@@ -6,12 +6,16 @@ import { installSourceNodes } from '../../src/documents/source-nodes.ts';
 import { EditorSource, blockProjection } from '../../src/documents/editor-source.ts';
 import { installIdentityAttributes, installIdentityState, identityState, topBlockIds } from '../../src/documents/identity.ts';
 import { verifyContracts } from './contracts.ts';
+import { fixtureDraft, editTime, verifyEditedSnapshots } from './edited-snapshot.ts';
+import { EditedSnapshotLedger } from '../../src/documents/edited-snapshot.ts';
 
 let crepe: Crepe | undefined;
+let ledger: EditedSnapshotLedger | undefined;
 const root = document.querySelector<HTMLElement>('#editor')!;
 const source = document.querySelector<HTMLTextAreaElement>('#source')!;
 const status = document.querySelector<HTMLElement>('#status')!;
 async function load(markdown: string, adapted = false, identity?: {ids: readonly number[]; next: number}) {
+  ledger = undefined;
   await crepe?.destroy();
   root.replaceChildren();
   crepe = new Crepe({root, defaultValue: markdown, features: {
@@ -43,7 +47,12 @@ async function load(markdown: string, adapted = false, identity?: {ids: readonly
 }
 Object.assign(window, { editorProbe: {
   load,
-  prepareIdentity: () => load('甲乙\n\n尾\n', true, {ids: [10, 20], next: 30}),
+  prepareIdentity: async () => {
+    const markdown = '甲乙\n\n尾\n';
+    await load(markdown, true, {ids: [10, 20], next: 30});
+    ledger = crepe!.editor.action(ctx => new EditedSnapshotLedger(ctx, fixtureDraft(ctx, markdown, [10,20], 30), ctx.get(editorViewCtx).state));
+  },
+  verifyEditedSnapshots: () => verifyEditedSnapshots((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
   verifyContracts: () => crepe!.editor.action(ctx => verifyContracts(ctx)),
   identityReport: () => crepe!.editor.action(ctx => ({
     ids: topBlockIds(ctx.get(editorViewCtx).state.doc),
@@ -51,6 +60,12 @@ Object.assign(window, { editorProbe: {
     position: ctx.get(editorViewCtx).state.selection.from,
     text: ctx.get(editorViewCtx).state.doc.textContent,
     serialized: crepe!.getMarkdown(),
+    ...(() => {
+      const pair = ledger!.capture(ctx.get(editorViewCtx).state, editTime);
+      return {pair, pair_projection: new EditorSource(ctx, pair.markdown_content).blocks.map(block => ({
+        block_type: block.block_type, plain_text: block.plain_text, section_path: block.section_path,
+      }))};
+    })(),
     dom_ids: [...ctx.get(editorViewCtx).dom.querySelectorAll('[data-block-id]')].map(node => node.getAttribute('data-block-id')),
   })),
   async verifyIdentityTypes() {
@@ -63,11 +78,13 @@ Object.assign(window, { editorProbe: {
         return {ids: ids.length ? topBlockIds(doc) : [], next: identityState(ctx.get(editorViewCtx).state).next_block_id,
           projection: entry.blocks.map((_block, index) => blockProjection(doc.child(index))),
           serialized: crepe!.getMarkdown(),
+          unchanged_pair: new EditedSnapshotLedger(ctx, fixtureDraft(ctx, entry.markdown, ids, ids.length + 1), ctx.get(editorViewCtx).state).capture(ctx.get(editorViewCtx).state, editTime),
           dom_ids: [...ctx.get(editorViewCtx).dom.querySelectorAll('[data-block-id]')].map(node => node.getAttribute('data-block-id'))};
       });
       if (JSON.stringify(actual.ids) !== JSON.stringify(ids) || actual.next !== ids.length + 1 ||
           JSON.stringify(actual.dom_ids) !== JSON.stringify(ids.map(String)) ||
           JSON.stringify(actual.projection) !== JSON.stringify(entry.blocks.map(block => block.plain_text)) ||
+          actual.unchanged_pair.markdown_content !== entry.markdown ||
           actual.serialized.includes('walle_block_id')) throw new Error(`身份属性改变了方言或丢失区块: ${entry.name}`);
       results.push({name: entry.name, ...actual});
     }

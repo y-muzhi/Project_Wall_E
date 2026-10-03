@@ -31,6 +31,8 @@ await mkdir(artifacts, {recursive: true});
 const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdown-editor-v1.json', 'frontend/package-lock.json',
   'frontend/src/documents/selection.ts', 'frontend/src/documents/editor-source.ts', 'frontend/src/documents/source-nodes.ts',
   'frontend/src/documents/identity.ts', 'frontend/src/documents/contracts.ts', 'frontend/tests/browser/contracts.ts',
+  'frontend/src/documents/edited-snapshot.ts', 'frontend/tests/browser/edited-snapshot.ts',
+  'tools/verify-editor-output.py',
   'frontend/tests/browser/probe.ts', 'frontend/tests/browser/editor.html',
   'frontend/tests/browser/vite.config.ts', 'tools/verify-editor-browser.mjs'];
 async function inputHashes() {
@@ -44,7 +46,7 @@ const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--config
 let serverLog = '';
 vite.stdout.on('data', data => { serverLog += data; });
 vite.stderr.on('data', data => { serverLog += data; });
-const report = {timestamp: new Date().toISOString(), scope: 'Initial source/projection and Crepe identity keyboard integration; no complete edited snapshot, product pages or HTTP acceptance', commands};
+const report = {timestamp: new Date().toISOString(), scope: 'Source/projection, local edited pairs and Crepe identity keyboard integration; no product pages or HTTP/DB save acceptance', commands};
 function resultFrom(output) {
   const match = /### Result\s*\n([\s\S]*?)\n### Ran Playwright code/.exec(output);
   if (!match) throw new Error('浏览器未返回结构化结果');
@@ -71,6 +73,9 @@ try {
   report.identity_types = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyIdentityTypes())'));
   if (report.identity_types.length !== 15) throw new Error('身份节点逐类型检查不完整');
   await cli('snapshot');
+  report.edited_snapshots = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyEditedSnapshots())'));
+  if (report.edited_snapshots.checks.length !== 19) throw new Error('编辑快照检查不完整');
+  await cli('snapshot');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.prepareIdentity())');
   const identitySnapshot = await cli('snapshot');
   const editorRef = /textbox \[ref=([^\]]+)\]/.exec(identitySnapshot)?.[1];
@@ -83,8 +88,24 @@ try {
     assert.deepEqual(actual.ids, ids, name);
     assert.deepEqual(actual.dom_ids, ids.filter(id => id !== null).map(String), `${name}: DOM身份`);
     assert.equal(actual.next, next, `${name}: 高水位`);
+    assert.equal(actual.pair.block_state_json.next_block_id, next, `${name}: 输出高水位`);
+    assert.deepEqual(actual.pair.block_state_json.blocks.map(block => block.block_id), ids.filter((id, index) => id !== null &&
+      !(name === 'keyboard-empty-first-split' && index === 0)), `${name}: 输出业务区块身份`);
     if (position !== undefined) assert.equal(actual.position, position, `${name}: 光标`);
     assert.equal(actual.serialized.includes('walle_block_id'), false, `${name}: 元数据泄漏`);
+    const exactMarkdown = {
+      'initial-bind': '甲乙\n\n尾\n',
+      'keyboard-split': '甲\n\n乙\n\n尾\n',
+      'keyboard-undo': '甲乙\n\n尾\n',
+      'keyboard-redo': '甲\n\n乙\n\n尾\n',
+      'keyboard-join': '甲乙\n\n尾\n',
+      'keyboard-second-split': '甲\n\n乙\n\n尾\n',
+      'keyboard-empty-first-split': '甲\n\n乙\n\n尾\n',
+      'keyboard-empty-first-join': '甲\n\n乙\n\n尾\n',
+      'keyboard-empty-new-gap': '甲\n\n乙\n\n尾\n',
+      'keyboard-gap-becomes-block': '甲\n\n乙\n\n尾\n\n新\n',
+    };
+    assert.equal(actual.pair.markdown_content, exactMarkdown[name], `${name}: 完整源码及撤销恢复`);
     report.identity_checks.push({name, ...actual});
   }
   await checkIdentity('initial-bind', [10,20], 30);
@@ -111,6 +132,19 @@ try {
   await cli('type', '新');
   await checkIdentity('keyboard-gap-becomes-block', [10,31,20,33], 34, 11);
   await cli('screenshot', '--filename=output/playwright/editor-identity.png');
+  const backendCommand = [resolve(root, '.venv/Scripts/python.exe'), '-X', 'utf8', 'tools/verify-editor-output.py'];
+  const backend = spawn(backendCommand[0], backendCommand.slice(1), {cwd: root, windowsHide: true});
+  let backendStdout = '', backendStderr = '';
+  backend.stdout.on('data', data => { backendStdout += data; });
+  backend.stderr.on('data', data => { backendStderr += data; });
+  const backendExited = new Promise((accept, reject) => { backend.once('error', reject); backend.once('exit', accept); });
+  backend.stdin.end(JSON.stringify(report));
+  const backendStatus = await backendExited;
+  report.backend_command = {command: backendCommand, status: backendStatus, stdout: backendStdout, stderr: backendStderr};
+  if (backendStatus !== 0) throw new Error(`后端拒绝真实编辑器快照\n${backendStderr}`);
+  report.backend_output = JSON.parse(backendStdout);
+  assert.equal(report.backend_output.passed, true);
+  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length);
   report.passed = true;
 } catch (error) {
   report.passed = false;

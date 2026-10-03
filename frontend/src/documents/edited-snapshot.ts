@@ -1,0 +1,206 @@
+import type { Ctx } from '@milkdown/kit/ctx';
+import { serializerCtx } from '@milkdown/kit/core';
+import { Fragment, type Node } from '@milkdown/kit/prose/model';
+import type { EditorState } from '@milkdown/kit/prose/state';
+import { validateBlockState, validateDocumentReadModel, type BlockMetadata, type BlockState } from './contracts.ts';
+import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
+import { bindIdentityDocument, identityState, topBlockIds } from './identity.ts';
+
+export interface EditedSnapshot {
+  readonly markdown_content: string;
+  readonly block_state_json: BlockState;
+}
+interface Unit { id: number; node: Node; raw: string; gap: string; actualGap: string; verbatim: boolean; }
+interface Version { node: Node; raw: string; }
+interface Layout { document: Node; markdown: string; units: readonly Unit[]; trailer: string; }
+
+function fail(message: string): never { throw new EditorSourceInvalid(message); }
+function timestamp(value: string): void {
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(value) || value.startsWith('0000-') ||
+      !Number.isFinite(new Date(value).getTime()) || new Date(value).toISOString() !== value) fail('编辑时间必须为真实UTC毫秒');
+}
+
+// Compare the user's complete node/mark structure, excluding private identity
+// and the code tail derived from source line endings. A serializer may choose
+// another Markdown spelling, but it must not lose text, marks or node content.
+function intent(node: Node): unknown {
+  const attrs = {...node.attrs};
+  delete attrs.walle_block_id;
+  delete attrs.walle_code_tail;
+  if (node.type.name === 'heading') delete attrs.id;
+  const children: unknown[] = [];
+  node.forEach(child => children.push(intent(child)));
+  return {type: node.type.name, attrs, text: node.text ?? null,
+    marks: node.marks.map(mark => mark.toJSON()), content: children};
+}
+
+// An editor-local source ledger. It emits a local pair, never a saved version
+// or authorization decision. The backend must bind MANUAL_EDIT to its real
+// persistent session and derive/check the metadata in the save transaction.
+export class EditedSnapshotLedger {
+  private readonly ctx: Ctx;
+  private readonly sessionId: number;
+  private readonly initialNext: number;
+  private readonly versions = new Map<number, Version[]>();
+  private readonly births = new Map<number, BlockMetadata>();
+  private readonly layouts: Layout[];
+  private units: Unit[];
+  private trailer: string;
+  private pair: EditedSnapshot;
+  private lastTime: string;
+
+  constructor(ctx: Ctx, input: unknown, state: EditorState) {
+    const {document, source} = validateDocumentReadModel(ctx, input);
+    if (document.document_type !== 'MANUAL_DRAFT') fail('只有真实人工草稿可输出编辑快照');
+    const ids = document.block_state_json.blocks.map(block => block.block_id);
+    const identity = identityState(state);
+    if (identity.next_block_id !== document.block_state_json.next_block_id ||
+        !state.doc.eq(bindIdentityDocument(source.document, ids, identity.next_block_id))) fail('载入快照与编辑器状态不一致');
+    this.ctx = ctx;
+    this.sessionId = document.id;
+    this.initialNext = identity.next_block_id;
+    this.units = source.blocks.map((block, index) => ({id: ids[index]!, node: state.doc.child(index),
+      raw: block.markdown, gap: source.parts[index * 2]!, actualGap: source.parts[index * 2]!, verbatim: true}));
+    this.trailer = source.parts.at(-1)!;
+    this.pair = Object.freeze({markdown_content: document.markdown_content, block_state_json: document.block_state_json});
+    this.lastTime = document.updated_at;
+    this.layouts = [{document: state.doc, markdown: document.markdown_content,
+      units: this.units.map(unit => ({...unit})), trailer: this.trailer}];
+    this.units.forEach((unit, index) => {
+      this.versions.set(unit.id, [{node: unit.node, raw: unit.raw}]);
+      this.births.set(unit.id, document.block_state_json.blocks[index]!);
+    });
+  }
+
+  capture(state: EditorState, at: string): EditedSnapshot {
+    timestamp(at);
+    if (at < this.lastTime) fail('编辑时间不能倒退');
+    const identity = identityState(state);
+    if (identity.next_block_id < this.pair.block_state_json.next_block_id) fail('编辑高水位不能倒退');
+    const ids = topBlockIds(state.doc);
+    const targets: Unit[] = [];
+    const used = new Set<number>();
+    state.doc.forEach((node, _pos, index) => {
+      // Empty paragraphs are caret/gap positions, not Markdown blocks.
+      if (node.type.name === 'paragraph' && node.content.size === 0) return;
+      const id = ids[index];
+      if (id == null || id >= identity.next_block_id || !identity.known_ids.has(id) ||
+          (!this.births.has(id) && id < this.initialNext) || used.has(id)) fail('区块没有同会话身份证明');
+      used.add(id);
+      const previous = this.versions.get(id)?.findLast(version => version.node.eq(node));
+      const raw = previous?.raw ?? (node.type.name === 'walle_raw_source' ? node.textContent :
+        this.ctx.get(serializerCtx)(state.doc.copy(Fragment.from(node))));
+      targets.push({id, node, raw, gap: '', actualGap: '', verbatim: previous !== undefined});
+    });
+
+    // Preserve authored gaps. A removed block transfers its gap to the next
+    // survivor (or trailer); moves carry their own gap. New blocks before a
+    // survivor receive its gap. No raw bytes of surviving blocks are trimmed.
+    const surviving = new Set(targets.map(unit => unit.id));
+    const emptySuccessors = new Map<number, number>();
+    let successor: number | undefined;
+    for (let index = ids.length - 1; index >= 0; index--) {
+      const id = ids[index];
+      if (id == null) continue;
+      if (surviving.has(id)) successor = id;
+      else if (successor !== undefined) emptySuccessors.set(id, successor);
+    }
+    const gaps = new Map<number, string>();
+    let pending = '';
+    for (const old of this.units) {
+      pending += old.gap;
+      const recipient = surviving.has(old.id) ? old.id : emptySuccessors.get(old.id);
+      if (recipient !== undefined && !gaps.has(recipient)) { gaps.set(recipient, pending); pending = ''; }
+    }
+    let trailer = pending + this.trailer;
+    let runStart = 0;
+    targets.forEach((unit, index) => {
+      if (!gaps.has(unit.id)) return;
+      targets[runStart]!.gap = gaps.get(unit.id)!;
+      runStart = index + 1;
+    });
+    // Same-session history can restore a complete prior node layout, including
+    // its authored gaps. This does not assign identities: the identity plugin
+    // has already proved every ID above. Content alone never selects an ID.
+    const restoredLayout = this.layouts.findLast(layout => layout.document.eq(state.doc));
+    if (restoredLayout) {
+      const restored = new Map(restoredLayout.units.map(unit => [unit.id, unit]));
+      for (const unit of targets) {
+        const original = restored.get(unit.id);
+        if (!original || !original.node.eq(unit.node)) fail('恢复源码没有完整同会话布局');
+        unit.raw = original.raw;
+        unit.gap = original.gap;
+        unit.verbatim = true;
+      }
+      trailer = restoredLayout.trailer;
+    }
+    const adjacent = new Set(this.units.slice(1).map((unit, index) => `${this.units[index]!.id}:${unit.id}`));
+    const oldRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
+    const oldActualGaps = new Map(this.units.map(unit => [unit.id, unit.actualGap]));
+    let markdown = '';
+    const starts: number[] = [];
+    for (const [index, unit] of targets.entries()) {
+      let gap = unit.gap;
+      const previous = targets[index - 1];
+      const unchangedBoundary = previous && adjacent.has(`${previous.id}:${unit.id}`) &&
+        previous.raw === oldRaw.get(previous.id) && unit.raw === oldRaw.get(unit.id);
+      if (unchangedBoundary) gap = oldActualGaps.get(unit.id)!;
+      if (previous && !unchangedBoundary) {
+        const boundary = (/[ \t\r\n]*$/.exec(markdown)?.[0] ?? '') + unit.gap + (/^[ \t\r\n]*/.exec(unit.raw)?.[0] ?? '');
+        const endings = boundary.match(/\r\n|\r|\n/g)?.length ?? 0;
+        const ending = markdown.endsWith('\r\n') ? '\r\n' : markdown.endsWith('\r') ? '\r' : '\n';
+        gap = ending.repeat(Math.max(0, 2 - endings)) + gap;
+      }
+      markdown += gap;
+      starts.push(markdown.length);
+      markdown += unit.raw;
+    }
+    markdown += trailer;
+    if (restoredLayout) markdown = restoredLayout.markdown;
+    const source = new EditorSource(this.ctx, markdown);
+    if (source.blocks.length !== targets.length) fail('重组源码吞掉、合并或新增区块');
+    source.blocks.forEach((block, index) => {
+      const unit = targets[index]!;
+      const suffix = block.markdown.startsWith(unit.raw) ? block.markdown.slice(unit.raw.length) : null;
+      const appendedEnding = !/[\r\n]$/.test(unit.raw) && ['\r\n', '\r', '\n'].includes(suffix ?? '');
+      if ((!restoredLayout && block.start_utf16 !== starts[index]) || !(suffix === '' || appendedEnding)) fail('重组源码改变区块边界');
+      const literal = unit.node.type.name === 'walle_raw_source';
+      if (literal ? block.block_type !== unit.node.attrs.kind ||
+          !(block.plain_text === unit.node.textContent || appendedEnding && block.plain_text === unit.node.textContent + suffix) :
+          !unit.verbatim && JSON.stringify(intent(block.node)) !== JSON.stringify(intent(unit.node))) fail('序列化改变区块解释或丢失编辑内容');
+    });
+    const prior = new Map(this.pair.block_state_json.blocks.map(block => [block.block_id, block]));
+    const priorRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
+    const blocks = targets.map((unit, index) => {
+      const parsed = source.blocks[index]!;
+      const old = prior.get(unit.id);
+      const birth = this.births.get(unit.id);
+      const changed = !old || priorRaw.get(unit.id) !== parsed.markdown ||
+        JSON.stringify(old.section_path) !== JSON.stringify(parsed.section_path);
+      const origin = {last_modified_by_type: 'USER' as const, last_modified_source_type: 'MANUAL_EDIT' as const,
+        last_modified_source_id: this.sessionId, last_modified_at: at};
+      return {block_id: unit.id, ...(old ?? birth ?? {created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
+        created_source_id: this.sessionId, created_at: at}), ...(changed ? origin : {}),
+        block_type: parsed.block_type, section_path: parsed.section_path};
+    });
+    const validated = validateBlockState(this.ctx, markdown, {schema_version: 1, next_block_id: identity.next_block_id, blocks});
+    const nextPair = Object.freeze({markdown_content: markdown, block_state_json: validated.state});
+    // Publish ledger updates only after the complete pair has passed. Failed
+    // composition cannot poison later retries or manufacture creation facts.
+    targets.forEach((unit, index) => {
+      if (!this.births.has(unit.id)) this.births.set(unit.id, validated.state.blocks[index]!);
+      const history = this.versions.get(unit.id) ?? [];
+      if (!history.some(version => version.node.eq(unit.node))) history.push({node: unit.node, raw: source.blocks[index]!.markdown});
+      this.versions.set(unit.id, history);
+    });
+    // Only authored gaps transfer on a later edit. Syntax separators added by
+    // composition are recomputed, so split/join/undo cannot accumulate them.
+    this.units = targets.map((unit, index) => ({...unit, raw: source.blocks[index]!.markdown, actualGap: source.parts[index * 2]!}));
+    this.trailer = trailer;
+    if (!restoredLayout) this.layouts.push({document: state.doc, markdown,
+      units: this.units.map(unit => ({...unit})), trailer});
+    this.pair = nextPair;
+    this.lastTime = at;
+    return nextPair;
+  }
+}
