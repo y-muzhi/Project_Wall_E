@@ -3,13 +3,14 @@ import { editorViewCtx, remarkCtx } from '@milkdown/kit/core';
 import fixtures from '../../../shared/fixtures/markdown-v1.json';
 import editorFixtures from '../../../shared/fixtures/markdown-editor-v1.json';
 import { installSourceNodes } from '../../src/documents/source-nodes.ts';
-import { EditorSource } from '../../src/documents/editor-source.ts';
+import { EditorSource, blockProjection } from '../../src/documents/editor-source.ts';
+import { installIdentityAttributes, installIdentityState, identityState, topBlockIds } from '../../src/documents/identity.ts';
 
 let crepe: Crepe | undefined;
 const root = document.querySelector<HTMLElement>('#editor')!;
 const source = document.querySelector<HTMLTextAreaElement>('#source')!;
 const status = document.querySelector<HTMLElement>('#status')!;
-async function load(markdown: string, adapted = false) {
+async function load(markdown: string, adapted = false, identity?: {ids: readonly number[]; next: number}) {
   await crepe?.destroy();
   root.replaceChildren();
   crepe = new Crepe({root, defaultValue: markdown, features: {
@@ -21,12 +22,16 @@ async function load(markdown: string, adapted = false) {
     [Crepe.Feature.TopBar]: false, [Crepe.Feature.AI]: false,
   }});
   if (adapted) await installSourceNodes(crepe);
+  if (identity) {
+    installIdentityAttributes(crepe);
+    installIdentityState(crepe, identity.ids, identity.next);
+  }
   await crepe.create();
   const result = crepe.editor.action(ctx => ({
     markdown: crepe!.getMarkdown(),
     document: ctx.get(editorViewCtx).state.doc.toJSON(),
     ast: ctx.get(remarkCtx).runSync(ctx.get(remarkCtx).parse(markdown), markdown),
-    ...(adapted ? (() => {
+    ...(adapted && !identity ? (() => {
       const parsed = new EditorSource(ctx, markdown);
       return {preserved: parsed.unchangedMarkdown(ctx.get(editorViewCtx).state.doc), parts: parsed.parts,
         blocks: parsed.blocks.map(({node: _node, ...block}) => block)};
@@ -37,6 +42,35 @@ async function load(markdown: string, adapted = false) {
 }
 Object.assign(window, { editorProbe: {
   load,
+  prepareIdentity: () => load('甲乙\n\n尾\n', true, {ids: [10, 20], next: 30}),
+  identityReport: () => crepe!.editor.action(ctx => ({
+    ids: topBlockIds(ctx.get(editorViewCtx).state.doc),
+    next: identityState(ctx.get(editorViewCtx).state).next_block_id,
+    position: ctx.get(editorViewCtx).state.selection.from,
+    text: ctx.get(editorViewCtx).state.doc.textContent,
+    serialized: crepe!.getMarkdown(),
+    dom_ids: [...ctx.get(editorViewCtx).dom.querySelectorAll('[data-block-id]')].map(node => node.getAttribute('data-block-id')),
+  })),
+  async verifyIdentityTypes() {
+    const results = [];
+    for (const entry of [...fixtures.cases, ...editorFixtures.cases]) {
+      const ids = entry.blocks.map((_block, index) => index + 1);
+      await load(entry.markdown, true, {ids, next: ids.length + 1});
+      const actual = crepe!.editor.action(ctx => {
+        const doc = ctx.get(editorViewCtx).state.doc;
+        return {ids: ids.length ? topBlockIds(doc) : [], next: identityState(ctx.get(editorViewCtx).state).next_block_id,
+          projection: entry.blocks.map((_block, index) => blockProjection(doc.child(index))),
+          serialized: crepe!.getMarkdown(),
+          dom_ids: [...ctx.get(editorViewCtx).dom.querySelectorAll('[data-block-id]')].map(node => node.getAttribute('data-block-id'))};
+      });
+      if (JSON.stringify(actual.ids) !== JSON.stringify(ids) || actual.next !== ids.length + 1 ||
+          JSON.stringify(actual.dom_ids) !== JSON.stringify(ids.map(String)) ||
+          JSON.stringify(actual.projection) !== JSON.stringify(entry.blocks.map(block => block.plain_text)) ||
+          actual.serialized.includes('walle_block_id')) throw new Error(`身份属性改变了方言或丢失区块: ${entry.name}`);
+      results.push({name: entry.name, ...actual});
+    }
+    return results;
+  },
   async fixtures(adapted = false) {
     const results = [];
     for (const entry of [...fixtures.cases, ...editorFixtures.cases]) {

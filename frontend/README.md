@@ -24,3 +24,5 @@ source-nodes.ts在create前安装，保留重复引用定义及惰性HTML文本�
 浏览器验证脚本使用Playwright CLI技能包装器（Windows需Git Bash及npx；可用WALLE_BASH/WALLE_PLAYWRIGHT_WRAPPER指定路径），在独立5174端口启动测试探针，使用自己的浏览器会话并在结束后关闭。15个独立共享样例覆盖11类型、CRLF、重复定义、图片、代码尾行、空文档、未闭合/未注册语法；断言真实节点投影、原文保留、编辑拒绝旧源和HTML不执行。原始输出存docs/verification，截图存output/playwright。手工探针可在本目录运行`node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173`后访问`/tests/browser/editor.html`，它是测试工具。
 
 这些验证不证明产品布局、焦点、滚动、IME、自动保存、完整方言边界或编辑后往返，373项设计场景仍未执行。尚未提供业务页面启动命令。
+
+identity.ts安装顶层节点walle_block_id属性（不进Markdown）、初始显式绑定、StepMap原节点继承、新插入/复制新ID、拆前保留/合首保留、显式整体移动、同编辑器真实history恢复及高水位。未知粘贴不信任携带ID，内部节点清除顶层身份；空文档caret不分配业务ID，容量失败不改原状态。空段落边界合并优先执行真实join，避免通用删除把首个ID丢弃。属性修正只setNodeMarkup，保留光标与history；位置二分查找，未变节点复用。12项身份测试，加7项选区共19项；浏览器验证额外核对全部15例身份属性/DOM与8步真实键盘。它仍不是完整编辑器：尚缺编辑后的源码重组/完整BlockState输出、来源/草稿应用绑定、选区DOM映射及生命周期。

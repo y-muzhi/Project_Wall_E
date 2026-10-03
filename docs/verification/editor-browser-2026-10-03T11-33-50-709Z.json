@@ -1,0 +1,885 @@
+{
+  "timestamp": "2026-10-03T11:33:50.709Z",
+  "scope": "Initial source/projection and Crepe identity keyboard integration; no complete edited snapshot, product pages or HTTP acceptance",
+  "commands": [
+    {
+      "args": [
+        "open",
+        "http://127.0.0.1:5174/tests/browser/editor.html"
+      ],
+      "code": 0,
+      "elapsed_ms": 2599,
+      "stdout": "### Browser `walle-source-1791027230699` opened with pid 60316.\n### Ran Playwright code\n```js\nawait page.goto('http://127.0.0.1:5174/tests/browser/editor.html');\n```\n### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n### Snapshot\n- [Snapshot](.playwright-cli\\page-2026-10-03T11-33-53-528Z.yml)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1884,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n### Snapshot\n```yaml\n- generic [active] [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [ref=e9]:\n    - heading \"浏览器验证\" [level=1] [ref=e10]\n    - paragraph [ref=e11]: 甲😀乙\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"# 浏览器验证\\\\n\\\\n甲😀乙\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"heading\\\", \\\"attrs\\\": { \\\"id\\\": \\\"浏览器验证\\\", \\\"level\\\": 1 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"浏览器验证\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲😀乙\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"heading\\\", \\\"depth\\\": 1, \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"浏览器验证\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 8, \\\"offset\\\": 7 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 8, \\\"offset\\\": 7 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲😀乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 9 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 5, \\\"offset\\\": 13 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 9 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 5, \\\"offset\\\": 13 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 14 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.verify())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2999,
+      "stdout": "### Result\n{\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36\",\"cases\":[{\"name\":\"empty\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[],\"preserved\":\"\\r\\n\\r\\n\"},{\"name\":\"unicode-crlf\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"heading\",\"markdown\":\"# 标题😀\\r\\n\",\"plain_text\":\"标题😀\",\"section_path\":[\"标题😀\"],\"heading_level\":1,\"start_utf16\":0,\"end_utf16\":8},{\"block_type\":\"paragraph\",\"markdown\":\"甲 乙😀\\r\\n\",\"plain_text\":\"甲 乙😀\",\"section_path\":[\"标题😀\"],\"heading_level\":null,\"start_utf16\":10,\"end_utf16\":17}],\"preserved\":\"# 标题😀\\r\\n\\r\\n甲 乙😀\\r\\n\"},{\"name\":\"inline-breaks\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"paragraph\",\"markdown\":\"**甲** _乙_ ~~丙~~ `x<y` [链接](https://example.test) ![图😀](x.png)\\n软换行  \\n硬换行 <em>原样</em>\\n\",\"plain_text\":\"甲 乙 丙 x<y 链接 图😀\\n软换行\\n硬换行 <em>原样</em>\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":85}],\"preserved\":\"**甲** _乙_ ~~丙~~ `x<y` [链接](https://example.test) ![图😀](x.png)\\n软换行  \\n硬换行 <em>原样</em>\\n\"},{\"name\":\"table-escaped-pipe\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"table\",\"markdown\":\"| 键 | 值 |\\n| --- | --- |\\n| A\\\\|B | **加粗** |\\n| 😀 | `code` |\\n\",\"plain_text\":\"键\\t值\\nA|B\\t加粗\\n😀\\tcode\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":58}],\"preserved\":\"| 键 | 值 |\\n| --- | --- |\\n| A\\\\|B | **加粗** |\\n| 😀 | `code` |\\n\"},{\"name\":\"tasks-nested\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"task_list\",\"markdown\":\"- [ ] 待办\\n- [x] 完成\\n  - 内层\\n\",\"plain_text\":\"待办\\n完成\\n内层\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":25}],\"preserved\":\"- [ ] 待办\\n- [x] 完成\\n  - 内层\\n\"},{\"name\":\"definition-and-inert-html\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"link_definition\",\"markdown\":\"[a]: https://a.test\\n\",\"plain_text\":\"[a]: https://a.test\\n\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":20},{\"block_type\":\"link_definition\",\"markdown\":\"[a]: https://b.test\\n\",\"plain_text\":\"[a]: https://b.test\\n\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":20,\"end_utf16\":40},{\"block_type\":\"paragraph\",\"markdown\":\"[标签][a]\\n\",\"plain_text\":\"标签\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":41,\"end_utf16\":49},{\"block_type\":\"html_block\",\"markdown\":\"<div>\\n原样\\n</div>\\n\",\"plain_text\":\"<div>\\n原样\\n</div>\\n\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":50,\"end_utf16\":66}],\"preserved\":\"[a]: https://a.test\\n[a]: https://b.test\\n\\n[标签][a]\\n\\n<div>\\n原样\\n</div>\\n\"},{\"name\":\"registered-types\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"heading\",\"markdown\":\"# 节\\n\",\"plain_text\":\"节\",\"section_path\":[\"节\"],\"heading_level\":1,\"start_utf16\":0,\"end_utf16\":4},{\"block_type\":\"paragraph\",\"markdown\":\"段\\n\",\"plain_text\":\"段\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":5,\"end_utf16\":7},{\"block_type\":\"blockquote\",\"markdown\":\"> 引用\\n>\\n> 第二段\\n\",\"plain_text\":\"引用\\n第二段\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":8,\"end_utf16\":21},{\"block_type\":\"bullet_list\",\"markdown\":\"- 一\\n- 二\\n\",\"plain_text\":\"一\\n二\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":22,\"end_utf16\":30},{\"block_type\":\"ordered_list\",\"markdown\":\"1. 壹\\n2. 贰\\n\",\"plain_text\":\"壹\\n贰\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":31,\"end_utf16\":41},{\"block_type\":\"task_list\",\"markdown\":\"- [ ] 任务\\n\",\"plain_text\":\"任务\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":42,\"end_utf16\":51},{\"block_type\":\"code_block\",\"markdown\":\"```js\\nx<y\\n```\\n\",\"plain_text\":\"x<y\\n\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":52,\"end_utf16\":66},{\"block_type\":\"thematic_break\",\"markdown\":\"---\\n\",\"plain_text\":\"\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":67,\"end_utf16\":71},{\"block_type\":\"table\",\"markdown\":\"| K | V |\\n| - | - |\\n| A | B |\\n\",\"plain_text\":\"K\\tV\\nA\\tB\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":72,\"end_utf16\":102},{\"block_type\":\"html_block\",\"markdown\":\"<div>源</div>\\n\",\"plain_text\":\"<div>源</div>\\n\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":103,\"end_utf16\":116},{\"block_type\":\"link_definition\",\"markdown\":\"[r]: /target\\n\",\"plain_text\":\"[r]: /target\\n\",\"section_path\":[\"节\"],\"heading_level\":null,\"start_utf16\":117,\"end_utf16\":130}],\"preserved\":\"# 节\\n\\n段\\n\\n> 引用\\n>\\n> 第二段\\n\\n- 一\\n- 二\\n\\n1. 壹\\n2. 贰\\n\\n- [ ] 任务\\n\\n```js\\nx<y\\n```\\n\\n---\\n\\n| K | V |\\n| - | - |\\n| A | B |\\n\\n<div>源</div>\\n\\n[r]: /target\\n\"},{\"name\":\"code-empty\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"code_block\",\"markdown\":\"```\\n```\\n\",\"plain_text\":\"\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":8}],\"preserved\":\"```\\n```\\n\"},{\"name\":\"code-blank-line\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"code_block\",\"markdown\":\"```\\n\\n```\\n\",\"plain_text\":\"\\n\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":9}],\"preserved\":\"```\\n\\n```\\n\"},{\"name\":\"unclosed-code-eof\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"code_block\",\"markdown\":\"```\\nx😀\",\"plain_text\":\"x😀\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":7}],\"preserved\":\"```\\nx😀\"},{\"name\":\"indented-code\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"code_block\",\"markdown\":\"    a\\r\\n    b\\r\\n\",\"plain_text\":\"a\\nb\\n\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":14}],\"preserved\":\"    a\\r\\n    b\\r\\n\"},{\"name\":\"repeated-headings\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"heading\",\"markdown\":\"### 深\\r\\n\",\"plain_text\":\"深\",\"section_path\":[\"深\"],\"heading_level\":3,\"start_utf16\":0,\"end_utf16\":7},{\"block_type\":\"heading\",\"markdown\":\"# 根\\r\\n\",\"plain_text\":\"根\",\"section_path\":[\"根\"],\"heading_level\":1,\"start_utf16\":9,\"end_utf16\":14},{\"block_type\":\"heading\",\"markdown\":\"### 深\\r\\n\",\"plain_text\":\"深\",\"section_path\":[\"根\",\"深\"],\"heading_level\":3,\"start_utf16\":16,\"end_utf16\":23},{\"block_type\":\"paragraph\",\"markdown\":\"文\\r\\n\",\"plain_text\":\"文\",\"section_path\":[\"根\",\"深\"],\"heading_level\":null,\"start_utf16\":25,\"end_utf16\":28},{\"block_type\":\"heading\",\"markdown\":\"### 深\\r\\n\",\"plain_text\":\"深\",\"section_path\":[\"根\",\"深\"],\"heading_level\":3,\"start_utf16\":30,\"end_utf16\":37}],\"preserved\":\"### 深\\r\\n\\r\\n# 根\\r\\n\\r\\n### 深\\r\\n\\r\\n文\\r\\n\\r\\n### 深\\r\\n\"},{\"name\":\"crlf-softbreak\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"paragraph\",\"markdown\":\"甲 乙\\r\\n丙\\r\\n\",\"plain_text\":\"甲 乙\\n丙\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":8}],\"preserved\":\"甲 乙\\r\\n丙\\r\\n\"},{\"name\":\"unknown-extension\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"paragraph\",\"markdown\":\"$$x$$\\n\",\"plain_text\":\"$$x$$\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":6},{\"block_type\":\"paragraph\",\"markdown\":\":::diagram\\nA-->B\\n:::\\n\",\"plain_text\":\":::diagram\\nA-->B\\n:::\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":7,\"end_utf16\":28}],\"preserved\":\"$$x$$\\n\\n:::diagram\\nA-->B\\n:::\\n\"},{\"name\":\"inert-script-br\",\"raw_equal\":true,\"projection_equal\":true,\"changed_rejected\":true,\"blocks\":[{\"block_type\":\"html_block\",\"markdown\":\"<script>window.__walleUnsafe=1</script>\\r\\n\",\"plain_text\":\"<script>window.__walleUnsafe=1</script>\\r\\n\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":0,\"end_utf16\":41},{\"block_type\":\"html_block\",\"markdown\":\"<br />\\r\\n\",\"plain_text\":\"<br />\\r\\n\",\"section_path\":[],\"heading_level\":null,\"start_utf16\":43,\"end_utf16\":51}],\"preserved\":\"<script>window.__walleUnsafe=1</script>\\r\\n\\r\\n<br />\\r\\n\"}],\"html_inert\":true}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.verify()))(page);\n```\n### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Events\n- New console entries: .playwright-cli\\console-2026-10-03T11-33-53-335Z.log#L1\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1859,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [active] [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [ref=e14]:\n    - code [ref=e16]: <script>window.__walleUnsafe=1</script>\n    - code [ref=e18]: <br />\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"<script>window.__walleUnsafe=1</script>\\\\r\\\\n\\\\n\\\\n<br />\\\\r\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"walle_raw_source\\\", \\\"attrs\\\": { \\\"kind\\\": \\\"html_block\\\" }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"<script>window.__walleUnsafe=1</script>\\\\r\\\\n\\\" } ] }, { \\\"type\\\": \\\"walle_raw_source\\\", \\\"attrs\\\": { \\\"kind\\\": \\\"html_block\\\" }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"<br />\\\\r\\\\n\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"walleRawSource\\\", \\\"value\\\": \\\"<script>window.__walleUnsafe=1</script>\\\\r\\\\n\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 40, \\\"offset\\\": 39 } }, \\\"kind\\\": \\\"html_block\\\" }, { \\\"type\\\": \\\"walleRawSource\\\", \\\"value\\\": \\\"<br />\\\\r\\\\n\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 43 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 7, \\\"offset\\\": 49 } }, \\\"kind\\\": \\\"html_block\\\" } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 51 } } }, \\\"preserved\\\": \\\"<script>window.__walleUnsafe=1</script>\\\\r\\\\n\\\\r\\\\n<br />\\\\r\\\\n\\\", \\\"parts\\\": [ \\\"\\\", \\\"<script>window.__walleUnsafe=1</script>\\\\r\\\\n\\\", \\\"\\\\r\\\\n\\\", \\\"<br />\\\\r\\\\n\\\", \\\"\\\" ], \\\"blocks\\\": [ { \\\"block_type\\\": \\\"html_block\\\", \\\"markdown\\\": \\\"<script>window.__walleUnsafe=1</script>\\\\r\\\\n\\\", \\\"plain_text\\\": \\\"<script>window.__walleUnsafe=1</script>\\\\r\\\\n\\\", \\\"section_path\\\": [], \\\"heading_level\\\": null, \\\"start_utf16\\\": 0, \\\"end_utf16\\\": 41 }, { \\\"block_type\\\": \\\"html_block\\\", \\\"markdown\\\": \\\"<br />\\\\r\\\\n\\\", \\\"plain_text\\\": \\\"<br />\\\\r\\\\n\\\", \\\"section_path\\\": [], \\\"heading_level\\\": null, \\\"start_utf16\\\": 43, \\\"end_utf16\\\": 51 } ] }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "screenshot",
+        "--filename=output/playwright/editor-source.png"
+      ],
+      "code": 0,
+      "elapsed_ms": 1866,
+      "stdout": "### Result\n- [Screenshot of viewport](output\\playwright\\editor-source.png)\n### Ran Playwright code\n```js\n// Screenshot viewport and save it as output\\playwright\\editor-source.png\nawait page.screenshot({\n  path: 'output\\\\playwright\\\\editor-source.png',\n  scale: 'css',\n  type: 'png'\n});\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.prepareIdentity())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2376,
+      "stdout": "### Result\n{\"markdown\":\"甲乙\\n\\n尾\\n\",\"document\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"attrs\":{\"walle_block_id\":10},\"content\":[{\"type\":\"text\",\"text\":\"甲乙\"}]},{\"type\":\"paragraph\",\"attrs\":{\"walle_block_id\":20},\"content\":[{\"type\":\"text\",\"text\":\"尾\"}]}]},\"ast\":{\"type\":\"root\",\"children\":[{\"type\":\"paragraph\",\"children\":[{\"type\":\"text\",\"value\":\"甲乙\",\"position\":{\"start\":{\"line\":1,\"column\":1,\"offset\":0},\"end\":{\"line\":1,\"column\":3,\"offset\":2}}}],\"position\":{\"start\":{\"line\":1,\"column\":1,\"offset\":0},\"end\":{\"line\":1,\"column\":3,\"offset\":2}}},{\"type\":\"paragraph\",\"children\":[{\"type\":\"text\",\"value\":\"尾\",\"position\":{\"start\":{\"line\":3,\"column\":1,\"offset\":4},\"end\":{\"line\":3,\"column\":2,\"offset\":5}}}],\"position\":{\"start\":{\"line\":3,\"column\":1,\"offset\":4},\"end\":{\"line\":3,\"column\":2,\"offset\":5}}}],\"position\":{\"start\":{\"line\":1,\"column\":1,\"offset\":0},\"end\":{\"line\":4,\"column\":1,\"offset\":6}}}}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.prepareIdentity()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1858,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [active] [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [ref=e20]:\n    - paragraph [ref=e21]: 甲乙\n    - paragraph [ref=e22]: 尾\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"甲乙\\\\n\\\\n尾\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 10 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲乙\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 20 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"尾\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"尾\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 6 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "click",
+        "e20"
+      ],
+      "code": 0,
+      "elapsed_ms": 2410,
+      "stdout": "### Ran Playwright code\n```js\nawait page.getByText('甲乙尾').click();\n```\n### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n- [Snapshot](.playwright-cli\\page-2026-10-03T11-34-08-775Z.yml)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1847,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [active] [ref=e20]:\n    - paragraph [ref=e21]: 甲乙\n    - paragraph [ref=e22]: 尾\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"甲乙\\\\n\\\\n尾\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 10 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲乙\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 20 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"尾\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"尾\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 6 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.identityReport())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2360,
+      "stdout": "### Result\n{\"ids\":[10,20],\"next\":30,\"position\":6,\"text\":\"甲乙尾\",\"serialized\":\"甲乙\\n\\n尾\\n\",\"dom_ids\":[\"10\",\"20\"]}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.identityReport()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "press",
+        "Control+Home"
+      ],
+      "code": 0,
+      "elapsed_ms": 1844,
+      "stdout": "### Ran Playwright code\n```js\n// Press Control+Home\nawait page.keyboard.press('Control+Home');\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "press",
+        "ArrowRight"
+      ],
+      "code": 0,
+      "elapsed_ms": 1840,
+      "stdout": "### Ran Playwright code\n```js\n// Press ArrowRight\nawait page.keyboard.press('ArrowRight');\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "press",
+        "Enter"
+      ],
+      "code": 0,
+      "elapsed_ms": 2378,
+      "stdout": "### Ran Playwright code\n```js\n// Press Enter\nawait page.keyboard.press('Enter');\n```\n### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n- [Snapshot](.playwright-cli\\page-2026-10-03T11-34-19-049Z.yml)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1856,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [active] [ref=e20]:\n    - paragraph [ref=e21]: 甲\n    - paragraph [ref=e23]: 乙\n    - paragraph [ref=e22]: 尾\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"甲乙\\\\n\\\\n尾\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 10 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲乙\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 20 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"尾\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"尾\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 6 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.identityReport())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2357,
+      "stdout": "### Result\n{\"ids\":[10,30,20],\"next\":31,\"position\":4,\"text\":\"甲乙尾\",\"serialized\":\"甲\\n\\n乙\\n\\n尾\\n\",\"dom_ids\":[\"10\",\"30\",\"20\"]}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.identityReport()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "press",
+        "Control+z"
+      ],
+      "code": 0,
+      "elapsed_ms": 1875,
+      "stdout": "### Ran Playwright code\n```js\n// Press Control+z\nawait page.keyboard.press('Control+z');\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1839,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [active] [ref=e20]:\n    - paragraph [ref=e21]: 甲乙\n    - paragraph [ref=e22]: 尾\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"甲乙\\\\n\\\\n尾\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 10 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲乙\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 20 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"尾\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"尾\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 6 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.identityReport())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2406,
+      "stdout": "### Result\n{\"ids\":[10,20],\"next\":31,\"position\":2,\"text\":\"甲乙尾\",\"serialized\":\"甲乙\\n\\n尾\\n\",\"dom_ids\":[\"10\",\"20\"]}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.identityReport()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "press",
+        "Control+Shift+z"
+      ],
+      "code": 0,
+      "elapsed_ms": 1882,
+      "stdout": "### Ran Playwright code\n```js\n// Press Control+Shift+z\nawait page.keyboard.press('Control+Shift+z');\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1877,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [active] [ref=e20]:\n    - paragraph [ref=e21]: 甲\n    - paragraph [ref=e24]: 乙\n    - paragraph [ref=e22]: 尾\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"甲乙\\\\n\\\\n尾\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 10 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲乙\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 20 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"尾\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"尾\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 6 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.identityReport())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2357,
+      "stdout": "### Result\n{\"ids\":[10,30,20],\"next\":31,\"position\":4,\"text\":\"甲乙尾\",\"serialized\":\"甲\\n\\n乙\\n\\n尾\\n\",\"dom_ids\":[\"10\",\"30\",\"20\"]}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.identityReport()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "press",
+        "Backspace"
+      ],
+      "code": 0,
+      "elapsed_ms": 1879,
+      "stdout": "### Ran Playwright code\n```js\n// Press Backspace\nawait page.keyboard.press('Backspace');\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1917,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [active] [ref=e20]:\n    - paragraph [ref=e21]: 甲乙\n    - paragraph [ref=e22]: 尾\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"甲乙\\\\n\\\\n尾\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 10 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲乙\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 20 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"尾\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"尾\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 6 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.identityReport())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2380,
+      "stdout": "### Result\n{\"ids\":[10,20],\"next\":31,\"position\":2,\"text\":\"甲乙尾\",\"serialized\":\"甲乙\\n\\n尾\\n\",\"dom_ids\":[\"10\",\"20\"]}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.identityReport()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "press",
+        "Enter"
+      ],
+      "code": 0,
+      "elapsed_ms": 2370,
+      "stdout": "### Ran Playwright code\n```js\n// Press Enter\nawait page.keyboard.press('Enter');\n```\n### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n- [Snapshot](.playwright-cli\\page-2026-10-03T11-34-44-047Z.yml)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1845,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n- Console: 1 errors, 0 warnings\n### Snapshot\n```yaml\n- generic [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [active] [ref=e20]:\n    - paragraph [ref=e21]: 甲\n    - paragraph [ref=e25]: 乙\n    - paragraph [ref=e22]: 尾\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"甲乙\\\\n\\\\n尾\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 10 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲乙\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"attrs\\\": { \\\"walle_block_id\\\": 20 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"尾\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"尾\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 4 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 2, \\\"offset\\\": 5 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 6 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.identityReport())"
+      ],
+      "code": 0,
+      "elapsed_ms": 2391,
+      "stdout": "### Result\n{\"ids\":[10,31,20],\"next\":32,\"position\":4,\"text\":\"甲乙尾\",\"serialized\":\"甲\\n\\n乙\\n\\n尾\\n\",\"dom_ids\":[\"10\",\"31\",\"20\"]}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.identityReport()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "screenshot",
+        "--filename=output/playwright/editor-identity.png"
+      ],
+      "code": 0,
+      "elapsed_ms": 1930,
+      "stdout": "### Result\n- [Screenshot of viewport](output\\playwright\\editor-identity.png)\n### Ran Playwright code\n```js\n// Screenshot viewport and save it as output\\playwright\\editor-identity.png\nawait page.screenshot({\n  path: 'output\\\\playwright\\\\editor-identity.png',\n  scale: 'css',\n  type: 'png'\n});\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "close"
+      ],
+      "code": 0,
+      "elapsed_ms": 2092,
+      "stdout": "Browser 'walle-source-1791027230699' closed\n\n",
+      "stderr": ""
+    }
+  ],
+  "result": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "cases": [
+      {
+        "name": "empty",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [],
+        "preserved": "\r\n\r\n"
+      },
+      {
+        "name": "unicode-crlf",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "heading",
+            "markdown": "# 标题😀\r\n",
+            "plain_text": "标题😀",
+            "section_path": [
+              "标题😀"
+            ],
+            "heading_level": 1,
+            "start_utf16": 0,
+            "end_utf16": 8
+          },
+          {
+            "block_type": "paragraph",
+            "markdown": "甲 乙😀\r\n",
+            "plain_text": "甲 乙😀",
+            "section_path": [
+              "标题😀"
+            ],
+            "heading_level": null,
+            "start_utf16": 10,
+            "end_utf16": 17
+          }
+        ],
+        "preserved": "# 标题😀\r\n\r\n甲 乙😀\r\n"
+      },
+      {
+        "name": "inline-breaks",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "paragraph",
+            "markdown": "**甲** _乙_ ~~丙~~ `x<y` [链接](https://example.test) ![图😀](x.png)\n软换行  \n硬换行 <em>原样</em>\n",
+            "plain_text": "甲 乙 丙 x<y 链接 图😀\n软换行\n硬换行 <em>原样</em>",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 85
+          }
+        ],
+        "preserved": "**甲** _乙_ ~~丙~~ `x<y` [链接](https://example.test) ![图😀](x.png)\n软换行  \n硬换行 <em>原样</em>\n"
+      },
+      {
+        "name": "table-escaped-pipe",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "table",
+            "markdown": "| 键 | 值 |\n| --- | --- |\n| A\\|B | **加粗** |\n| 😀 | `code` |\n",
+            "plain_text": "键\t值\nA|B\t加粗\n😀\tcode",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 58
+          }
+        ],
+        "preserved": "| 键 | 值 |\n| --- | --- |\n| A\\|B | **加粗** |\n| 😀 | `code` |\n"
+      },
+      {
+        "name": "tasks-nested",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "task_list",
+            "markdown": "- [ ] 待办\n- [x] 完成\n  - 内层\n",
+            "plain_text": "待办\n完成\n内层",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 25
+          }
+        ],
+        "preserved": "- [ ] 待办\n- [x] 完成\n  - 内层\n"
+      },
+      {
+        "name": "definition-and-inert-html",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "link_definition",
+            "markdown": "[a]: https://a.test\n",
+            "plain_text": "[a]: https://a.test\n",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 20
+          },
+          {
+            "block_type": "link_definition",
+            "markdown": "[a]: https://b.test\n",
+            "plain_text": "[a]: https://b.test\n",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 20,
+            "end_utf16": 40
+          },
+          {
+            "block_type": "paragraph",
+            "markdown": "[标签][a]\n",
+            "plain_text": "标签",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 41,
+            "end_utf16": 49
+          },
+          {
+            "block_type": "html_block",
+            "markdown": "<div>\n原样\n</div>\n",
+            "plain_text": "<div>\n原样\n</div>\n",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 50,
+            "end_utf16": 66
+          }
+        ],
+        "preserved": "[a]: https://a.test\n[a]: https://b.test\n\n[标签][a]\n\n<div>\n原样\n</div>\n"
+      },
+      {
+        "name": "registered-types",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "heading",
+            "markdown": "# 节\n",
+            "plain_text": "节",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": 1,
+            "start_utf16": 0,
+            "end_utf16": 4
+          },
+          {
+            "block_type": "paragraph",
+            "markdown": "段\n",
+            "plain_text": "段",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 5,
+            "end_utf16": 7
+          },
+          {
+            "block_type": "blockquote",
+            "markdown": "> 引用\n>\n> 第二段\n",
+            "plain_text": "引用\n第二段",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 8,
+            "end_utf16": 21
+          },
+          {
+            "block_type": "bullet_list",
+            "markdown": "- 一\n- 二\n",
+            "plain_text": "一\n二",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 22,
+            "end_utf16": 30
+          },
+          {
+            "block_type": "ordered_list",
+            "markdown": "1. 壹\n2. 贰\n",
+            "plain_text": "壹\n贰",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 31,
+            "end_utf16": 41
+          },
+          {
+            "block_type": "task_list",
+            "markdown": "- [ ] 任务\n",
+            "plain_text": "任务",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 42,
+            "end_utf16": 51
+          },
+          {
+            "block_type": "code_block",
+            "markdown": "```js\nx<y\n```\n",
+            "plain_text": "x<y\n",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 52,
+            "end_utf16": 66
+          },
+          {
+            "block_type": "thematic_break",
+            "markdown": "---\n",
+            "plain_text": "",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 67,
+            "end_utf16": 71
+          },
+          {
+            "block_type": "table",
+            "markdown": "| K | V |\n| - | - |\n| A | B |\n",
+            "plain_text": "K\tV\nA\tB",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 72,
+            "end_utf16": 102
+          },
+          {
+            "block_type": "html_block",
+            "markdown": "<div>源</div>\n",
+            "plain_text": "<div>源</div>\n",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 103,
+            "end_utf16": 116
+          },
+          {
+            "block_type": "link_definition",
+            "markdown": "[r]: /target\n",
+            "plain_text": "[r]: /target\n",
+            "section_path": [
+              "节"
+            ],
+            "heading_level": null,
+            "start_utf16": 117,
+            "end_utf16": 130
+          }
+        ],
+        "preserved": "# 节\n\n段\n\n> 引用\n>\n> 第二段\n\n- 一\n- 二\n\n1. 壹\n2. 贰\n\n- [ ] 任务\n\n```js\nx<y\n```\n\n---\n\n| K | V |\n| - | - |\n| A | B |\n\n<div>源</div>\n\n[r]: /target\n"
+      },
+      {
+        "name": "code-empty",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "code_block",
+            "markdown": "```\n```\n",
+            "plain_text": "",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 8
+          }
+        ],
+        "preserved": "```\n```\n"
+      },
+      {
+        "name": "code-blank-line",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "code_block",
+            "markdown": "```\n\n```\n",
+            "plain_text": "\n",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 9
+          }
+        ],
+        "preserved": "```\n\n```\n"
+      },
+      {
+        "name": "unclosed-code-eof",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "code_block",
+            "markdown": "```\nx😀",
+            "plain_text": "x😀",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 7
+          }
+        ],
+        "preserved": "```\nx😀"
+      },
+      {
+        "name": "indented-code",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "code_block",
+            "markdown": "    a\r\n    b\r\n",
+            "plain_text": "a\nb\n",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 14
+          }
+        ],
+        "preserved": "    a\r\n    b\r\n"
+      },
+      {
+        "name": "repeated-headings",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "heading",
+            "markdown": "### 深\r\n",
+            "plain_text": "深",
+            "section_path": [
+              "深"
+            ],
+            "heading_level": 3,
+            "start_utf16": 0,
+            "end_utf16": 7
+          },
+          {
+            "block_type": "heading",
+            "markdown": "# 根\r\n",
+            "plain_text": "根",
+            "section_path": [
+              "根"
+            ],
+            "heading_level": 1,
+            "start_utf16": 9,
+            "end_utf16": 14
+          },
+          {
+            "block_type": "heading",
+            "markdown": "### 深\r\n",
+            "plain_text": "深",
+            "section_path": [
+              "根",
+              "深"
+            ],
+            "heading_level": 3,
+            "start_utf16": 16,
+            "end_utf16": 23
+          },
+          {
+            "block_type": "paragraph",
+            "markdown": "文\r\n",
+            "plain_text": "文",
+            "section_path": [
+              "根",
+              "深"
+            ],
+            "heading_level": null,
+            "start_utf16": 25,
+            "end_utf16": 28
+          },
+          {
+            "block_type": "heading",
+            "markdown": "### 深\r\n",
+            "plain_text": "深",
+            "section_path": [
+              "根",
+              "深"
+            ],
+            "heading_level": 3,
+            "start_utf16": 30,
+            "end_utf16": 37
+          }
+        ],
+        "preserved": "### 深\r\n\r\n# 根\r\n\r\n### 深\r\n\r\n文\r\n\r\n### 深\r\n"
+      },
+      {
+        "name": "crlf-softbreak",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "paragraph",
+            "markdown": "甲 乙\r\n丙\r\n",
+            "plain_text": "甲 乙\n丙",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 8
+          }
+        ],
+        "preserved": "甲 乙\r\n丙\r\n"
+      },
+      {
+        "name": "unknown-extension",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "paragraph",
+            "markdown": "$$x$$\n",
+            "plain_text": "$$x$$",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 6
+          },
+          {
+            "block_type": "paragraph",
+            "markdown": ":::diagram\nA-->B\n:::\n",
+            "plain_text": ":::diagram\nA-->B\n:::",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 7,
+            "end_utf16": 28
+          }
+        ],
+        "preserved": "$$x$$\n\n:::diagram\nA-->B\n:::\n"
+      },
+      {
+        "name": "inert-script-br",
+        "raw_equal": true,
+        "projection_equal": true,
+        "changed_rejected": true,
+        "blocks": [
+          {
+            "block_type": "html_block",
+            "markdown": "<script>window.__walleUnsafe=1</script>\r\n",
+            "plain_text": "<script>window.__walleUnsafe=1</script>\r\n",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 0,
+            "end_utf16": 41
+          },
+          {
+            "block_type": "html_block",
+            "markdown": "<br />\r\n",
+            "plain_text": "<br />\r\n",
+            "section_path": [],
+            "heading_level": null,
+            "start_utf16": 43,
+            "end_utf16": 51
+          }
+        ],
+        "preserved": "<script>window.__walleUnsafe=1</script>\r\n\r\n<br />\r\n"
+      }
+    ],
+    "html_inert": true
+  },
+  "identity_checks": [
+    {
+      "name": "initial-bind",
+      "ids": [
+        10,
+        20
+      ],
+      "next": 30,
+      "position": 6,
+      "text": "甲乙尾",
+      "serialized": "甲乙\n\n尾\n",
+      "dom_ids": [
+        "10",
+        "20"
+      ]
+    },
+    {
+      "name": "keyboard-split",
+      "ids": [
+        10,
+        30,
+        20
+      ],
+      "next": 31,
+      "position": 4,
+      "text": "甲乙尾",
+      "serialized": "甲\n\n乙\n\n尾\n",
+      "dom_ids": [
+        "10",
+        "30",
+        "20"
+      ]
+    },
+    {
+      "name": "keyboard-undo",
+      "ids": [
+        10,
+        20
+      ],
+      "next": 31,
+      "position": 2,
+      "text": "甲乙尾",
+      "serialized": "甲乙\n\n尾\n",
+      "dom_ids": [
+        "10",
+        "20"
+      ]
+    },
+    {
+      "name": "keyboard-redo",
+      "ids": [
+        10,
+        30,
+        20
+      ],
+      "next": 31,
+      "position": 4,
+      "text": "甲乙尾",
+      "serialized": "甲\n\n乙\n\n尾\n",
+      "dom_ids": [
+        "10",
+        "30",
+        "20"
+      ]
+    },
+    {
+      "name": "keyboard-join",
+      "ids": [
+        10,
+        20
+      ],
+      "next": 31,
+      "position": 2,
+      "text": "甲乙尾",
+      "serialized": "甲乙\n\n尾\n",
+      "dom_ids": [
+        "10",
+        "20"
+      ]
+    },
+    {
+      "name": "keyboard-second-split",
+      "ids": [
+        10,
+        31,
+        20
+      ],
+      "next": 32,
+      "position": 4,
+      "text": "甲乙尾",
+      "serialized": "甲\n\n乙\n\n尾\n",
+      "dom_ids": [
+        "10",
+        "31",
+        "20"
+      ]
+    }
+  ],
+  "passed": true,
+  "server_log": "\n  VITE v8.3.2  ready in 134 ms\n\n  ➜  Local:   http://127.0.0.1:5174/\n",
+  "fixtures": [
+    {
+      "file": "shared/fixtures/markdown-v1.json",
+      "sha256": "be6593655542dae95005e71fb323a36793d27b70984babdd3daeb09fe51274a2"
+    },
+    {
+      "file": "shared/fixtures/markdown-editor-v1.json",
+      "sha256": "7ef2ce2868a174b8d2baea0470e0e179852528159c6673bc35273be497749531"
+    },
+    {
+      "file": "frontend/package-lock.json",
+      "sha256": "a1f0f7105586372d92bbe2731707269e4f6784c6b23a034b3cb3e10fbf6b9384"
+    }
+  ]
+}
