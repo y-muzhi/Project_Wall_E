@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "basis": "Independent D-004 projected-codepoint ranges. Endpoint text identifies actual PM text nodes; offsets remain UTF-16 and never infer block identity.",
+  "cases": [
+    {
+      "name": "unicode-graphemes",
+      "markdown": "甲😀é👩‍💻乙\n",
+      "plain_text": "甲😀é👩‍💻乙",
+      "anchor": {
+        "text": "甲",
+        "offset": 1
+      },
+      "focus": {
+        "text": "乙",
+        "offset": 0
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 7,
+        "selected_text": "😀é👩‍💻",
+        "prefix_text": "甲",
+        "suffix_text": "乙"
+      }
+    },
+    {
+      "name": "marks-and-unicode-url",
+      "markdown": "**甲**乙 www.例子.test/a*b 尾\n",
+      "plain_text": "甲乙 www.例子.test/a*b 尾",
+      "anchor": {
+        "text": "甲",
+        "offset": 0
+      },
+      "focus": {
+        "text": "www.例子.test/a*b",
+        "offset": 14
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 0,
+        "end_offset": 17,
+        "selected_text": "甲乙 www.例子.test/a*",
+        "prefix_text": "",
+        "suffix_text": "b 尾"
+      }
+    },
+    {
+      "name": "hard-break",
+      "markdown": "甲  \n乙\n",
+      "plain_text": "甲\n乙",
+      "anchor": {
+        "text": "甲",
+        "offset": 1
+      },
+      "focus": {
+        "text": "乙",
+        "offset": 0
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 2,
+        "selected_text": "\n",
+        "prefix_text": "甲",
+        "suffix_text": "乙"
+      }
+    },
+    {
+      "name": "soft-break",
+      "markdown": "甲\n乙\n",
+      "plain_text": "甲\n乙",
+      "anchor": {
+        "text": "甲",
+        "offset": 1
+      },
+      "focus": {
+        "text": "乙",
+        "offset": 0
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 2,
+        "selected_text": "\n",
+        "prefix_text": "甲",
+        "suffix_text": "乙"
+      }
+    },
+    {
+      "name": "image-alt",
+      "markdown": "前![图😀](x.png)后\n",
+      "plain_text": "前图😀后",
+      "anchor": {
+        "text": "前",
+        "offset": 1
+      },
+      "focus": {
+        "text": "后",
+        "offset": 0
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 3,
+        "selected_text": "图😀",
+        "prefix_text": "前",
+        "suffix_text": "后"
+      }
+    },
+    {
+      "name": "inline-html-atom",
+      "markdown": "甲<em>乙</em>丙\n",
+      "plain_text": "甲<em>乙</em>丙",
+      "anchor": {
+        "text": "甲",
+        "offset": 1
+      },
+      "focus": {
+        "text": "乙",
+        "offset": 0
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 5,
+        "selected_text": "<em>",
+        "prefix_text": "甲",
+        "suffix_text": "乙</em>丙"
+      }
+    },
+    {
+      "name": "quote-paragraph-separator",
+      "markdown": "> 一\n>\n> 二\n",
+      "plain_text": "一\n二",
+      "anchor": {
+        "text": "一",
+        "offset": 1
+      },
+      "focus": {
+        "text": "二",
+        "offset": 0
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 2,
+        "selected_text": "\n",
+        "prefix_text": "一",
+        "suffix_text": "二"
+      }
+    },
+    {
+      "name": "nested-table-row-and-cell",
+      "markdown": "> | 键 | 值 |\n> | --- | --- |\n> | A | 一 |\n",
+      "plain_text": "键\t值\nA\t一",
+      "anchor": {
+        "text": "值",
+        "offset": 0
+      },
+      "focus": {
+        "text": "A",
+        "offset": 1
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 2,
+        "end_offset": 5,
+        "selected_text": "值\nA",
+        "prefix_text": "键\t",
+        "suffix_text": "\t一"
+      }
+    },
+    {
+      "name": "list-item-separator",
+      "markdown": "- 一\n- 二\n",
+      "plain_text": "一\n二",
+      "anchor": {
+        "text": "一",
+        "offset": 1
+      },
+      "focus": {
+        "text": "二",
+        "offset": 0
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 2,
+        "selected_text": "\n",
+        "prefix_text": "一",
+        "suffix_text": "二"
+      }
+    },
+    {
+      "name": "raw-html-crlf",
+      "markdown": "> <div>\r\n> 原😀\r\n> </div>\r\n",
+      "plain_text": "<div>\r\n原😀\r\n</div>\r\n",
+      "anchor": {
+        "text": "原😀",
+        "offset": 0
+      },
+      "focus": {
+        "text": "原😀",
+        "offset": 3
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 7,
+        "end_offset": 9,
+        "selected_text": "原😀",
+        "prefix_text": "<div>\r\n",
+        "suffix_text": "\r\n</div>\r\n"
+      }
+    },
+    {
+      "name": "code-tail-not-a-visible-character",
+      "markdown": "```\r\n甲\r\n乙\r\n```\r\n",
+      "plain_text": "甲\n乙\n",
+      "anchor": {
+        "text": "甲",
+        "offset": 0
+      },
+      "focus": {
+        "text": "乙",
+        "offset": 1
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 0,
+        "end_offset": 3,
+        "selected_text": "甲\n乙",
+        "prefix_text": "",
+        "suffix_text": "\n"
+      }
+    },
+    {
+      "name": "task-separator",
+      "markdown": "- [ ] 待办\n- [x] 完成\n",
+      "plain_text": "待办\n完成",
+      "anchor": {
+        "text": "待办",
+        "offset": 1
+      },
+      "focus": {
+        "text": "完成",
+        "offset": 1
+      },
+      "event": {
+        "document_id": 90,
+        "content_version": 3,
+        "block_id": 10,
+        "start_offset": 1,
+        "end_offset": 4,
+        "selected_text": "办\n完",
+        "prefix_text": "待",
+        "suffix_text": "成"
+      }
+    }
+  ]
+}

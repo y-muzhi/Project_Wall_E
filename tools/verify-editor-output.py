@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.documents.snapshot import validate_snapshot  # noqa: E402
+from backend.app.documents.anchors import create_selection_anchor, locate  # noqa: E402
 
 
 def fixture_origin(origin):
@@ -35,6 +36,16 @@ def main():
         records.append((f'strikethrough-{index}', entry['pair'], entry['projection']))
     for index, entry in enumerate(report.get('raw_source', {}).get('outputs', [])):
         records.append((f'raw-source-{index}', entry['pair'], entry['projection']))
+    for index, entry in enumerate(report.get('editor_selection', {}).get('records', [])):
+        records.append((f'editor-selection-{index}', entry['pair'], entry['projection']))
+        snapshot = validate_snapshot(entry['pair']['markdown_content'], entry['pair']['block_state_json'], fixture_origin)
+        event = entry['event']
+        if event['document_id'] != 90 or event['content_version'] != 3:
+            raise AssertionError('Selection is not bound to the actual fixture draft context')
+        anchor = create_selection_anchor(snapshot, event['block_id'], {key: event[key] for key in ('selected_text', 'prefix_text', 'suffix_text')})
+        location = locate(snapshot, 'SELECTION', event['block_id'], anchor)
+        if (location.start_offset, location.end_offset) != (event['start_offset'], event['end_offset']):
+            raise AssertionError('Backend codepoint location differs from actual native/editor selection')
     for name, pair, expected in records:
         snapshot = validate_snapshot(pair['markdown_content'], pair['block_state_json'], fixture_origin)
         actual = [{'block_type': block.block_type, 'plain_text': block.plain_text,

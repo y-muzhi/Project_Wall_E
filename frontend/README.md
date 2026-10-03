@@ -46,3 +46,5 @@ edited-snapshot.ts的EditedSnapshotLedger只接受完整MANUAL_DRAFT与同次绑
 Unicode域名单元：shared/markdown/url-domain-unicode-v1.json冻结所选Python3.13/Unicode15.1的748字母数字区间，url-domain-unicode.ts按完整码点查询。实际Node的Unicode17分类不直接作为业务语义；生成工具拒绝覆盖，后端升级需重新逐码点验证。新增8独立例及2真实编辑输出；自动链接专项现为56例/61对，默认完整模式131对，最新editor-browser-2026-10-03T14-54-25-426Z.json的36输入hash一致、会话关闭。27项前端测试及完整TS通过，后端123项；两端均核对全部1,114,112码点。上述历史证据保留，Unicode域列出范围已验证；嵌套原始节点、更多标签边界、完整组件仍待实施。
 
 容器内原始HTML/定义由raw-source-remark.ts读取真实流片段，去除容器前缀但保留原始换行/缩进/转义；source-nodes允许合法块作为列表首项（生成空列表仍优先段落），不补空段造成投影变化。后端按块树连接，嵌套表格保留TAB/LF结构。专项`node tools/verify-editor-browser.mjs --raw-source-check`现为18独立例/22对输出；默认完整模式153对，editor-browser-2026-10-03T15-35-41-838Z.json，40输入hash不变、会话关闭。125后端/28前端/TS通过。更多键入/列表命令、原始节点重新分块、DOM选区和完整组件仍待验；上述有限范围不等于全部GFM。
+
+editor-selection.ts正向适配真实EditorState与原生DOM端点，映射到selection.ts的共同码点事件；只接受同一实际Block及精确往返端点，拒绝代理项内、部分原子HTML文本、跨块/编辑器外、迟到DOM和2001码点。折叠选区不发正文事件。文档id/version由父级同次载入上下文传入，父页面控制及反向定位尚待实现；它不认定保存或授权。专项`node tools/verify-editor-browser.mjs --selection-check`覆盖12独立正反向黄金例、2000码点和真实键盘emoji，共14记录；后端真实锚点重新定位起止一致。完整模式167对快照、44输入hash不变、会话关闭，editor-browser-2026-10-03T15-55-02-644Z.json；125后端/28前端/TS通过。

@@ -12,6 +12,7 @@ import { autolinkBaseline } from './autolink-baseline.ts';
 import { autolinkConformance } from './autolink-conformance.ts';
 import { verifyStrikethrough } from './strikethrough.ts';
 import { verifyRawSource } from './raw-source.ts';
+import { verifyEditorSelection, keyboardSelection } from './editor-selection.ts';
 
 let crepe: Crepe | undefined;
 let ledger: EditedSnapshotLedger | undefined;
@@ -55,6 +56,9 @@ Object.assign(window, { editorProbe: {
   autolinkConformance: () => autolinkConformance((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
   verifyStrikethrough: () => verifyStrikethrough((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
   verifyRawSource: () => verifyRawSource((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
+  verifyEditorSelection: () => verifyEditorSelection((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
+  prepareSelection: () => load('甲😀乙\n', true, {ids: [10], next: 20}),
+  keyboardSelection: () => keyboardSelection(crepe!),
   prepareIdentity: async () => {
     const markdown = '甲乙\n\n尾\n';
     await load(markdown, true, {ids: [10, 20], next: 30});

@@ -12,7 +12,8 @@ const baselineOnly = process.argv.includes('--autolink-baseline');
 const autolinkOnly = process.argv.includes('--autolink-check');
 const strikethroughOnly = process.argv.includes('--strikethrough-check');
 const rawSourceOnly = process.argv.includes('--raw-source-check');
-if ([baselineOnly, autolinkOnly, strikethroughOnly, rawSourceOnly].filter(Boolean).length > 1) throw new Error('独立检查模式不能混用');
+const selectionOnly = process.argv.includes('--selection-check');
+if ([baselineOnly, autolinkOnly, strikethroughOnly, rawSourceOnly, selectionOnly].filter(Boolean).length > 1) throw new Error('独立检查模式不能混用');
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const commands = [];
@@ -41,6 +42,8 @@ const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdow
   'frontend/src/documents/inline-marks.ts',
   'frontend/src/documents/raw-source-remark.ts', 'backend/app/documents/raw_source.py',
   'shared/fixtures/raw-source-containers-v1.json', 'frontend/tests/browser/raw-source.ts',
+  'frontend/src/documents/editor-selection.ts', 'frontend/tests/browser/editor-selection.ts',
+  'shared/fixtures/editor-selection-v1.json', 'backend/app/documents/anchors.py',
   'frontend/src/documents/url-domain-unicode.ts', 'shared/markdown/url-domain-unicode-v1.json',
   'backend/app/documents/autolinks.py', 'backend/app/documents/markdown.py', 'backend/requirements.lock',
   'backend/app/documents/snapshot.py', 'backend/app/shared/validation.py', 'backend/app/shared/time.py',
@@ -68,6 +71,24 @@ function resultFrom(output) {
   if (!match) throw new Error('浏览器未返回结构化结果');
   return JSON.parse(match[1]);
 }
+async function verifySelection() {
+  const result = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyEditorSelection())'));
+  assert.equal(result.records.length, 13);
+  assert.deepEqual(result.rejected, ['cross-block', 'surrogate-interior', 'partial-html-atom', 'outside-editor', 'stale-dom-state', 'collapsed-no-event', '2001-not-truncated']);
+  await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.prepareSelection())');
+  const snapshot = await cli('snapshot');
+  const ref = /textbox \[ref=([^\]]+)\]/.exec(snapshot)?.[1];
+  if (!ref) throw new Error('选区键盘检查缺少真实编辑器引用');
+  await cli('click', ref);
+  await cli('press', 'Control+Home');
+  await cli('press', 'ArrowRight');
+  await cli('press', 'Shift+ArrowRight');
+  const keyboard = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.keyboardSelection())'));
+  assert.deepEqual(keyboard.event, {document_id: 90, content_version: 3, block_id: 10, start_offset: 1, end_offset: 2,
+    selected_text: '😀', prefix_text: '甲', suffix_text: '乙'});
+  result.records.push(keyboard);
+  return result;
+}
 try {
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -93,7 +114,7 @@ try {
     assert.equal(report.frontend_baseline.records.length, 22);
     assert.equal(report.backend_baseline.records.length, 22);
     report.conforms = !report.frontend_baseline.mismatches.length && !report.backend_baseline.mismatches.length;
-  } else if (autolinkOnly || strikethroughOnly || rawSourceOnly) {
+  } else if (autolinkOnly || strikethroughOnly || rawSourceOnly || selectionOnly) {
     report.scope = 'Independent syntax/context cases and edited output; fixture provenance, not product/HTTP acceptance';
     if (autolinkOnly) {
       report.autolink_conformance = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkConformance())'));
@@ -104,10 +125,12 @@ try {
       report.strikethrough = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyStrikethrough())'));
       assert.equal(report.strikethrough.records.length, 18);
       assert.equal(report.strikethrough.outputs.length, 21);
-    } else {
+    } else if (rawSourceOnly) {
       report.raw_source = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyRawSource())'));
       assert.equal(report.raw_source.records.length, 18);
       assert.equal(report.raw_source.outputs.length, 22);
+    } else {
+      report.editor_selection = await verifySelection();
     }
     const backend = spawn(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/verify-editor-output.py'], {cwd: root, windowsHide: true});
     let stdout = '', stderr = '';
@@ -119,7 +142,7 @@ try {
     report.backend_command = {status: code, stdout, stderr};
     if (code !== 0) throw new Error(`后端拒绝方言快照\n${stderr}`);
     report.backend_output = JSON.parse(stdout);
-    assert.equal(report.backend_output.pairs_checked, (report.autolink_conformance ?? report.strikethrough ?? report.raw_source).outputs.length);
+    assert.equal(report.backend_output.pairs_checked, selectionOnly ? report.editor_selection.records.length : (report.autolink_conformance ?? report.strikethrough ?? report.raw_source).outputs.length);
   } else {
   const output = await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verify())');
   report.result = resultFrom(output);
@@ -200,6 +223,7 @@ try {
   report.raw_source = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyRawSource())'));
   assert.equal(report.raw_source.records.length, 18);
   assert.equal(report.raw_source.outputs.length, 22);
+  report.editor_selection = await verifySelection();
   const backendCommand = [resolve(root, '.venv/Scripts/python.exe'), '-X', 'utf8', 'tools/verify-editor-output.py'];
   const backend = spawn(backendCommand[0], backendCommand.slice(1), {cwd: root, windowsHide: true});
   let backendStdout = '', backendStderr = '';
@@ -212,7 +236,7 @@ try {
   if (backendStatus !== 0) throw new Error(`后端拒绝真实编辑器快照\n${backendStderr}`);
   report.backend_output = JSON.parse(backendStdout);
   assert.equal(report.backend_output.passed, true);
-  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length + report.strikethrough.outputs.length + report.raw_source.outputs.length);
+  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length + report.strikethrough.outputs.length + report.raw_source.outputs.length + report.editor_selection.records.length);
   }
   report.passed = true;
 } catch (error) {
