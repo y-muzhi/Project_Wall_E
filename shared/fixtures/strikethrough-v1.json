@@ -1,0 +1,23 @@
+{
+  "source": "Own independent cases for approved D-004/GFM 6.5 matching one/two tildes; raw source and 11 top-level projection rules stay in force",
+  "cases": [
+    {"name":"single","markdown":"~甲~\n","plain_text":["甲"],"deleted":["甲"]},
+    {"name":"double","markdown":"~~甲~~\n","plain_text":["甲"],"deleted":["甲"]},
+    {"name":"triple-inert","markdown":"前 ~~~甲~~~ 后\n","plain_text":["前 ~~~甲~~~ 后"],"deleted":[]},
+    {"name":"four-inert","markdown":"前 ~~~~甲~~~~ 后\n","plain_text":["前 ~~~~甲~~~~ 后"],"deleted":[]},
+    {"name":"mismatched-width","markdown":"~甲~~\n","plain_text":["~甲~~"],"deleted":[]},
+    {"name":"double-with-unmatched-single","markdown":"~~甲~乙~~\n","plain_text":["甲~乙"],"deleted":["甲~乙"]},
+    {"name":"single-with-unmatched-double","markdown":"~甲~~乙~\n","plain_text":["甲~~乙"],"deleted":["甲~~乙"]},
+    {"name":"nested-width","markdown":"~~甲~乙~丙~~\n","plain_text":["甲乙丙"],"deleted":["甲乙丙"]},
+    {"name":"word-interior","markdown":"甲~乙~丙\n","plain_text":["甲乙丙"],"deleted":["乙"]},
+    {"name":"spaces-inert","markdown":"~ 甲 ~\n","plain_text":["~ 甲 ~"],"deleted":[]},
+    {"name":"escaped-marker","markdown":"\\~甲\\~\n","plain_text":["~甲~"],"deleted":[]},
+    {"name":"code-inert","markdown":"`~甲~`\n","plain_text":["~甲~"],"deleted":[]},
+    {"name":"paragraph-boundary","markdown":"前 ~甲\n\n乙~ 后\n","plain_text":["前 ~甲","乙~ 后"],"deleted":[]},
+    {"name":"softbreak","markdown":"~甲\n乙~\n","plain_text":["甲\n乙"],"deleted":["甲\n乙"]},
+    {"name":"table","markdown":"| 键 | 内容 |\n| --- | --- |\n| A | ~甲~与~~乙~~ |\n","plain_text":["键\t内容\nA\t甲与乙"],"deleted":["甲","乙"]},
+    {"name":"blockquote","markdown":"> ~甲~\n> ~~乙~~\n","plain_text":["甲\n乙"],"deleted":["甲","乙"]},
+    {"name":"autolink-interior-is-literal","markdown":"www.example.test/a~b~c\n","plain_text":["www.example.test/a~b~c"],"deleted":[]},
+    {"name":"single-strike-around-autolink","markdown":"~www.example.test/a~\n","plain_text":["www.example.test/a"],"deleted":["www.example.test/a"]}
+  ]
+}

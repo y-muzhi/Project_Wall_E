@@ -40,3 +40,5 @@ edited-snapshot.ts的EditedSnapshotLedger只接受完整MANUAL_DRAFT与同次绑
 自动链接生产规则使用原始源上的micromark tokenizer，保留表格/任务/删除线并处理真实表格chunk与转义竖线，不靠实体解码后替换AST文本。专项运行`node tools/verify-editor-browser.mjs --autolink-check`：48个独立预期与3个真实编辑后的输出，51对完整快照交给后端验证。完整默认模式再运行原编辑/身份/键盘及输入门禁，共100对；最新证据editor-browser-2026-10-03T14-08-31-198Z.json，29输入前后hash一致。24项独立前端测试及TS通过，另在development条件运行4自动链接测试以覆盖Vite使用的解析器断言。
 
 `--autolink-baseline`仍只采集当前22例，BASELINE COLLECTED不表示合规；修复前5处前端/16处后端差异的历史证据不覆写。原源及星号/协议边界修复已验证上述有限范围，Unicode域、更多括号语境、GFM其他边界和完整组件仍待补齐。详细记录docs/verification/autolink-baseline-notes.md；没有产品页面启动命令。
+
+单双删除线另有18独立例，专项运行`node tools/verify-editor-browser.mjs --strikethrough-check`。inline-marks.ts在生产sourceRemark中展平重复delete样式，避免Milkdown关闭内层时把外层剩余文字漏划；原始tildes由源码层保存。21对专项输出与完整模式121对通过后端校验，最新editor-browser-2026-10-03T14-30-29-473Z.json，33输入hash不变；25前端测试/完整TS通过。不表示全部键入规则或产品视觉验收通过。

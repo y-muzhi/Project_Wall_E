@@ -8,6 +8,7 @@ import { uploadPlugin } from '@milkdown/kit/plugin/upload';
 import { trailing } from '@milkdown/kit/plugin/trailing';
 import { remarkGFMPlugin } from '@milkdown/kit/preset/gfm';
 import { remarkWallEGfm } from './autolink-remark.ts';
+import { collapseNestedDeletion } from './inline-marks.ts';
 
 // A text node, never innerHTML: authored HTML and definitions stay visible,
 // including duplicates that remark-inline-links would otherwise discard.
@@ -52,6 +53,7 @@ function sourceValue(node: MarkdownNode, source: string, wholeLine = false): str
 }
 
 const sourceRemark = $remark('walle-source-nodes', () => () => (root, file) => {
+  collapseNestedDeletion(root as MarkdownNode);
   const source = String(file.value);
   const definitions = new Map<string, MarkdownNode>();
   const scan = (node: MarkdownNode) => {

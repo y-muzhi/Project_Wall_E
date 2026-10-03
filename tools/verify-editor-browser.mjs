@@ -10,7 +10,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const session = `walle-source-${Date.now()}`;
 const baselineOnly = process.argv.includes('--autolink-baseline');
 const autolinkOnly = process.argv.includes('--autolink-check');
-if (baselineOnly && autolinkOnly) throw new Error('基线采集和合规检查不能混用');
+const strikethroughOnly = process.argv.includes('--strikethrough-check');
+if ([baselineOnly, autolinkOnly, strikethroughOnly].filter(Boolean).length > 1) throw new Error('独立检查模式不能混用');
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const commands = [];
@@ -36,8 +37,10 @@ const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdow
   'frontend/src/documents/identity.ts', 'frontend/src/documents/contracts.ts', 'frontend/tests/browser/contracts.ts',
   'frontend/src/documents/edited-snapshot.ts', 'frontend/tests/browser/edited-snapshot.ts',
   'frontend/src/documents/autolink-lexemes.ts', 'frontend/src/documents/autolink-remark.ts',
+  'frontend/src/documents/inline-marks.ts',
   'backend/app/documents/autolinks.py', 'backend/app/documents/markdown.py', 'backend/requirements.lock',
   'backend/app/documents/snapshot.py', 'backend/app/shared/validation.py', 'backend/app/shared/time.py',
+  'backend/app/documents/strikethrough.py', 'shared/fixtures/strikethrough-v1.json', 'frontend/tests/browser/strikethrough.ts',
   'tools/verify-editor-output.py',
   'shared/fixtures/autolink-v1.json', 'frontend/tests/browser/autolink-baseline.ts', 'tools/autolink-baseline.py',
   'shared/fixtures/autolink-context-v1.json', 'frontend/tests/browser/autolink-conformance.ts',
@@ -85,12 +88,18 @@ try {
     assert.equal(report.frontend_baseline.records.length, 22);
     assert.equal(report.backend_baseline.records.length, 22);
     report.conforms = !report.frontend_baseline.mismatches.length && !report.backend_baseline.mismatches.length;
-  } else if (autolinkOnly) {
-    report.scope = '48 independent literal/context cases and edited output; fixture provenance, not product/HTTP acceptance';
-    report.autolink_conformance = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkConformance())'));
-    assert.equal(report.autolink_conformance.records.length, 48);
-    assert.deepEqual(report.autolink_conformance.mismatches, []);
-    assert.equal(report.autolink_conformance.outputs.length, 51);
+  } else if (autolinkOnly || strikethroughOnly) {
+    report.scope = 'Independent syntax/context cases and edited output; fixture provenance, not product/HTTP acceptance';
+    if (autolinkOnly) {
+      report.autolink_conformance = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkConformance())'));
+      assert.equal(report.autolink_conformance.records.length, 48);
+      assert.deepEqual(report.autolink_conformance.mismatches, []);
+      assert.equal(report.autolink_conformance.outputs.length, 51);
+    } else {
+      report.strikethrough = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyStrikethrough())'));
+      assert.equal(report.strikethrough.records.length, 18);
+      assert.equal(report.strikethrough.outputs.length, 21);
+    }
     const backend = spawn(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/verify-editor-output.py'], {cwd: root, windowsHide: true});
     let stdout = '', stderr = '';
     backend.stdout.on('data', data => { stdout += data; });
@@ -99,9 +108,9 @@ try {
     backend.stdin.end(JSON.stringify({...report, identity_types: [], edited_snapshots: {outputs: []}, identity_checks: []}));
     const code = await exited;
     report.backend_command = {status: code, stdout, stderr};
-    if (code !== 0) throw new Error(`后端拒绝自动链接快照\n${stderr}`);
+    if (code !== 0) throw new Error(`后端拒绝方言快照\n${stderr}`);
     report.backend_output = JSON.parse(stdout);
-    assert.equal(report.backend_output.pairs_checked, report.autolink_conformance.outputs.length);
+    assert.equal(report.backend_output.pairs_checked, (report.autolink_conformance ?? report.strikethrough).outputs.length);
   } else {
   const output = await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verify())');
   report.result = resultFrom(output);
@@ -176,6 +185,9 @@ try {
   assert.equal(report.autolink_conformance.records.length, 48);
   assert.deepEqual(report.autolink_conformance.mismatches, [], '独立自动链接/容器预期');
   assert.equal(report.autolink_conformance.outputs.length, 51);
+  report.strikethrough = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyStrikethrough())'));
+  assert.equal(report.strikethrough.records.length, 18);
+  assert.equal(report.strikethrough.outputs.length, 21);
   const backendCommand = [resolve(root, '.venv/Scripts/python.exe'), '-X', 'utf8', 'tools/verify-editor-output.py'];
   const backend = spawn(backendCommand[0], backendCommand.slice(1), {cwd: root, windowsHide: true});
   let backendStdout = '', backendStderr = '';
@@ -188,7 +200,7 @@ try {
   if (backendStatus !== 0) throw new Error(`后端拒绝真实编辑器快照\n${backendStderr}`);
   report.backend_output = JSON.parse(backendStdout);
   assert.equal(report.backend_output.passed, true);
-  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length);
+  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length + report.strikethrough.outputs.length);
   }
   report.passed = true;
 } catch (error) {
