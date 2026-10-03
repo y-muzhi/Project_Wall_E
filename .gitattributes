@@ -5,3 +5,4 @@ backend/app/infrastructure/migrations/** -text
 docs/proposals/** -text
 docs/verification/** -text
 docs/resource-adoption-v1.json -text
+docs/manual-edit-source-adoption-v1.json -text

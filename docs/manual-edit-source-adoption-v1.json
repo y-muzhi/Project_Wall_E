@@ -1,0 +1,20 @@
+{
+  "decision": "D-008",
+  "user_confirmation": "确认按补充稿接入（推荐）",
+  "recorded_at": "2026-10-03T10:29:26.434Z",
+  "approved": [
+    {
+      "path": "docs/proposals/manual-edit-source-v1.md",
+      "sha256": "80977ab4c4dc8707e27e0a4d229a0acd0d168bc19f8e9dcc460dbeef3e18f3f7"
+    },
+    {
+      "path": "docs/proposals/manual-edit-source-v1.sql",
+      "sha256": "6fdbbc3d0266066e897f2dfe45a6844b17edfd6597983cb7735a4c45f342b666"
+    }
+  ],
+  "migration": {
+    "path": "backend/app/infrastructure/migrations/003_manual_edit_sources.sql",
+    "sha256": "e23c68c00cde07bc51080d4f9c772bfb6f1ec577907881625b47cdd4b8caa5f5",
+    "changes": "Approval annotation; SQL preflight implements the reviewed legacy-source refusal."
+  }
+}

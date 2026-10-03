@@ -19,7 +19,7 @@ from .process_lock import ProcessLock
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MIGRATION = Path(__file__).with_name('migrations') / '001_initial.sql'
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class SchemaMismatch(RuntimeError):
@@ -48,7 +48,7 @@ class Migration:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
 
 
-MIGRATIONS = (Migration(), Migration(DEFAULT_MIGRATION.with_name('002_idempotency_guards.sql'), 2))
+MIGRATIONS = (Migration(), Migration(DEFAULT_MIGRATION.with_name('002_idempotency_guards.sql'), 2), Migration(DEFAULT_MIGRATION.with_name('003_manual_edit_sources.sql'), 3))
 
 
 def configured_path() -> Path:
