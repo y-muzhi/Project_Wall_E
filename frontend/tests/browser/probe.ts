@@ -11,6 +11,7 @@ import { EditedSnapshotLedger } from '../../src/documents/edited-snapshot.ts';
 import { autolinkBaseline } from './autolink-baseline.ts';
 import { autolinkConformance } from './autolink-conformance.ts';
 import { verifyStrikethrough } from './strikethrough.ts';
+import { verifyRawSource } from './raw-source.ts';
 
 let crepe: Crepe | undefined;
 let ledger: EditedSnapshotLedger | undefined;
@@ -53,6 +54,7 @@ Object.assign(window, { editorProbe: {
   autolinkBaseline: () => autolinkBaseline(markdown => load(markdown, true), () => crepe!),
   autolinkConformance: () => autolinkConformance((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
   verifyStrikethrough: () => verifyStrikethrough((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
+  verifyRawSource: () => verifyRawSource((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
   prepareIdentity: async () => {
     const markdown = '甲乙\n\n尾\n';
     await load(markdown, true, {ids: [10, 20], next: 30});

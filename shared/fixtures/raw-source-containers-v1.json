@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "basis": "D-004 inert original HTML/definitions within real CommonMark containers; own independent CRLF/CR/EOF and nested samples. Structural join LF is separate from raw source endings.",
+  "cases": [
+    {
+      "name": "quote-definition",
+      "markdown": "> [a]: /chosen\r\n>\r\n> [标签][a]\r\n",
+      "block_type": "blockquote",
+      "plain_text": "[a]: /chosen\r\n\n标签"
+    },
+    {
+      "name": "quote-multiline-definition",
+      "markdown": "> [a]:\r\n>   /chosen\r\n>   \"题\"\r\n>\r\n> [标签][a]\r\n",
+      "block_type": "blockquote",
+      "plain_text": "[a]:\r\n  /chosen\r\n  \"题\"\r\n\n标签"
+    },
+    {
+      "name": "quote-duplicate-definitions",
+      "markdown": "> [a]: /first\r\n> [a]: /second\r\n>\r\n> [标签][a]\r\n",
+      "block_type": "blockquote",
+      "plain_text": "[a]: /first\r\n\n[a]: /second\r\n\n标签"
+    },
+    {
+      "name": "quote-html",
+      "markdown": "> <div>\r\n> 原样\r\n> </div>\r\n",
+      "block_type": "blockquote",
+      "plain_text": "<div>\r\n原样\r\n</div>\r\n"
+    },
+    {
+      "name": "quote-html-indent",
+      "markdown": ">   <div>\r\n>   原样\r\n>   </div>\r\n",
+      "block_type": "blockquote",
+      "plain_text": "  <div>\r\n  原样\r\n  </div>\r\n"
+    },
+    {
+      "name": "nested-quote-script",
+      "markdown": "> > <script>window.__walleNestedUnsafe=1</script>\r\n",
+      "block_type": "blockquote",
+      "plain_text": "<script>window.__walleNestedUnsafe=1</script>\r\n"
+    },
+    {
+      "name": "list-after-paragraph-definition",
+      "markdown": "- 一\r\n\r\n  [a]: /chosen\r\n\r\n  [标签][a]\r\n",
+      "block_type": "bullet_list",
+      "plain_text": "一\n[a]: /chosen\r\n\n标签"
+    },
+    {
+      "name": "list-first-definition",
+      "markdown": "- [a]: /chosen\r\n\r\n  [标签][a]\r\n",
+      "block_type": "bullet_list",
+      "plain_text": "[a]: /chosen\r\n\n标签"
+    },
+    {
+      "name": "list-first-html",
+      "markdown": "- <div>\r\n  原样\r\n  </div>\r\n",
+      "block_type": "bullet_list",
+      "plain_text": "<div>\r\n原样\r\n</div>\r\n"
+    },
+    {
+      "name": "ordered-first-html",
+      "markdown": "3. <div>\r\n   原样\r\n   </div>\r\n",
+      "block_type": "ordered_list",
+      "plain_text": "<div>\r\n原样\r\n</div>\r\n"
+    },
+    {
+      "name": "quote-list-html",
+      "markdown": "> - <div>\r\n>   原样\r\n>   </div>\r\n",
+      "block_type": "blockquote",
+      "plain_text": "<div>\r\n原样\r\n</div>\r\n"
+    },
+    {
+      "name": "list-quote-definition",
+      "markdown": "- > [a]: /chosen\r\n  >\r\n  > [标签][a]\r\n",
+      "block_type": "bullet_list",
+      "plain_text": "[a]: /chosen\r\n\n标签"
+    },
+    {
+      "name": "quote-html-lone-cr",
+      "markdown": "> <div>\r> 行\r> </div>\r",
+      "block_type": "blockquote",
+      "plain_text": "<div>\r行\r</div>\r"
+    },
+    {
+      "name": "quote-html-eof",
+      "markdown": "> <div>\n> 甲😀\n> </div>",
+      "block_type": "blockquote",
+      "plain_text": "<div>\n甲😀\n</div>"
+    },
+    {
+      "name": "quote-html-tabs",
+      "markdown": "> <div>\r\n> \t字\t尾\r\n> </div>\r\n",
+      "block_type": "blockquote",
+      "plain_text": "<div>\r\n\t字\t尾\r\n</div>\r\n"
+    },
+    {
+      "name": "list-first-fence",
+      "markdown": "- ```\r\n  甲\r\n  ```\r\n",
+      "block_type": "bullet_list",
+      "plain_text": "甲\n"
+    },
+    {
+      "name": "ordered-first-thematic-break",
+      "markdown": "1. ---\r\n\r\n   后文\r\n",
+      "block_type": "ordered_list",
+      "plain_text": "\n后文"
+    },
+    {
+      "name": "quote-table",
+      "markdown": "> | 键 | 值 |\r\n> | --- | --- |\r\n> | A | 一 |\r\n",
+      "block_type": "blockquote",
+      "plain_text": "键\t值\nA\t一"
+    }
+  ]
+}

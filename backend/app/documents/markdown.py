@@ -12,6 +12,7 @@ from markdown_it.token import Token
 from mdit_py_plugins.tasklists import tasklists_plugin
 from .autolinks import install_autolinks
 from .strikethrough import install_strikethrough
+from .raw_source import install_raw_source
 
 MAX_MARKDOWN_CODEPOINTS = 1_000_000
 MAX_BLOCKS = 10_000
@@ -64,6 +65,7 @@ def _parser() -> MarkdownIt:
     parser.enable(['table', 'strikethrough'])
     install_strikethrough(parser)
     install_autolinks(parser)
+    install_raw_source(parser)
     parser.use(tasklists_plugin, enabled=False, label=False)
     parser.core.ruler.before('github-tasklists', 'walle-task-source', _mark_task_items)
     return parser
@@ -103,27 +105,30 @@ def _plain(tokens: list[Token], kind: str, raw: str) -> str:
         return ''
     if kind == 'code_block':
         return tokens[0].content
-    if kind == 'table':
-        rows, cells = [], None
-        for token in tokens:
-            if token.type == 'tr_open':
-                cells = []
-            elif token.type == 'inline' and cells is not None:
-                cells.append(_inline_text(token))
-            elif token.type == 'tr_close' and cells is not None:
-                rows.append('\t'.join(cells))
-                cells = None
-        return '\n'.join(rows)
-    texts = []
-    for token in tokens:
-        if token.type == 'inline':
-            texts.append(_inline_text(token))
-        elif token.type in ('fence', 'code_block'):
-            texts.append(token.content)
-        elif token.type in ('html_block', 'definition'):
-            # Within a container this remains part of that one top-level block.
-            texts.append(token.content)
-    return '\n'.join(texts)
+    # Follow the actual block structure. A flat scan loses empty structural
+    # children and changes tables nested inside quotes/lists into LF cells.
+    def children(index: int) -> tuple[list[str], int]:
+        parts = []
+        while index < len(tokens):
+            token = tokens[index]
+            index += 1
+            if token.nesting == -1:
+                return parts, index
+            if token.nesting == 1:
+                nested, index = children(index)
+                parts.append(('\t' if token.type == 'tr_open' else '\n').join(nested))
+            elif token.type == 'inline':
+                parts.append(_inline_text(token))
+            elif token.type in ('fence', 'code_block'):
+                parts.append(token.content)
+            elif token.type in ('html_block', 'definition'):
+                parts.append(token.meta['walle_raw_source'])
+            elif token.type == 'hr':
+                parts.append('')
+        return parts, index
+
+    parts, _ = children(0)
+    return '\n'.join(parts)
 
 
 def parse_markdown(markdown: str) -> ParsedMarkdown:

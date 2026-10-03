@@ -44,3 +44,5 @@ edited-snapshot.ts的EditedSnapshotLedger只接受完整MANUAL_DRAFT与同次绑
 单双删除线另有18独立例，专项运行`node tools/verify-editor-browser.mjs --strikethrough-check`。inline-marks.ts在生产sourceRemark中展平重复delete样式，避免Milkdown关闭内层时把外层剩余文字漏划；原始tildes由源码层保存。21对专项输出与完整模式121对通过后端校验，最新editor-browser-2026-10-03T14-30-29-473Z.json，33输入hash不变；25前端测试/完整TS通过。不表示全部键入规则或产品视觉验收通过。
 
 Unicode域名单元：shared/markdown/url-domain-unicode-v1.json冻结所选Python3.13/Unicode15.1的748字母数字区间，url-domain-unicode.ts按完整码点查询。实际Node的Unicode17分类不直接作为业务语义；生成工具拒绝覆盖，后端升级需重新逐码点验证。新增8独立例及2真实编辑输出；自动链接专项现为56例/61对，默认完整模式131对，最新editor-browser-2026-10-03T14-54-25-426Z.json的36输入hash一致、会话关闭。27项前端测试及完整TS通过，后端123项；两端均核对全部1,114,112码点。上述历史证据保留，Unicode域列出范围已验证；嵌套原始节点、更多标签边界、完整组件仍待实施。
+
+容器内原始HTML/定义由raw-source-remark.ts读取真实流片段，去除容器前缀但保留原始换行/缩进/转义；source-nodes允许合法块作为列表首项（生成空列表仍优先段落），不补空段造成投影变化。后端按块树连接，嵌套表格保留TAB/LF结构。专项`node tools/verify-editor-browser.mjs --raw-source-check`现为18独立例/22对输出；默认完整模式153对，editor-browser-2026-10-03T15-35-41-838Z.json，40输入hash不变、会话关闭。125后端/28前端/TS通过。更多键入/列表命令、原始节点重新分块、DOM选区和完整组件仍待验；上述有限范围不等于全部GFM。

@@ -7,8 +7,10 @@ import {
 import { uploadPlugin } from '@milkdown/kit/plugin/upload';
 import { trailing } from '@milkdown/kit/plugin/trailing';
 import { remarkGFMPlugin } from '@milkdown/kit/preset/gfm';
+import { extendListItemSchemaForTask } from '@milkdown/kit/preset/gfm';
 import { remarkWallEGfm } from './autolink-remark.ts';
 import { collapseNestedDeletion } from './inline-marks.ts';
+import { remarkRawSource } from './raw-source-remark.ts';
 
 // A text node, never innerHTML: authored HTML and definitions stay visible,
 // including duplicates that remark-inline-links would otherwise discard.
@@ -43,6 +45,13 @@ const sourceCodeNode = codeBlockSchema.extendSchema(previous => ctx => {
   };
 });
 
+const sourceListItem = extendListItemSchemaForTask.extendSchema(previous => ctx => ({
+  // CommonMark permits a quote/code/raw block as the first list child. Keep
+  // paragraph first for generated empty items, but never inject a phantom
+  // paragraph when a parsed item's actual first child is another block.
+  ...previous(ctx), content: '(paragraph | block) block*',
+}));
+
 function sourceValue(node: MarkdownNode, source: string, wholeLine = false): string {
   let start = node.position?.start.offset;
   const end = node.position?.end.offset;
@@ -66,7 +75,13 @@ const sourceRemark = $remark('walle-source-nodes', () => () => (root, file) => {
   const transform = (node: MarkdownNode, flow: boolean, depth: number) => {
     const originalType = node.type;
     if (originalType === 'definition' || (originalType === 'html' && flow)) {
-      node.value = sourceValue(node, source, depth === 1);
+      if (depth === 1) node.value = sourceValue(node, source, true);
+      else {
+        if (typeof node.walleRawValue !== 'string') throw new Error('原始容器节点缺少解析器源片段');
+        const end = node.position?.end.offset;
+        if (end === undefined) throw new Error('原始节点缺少源位置');
+        node.value = node.walleRawValue + (/^(?:\r\n|\r|\n)/.exec(source.slice(end))?.[0] ?? '');
+      }
       node.kind = originalType === 'definition' ? 'link_definition' : 'html_block';
       node.type = 'walleRawSource';
     } else if (originalType === 'linkReference' || originalType === 'imageReference') {
@@ -110,6 +125,9 @@ export async function installSourceNodes(crepe: Crepe): Promise<void> {
     ...remarkGFMPlugin,
     ...remarkInlineLinkPlugin, ...remarkHtmlTransformer,
     ...remarkPreserveEmptyLinePlugin, syncHeadingIdPlugin, uploadPlugin, ...trailing, codeBlockSchema.node,
+    extendListItemSchemaForTask.node,
   ]);
-  crepe.editor.use($remark('walle-gfm', () => remarkWallEGfm)).use(sourceCodeNode).use(rawSourceNode).use(sourceRemark);
+  crepe.editor.use($remark('walle-gfm', () => remarkWallEGfm))
+    .use($remark('walle-raw-flow', () => remarkRawSource))
+    .use(sourceCodeNode).use(sourceListItem).use(rawSourceNode).use(sourceRemark);
 }

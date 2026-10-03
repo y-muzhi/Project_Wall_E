@@ -33,6 +33,8 @@ def main():
         records.append((f'autolink-{index}', entry['pair'], entry['projection']))
     for index, entry in enumerate(report.get('strikethrough', {}).get('outputs', [])):
         records.append((f'strikethrough-{index}', entry['pair'], entry['projection']))
+    for index, entry in enumerate(report.get('raw_source', {}).get('outputs', [])):
+        records.append((f'raw-source-{index}', entry['pair'], entry['projection']))
     for name, pair, expected in records:
         snapshot = validate_snapshot(pair['markdown_content'], pair['block_state_json'], fixture_origin)
         actual = [{'block_type': block.block_type, 'plain_text': block.plain_text,
