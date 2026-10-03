@@ -40,6 +40,10 @@ function emptyCaret(doc: Node): boolean {
   return doc.childCount === 1 && doc.firstChild?.type.name === 'paragraph' && doc.firstChild.content.size === 0;
 }
 
+function emptyParagraph(node: Node): boolean {
+  return node.type.name === 'paragraph' && node.content.size === 0;
+}
+
 function rewrite(node: Node, id: number | null): Node {
   if (node.isText) return node;
   const children: Node[] = [];
@@ -102,7 +106,7 @@ export function createIdentityPlugin(ids: readonly number[], next: number): Plug
       transactions.forEach(tr => mapping.appendMapping(tr.mapping));
       const targets: {node: Node; pos: number}[] = [];
       newState.doc.forEach((node, pos) => targets.push({node, pos}));
-      if (targets.length > 10_000) throw new IdentityInvalid('顶层区块超过容量');
+      if (targets.filter(target => !emptyParagraph(target.node)).length > 10_000) throw new IdentityInvalid('顶层区块超过容量');
       const assigned = new Map<number, number>();
       const used = new Set<number>();
       const moves = transactions.flatMap(tr => (tr.getMeta(moveKey) ?? []) as {old_index: number; new_index: number}[]);
@@ -153,7 +157,7 @@ export function createIdentityPlugin(ids: readonly number[], next: number): Plug
       let highWater = current.next_block_id;
       const children = targets.map(({node}, index) => {
         let id = assigned.get(index);
-        if (emptyCaret(newState.doc)) return rewrite(node, null);
+        if (emptyCaret(newState.doc) || (id === undefined && emptyParagraph(node))) return rewrite(node, null);
         if (id === undefined) {
           if (highWater >= MAX_SAFE) throw new IdentityInvalid('区块ID容量耗尽', true);
           id = highWater++;
@@ -185,7 +189,8 @@ export function moveTopBlock(state: EditorState, from: number, to: number): Tran
   order.splice(to, 0, oldIndex!);
   const nodes = order.map(index => state.doc.child(index));
   return state.tr.replaceWith(0, state.doc.content.size, Fragment.fromArray(nodes)).setMeta(moveKey,
-    order.map((index, newIndex) => ({old_index: index, new_index: newIndex})));
+    order.map((index, newIndex) => ({old_index: index, new_index: newIndex}))
+      .filter(move => integer(state.doc.child(move.old_index).attrs[ATTRIBUTE])));
 }
 
 // ProseMirror's generic backward/forward deletion sometimes removes an empty

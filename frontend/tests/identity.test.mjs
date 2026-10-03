@@ -124,6 +124,19 @@ test('empty caret has no business ID; deletion does not recycle IDs and undo res
   assert.deepEqual(topBlockIds(state.doc), [50]);
 });
 
+test('a new empty gap paragraph consumes no ID until actual text appears', () => {
+  let state = editor([paragraph('甲')], [10], 30);
+  state = apply(state, state.tr.insert(state.doc.content.size, paragraph('')));
+  assert.deepEqual(topBlockIds(state.doc), [10,null]);
+  assert.equal(identityState(state).next_block_id, 30);
+  const moved = apply(state, moveTopBlock(state, 0, 1));
+  assert.deepEqual(topBlockIds(moved.doc), [null,10]);
+  assert.equal(identityState(moved).next_block_id, 30);
+  state = apply(state, state.tr.insertText('新', state.doc.firstChild.nodeSize + 1));
+  assert.deepEqual(topBlockIds(state.doc), [10,30]);
+  assert.equal(identityState(state).next_block_id, 31);
+});
+
 test('capacity rejects entire transaction with original document/high-water untouched', () => {
   const state = editor([paragraph('原文')], [10], Number.MAX_SAFE_INTEGER);
   assert.throws(() => apply(state, state.tr.insert(0, paragraph('新增'))), {code:'CAPACITY_EXCEEDED'});

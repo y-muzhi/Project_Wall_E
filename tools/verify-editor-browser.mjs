@@ -28,8 +28,17 @@ async function cli(...args) {
 
 const artifacts = resolve(root, 'output/playwright');
 await mkdir(artifacts, {recursive: true});
+const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdown-editor-v1.json', 'frontend/package-lock.json',
+  'frontend/src/documents/selection.ts', 'frontend/src/documents/editor-source.ts', 'frontend/src/documents/source-nodes.ts',
+  'frontend/src/documents/identity.ts', 'frontend/tests/browser/probe.ts', 'frontend/tests/browser/editor.html',
+  'frontend/tests/browser/vite.config.ts', 'tools/verify-editor-browser.mjs'];
+async function inputHashes() {
+  return Promise.all(inputFiles.map(async file => ({file,
+    sha256: createHash('sha256').update(await readFile(resolve(root, file))).digest('hex')})));
+}
+const beforeHashes = await inputHashes();
 const port = 5174;
-const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--config', 'tests/browser/vite.config.ts', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
   {cwd: resolve(root, 'frontend'), windowsHide: true});
 let serverLog = '';
 vite.stdout.on('data', data => { serverLog += data; });
@@ -69,7 +78,7 @@ try {
     await cli('snapshot');
     const actual = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.identityReport())'));
     assert.deepEqual(actual.ids, ids, name);
-    assert.deepEqual(actual.dom_ids, ids.map(String), `${name}: DOM身份`);
+    assert.deepEqual(actual.dom_ids, ids.filter(id => id !== null).map(String), `${name}: DOM身份`);
     assert.equal(actual.next, next, `${name}: 高水位`);
     if (position !== undefined) assert.equal(actual.position, position, `${name}: 光标`);
     assert.equal(actual.serialized.includes('walle_block_id'), false, `${name}: 元数据泄漏`);
@@ -93,6 +102,11 @@ try {
   await checkIdentity('keyboard-empty-first-split', [10,32,31,20], 33, 3);
   await cli('press', 'Backspace');
   await checkIdentity('keyboard-empty-first-join', [10,31,20], 33, 1);
+  await cli('press', 'Control+End');
+  await cli('press', 'Enter');
+  await checkIdentity('keyboard-empty-new-gap', [10,31,20,null], 33, 10);
+  await cli('type', '新');
+  await checkIdentity('keyboard-gap-becomes-block', [10,31,20,33], 34, 11);
   await cli('screenshot', '--filename=output/playwright/editor-identity.png');
   report.passed = true;
 } catch (error) {
@@ -103,9 +117,12 @@ try {
   try { await cli('close'); } catch (error) { report.close_error = String(error); process.exitCode = 1; }
   vite.kill();
   report.server_log = serverLog;
-  report.fixtures = [];
-  for (const file of ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdown-editor-v1.json', 'frontend/package-lock.json']) {
-    report.fixtures.push({file, sha256: createHash('sha256').update(await readFile(resolve(root, file))).digest('hex')});
+  report.inputs_before = beforeHashes;
+  report.inputs_after = await inputHashes();
+  if (JSON.stringify(report.inputs_before) !== JSON.stringify(report.inputs_after)) {
+    report.passed = false;
+    report.error = '验证期间源码或夹具发生变化，结果不能用于该版本验收';
+    process.exitCode = 1;
   }
   const path = resolve(root, 'docs/verification', `editor-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n');
