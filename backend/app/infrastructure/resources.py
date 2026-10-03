@@ -99,6 +99,16 @@ class FrozenFunction:
     def validate_input(self, value: dict) -> dict:
         return _validate(self.input_schema_json, value)
 
+    def validate_patch(self, value: dict) -> dict:
+        definitions = json.loads(self.output_schema_json)['$defs']
+        schema = {'$schema': 'https://json-schema.org/draft/2020-12/schema', '$ref': '#/$defs/patch', '$defs': definitions}
+        return _validate(json.dumps(schema), value)
+
+    def validate_allowed_targets(self, value: dict) -> dict:
+        root = json.loads(self.input_schema_json)
+        schema = {'$schema': 'https://json-schema.org/draft/2020-12/schema', 'type': 'object', 'properties': {'schema_version': {'type': 'integer', 'const': 1}, 'targets': root['properties']['allowed_targets']}, 'required': ['schema_version', 'targets'], 'additionalProperties': False, '$defs': root['$defs']}
+        return _validate(json.dumps(schema), value)
+
     def parse_output(self, content: str | bytes) -> dict:
         try:
             if type(content) is str:

@@ -1,10 +1,16 @@
 """Server-derived focus/read ranges and write authority (SHR-SCOPE/D-004)."""
 from dataclasses import dataclass
 import json
+from functools import lru_cache
+from typing import Protocol
 
-from backend.app.shared.validation import MAX_SAFE_INTEGER
+from backend.app.infrastructure.idempotency import canonical_input
+from backend.app.infrastructure.resources import ProtocolInvalid, ResourceCatalog
+from backend.app.shared.validation import InvalidInput, MAX_SAFE_INTEGER, strict_json_object
 from .anchors import AnchorInvalid, locate
+from .patch_errors import PatchInvalid, TargetStale
 from .snapshot import Snapshot
+from .tables import select_row, table_model
 
 OPERATIONS = ('REPLACE_BLOCK', 'INSERT_BEFORE', 'INSERT_AFTER', 'DELETE_BLOCK', 'REPLACE_TABLE_ROW')
 
@@ -18,9 +24,23 @@ class AllowedTarget:
     block_id: int
     operations: tuple[str, ...]
     selection_range: tuple[int, int] | None
+    row_selectors: tuple[tuple[int, str], ...] | None = None
 
     def as_dict(self) -> dict:
-        return {'block_id': self.block_id, 'operations': list(self.operations), 'selection_range': None if self.selection_range is None else {'start_offset': self.selection_range[0], 'end_offset': self.selection_range[1]}, 'row_selectors': None}
+        return {'block_id': self.block_id, 'operations': list(self.operations), 'selection_range': None if self.selection_range is None else {'start_offset': self.selection_range[0], 'end_offset': self.selection_range[1]}, 'row_selectors': None if self.row_selectors is None else [{'key_column_index': column, 'key_value': key} for column, key in self.row_selectors]}
+
+
+class WriteAuthority(Protocol):
+    allowed_targets: tuple[AllowedTarget, ...]
+
+
+@dataclass(frozen=True)
+class FrozenAuthority:
+    allowed_targets: tuple[AllowedTarget, ...]
+
+    @property
+    def state_json(self) -> str:
+        return canonical_input({'schema_version': 1, 'targets': [target.as_dict() for target in self.allowed_targets]})
 
 
 @dataclass(frozen=True)
@@ -44,6 +64,59 @@ class ResolvedScope:
     @property
     def targets_json(self) -> list[dict]:
         return [target.as_dict() for target in self.allowed_targets]
+
+    @property
+    def authority_json(self) -> str:
+        return FrozenAuthority(self.allowed_targets).state_json
+
+
+@lru_cache(maxsize=1)
+def _authority_protocol():
+    return ResourceCatalog().freeze('MODIFY', 'USER_INSTRUCTION')
+
+
+def restore_authority(snapshot: Snapshot, action_type: str, scope_type: str, scope_ref: dict | None, stored: dict | str) -> FrozenAuthority:
+    """Restore the frozen server authority; never fill missing/invalid entries.
+
+    The application must first check the same run/requirement and base version.
+    Scope resolution sets an upper bound. Persisted grants may be narrower,
+    including an empty row whitelist, but cannot gain authority on restoration.
+    """
+    try:
+        value = strict_json_object(stored) if type(stored) is str else stored
+        value = _authority_protocol().validate_allowed_targets(value)
+    except (InvalidInput, ProtocolInvalid):
+        raise ScopeInvalid('冻结写入权限结构不合法') from None
+    permitted = {target.block_id: target for target in resolve_scope(snapshot, action_type, scope_type, scope_ref).allowed_targets}
+    restored = []
+    seen = set()
+    for entry in value['targets']:
+        identity = entry['block_id']
+        ceiling = permitted.get(identity)
+        if identity in seen or ceiling is None or not set(entry['operations']).issubset(ceiling.operations):
+            raise ScopeInvalid('冻结权限重复或超过原动作范围')
+        seen.add(identity)
+        selection = entry['selection_range']
+        selection = None if selection is None else (selection['start_offset'], selection['end_offset'])
+        if selection != ceiling.selection_range:
+            raise ScopeInvalid('冻结选区与当前原范围不一致')
+        row_selectors = entry['row_selectors']
+        if row_selectors is not None:
+            if 'REPLACE_TABLE_ROW' not in entry['operations']:
+                raise ScopeInvalid('行选择权限不能用于非行操作')
+            selectors = tuple((item['key_column_index'], item['key_value']) for item in row_selectors)
+            if len(set(selectors)) != len(selectors):
+                raise ScopeInvalid('冻结行权限重复')
+            try:
+                table = table_model(snapshot.by_id[identity][0])
+                for selector in row_selectors:
+                    select_row(table, selector)
+            except (PatchInvalid, TargetStale):
+                raise ScopeInvalid('冻结行权限不能对应唯一原行') from None
+        else:
+            selectors = None
+        restored.append(AllowedTarget(identity, tuple(entry['operations']), selection, selectors))
+    return FrozenAuthority(tuple(restored))
 
 
 def resolve_scope(snapshot: Snapshot, action_type: str, scope_type: str, scope_ref: dict | None = None) -> ResolvedScope:
