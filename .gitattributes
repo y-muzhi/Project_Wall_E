@@ -1,0 +1,7 @@
+* text=auto eol=lf
+# Approved content and migration checksums are byte identities, including EOL.
+backend/resources/** -text
+backend/app/infrastructure/migrations/** -text
+docs/proposals/** -text
+docs/verification/** -text
+docs/resource-adoption-v1.json -text
