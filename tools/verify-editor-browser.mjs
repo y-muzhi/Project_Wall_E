@@ -30,7 +30,8 @@ const artifacts = resolve(root, 'output/playwright');
 await mkdir(artifacts, {recursive: true});
 const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdown-editor-v1.json', 'frontend/package-lock.json',
   'frontend/src/documents/selection.ts', 'frontend/src/documents/editor-source.ts', 'frontend/src/documents/source-nodes.ts',
-  'frontend/src/documents/identity.ts', 'frontend/tests/browser/probe.ts', 'frontend/tests/browser/editor.html',
+  'frontend/src/documents/identity.ts', 'frontend/src/documents/contracts.ts', 'frontend/tests/browser/contracts.ts',
+  'frontend/tests/browser/probe.ts', 'frontend/tests/browser/editor.html',
   'frontend/tests/browser/vite.config.ts', 'tools/verify-editor-browser.mjs'];
 async function inputHashes() {
   return Promise.all(inputFiles.map(async file => ({file,
@@ -65,6 +66,8 @@ try {
   if (report.result.cases.length !== 15 || report.result.cases.some(entry => !entry.raw_equal || !entry.projection_equal || !entry.changed_rejected)) throw new Error('浏览器断言不完整');
   await cli('snapshot');
   await cli('screenshot', '--filename=output/playwright/editor-source.png');
+  report.snapshot_contract = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyContracts())'));
+  if (report.snapshot_contract.positive_fixtures.length !== 15 || report.snapshot_contract.rejected_variants.length !== 31 || !report.snapshot_contract.metadata_capacity_rejected) throw new Error('完整快照门禁断言不完整');
   report.identity_types = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyIdentityTypes())'));
   if (report.identity_types.length !== 15) throw new Error('身份节点逐类型检查不完整');
   await cli('snapshot');

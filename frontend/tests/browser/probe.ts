@@ -5,6 +5,7 @@ import editorFixtures from '../../../shared/fixtures/markdown-editor-v1.json';
 import { installSourceNodes } from '../../src/documents/source-nodes.ts';
 import { EditorSource, blockProjection } from '../../src/documents/editor-source.ts';
 import { installIdentityAttributes, installIdentityState, identityState, topBlockIds } from '../../src/documents/identity.ts';
+import { verifyContracts } from './contracts.ts';
 
 let crepe: Crepe | undefined;
 const root = document.querySelector<HTMLElement>('#editor')!;
@@ -43,6 +44,7 @@ async function load(markdown: string, adapted = false, identity?: {ids: readonly
 Object.assign(window, { editorProbe: {
   load,
   prepareIdentity: () => load('甲乙\n\n尾\n', true, {ids: [10, 20], next: 30}),
+  verifyContracts: () => crepe!.editor.action(ctx => verifyContracts(ctx)),
   identityReport: () => crepe!.editor.action(ctx => ({
     ids: topBlockIds(ctx.get(editorViewCtx).state.doc),
     next: identityState(ctx.get(editorViewCtx).state).next_block_id,
