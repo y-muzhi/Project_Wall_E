@@ -8,9 +8,11 @@ from backend.app.infrastructure.resources import ResourceCatalog
 
 class MarkdownTests(unittest.TestCase):
     def test_shared_independent_golden_fixtures(self):
-        path = Path(__file__).resolve().parents[3] / 'shared' / 'fixtures' / 'markdown-v1.json'
-        fixtures = json.loads(path.read_text(encoding='utf-8'))
-        for case in fixtures['cases']:
+        directory = Path(__file__).resolve().parents[3] / 'shared' / 'fixtures'
+        cases = []
+        for name in ('markdown-v1.json', 'markdown-editor-v1.json'):
+            cases.extend(json.loads((directory / name).read_text(encoding='utf-8'))['cases'])
+        for case in cases:
             with self.subTest(case=case['name']):
                 parsed = parse_markdown(case['markdown'])
                 actual = [{'type': block.block_type, 'plain_text': block.plain_text, 'section_path': list(block.section_path), 'heading_level': block.heading_level} for block in parsed.blocks]

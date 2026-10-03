@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="UTF-8" />
+  <title>WALL-E 编辑器契约探针</title>
+  <link rel="icon" href="data:," />
+  <style>body{margin:24px;font-family:system-ui}#editor{max-width:900px;border:1px solid #bbb;padding:16px}pre{white-space:pre-wrap}</style>
+  <body>
+    <h1>编辑器契约探针（测试工具）</h1>
+    <p>此页面用于真实 Milkdown 解析验证，不是业务页面。</p>
+    <label>Markdown 源码<textarea id="source" rows="6" cols="80"></textarea></label>
+    <button id="load">载入源码</button>
+    <div id="editor"></div>
+    <pre id="status" role="status">准备中</pre>
+    <script type="module" src="./probe.ts"></script>
+  </body>
+</html>
