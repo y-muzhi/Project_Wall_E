@@ -2,13 +2,14 @@ import type { Crepe } from '@milkdown/crepe';
 import { editorViewCtx } from '@milkdown/kit/core';
 import base from '../../../shared/fixtures/autolink-v1.json';
 import contexts from '../../../shared/fixtures/autolink-context-v1.json';
+import unicode from '../../../shared/fixtures/autolink-unicode-v1.json';
 import { EditorSource } from '../../src/documents/editor-source.ts';
 import { EditedSnapshotLedger } from '../../src/documents/edited-snapshot.ts';
 import { fixtureDraft, editTime } from './edited-snapshot.ts';
 
 export async function autolinkConformance(load: (markdown: string, ids: readonly number[], next: number) => Promise<unknown>, get: () => Crepe) {
   const records = [], outputs = [];
-  for (const entry of [...base.cases.map(entry => ({...entry, plain_text: [entry.plain_text]})), ...contexts.cases]) {
+  for (const entry of [...base.cases.map(entry => ({...entry, plain_text: [entry.plain_text]})), ...contexts.cases, ...unicode.cases]) {
     const ids = entry.plain_text.map((_plain, index) => index + 1);
     await load(entry.markdown, ids, ids.length + 1);
     const actual = get().editor.action(ctx => {
@@ -62,6 +63,21 @@ export async function autolinkConformance(load: (markdown: string, ids: readonly
       return {pair, projection: parsed.blocks.map(block => ({block_type: block.block_type, plain_text: block.plain_text, section_path: block.section_path}))};
     }));
   }
-  return {scope: '48 independent literal/context cases plus 3 actual edited snapshots; no complete dialect or product acceptance', records, outputs,
+  for (const name of ['astral-letter-domain-and-offset', 'unicode-table-chunk']) {
+    const entry = unicode.cases.find(entry => entry.name === name)!;
+    await load(entry.markdown, [10], 20);
+    outputs.push(get().editor.action(ctx => {
+      const view = ctx.get(editorViewCtx);
+      const ledger = new EditedSnapshotLedger(ctx, fixtureDraft(ctx, entry.markdown, [10], 20), view.state);
+      let first: number | undefined;
+      view.state.doc.descendants((node, position) => { if (node.isText && first === undefined) first = position; });
+      if (first === undefined) throw new Error('Unicode链接缺少实际编辑位置');
+      view.dispatch(view.state.tr.insertText('新', first));
+      const pair = ledger.capture(view.state, editTime), parsed = new EditorSource(ctx, pair.markdown_content);
+      if (parsed.blocks[0]!.plain_text !== '新' + entry.plain_text[0]) throw new Error('Unicode链接编辑破坏域名或原文字号');
+      return {pair, projection: parsed.blocks.map(block => ({block_type: block.block_type, plain_text: block.plain_text, section_path: block.section_path}))};
+    }));
+  }
+  return {scope: '56 independent literal/context cases plus 5 actual edited snapshots; no complete dialect or product acceptance', records, outputs,
     mismatches: records.filter(record => !record.conforms).map(record => record.name)};
 }

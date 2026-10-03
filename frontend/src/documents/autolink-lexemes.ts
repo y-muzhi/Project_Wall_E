@@ -1,5 +1,6 @@
 /** D-004/GFM literal spans in the original source. Markdown context is owned
  * by the inline tokenizer, not by this candidate index. No fuzzy domains. */
+import { isUrlDomainAlphanumeric } from './url-domain-unicode.ts';
 export interface LiteralLink { readonly start: number; readonly end: number; readonly text: string; readonly href: string; }
 const atext = /[A-Za-z0-9.+_-]/;
 const domainChar = /[A-Za-z0-9._-]/;
@@ -48,7 +49,12 @@ export class AutolinkIndex {
         if (previous !== null && !space.test(previous) && !'*_~('.includes(previous)) return;
         const domainStart = protocol === 'www.' ? start : start + prefix.length;
         let domainEnd = domainStart;
-        while (domainEnd < maximum && domainChar.test(source[domainEnd]!)) domainEnd++;
+        while (domainEnd < maximum) {
+          const point = source.codePointAt(domainEnd)!;
+          const char = String.fromCodePoint(point);
+          if (!'._-'.includes(char) && !isUrlDomainAlphanumeric(point)) break;
+          domainEnd += char.length;
+        }
         const domain = source.slice(domainStart, domainEnd).replace(/\.+$/, '');
         const labels = domain.split('.');
         if (labels.length < 2 || labels.some(label => !label) || labels.slice(-2).some(label => label.includes('_'))) return;

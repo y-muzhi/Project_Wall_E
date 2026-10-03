@@ -42,3 +42,5 @@ edited-snapshot.ts的EditedSnapshotLedger只接受完整MANUAL_DRAFT与同次绑
 `--autolink-baseline`仍只采集当前22例，BASELINE COLLECTED不表示合规；修复前5处前端/16处后端差异的历史证据不覆写。原源及星号/协议边界修复已验证上述有限范围，Unicode域、更多括号语境、GFM其他边界和完整组件仍待补齐。详细记录docs/verification/autolink-baseline-notes.md；没有产品页面启动命令。
 
 单双删除线另有18独立例，专项运行`node tools/verify-editor-browser.mjs --strikethrough-check`。inline-marks.ts在生产sourceRemark中展平重复delete样式，避免Milkdown关闭内层时把外层剩余文字漏划；原始tildes由源码层保存。21对专项输出与完整模式121对通过后端校验，最新editor-browser-2026-10-03T14-30-29-473Z.json，33输入hash不变；25前端测试/完整TS通过。不表示全部键入规则或产品视觉验收通过。
+
+Unicode域名单元：shared/markdown/url-domain-unicode-v1.json冻结所选Python3.13/Unicode15.1的748字母数字区间，url-domain-unicode.ts按完整码点查询。实际Node的Unicode17分类不直接作为业务语义；生成工具拒绝覆盖，后端升级需重新逐码点验证。新增8独立例及2真实编辑输出；自动链接专项现为56例/61对，默认完整模式131对，最新editor-browser-2026-10-03T14-54-25-426Z.json的36输入hash一致、会话关闭。27项前端测试及完整TS通过，后端123项；两端均核对全部1,114,112码点。上述历史证据保留，Unicode域列出范围已验证；嵌套原始节点、更多标签边界、完整组件仍待实施。

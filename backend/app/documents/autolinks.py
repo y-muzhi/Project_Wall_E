@@ -1,6 +1,6 @@
 """D-004/GFM literal autolinks, before emphasis/entity parsing.
 
-Candidate indexing is linear in the original inline source. URL paths are
+Candidates are collected in a linear source scan and sorted for lookup. Paths are
 matched lazily at actual parser positions, so nested-looking URLs in a long
 path are not repeatedly scanned. No fuzzy bare-domain recognition occurs.
 """
@@ -74,7 +74,7 @@ class AutolinkIndex:
                     return None
                 domain_start = start if protocol == 'www.' else prefix.end()
                 domain_end = domain_start
-                while domain_end < maximum and source[domain_end] in DOMAIN:
+                while domain_end < maximum and (source[domain_end] in DOMAIN or source[domain_end].isalnum()):
                     domain_end += 1
                 domain = source[domain_start:domain_end].rstrip('.')
                 labels = domain.split('.')

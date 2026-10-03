@@ -38,12 +38,14 @@ const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdow
   'frontend/src/documents/edited-snapshot.ts', 'frontend/tests/browser/edited-snapshot.ts',
   'frontend/src/documents/autolink-lexemes.ts', 'frontend/src/documents/autolink-remark.ts',
   'frontend/src/documents/inline-marks.ts',
+  'frontend/src/documents/url-domain-unicode.ts', 'shared/markdown/url-domain-unicode-v1.json',
   'backend/app/documents/autolinks.py', 'backend/app/documents/markdown.py', 'backend/requirements.lock',
   'backend/app/documents/snapshot.py', 'backend/app/shared/validation.py', 'backend/app/shared/time.py',
   'backend/app/documents/strikethrough.py', 'shared/fixtures/strikethrough-v1.json', 'frontend/tests/browser/strikethrough.ts',
   'tools/verify-editor-output.py',
   'shared/fixtures/autolink-v1.json', 'frontend/tests/browser/autolink-baseline.ts', 'tools/autolink-baseline.py',
   'shared/fixtures/autolink-context-v1.json', 'frontend/tests/browser/autolink-conformance.ts',
+  'shared/fixtures/autolink-unicode-v1.json',
   'frontend/tests/browser/probe.ts', 'frontend/tests/browser/editor.html',
   'frontend/tests/browser/vite.config.ts', 'tools/verify-editor-browser.mjs'];
 async function inputHashes() {
@@ -92,9 +94,9 @@ try {
     report.scope = 'Independent syntax/context cases and edited output; fixture provenance, not product/HTTP acceptance';
     if (autolinkOnly) {
       report.autolink_conformance = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkConformance())'));
-      assert.equal(report.autolink_conformance.records.length, 48);
+      assert.equal(report.autolink_conformance.records.length, 56);
       assert.deepEqual(report.autolink_conformance.mismatches, []);
-      assert.equal(report.autolink_conformance.outputs.length, 51);
+      assert.equal(report.autolink_conformance.outputs.length, 61);
     } else {
       report.strikethrough = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyStrikethrough())'));
       assert.equal(report.strikethrough.records.length, 18);
@@ -182,9 +184,9 @@ try {
   await checkIdentity('keyboard-gap-becomes-block', [10,31,20,33], 34, 11);
   await cli('screenshot', '--filename=output/playwright/editor-identity.png');
   report.autolink_conformance = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkConformance())'));
-  assert.equal(report.autolink_conformance.records.length, 48);
+  assert.equal(report.autolink_conformance.records.length, 56);
   assert.deepEqual(report.autolink_conformance.mismatches, [], '独立自动链接/容器预期');
-  assert.equal(report.autolink_conformance.outputs.length, 51);
+  assert.equal(report.autolink_conformance.outputs.length, 61);
   report.strikethrough = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyStrikethrough())'));
   assert.equal(report.strikethrough.records.length, 18);
   assert.equal(report.strikethrough.outputs.length, 21);

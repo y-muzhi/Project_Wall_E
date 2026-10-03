@@ -1,0 +1,13 @@
+{
+  "source": "Own cases for Unicode letters/numbers in GFM URL domains (formal valid-domain rule and github/cmark-gfm UTF-8 host scanning); email matching remains a separate rule",
+  "cases": [
+    {"name":"cjk-www-domain","markdown":"www.例子.test/a*b*c\n","plain_text":["www.例子.test/a*b*c"],"links":[{"text":"www.例子.test/a*b*c","href":"http://www.例子.test/a*b*c"}]},
+    {"name":"cjk-https-domain","markdown":"https://例子.test/a*b*c\n","plain_text":["https://例子.test/a*b*c"],"links":[{"text":"https://例子.test/a*b*c","href":"https://例子.test/a*b*c"}]},
+    {"name":"astral-letter-domain-and-offset","markdown":"😀 https://𐐀𐐁.test/a*b*c.\n","plain_text":["😀 https://𐐀𐐁.test/a*b*c."],"links":[{"text":"https://𐐀𐐁.test/a*b*c","href":"https://𐐀𐐁.test/a*b*c"}]},
+    {"name":"unicode-earlier-underscore","markdown":"www.子_域.例子.test/a*b*c\n","plain_text":["www.子_域.例子.test/a*b*c"],"links":[{"text":"www.子_域.例子.test/a*b*c","href":"http://www.子_域.例子.test/a*b*c"}]},
+    {"name":"unicode-last-underscore-excluded","markdown":"https://例_子.test\n","plain_text":["https://例_子.test"],"links":[]},
+    {"name":"emoji-is-not-alphanumeric-domain","markdown":"www.😀.test\n","plain_text":["www.😀.test"],"links":[]},
+    {"name":"unicode-table-chunk","markdown":"| www.例子.test/a*b*c|值|\n|---|---|\n|一|二|\n","plain_text":["www.例子.test/a*b*c\t值\n一\t二"],"links":[{"text":"www.例子.test/a*b*c","href":"http://www.例子.test/a*b*c"}]},
+    {"name":"selected-backend-unicode-profile","markdown":"www.Ᲊ.test\n","plain_text":["www.Ᲊ.test"],"links":[]}
+  ]
+}
