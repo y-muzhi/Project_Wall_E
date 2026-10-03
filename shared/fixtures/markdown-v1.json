@@ -1,0 +1,27 @@
+{
+  "fixture_version": "markdown-v1",
+  "decision": "D-004",
+  "note": "Independent expected projections. Backend parser verified; browser/editor parity is pending. All offsets use Unicode codepoints. Raw source and gaps must round-trip exactly.",
+  "cases": [
+    {"name": "empty", "markdown": "\r\n\r\n", "blocks": []},
+    {"name": "unicode-crlf", "markdown": "# 标题😀\r\n\r\n甲\u2028乙😀\r\n", "blocks": [
+      {"type": "heading", "plain_text": "标题😀", "section_path": ["标题😀"], "heading_level": 1},
+      {"type": "paragraph", "plain_text": "甲\u2028乙😀", "section_path": ["标题😀"], "heading_level": null}
+    ]},
+    {"name": "inline-breaks", "markdown": "**甲** _乙_ ~~丙~~ `x<y` [链接](https://example.test) ![图😀](x.png)\n软换行  \n硬换行 <em>原样</em>\n", "blocks": [
+      {"type": "paragraph", "plain_text": "甲 乙 丙 x<y 链接 图😀\n软换行\n硬换行 <em>原样</em>", "section_path": [], "heading_level": null}
+    ]},
+    {"name": "table-escaped-pipe", "markdown": "| 键 | 值 |\n| --- | --- |\n| A\\|B | **加粗** |\n| 😀 | `code` |\n", "blocks": [
+      {"type": "table", "plain_text": "键\t值\nA|B\t加粗\n😀\tcode", "section_path": [], "heading_level": null}
+    ]},
+    {"name": "tasks-nested", "markdown": "- [ ] 待办\n- [x] 完成\n  - 内层\n", "blocks": [
+      {"type": "task_list", "plain_text": "待办\n完成\n内层", "section_path": [], "heading_level": null}
+    ]},
+    {"name": "definition-and-inert-html", "markdown": "[a]: https://a.test\n[a]: https://b.test\n\n[标签][a]\n\n<div>\n原样\n</div>\n", "blocks": [
+      {"type": "link_definition", "plain_text": "[a]: https://a.test\n", "section_path": [], "heading_level": null},
+      {"type": "link_definition", "plain_text": "[a]: https://b.test\n", "section_path": [], "heading_level": null},
+      {"type": "paragraph", "plain_text": "标签", "section_path": [], "heading_level": null},
+      {"type": "html_block", "plain_text": "<div>\n原样\n</div>\n", "section_path": [], "heading_level": null}
+    ]}
+  ]
+}

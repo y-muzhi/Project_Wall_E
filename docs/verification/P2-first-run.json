@@ -1,0 +1,15 @@
+{
+  "command": ".venv\\Scripts\\python.exe -m unittest backend.tests.infrastructure.test_database -v",
+  "exit_code": 1,
+  "tests_run": 11,
+  "result": "FAILED (errors=4)",
+  "errors": [
+    "test_backup_api_preserves_source_and_refuses_overwrite: teardown WinError 32 saved.sqlite",
+    "test_schema_creation_failure_has_no_partial_tables_and_can_retry: teardown WinError 32 actual.sqlite",
+    "test_unknown_schema_refuses_without_erasing_existing_data: teardown WinError 32 actual.sqlite",
+    "test_version_checksum_and_missing_object_are_distinct_startup_failures: teardown WinError 32 actual.sqlite"
+  ],
+  "cause": "Test helper used sqlite3 connection context manager, which commits/rolls back but does not close the handle. Windows temporary file cleanup therefore failed.",
+  "repair": "Explicit contextlib.closing on test inspection/tampering connections; keep all original assertions and prove final successful cleanup. Production Database already closes every owned connection in finally.",
+  "scope": "First actual SQLite infrastructure run, not a passing business acceptance record. Original output was observed in the execution tool; this file preserves its result/cause."
+}

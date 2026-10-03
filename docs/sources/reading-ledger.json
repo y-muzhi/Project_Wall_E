@@ -1,0 +1,391 @@
+{
+  "frontend": [
+    {
+      "start": 1,
+      "end": 233,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:33:24.756Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 2138,
+      "end": 2155,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:33:24.818Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 234,
+      "end": 351,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:33:44.754Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 352,
+      "end": 525,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:37:00.273Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 526,
+      "end": 706,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:37:10.601Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 707,
+      "end": 886,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:37:26.767Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 887,
+      "end": 1080,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:37:35.229Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1081,
+      "end": 1289,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:37:44.806Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1290,
+      "end": 1414,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:37:52.701Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1415,
+      "end": 1525,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:38:06.870Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1526,
+      "end": 1682,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:38:16.460Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1683,
+      "end": 1843,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:38:25.225Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1844,
+      "end": 1963,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:38:34.810Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1964,
+      "end": 2065,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:38:43.693Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 2066,
+      "end": 2137,
+      "sha256": "91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA",
+      "confirmedAt": "2026-10-03T05:39:10.947Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    }
+  ],
+  "backend": [
+    {
+      "start": 1,
+      "end": 174,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:33:24.888Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 7167,
+      "end": 7195,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:33:24.959Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 175,
+      "end": 340,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:33:51.565Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 341,
+      "end": 502,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:33:59.700Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 503,
+      "end": 639,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:34:07.875Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 640,
+      "end": 843,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:36:49.539Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 844,
+      "end": 1005,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:40:07.704Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1006,
+      "end": 1241,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:40:18.242Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1242,
+      "end": 1478,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:40:26.799Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1479,
+      "end": 1720,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:40:34.220Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1721,
+      "end": 1940,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:40:56.869Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 1941,
+      "end": 2149,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:41:05.568Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 2150,
+      "end": 2319,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:41:13.846Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 2320,
+      "end": 2500,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:41:24.654Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 2501,
+      "end": 2733,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:41:36.626Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 2734,
+      "end": 2940,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:41:45.003Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 2941,
+      "end": 3113,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:41:59.233Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 3114,
+      "end": 3402,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:42:06.923Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 3403,
+      "end": 3654,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:42:16.647Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 3655,
+      "end": 3836,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:42:26.019Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 3837,
+      "end": 4098,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:42:35.262Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 4099,
+      "end": 4355,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:42:45.217Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 4356,
+      "end": 4532,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:42:53.026Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 4533,
+      "end": 4787,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:43:03.058Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 4788,
+      "end": 5038,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:43:10.791Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 5039,
+      "end": 5299,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:43:21.253Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 5300,
+      "end": 5546,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:43:39.221Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 5547,
+      "end": 5800,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:43:48.941Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 5801,
+      "end": 6014,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:48:56.334Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6015,
+      "end": 6184,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:49:06.275Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6185,
+      "end": 6300,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:49:13.661Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6301,
+      "end": 6430,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:49:23.092Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6431,
+      "end": 6560,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:49:31.697Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6561,
+      "end": 6690,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:49:42.201Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6691,
+      "end": 6770,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:49:53.226Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6771,
+      "end": 6850,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:50:02.896Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6851,
+      "end": 6930,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:50:13.681Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 6931,
+      "end": 7010,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:50:25.356Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 7011,
+      "end": 7100,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:50:33.298Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    },
+    {
+      "start": 7101,
+      "end": 7166,
+      "sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+      "confirmedAt": "2026-10-03T05:50:44.968Z",
+      "evidence": "Complete range displayed and inspected; no truncation warning; explicit later confirmation"
+    }
+  ]
+}

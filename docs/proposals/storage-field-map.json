@@ -1,0 +1,1067 @@
+{
+  "status": "UNAPPROVED_PROPOSAL",
+  "source_sha256": "EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F",
+  "entities": {
+    "Requirement": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 205,
+        "immutable": true
+      },
+      {
+        "name": "requirement_no",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 206,
+        "immutable": true
+      },
+      {
+        "name": "requirement_type",
+        "logical_type": "NEW / CHANGE",
+        "nullable": false,
+        "source_line": 207,
+        "immutable": true
+      },
+      {
+        "name": "initialization_mode",
+        "logical_type": "IDEATION / DESIGN",
+        "nullable": false,
+        "source_line": 208,
+        "immutable": false
+      },
+      {
+        "name": "title",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 209,
+        "immutable": false
+      },
+      {
+        "name": "template_key",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 210,
+        "immutable": true
+      },
+      {
+        "name": "template_version",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 211,
+        "immutable": true
+      },
+      {
+        "name": "status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 212,
+        "immutable": false
+      },
+      {
+        "name": "document_work_state",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 213,
+        "immutable": false
+      },
+      {
+        "name": "active_operation_type",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 214,
+        "immutable": false
+      },
+      {
+        "name": "active_operation_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 215,
+        "immutable": false
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 216,
+        "immutable": true
+      },
+      {
+        "name": "updated_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 217,
+        "immutable": false
+      },
+      {
+        "name": "completed_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 218,
+        "immutable": false
+      },
+      {
+        "name": "state_started_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 219,
+        "immutable": false
+      }
+    ],
+    "RequirementDocument": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 282,
+        "immutable": true
+      },
+      {
+        "name": "requirement_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 283,
+        "immutable": true
+      },
+      {
+        "name": "document_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 284,
+        "immutable": true
+      },
+      {
+        "name": "markdown_content",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 285,
+        "immutable": false
+      },
+      {
+        "name": "block_state_json",
+        "logical_type": "BlockState（OBJ-DOC／SHR-BLOCK）",
+        "nullable": false,
+        "source_line": 286,
+        "immutable": false
+      },
+      {
+        "name": "content_version",
+        "logical_type": "PositiveInt",
+        "nullable": false,
+        "source_line": 287,
+        "immutable": false
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 288,
+        "immutable": true
+      },
+      {
+        "name": "updated_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 289,
+        "immutable": false
+      }
+    ],
+    "Revision": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 365,
+        "immutable": true
+      },
+      {
+        "name": "requirement_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 366,
+        "immutable": true
+      },
+      {
+        "name": "version_no",
+        "logical_type": "PositiveInt",
+        "nullable": false,
+        "source_line": 367,
+        "immutable": true
+      },
+      {
+        "name": "revision_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 368,
+        "immutable": true
+      },
+      {
+        "name": "markdown_snapshot",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 369,
+        "immutable": true
+      },
+      {
+        "name": "block_state_snapshot_json",
+        "logical_type": "BlockState（OBJ-DOC／SHR-BLOCK）",
+        "nullable": false,
+        "source_line": 370,
+        "immutable": true
+      },
+      {
+        "name": "description",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 371,
+        "immutable": true
+      },
+      {
+        "name": "source_content_version",
+        "logical_type": "PositiveInt",
+        "nullable": false,
+        "source_line": 372,
+        "immutable": true
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 373,
+        "immutable": true
+      }
+    ],
+    "ConversationMessage": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 422,
+        "immutable": true
+      },
+      {
+        "name": "requirement_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 423,
+        "immutable": true
+      },
+      {
+        "name": "guide_run_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 424,
+        "immutable": true
+      },
+      {
+        "name": "sequence_no",
+        "logical_type": "PositiveInt",
+        "nullable": false,
+        "source_line": 425,
+        "immutable": true
+      },
+      {
+        "name": "role",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 426,
+        "immutable": true
+      },
+      {
+        "name": "content",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 427,
+        "immutable": true
+      },
+      {
+        "name": "message_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 428,
+        "immutable": true
+      },
+      {
+        "name": "structured_content_json",
+        "logical_type": "卡片组或整组回答（本节 SHR-CARDS）",
+        "nullable": true,
+        "source_line": 429,
+        "immutable": true
+      },
+      {
+        "name": "reply_to_message_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 430,
+        "immutable": true
+      },
+      {
+        "name": "idempotency_key",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 431,
+        "immutable": true
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 432,
+        "immutable": true
+      }
+    ],
+    "GuideRun": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 528,
+        "immutable": true
+      },
+      {
+        "name": "requirement_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 529,
+        "immutable": true
+      },
+      {
+        "name": "idempotency_key",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 530,
+        "immutable": true
+      },
+      {
+        "name": "trigger_message_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 531,
+        "immutable": false
+      },
+      {
+        "name": "trigger_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 532,
+        "immutable": false
+      },
+      {
+        "name": "source_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 533,
+        "immutable": false
+      },
+      {
+        "name": "source_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 534,
+        "immutable": false
+      },
+      {
+        "name": "function_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 535,
+        "immutable": true
+      },
+      {
+        "name": "context_template_key",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 536,
+        "immutable": true
+      },
+      {
+        "name": "context_template_version",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 537,
+        "immutable": true
+      },
+      {
+        "name": "prompt_version",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 538,
+        "immutable": true
+      },
+      {
+        "name": "action_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 539,
+        "immutable": true
+      },
+      {
+        "name": "mode_snapshot",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 540,
+        "immutable": true
+      },
+      {
+        "name": "instruction_summary",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 541,
+        "immutable": false
+      },
+      {
+        "name": "scope_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 542,
+        "immutable": false
+      },
+      {
+        "name": "scope_ref_json",
+        "logical_type": "ScopeRef（APP-GUIDE-CMD-C01 输入）",
+        "nullable": true,
+        "source_line": 543,
+        "immutable": false
+      },
+      {
+        "name": "read_scope_manifest_json",
+        "logical_type": "JSON对象",
+        "nullable": false,
+        "source_line": 544,
+        "immutable": false
+      },
+      {
+        "name": "allowed_targets_json",
+        "logical_type": "JSON对象",
+        "nullable": false,
+        "source_line": 545,
+        "immutable": false
+      },
+      {
+        "name": "status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 546,
+        "immutable": false
+      },
+      {
+        "name": "current_step",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 547,
+        "immutable": false
+      },
+      {
+        "name": "final_result_json",
+        "logical_type": "JSON对象",
+        "nullable": true,
+        "source_line": 548,
+        "immutable": false
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 549,
+        "immutable": true
+      },
+      {
+        "name": "started_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 550,
+        "immutable": false
+      },
+      {
+        "name": "waiting_user_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 551,
+        "immutable": false
+      },
+      {
+        "name": "ended_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 552,
+        "immutable": false
+      },
+      {
+        "name": "updated_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 553,
+        "immutable": false
+      },
+      {
+        "name": "error_code",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 554,
+        "immutable": false
+      },
+      {
+        "name": "error_message",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 555,
+        "immutable": false
+      },
+      {
+        "name": "cancel_reason",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 556,
+        "immutable": false
+      },
+      {
+        "name": "retry_of_guide_run_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 557,
+        "immutable": true
+      }
+    ],
+    "LLMUse": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 564,
+        "immutable": true
+      },
+      {
+        "name": "guide_run_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 565,
+        "immutable": true
+      },
+      {
+        "name": "call_no",
+        "logical_type": "PositiveInt",
+        "nullable": false,
+        "source_line": 566,
+        "immutable": false
+      },
+      {
+        "name": "attempt_no",
+        "logical_type": "PositiveInt",
+        "nullable": false,
+        "source_line": 567,
+        "immutable": false
+      },
+      {
+        "name": "provider",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 568,
+        "immutable": false
+      },
+      {
+        "name": "model_name",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 569,
+        "immutable": false
+      },
+      {
+        "name": "model_version",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 570,
+        "immutable": false
+      },
+      {
+        "name": "function_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 571,
+        "immutable": true
+      },
+      {
+        "name": "prompt_config",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 572,
+        "immutable": false
+      },
+      {
+        "name": "request_snapshot_json",
+        "logical_type": "JSON对象",
+        "nullable": false,
+        "source_line": 573,
+        "immutable": false
+      },
+      {
+        "name": "parsed_output_json",
+        "logical_type": "JSON对象",
+        "nullable": true,
+        "source_line": 574,
+        "immutable": false
+      },
+      {
+        "name": "trusted_output_json",
+        "logical_type": "JSON对象",
+        "nullable": true,
+        "source_line": 575,
+        "immutable": false
+      },
+      {
+        "name": "input_summary",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 576,
+        "immutable": false
+      },
+      {
+        "name": "context_manifest_json",
+        "logical_type": "JSON对象",
+        "nullable": false,
+        "source_line": 577,
+        "immutable": false
+      },
+      {
+        "name": "raw_response_json",
+        "logical_type": "JSON对象",
+        "nullable": true,
+        "source_line": 578,
+        "immutable": false
+      },
+      {
+        "name": "finish_reason",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 579,
+        "immutable": false
+      },
+      {
+        "name": "parse_status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 580,
+        "immutable": false
+      },
+      {
+        "name": "parse_error",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 581,
+        "immutable": false
+      },
+      {
+        "name": "validation_status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 582,
+        "immutable": false
+      },
+      {
+        "name": "validation_error",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 583,
+        "immutable": false
+      },
+      {
+        "name": "call_status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 584,
+        "immutable": false
+      },
+      {
+        "name": "input_tokens",
+        "logical_type": "Int",
+        "nullable": true,
+        "source_line": 585,
+        "immutable": false
+      },
+      {
+        "name": "output_tokens",
+        "logical_type": "Int",
+        "nullable": true,
+        "source_line": 586,
+        "immutable": false
+      },
+      {
+        "name": "cache_info_json",
+        "logical_type": "JSON对象",
+        "nullable": true,
+        "source_line": 587,
+        "immutable": false
+      },
+      {
+        "name": "provider_request_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 588,
+        "immutable": false
+      },
+      {
+        "name": "started_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 589,
+        "immutable": false
+      },
+      {
+        "name": "ended_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 590,
+        "immutable": false
+      },
+      {
+        "name": "duration_ms",
+        "logical_type": "Int",
+        "nullable": true,
+        "source_line": 591,
+        "immutable": false
+      },
+      {
+        "name": "error_code",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 592,
+        "immutable": false
+      },
+      {
+        "name": "error_message",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 593,
+        "immutable": false
+      }
+    ],
+    "SuggestionBatch": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 665,
+        "immutable": true
+      },
+      {
+        "name": "requirement_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 666,
+        "immutable": true
+      },
+      {
+        "name": "guide_run_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 667,
+        "immutable": true
+      },
+      {
+        "name": "source_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 668,
+        "immutable": false
+      },
+      {
+        "name": "source_id",
+        "logical_type": "ID",
+        "nullable": true,
+        "source_line": 669,
+        "immutable": false
+      },
+      {
+        "name": "title",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 670,
+        "immutable": false
+      },
+      {
+        "name": "summary",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 671,
+        "immutable": false
+      },
+      {
+        "name": "status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 672,
+        "immutable": false
+      },
+      {
+        "name": "completion_result",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 673,
+        "immutable": false
+      },
+      {
+        "name": "error_message",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 674,
+        "immutable": false
+      },
+      {
+        "name": "base_content_version",
+        "logical_type": "Int",
+        "nullable": false,
+        "source_line": 675,
+        "immutable": false
+      },
+      {
+        "name": "applied_content_version",
+        "logical_type": "Int",
+        "nullable": true,
+        "source_line": 676,
+        "immutable": false
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 677,
+        "immutable": true
+      },
+      {
+        "name": "completed_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 678,
+        "immutable": false
+      },
+      {
+        "name": "updated_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 679,
+        "immutable": false
+      }
+    ],
+    "Suggestion": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 686,
+        "immutable": true
+      },
+      {
+        "name": "batch_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 687,
+        "immutable": true
+      },
+      {
+        "name": "order_no",
+        "logical_type": "PositiveInt",
+        "nullable": false,
+        "source_line": 688,
+        "immutable": true
+      },
+      {
+        "name": "title",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 689,
+        "immutable": false
+      },
+      {
+        "name": "explanation",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 690,
+        "immutable": false
+      },
+      {
+        "name": "impact",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 691,
+        "immutable": false
+      },
+      {
+        "name": "patch_operation",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 692,
+        "immutable": true
+      },
+      {
+        "name": "target_ref_json",
+        "logical_type": "TargetRef（本节 SHR-PATCH）",
+        "nullable": false,
+        "source_line": 693,
+        "immutable": true
+      },
+      {
+        "name": "selector_json",
+        "logical_type": "TableRowSelector（本节 SHR-PATCH）",
+        "nullable": true,
+        "source_line": 694,
+        "immutable": true
+      },
+      {
+        "name": "original_content",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 695,
+        "immutable": true
+      },
+      {
+        "name": "proposed_markdown",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 696,
+        "immutable": true
+      },
+      {
+        "name": "proposed_data_json",
+        "logical_type": "TableRowData（本节 SHR-PATCH）",
+        "nullable": true,
+        "source_line": 697,
+        "immutable": true
+      },
+      {
+        "name": "user_edited_content",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 698,
+        "immutable": false
+      },
+      {
+        "name": "status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 699,
+        "immutable": false
+      },
+      {
+        "name": "validation_status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 700,
+        "immutable": false
+      },
+      {
+        "name": "validation_error",
+        "logical_type": "Text",
+        "nullable": true,
+        "source_line": 701,
+        "immutable": false
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 702,
+        "immutable": true
+      },
+      {
+        "name": "decided_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 703,
+        "immutable": false
+      },
+      {
+        "name": "updated_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 704,
+        "immutable": false
+      }
+    ],
+    "Comment": [
+      {
+        "name": "id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 788,
+        "immutable": true
+      },
+      {
+        "name": "requirement_id",
+        "logical_type": "ID",
+        "nullable": false,
+        "source_line": 789,
+        "immutable": true
+      },
+      {
+        "name": "content",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 790,
+        "immutable": false
+      },
+      {
+        "name": "anchor_type",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 791,
+        "immutable": true
+      },
+      {
+        "name": "block_id",
+        "logical_type": "BlockId",
+        "nullable": false,
+        "source_line": 792,
+        "immutable": true
+      },
+      {
+        "name": "anchor_ref_json",
+        "logical_type": "AnchorRef（本节 SHR-ANCHOR）",
+        "nullable": false,
+        "source_line": 793,
+        "immutable": true
+      },
+      {
+        "name": "anchor_status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 794,
+        "immutable": false
+      },
+      {
+        "name": "status",
+        "logical_type": "Text",
+        "nullable": false,
+        "source_line": 795,
+        "immutable": false
+      },
+      {
+        "name": "resolved_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 796,
+        "immutable": false
+      },
+      {
+        "name": "deleted_at",
+        "logical_type": "UtcTime",
+        "nullable": true,
+        "source_line": 797,
+        "immutable": false
+      },
+      {
+        "name": "created_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 798,
+        "immutable": true
+      },
+      {
+        "name": "updated_at",
+        "logical_type": "UtcTime",
+        "nullable": false,
+        "source_line": 799,
+        "immutable": false
+      }
+    ]
+  }
+}

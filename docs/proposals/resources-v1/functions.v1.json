@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "proposal": true,
+  "functions": [
+    {
+      "function_type": "INITIALIZE_REQUIREMENT",
+      "version": "v1",
+      "action_type": "INITIALIZE",
+      "source_type": "USER_INSTRUCTION",
+      "input_schema": "INITIALIZE_INPUT@v1",
+      "output_schema": "INITIALIZE_OUTPUT@v1",
+      "context_template": "INITIALIZE_CONTEXT@v1",
+      "prompt": "INITIALIZE_REQUIREMENT@v1"
+    },
+    {
+      "function_type": "ANSWER_REQUIREMENT",
+      "version": "v1",
+      "action_type": "ASK",
+      "source_type": "USER_INSTRUCTION",
+      "input_schema": "ASK_INPUT@v1",
+      "output_schema": "ASK_OUTPUT@v1",
+      "context_template": "ASK_CONTEXT@v1",
+      "prompt": "ANSWER_REQUIREMENT@v1"
+    },
+    {
+      "function_type": "REVIEW_REQUIREMENT",
+      "version": "v1",
+      "action_type": "REVIEW",
+      "source_type": "USER_INSTRUCTION",
+      "input_schema": "REVIEW_INPUT@v1",
+      "output_schema": "REVIEW_OUTPUT@v1",
+      "context_template": "REVIEW_CONTEXT@v1",
+      "prompt": "REVIEW_REQUIREMENT@v1"
+    },
+    {
+      "function_type": "MODIFY_REQUIREMENT",
+      "version": "v1",
+      "action_type": "MODIFY",
+      "source_type": "USER_INSTRUCTION",
+      "input_schema": "MODIFY_INPUT@v1",
+      "output_schema": "MODIFY_OUTPUT@v1",
+      "context_template": "MODIFY_CONTEXT@v1",
+      "prompt": "MODIFY_REQUIREMENT@v1"
+    },
+    {
+      "function_type": "MODIFY_FROM_REVIEW",
+      "version": "v1",
+      "action_type": "MODIFY",
+      "source_type": "REVIEW_RESULT",
+      "input_schema": "MODIFY_FROM_REVIEW_INPUT@v1",
+      "output_schema": "MODIFY_OUTPUT@v1",
+      "context_template": "MODIFY_FROM_REVIEW_CONTEXT@v1",
+      "prompt": "MODIFY_FROM_REVIEW@v1"
+    },
+    {
+      "function_type": "MODIFY_FROM_COMMENT",
+      "version": "v1",
+      "action_type": "MODIFY",
+      "source_type": "COMMENT",
+      "input_schema": "MODIFY_FROM_COMMENT_INPUT@v1",
+      "output_schema": "MODIFY_OUTPUT@v1",
+      "context_template": "MODIFY_FROM_COMMENT_CONTEXT@v1",
+      "prompt": "MODIFY_FROM_COMMENT@v1"
+    }
+  ]
+}
