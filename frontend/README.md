@@ -37,4 +37,6 @@ edited-snapshot.ts的EditedSnapshotLedger只接受完整MANUAL_DRAFT与同次绑
 
 最新浏览器覆盖19项编辑输出行为和10步键盘逐字源码，tools/verify-editor-output.py将其中实际输出与后端真实解析器/结构校验比较，共49对快照通过。该工具只使用测试来源，不证明真实会话数据库关系、HTTP保存或完整编辑器验收。证据：docs/verification/editor-browser-2026-10-03T12-59-47-413Z.json；源码/工具/夹具等16项输入前后hash一致，浏览器及Vite已关闭。
 
-自动链接基线可运行`node tools/verify-editor-browser.mjs --autolink-baseline`；该模式只采集差异，BASELINE COLLECTED不表示GFM语义通过。22独立例中前端5处/后端16处不符合预期，见docs/verification/autolink-baseline-notes.md和editor-browser-2026-10-03T13-14-26-317Z.json。正式修复尚待实施，不将当前差异改写为黄金值。验证脚本现登记19项输入；此前49对完整输出证据仍按当时16输入版本保存。
+自动链接生产规则使用原始源上的micromark tokenizer，保留表格/任务/删除线并处理真实表格chunk与转义竖线，不靠实体解码后替换AST文本。专项运行`node tools/verify-editor-browser.mjs --autolink-check`：48个独立预期与3个真实编辑后的输出，51对完整快照交给后端验证。完整默认模式再运行原编辑/身份/键盘及输入门禁，共100对；最新证据editor-browser-2026-10-03T14-08-31-198Z.json，29输入前后hash一致。24项独立前端测试及TS通过，另在development条件运行4自动链接测试以覆盖Vite使用的解析器断言。
+
+`--autolink-baseline`仍只采集当前22例，BASELINE COLLECTED不表示合规；修复前5处前端/16处后端差异的历史证据不覆写。原源及星号/协议边界修复已验证上述有限范围，Unicode域、更多括号语境、GFM其他边界和完整组件仍待补齐。详细记录docs/verification/autolink-baseline-notes.md；没有产品页面启动命令。

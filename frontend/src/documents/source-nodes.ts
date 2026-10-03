@@ -6,6 +6,8 @@ import {
 } from '@milkdown/kit/preset/commonmark';
 import { uploadPlugin } from '@milkdown/kit/plugin/upload';
 import { trailing } from '@milkdown/kit/plugin/trailing';
+import { remarkGFMPlugin } from '@milkdown/kit/preset/gfm';
+import { remarkWallEGfm } from './autolink-remark.ts';
 
 // A text node, never innerHTML: authored HTML and definitions stay visible,
 // including duplicates that remark-inline-links would otherwise discard.
@@ -103,8 +105,9 @@ export async function installSourceNodes(crepe: Crepe): Promise<void> {
   // Do this before create(). Upload has no persistent media API in the design;
   // dropping files must never insert a temporary blob URL into saved Markdown.
   await crepe.editor.remove([
+    ...remarkGFMPlugin,
     ...remarkInlineLinkPlugin, ...remarkHtmlTransformer,
     ...remarkPreserveEmptyLinePlugin, syncHeadingIdPlugin, uploadPlugin, ...trailing, codeBlockSchema.node,
   ]);
-  crepe.editor.use(sourceCodeNode).use(rawSourceNode).use(sourceRemark);
+  crepe.editor.use($remark('walle-gfm', () => remarkWallEGfm)).use(sourceCodeNode).use(rawSourceNode).use(sourceRemark);
 }

@@ -29,6 +29,8 @@ def main():
         records.append((f'edited-{index}', entry['pair'], entry['projection']))
     for entry in report['identity_checks']:
         records.append((entry['name'], entry['pair'], entry['pair_projection']))
+    for index, entry in enumerate(report.get('autolink_conformance', {}).get('outputs', [])):
+        records.append((f'autolink-{index}', entry['pair'], entry['projection']))
     for name, pair, expected in records:
         snapshot = validate_snapshot(pair['markdown_content'], pair['block_state_json'], fixture_origin)
         actual = [{'block_type': block.block_type, 'plain_text': block.plain_text,

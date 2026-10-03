@@ -10,6 +10,7 @@ import re
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 from mdit_py_plugins.tasklists import tasklists_plugin
+from .autolinks import install_autolinks
 
 MAX_MARKDOWN_CODEPOINTS = 1_000_000
 MAX_BLOCKS = 10_000
@@ -60,6 +61,7 @@ def _mark_task_items(state):
 def _parser() -> MarkdownIt:
     parser = MarkdownIt('commonmark', {'html': True, 'inline_definitions': True, 'typographer': False})
     parser.enable(['table', 'strikethrough'])
+    install_autolinks(parser)
     parser.use(tasklists_plugin, enabled=False, label=False)
     parser.core.ruler.before('github-tasklists', 'walle-task-source', _mark_task_items)
     return parser

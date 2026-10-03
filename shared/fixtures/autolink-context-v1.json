@@ -1,0 +1,31 @@
+{
+  "source": "Independent GFM literal expectations in Markdown contexts; approved D-004 raw preservation and projection rules also apply",
+  "cases": [
+    {"name":"table-header-chunk","markdown":"| www.example.test/a*b*c|标题|\n|---|---|\n| 值|值|\n","plain_text":["www.example.test/a*b*c\t标题\n值\t值"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"table-body-chunk-and-punctuation","markdown":"| 标题|标题|\n|---|---|\n| www.example.test/a*b*c.)|值|\n","plain_text":["标题\t标题\nwww.example.test/a*b*c.)\t值"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"table-escaped-pipe","markdown":"| 标题 |\n|---|\n| www.example.test/a\\|b |\n","plain_text":["标题\nwww.example.test/a|b"],"links":[{"text":"www.example.test/a|b","href":"http://www.example.test/a|b"}]},
+    {"name":"blockquote-start-and-softbreak","markdown":"> www.example.test/a*b*c\n> name@example.t2\n","plain_text":["www.example.test/a*b*c\nname@example.t2"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"},{"text":"name@example.t2","href":"mailto:name@example.t2"}]},
+    {"name":"nested-list","markdown":"- 外层\n  - www.example.test/a*b*c\n","plain_text":["外层\nwww.example.test/a*b*c"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"task-start","markdown":"- [ ] www.example.test/a*b*c\n","plain_text":["www.example.test/a*b*c"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"heading-start","markdown":"# www.example.test/a*b*c\n","plain_text":["www.example.test/a*b*c"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"emphasis-delimiter","markdown":"**www.example.test/a*b*c**\n","plain_text":["www.example.test/a*b*c"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"strike-delimiter","markdown":"~~www.example.test/a*b*c~~\n","plain_text":["www.example.test/a*b*c"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"escape-does-not-create-link","markdown":"www\\.example.test name\\+tag@example.test\n","plain_text":["www.example.test name+tag@example.test"],"links":[]},
+    {"name":"entity-does-not-create-www-link","markdown":"www&#46;example.test\n","plain_text":["www.example.test"],"links":[]},
+    {"name":"interior-entity-is-literal","markdown":"www.example.test/a&copy;more\n","plain_text":["www.example.test/a&copy;more"],"links":[{"text":"www.example.test/a&copy;more","href":"http://www.example.test/a&copy;more"}]},
+    {"name":"uppercase-scheme","markdown":"HTTPS://example.test/a WWW.example.test/b MAILTO:name@example.test\n","plain_text":["HTTPS://example.test/a WWW.example.test/b MAILTO:name@example.test"],"links":[{"text":"HTTPS://example.test/a","href":"HTTPS://example.test/a"},{"text":"WWW.example.test/b","href":"http://WWW.example.test/b"},{"text":"MAILTO:name@example.test","href":"MAILTO:name@example.test"}]},
+    {"name":"unicode-path-and-emoji-offset","markdown":"😀 www.example.test/资料😀?q=甲\n","plain_text":["😀 www.example.test/资料😀?q=甲"],"links":[{"text":"www.example.test/资料😀?q=甲","href":"http://www.example.test/资料😀?q=甲"}]},
+    {"name":"ascii-space-before-url","markdown":"前\twww.example.test/a\n","plain_text":["前\twww.example.test/a"],"links":[{"text":"www.example.test/a","href":"http://www.example.test/a"}]},
+    {"name":"unicode-space-is-not-ascii-whitespace","markdown":"前 www.example.test/a\n","plain_text":["前 www.example.test/a"],"links":[]},
+    {"name":"unsupported-scheme-no-fuzzy-domain","markdown":"ftp://example.test example.test\n","plain_text":["ftp://example.test example.test"],"links":[]},
+    {"name":"invalid-double-dot-domain","markdown":"https://example..test\n","plain_text":["https://example..test"],"links":[]},
+    {"name":"bracket-is-not-url-delimiter","markdown":"[www.example.test]\n","plain_text":["[www.example.test]"],"links":[]},
+    {"name":"image-label-plain-alt","markdown":"![www.example.test/a*b*c](x.png)\n","plain_text":["www.example.test/abc"],"links":[]},
+    {"name":"explicit-label-no-nested-link","markdown":"[www.example.test/a*b*c](/chosen)\n","plain_text":["www.example.test/abc"],"links":[{"text":"www.example.test/abc","href":"/chosen"}]},
+    {"name":"reference-label-no-nested-link","markdown":"[www.example.test/a*b*c][选]\n\n[选]: /chosen\n","plain_text":["www.example.test/abc","[选]: /chosen\n"],"links":[{"text":"www.example.test/abc","href":"/chosen"}]},
+    {"name":"code-fence-inert","markdown":"```text\nwww.example.test/a*b*c\n```\n","plain_text":["www.example.test/a*b*c\n"],"links":[]},
+    {"name":"html-block-inert","markdown":"<div>www.example.test/a*b*c</div>\n","plain_text":["<div>www.example.test/a*b*c</div>\n"],"links":[]},
+    {"name":"html-inline-inert","markdown":"文本 <span title=\"www.example.test/a*b*c\">尾</span>\n","plain_text":["文本 <span title=\"www.example.test/a*b*c\">尾</span>"],"links":[]},
+    {"name":"crlf-softbreak","markdown":"www.example.test/a*b*c\r\nname@example.t2\r\n","plain_text":["www.example.test/a*b*c\nname@example.t2"],"links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"},{"text":"name@example.t2","href":"mailto:name@example.t2"}]}
+  ]
+}

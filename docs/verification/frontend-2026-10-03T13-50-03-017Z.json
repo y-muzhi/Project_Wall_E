@@ -1,0 +1,37 @@
+{
+  "scope": "Installed dependency versions, TypeScript and projected-text offset helpers only; no editor/browser/business acceptance",
+  "recordedAt": "2026-10-03T13:50:03.017Z",
+  "node": "v24.15.0",
+  "passed": false,
+  "results": [
+    {
+      "args": [
+        "ls",
+        "--depth=0"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "walle-frontend@0.6.0 C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\frontend\n├── @milkdown/crepe@7.22.2\n├── @milkdown/kit@7.22.2\n├── @types/node@26.6.4\n├── @types/react-dom@19.3.0\n├── @types/react@19.3.0\n├── @vitejs/plugin-react@6.1.1\n├── react-dom@19.3.0\n├── react@19.3.0\n├── typescript@7.0.2\n└── vite@8.3.2\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "\n> walle-frontend@0.6.0 typecheck\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "test"
+      ],
+      "exitCode": 1,
+      "error": null,
+      "stdout": "\n> walle-frontend@0.6.0 test\n> node --test tests/*.test.mjs\n\n✔ actual remark tokenizer matches independent GFM literal cases before emphasis/entity decoding (9.1624ms)\n✖ literal links respect inline chunk boundaries in real tables, lists, headings and quotes (3.1538ms)\n✔ editing identical blocks follows transaction positions, retains IDs and selection (2.9683ms)\n✔ copied attributes before original get new ID; pasted unknown IDs and nested IDs are removed (0.9223ms)\n✔ split at middle and at start keeps first part; joining keeps first document ID (1.4726ms)\n✔ forward join of an empty first paragraph keeps first identity and ordinary mid-text deletion is deferred (0.282ms)\n✔ explicit movement preserves origins, including identical content and complete containers (0.338ms)\n✔ undo/redo restore same allocated IDs while high water never decreases (1.1689ms)\n✔ removed identity is only restored by actual local history, never a later pasted copy (0.3471ms)\n✔ atom blocks retain ID when typing elsewhere; whole unknown replacements receive new ID (0.2939ms)\n✔ empty caret has no business ID; deletion does not recycle IDs and undo restores old one (0.2652ms)\n✔ a new empty gap paragraph consumes no ID until actual text appears (0.5947ms)\n✔ capacity rejects entire transaction with original document/high-water untouched (0.4712ms)\n✔ 10000-block boundary keeps unrelated nodes and selections; further block insertion fails atomically (23.6153ms)\n✔ invalid initial identities fail; changing an ID attr cannot steal another block ID (0.5001ms)\n✔ shared independent Markdown projection and selection fixtures (1.2193ms)\n✔ Unicode offsets count codepoints including combining marks, ZWJ and CRLF (0.1215ms)\n✔ surrogate interiors, invalid Unicode and coerced integers are rejected (0.3244ms)\n✔ selection keeps raw text and immediate context, binds snapshot identity (0.1576ms)\n✔ 100-codepoint context boundaries do not split emoji or normalize content (0.1196ms)\n✔ 2000-codepoint selection is accepted; 2001 never truncated (0.703ms)\n✔ collapsed, reversed, extra fields and wrong snapshot values cannot form selection (0.3284ms)\nℹ tests 22\nℹ suites 0\nℹ pass 21\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 229.5786\n\n✖ failing tests:\n\ntest at tests\\autolinks.test.mjs:22:1\n✖ literal links respect inline chunk boundaries in real tables, lists, headings and quotes (3.1538ms)\n  AssertionError [ERR_ASSERTION]: | www.example.test/a*b*c|标题|\n  |---|---|\n  | 值|值|\n  \n  + actual - expected\n  \n  + []\n  - [\n  -   {\n  -     href: 'http://www.example.test/a*b*c',\n  -     text: 'www.example.test/a*b*c'\n  -   }\n  - ]\n  \n      at TestContext.<anonymous> (file:///C:/Users/%E7%BE%8A%E7%89%A7%E4%B9%8B/Documents/ChatGPT/Project_Wall_E%202/frontend/tests/autolinks.test.mjs:27:12)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1201:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)\n      at Test.postRun (node:internal/test_runner/test:1330:19)\n      at Test.run (node:internal/test_runner/test:1258:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: [],\n    expected: [ { text: 'www.example.test/a*b*c', href: 'http://www.example.test/a*b*c' } ],\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n",
+      "stderr": ""
+    }
+  ]
+}
