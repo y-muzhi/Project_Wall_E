@@ -36,3 +36,5 @@ edited-snapshot.ts的EditedSnapshotLedger只接受完整MANUAL_DRAFT与同次绑
 源码账本区分原始gap与生成的分隔符；同会话完整节点历史可恢复原始布局，撤销不累积空行，next不回退。空caret不填造Block，失败不改变账本。原始HTML/定义节点编辑必须仍能对应其实际节点类型与一个顶层区块；完整组件还须处理重新分块/类型转换及视图同步，不能把目前拒绝的局部状态标为已支持。账本缓存的生命周期与资源控制也须在RequirementEditor接入时处理。
 
 最新浏览器覆盖19项编辑输出行为和10步键盘逐字源码，tools/verify-editor-output.py将其中实际输出与后端真实解析器/结构校验比较，共49对快照通过。该工具只使用测试来源，不证明真实会话数据库关系、HTTP保存或完整编辑器验收。证据：docs/verification/editor-browser-2026-10-03T12-59-47-413Z.json；源码/工具/夹具等16项输入前后hash一致，浏览器及Vite已关闭。
+
+自动链接基线可运行`node tools/verify-editor-browser.mjs --autolink-baseline`；该模式只采集差异，BASELINE COLLECTED不表示GFM语义通过。22独立例中前端5处/后端16处不符合预期，见docs/verification/autolink-baseline-notes.md和editor-browser-2026-10-03T13-14-26-317Z.json。正式修复尚待实施，不将当前差异改写为黄金值。验证脚本现登记19项输入；此前49对完整输出证据仍按当时16输入版本保存。

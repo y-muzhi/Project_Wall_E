@@ -8,6 +8,7 @@ import { installIdentityAttributes, installIdentityState, identityState, topBloc
 import { verifyContracts } from './contracts.ts';
 import { fixtureDraft, editTime, verifyEditedSnapshots } from './edited-snapshot.ts';
 import { EditedSnapshotLedger } from '../../src/documents/edited-snapshot.ts';
+import { autolinkBaseline } from './autolink-baseline.ts';
 
 let crepe: Crepe | undefined;
 let ledger: EditedSnapshotLedger | undefined;
@@ -47,6 +48,7 @@ async function load(markdown: string, adapted = false, identity?: {ids: readonly
 }
 Object.assign(window, { editorProbe: {
   load,
+  autolinkBaseline: () => autolinkBaseline(markdown => load(markdown, true), () => crepe!),
   prepareIdentity: async () => {
     const markdown = '甲乙\n\n尾\n';
     await load(markdown, true, {ids: [10, 20], next: 30});

@@ -1,0 +1,27 @@
+{
+  "source": "Independent cases derived from D-004 and https://github.github.com/gfm/#autolinks-extension-; these are expected semantics, not current parser output",
+  "cases": [
+    {"name":"www-basic","markdown":"www.example.test\n","plain_text":"www.example.test","links":[{"text":"www.example.test","href":"http://www.example.test"}]},
+    {"name":"bare-domain-excluded","markdown":"example.test\n","plain_text":"example.test","links":[]},
+    {"name":"explicit-link-no-nesting","markdown":"[www.example.test](/chosen)\n","plain_text":"www.example.test","links":[{"text":"www.example.test","href":"/chosen"}]},
+    {"name":"code-excluded","markdown":"`www.example.test`\n","plain_text":"www.example.test","links":[]},
+    {"name":"www-interior-markers","markdown":"访问 www.example.test/a*b*c.\n","plain_text":"访问 www.example.test/a*b*c.","links":[{"text":"www.example.test/a*b*c","href":"http://www.example.test/a*b*c"}]},
+    {"name":"early-domain-underscore","markdown":"www.sub_domain.example.test\n","plain_text":"www.sub_domain.example.test","links":[{"text":"www.sub_domain.example.test","href":"http://www.sub_domain.example.test"}]},
+    {"name":"late-domain-underscore-excluded","markdown":"www.sub.example_bad.test\n","plain_text":"www.sub.example_bad.test","links":[]},
+    {"name":"unmatched-close-parenthesis","markdown":"www.example.test/path)\n","plain_text":"www.example.test/path)","links":[{"text":"www.example.test/path","href":"http://www.example.test/path"}]},
+    {"name":"balanced-parentheses","markdown":"www.example.test/a(b)c))\n","plain_text":"www.example.test/a(b)c))","links":[{"text":"www.example.test/a(b)c","href":"http://www.example.test/a(b)c"}]},
+    {"name":"interior-unbalanced-parentheses","markdown":"www.example.test/a(b))+c\n","plain_text":"www.example.test/a(b))+c","links":[{"text":"www.example.test/a(b))+c","href":"http://www.example.test/a(b))+c"}]},
+    {"name":"trailing-entity","markdown":"www.example.test/query&copy;\n","plain_text":"www.example.test/query©","links":[{"text":"www.example.test/query","href":"http://www.example.test/query"}]},
+    {"name":"trailing-unknown-entity","markdown":"www.example.test/query&unknown;\n","plain_text":"www.example.test/query&unknown;","links":[{"text":"www.example.test/query","href":"http://www.example.test/query"}]},
+    {"name":"https-basic","markdown":"https://example.test\n","plain_text":"https://example.test","links":[{"text":"https://example.test","href":"https://example.test"}]},
+    {"name":"http-inside-word-excluded","markdown":"aahttp://example.test\n","plain_text":"aahttp://example.test","links":[]},
+    {"name":"email-plus","markdown":"name+tag@example.test\n","plain_text":"name+tag@example.test","links":[{"text":"name+tag@example.test","href":"mailto:name+tag@example.test"}]},
+    {"name":"email-dot-trail","markdown":"name@example.test.\n","plain_text":"name@example.test.","links":[{"text":"name@example.test","href":"mailto:name@example.test"}]},
+    {"name":"email-invalid-tail","markdown":"name@example.test_\n","plain_text":"name@example.test_","links":[]},
+    {"name":"email-tld-digit","markdown":"name@example.t2\n","plain_text":"name@example.t2","links":[{"text":"name@example.t2","href":"mailto:name@example.t2"}]},
+    {"name":"mailto-prefix","markdown":"mailto:name@example.test\n","plain_text":"mailto:name@example.test","links":[{"text":"mailto:name@example.test","href":"mailto:name@example.test"}]},
+    {"name":"mailto-resource-excluded","markdown":"mailto:name@example.test/res\n","plain_text":"mailto:name@example.test/res","links":[{"text":"mailto:name@example.test","href":"mailto:name@example.test"}]},
+    {"name":"xmpp-prefix","markdown":"xmpp:name@example.test\n","plain_text":"xmpp:name@example.test","links":[{"text":"xmpp:name@example.test","href":"xmpp:name@example.test"}]},
+    {"name":"xmpp-resource","markdown":"xmpp:name@example.test/res@node.test/more\n","plain_text":"xmpp:name@example.test/res@node.test/more","links":[{"text":"xmpp:name@example.test/res@node.test","href":"xmpp:name@example.test/res@node.test"}]}
+  ]
+}

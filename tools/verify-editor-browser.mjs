@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const session = `walle-source-${Date.now()}`;
+const baselineOnly = process.argv.includes('--autolink-baseline');
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const commands = [];
@@ -33,6 +34,7 @@ const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdow
   'frontend/src/documents/identity.ts', 'frontend/src/documents/contracts.ts', 'frontend/tests/browser/contracts.ts',
   'frontend/src/documents/edited-snapshot.ts', 'frontend/tests/browser/edited-snapshot.ts',
   'tools/verify-editor-output.py',
+  'shared/fixtures/autolink-v1.json', 'frontend/tests/browser/autolink-baseline.ts', 'tools/autolink-baseline.py',
   'frontend/tests/browser/probe.ts', 'frontend/tests/browser/editor.html',
   'frontend/tests/browser/vite.config.ts', 'tools/verify-editor-browser.mjs'];
 async function inputHashes() {
@@ -63,6 +65,21 @@ try {
   if (!ready) throw new Error('Vite启动超时');
   await cli('open', `http://127.0.0.1:${port}/tests/browser/editor.html`);
   await cli('snapshot');
+  if (baselineOnly) {
+    report.scope = 'Autolink baseline observation only; passed means collection completed, not GFM conformance';
+    report.frontend_baseline = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkBaseline())'));
+    const backend = spawn(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/autolink-baseline.py'], {cwd: root, windowsHide: true});
+    let stdout = '', stderr = '';
+    backend.stdout.on('data', data => { stdout += data; });
+    backend.stderr.on('data', data => { stderr += data; });
+    const code = await new Promise((accept, reject) => { backend.once('error', reject); backend.once('exit', accept); });
+    report.backend_command = {status: code, stdout, stderr};
+    if (code !== 0) throw new Error(`后端基线收集失败\n${stderr}`);
+    report.backend_baseline = JSON.parse(stdout);
+    assert.equal(report.frontend_baseline.records.length, 22);
+    assert.equal(report.backend_baseline.records.length, 22);
+    report.conforms = !report.frontend_baseline.mismatches.length && !report.backend_baseline.mismatches.length;
+  } else {
   const output = await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verify())');
   report.result = resultFrom(output);
   if (report.result.cases.length !== 15 || report.result.cases.some(entry => !entry.raw_equal || !entry.projection_equal || !entry.changed_rejected)) throw new Error('浏览器断言不完整');
@@ -145,6 +162,7 @@ try {
   report.backend_output = JSON.parse(backendStdout);
   assert.equal(report.backend_output.passed, true);
   assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length);
+  }
   report.passed = true;
 } catch (error) {
   report.passed = false;
@@ -163,6 +181,6 @@ try {
   }
   const path = resolve(root, 'docs/verification', `editor-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n');
-  console.log(`${report.passed ? 'PASS' : 'FAIL'} ${path}`);
+  console.log(`${report.passed ? baselineOnly ? 'BASELINE COLLECTED' : 'PASS' : 'FAIL'} ${path}`);
   if (report.error) console.error(report.error);
 }
