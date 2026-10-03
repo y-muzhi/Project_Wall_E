@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "emoji-and-formatted-label",
+      "markdown": "😀审批人为部**门**经理。\n",
+      "plain_text": "😀审批人为部门经理。",
+      "start_utf16": 6,
+      "end_utf16": 10,
+      "start_offset": 5,
+      "end_offset": 9,
+      "selected_text": "部门经理",
+      "prefix_text": "😀审批人为",
+      "suffix_text": "。"
+    },
+    {
+      "name": "combining-mark-and-zwj",
+      "markdown": "é 👩‍💻。\n",
+      "plain_text": "é 👩‍💻。",
+      "start_utf16": 3,
+      "end_utf16": 8,
+      "start_offset": 3,
+      "end_offset": 6,
+      "selected_text": "👩‍💻",
+      "prefix_text": "é ",
+      "suffix_text": "。"
+    },
+    {
+      "name": "hard-break-with-emoji",
+      "markdown": "甲  \n乙😀尾\n",
+      "plain_text": "甲\n乙😀尾",
+      "start_utf16": 2,
+      "end_utf16": 5,
+      "start_offset": 2,
+      "end_offset": 4,
+      "selected_text": "乙😀",
+      "prefix_text": "甲\n",
+      "suffix_text": "尾"
+    }
+  ]
+}
