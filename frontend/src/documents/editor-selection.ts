@@ -1,9 +1,10 @@
 import type { Node } from '@milkdown/kit/prose/model';
 import type { EditorState } from '@milkdown/kit/prose/state';
+import { NodeSelection, TextSelection } from '@milkdown/kit/prose/state';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import { blockProjection, inlineProjection } from './editor-source.ts';
 import { identityState } from './identity.ts';
-import { SelectionInvalid, selectionFromProjectedText, type SelectionEvent } from './selection.ts';
+import { SelectionInvalid, selectionFromProjectedText, utf16RangeForSelection, type SelectionEvent } from './selection.ts';
 
 export type DocumentSelectionContext = Readonly<{document_id: number; content_version: number}>;
 interface Segment { from: number; to: number; start: number; end: number; linear: boolean; }
@@ -17,7 +18,7 @@ function context(value: DocumentSelectionContext): void {
 // Store text intervals and atom boundaries, not a million-entry position map.
 // Structural LF/TAB and code tails belong to the shared projection. They are
 // included between selected text endpoints without inventing a DOM character.
-function projection(node: Node, position: number): {text: string; at: (position: number) => number} {
+function projection(node: Node, position: number): {text: string; at: (position: number) => number; positionAt: (offset: number) => number} {
   const segments: Segment[] = [], parts: string[] = [];
   let size = 0;
   const append = (value: string) => { parts.push(value); size += value.length; };
@@ -55,6 +56,20 @@ function projection(node: Node, position: number): {text: string; at: (position:
     }
     if (matches.size !== 1) invalid();
     return matches.values().next().value!;
+  }, positionAt(target) {
+    const matches = new Set<number>();
+    for (const segment of segments) {
+      if (target < segment.start || target > segment.end) continue;
+      if (segment.linear) matches.add(segment.from + target - segment.start);
+      else {
+        if (target === segment.start) matches.add(segment.from);
+        if (target === segment.end) matches.add(segment.to);
+      }
+    }
+    if (!matches.size && target === 0) return position;
+    if (!matches.size && target === text.length) return position + node.nodeSize;
+    if (matches.size !== 1) invalid(); // Never guess an interior atom/virtual endpoint.
+    return matches.values().next().value!;
   }};
 }
 
@@ -74,6 +89,44 @@ export function selectionFromEditorState(state: EditorState, current: DocumentSe
   });
   if (!result) invalid(); // No cross-Block search or snapping into another node.
   return result;
+}
+
+export interface EditorSelectionRange {
+  readonly from: number;
+  readonly to: number;
+  readonly node_selection: boolean;
+}
+
+export function editorRangeForSelection(state: EditorState, current: DocumentSelectionContext, event: SelectionEvent): EditorSelectionRange {
+  context(current);
+  if (!event || typeof event !== 'object' || !Number.isSafeInteger(event.block_id) || event.block_id < 1) invalid();
+  let result: EditorSelectionRange | undefined;
+  state.doc.forEach((node, position) => {
+    if (node.attrs.walle_block_id !== event.block_id) return;
+    if (result || !identityState(state).known_ids.has(event.block_id)) invalid();
+    const map = projection(node, position);
+    const range = utf16RangeForSelection({...current, block_id: event.block_id}, map.text, event);
+    const from = map.positionAt(range.start), to = map.positionAt(range.end);
+    if (from >= to || map.at(from) !== range.start || map.at(to) !== range.end) invalid();
+    const textEndpoints = state.doc.resolve(from).parent.inlineContent && state.doc.resolve(to).parent.inlineContent;
+    if (!textEndpoints && (range.start !== 0 || range.end !== map.text.length)) invalid();
+    result = Object.freeze(textEndpoints ? {from, to, node_selection: false} :
+      {from: position, to: position + node.nodeSize, node_selection: true});
+  });
+  if (!result) throw new SelectionInvalid('STALE_SELECTION');
+  return result;
+}
+
+// Validation completes before changing selection, focus or scroll. A whole
+// block whose projection contains a synthetic code tail uses NodeSelection;
+// partial synthetic/atom interiors have no exact text endpoint and fail.
+export function locateEditorSelection(view: EditorView, current: DocumentSelectionContext, event: SelectionEvent): void {
+  const range = editorRangeForSelection(view.state, current, event);
+  const selection = range.node_selection ? NodeSelection.create(view.state.doc, range.from) :
+    TextSelection.create(view.state.doc, range.from, range.to);
+  if (selection.from !== range.from || selection.to !== range.to) invalid();
+  view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+  view.focus();
 }
 
 interface DomPoint { node: globalThis.Node; offset: number; }

@@ -1,9 +1,10 @@
 import type { Crepe } from '@milkdown/crepe';
 import { editorViewCtx } from '@milkdown/kit/core';
-import { TextSelection } from '@milkdown/kit/prose/state';
+import { NodeSelection, TextSelection } from '@milkdown/kit/prose/state';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import fixtures from '../../../shared/fixtures/editor-selection-v1.json';
-import { selectionFromEditorState, selectionFromEditorView } from '../../src/documents/editor-selection.ts';
+import { editorRangeForSelection, locateEditorSelection, selectionFromEditorState, selectionFromEditorView } from '../../src/documents/editor-selection.ts';
+import { selectionFromProjectedText } from '../../src/documents/selection.ts';
 import { SelectionInvalid } from '../../src/documents/selection.ts';
 import { EditorSource } from '../../src/documents/editor-source.ts';
 import { EditedSnapshotLedger } from '../../src/documents/edited-snapshot.ts';
@@ -42,10 +43,14 @@ export async function verifyEditorSelection(load: (markdown: string, ids: readon
       select(view, anchor, focus);
       const actual = selectionFromEditorView(view, selectionContext);
       if (JSON.stringify(actual) !== JSON.stringify(entry.event)) throw new Error(`真实选区不一致: ${entry.name}: ${JSON.stringify(actual)}`);
+      const restored = editorRangeForSelection(view.state, selectionContext, actual!);
+      if (restored.from !== Math.min(anchor, focus) || restored.to !== Math.max(anchor, focus) || restored.node_selection) throw new Error('选区反向映射改变实际端点');
+      locateEditorSelection(view, selectionContext, actual!);
+      if (JSON.stringify(selectionFromEditorView(view, selectionContext)) !== JSON.stringify(entry.event)) throw new Error('实际视图定位改变纯文本范围');
       select(view, focus, anchor);
       if (JSON.stringify(selectionFromEditorView(view, selectionContext)) !== JSON.stringify(entry.event)) throw new Error('反向选区被改变');
       const pair = new EditedSnapshotLedger(ctx, fixtureDraft(ctx, entry.markdown, [10], 20), view.state).capture(view.state, editTime);
-      return {name: entry.name, event: actual, expected: entry.event, pair, native_round_trip: true,
+      return {name: entry.name, event: actual, expected: entry.event, pair, native_round_trip: true, inverse_equal: true,
         projection: source.blocks.map(block => ({block_type: block.block_type, plain_text: block.plain_text, section_path: block.section_path}))};
     }));
   }
@@ -81,7 +86,48 @@ export async function verifyEditorSelection(load: (markdown: string, ids: readon
     select(view, first, first);
     if (selectionFromEditorState(view.state, selectionContext) !== null || selectionFromEditorView(view, selectionContext) !== null) throw new Error('空选区变为正文选区');
     rejectedCases.push('collapsed-no-event');
+    select(view, first, first + 1);
+    const original = selectionFromEditorView(view, selectionContext)!;
+    const before = view.state;
+    for (const [name, event, code] of [
+      ['old-document', {...original, document_id: 91}, 'STALE_SELECTION'],
+      ['old-version', {...original, content_version: 2}, 'STALE_SELECTION'],
+      ['changed-text', {...original, selected_text: '错'}, 'STALE_SELECTION'],
+      ['missing-block', {...original, block_id: 11}, 'STALE_SELECTION'],
+    ] as const) {
+      rejected(() => locateEditorSelection(view, selectionContext, event), code);
+      if (view.state !== before) throw new Error('拒绝定位仍改变编辑器状态');
+      rejectedCases.push(name);
+    }
   });
+  await load('前![图😀](x.png)后\n', [10], 20);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx), before = view.state;
+    const partial = selectionFromProjectedText({...selectionContext, block_id: 10}, '前图😀后', 2, 4);
+    rejected(() => locateEditorSelection(view, selectionContext, partial));
+    if (view.state !== before) throw new Error('原子内部定位改变状态');
+    rejectedCases.push('inverse-partial-image-alt');
+  });
+  const codeSource = '```\r\n甲\r\n```\r\n';
+  await load(codeSource, [10], 20);
+  records.push(get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx), initialDoc = view.state.doc;
+    const event = selectionFromProjectedText({...selectionContext, block_id: 10}, '甲\n', 0, 2);
+    const range = editorRangeForSelection(view.state, selectionContext, event);
+    if (!range.node_selection || range.from !== 0 || range.to !== view.state.doc.content.size) throw new Error('完整代码尾行未对应真实区块');
+    locateEditorSelection(view, selectionContext, event);
+    if (!(view.state.selection instanceof NodeSelection) || !view.state.doc.eq(initialDoc) ||
+        JSON.stringify(selectionFromEditorState(view.state, selectionContext)) !== JSON.stringify(event) ||
+        !view.dom.querySelector('.ProseMirror-selectednode')) throw new Error('代码块实际定位失败/修改正文');
+    const before = view.state;
+    const tail = selectionFromProjectedText({...selectionContext, block_id: 10}, '甲\n', 1, 2);
+    rejected(() => locateEditorSelection(view, selectionContext, tail));
+    if (view.state !== before) throw new Error('尾行部分定位改变状态');
+    rejectedCases.push('inverse-partial-synthetic-tail');
+    const pair = new EditedSnapshotLedger(ctx, fixtureDraft(ctx, codeSource, [10], 20), view.state).capture(view.state, editTime);
+    return {name: 'whole-code-with-tail', event, expected: event, pair, native_round_trip: false, inverse_equal: true,
+      projection: new EditorSource(ctx, codeSource).blocks.map(block => ({block_type: block.block_type, plain_text: block.plain_text, section_path: block.section_path}))};
+  }));
   const capacity = '😀'.repeat(2001) + '\n';
   await load(capacity, [10], 20);
   records.push(get().editor.action(ctx => {
@@ -89,22 +135,26 @@ export async function verifyEditorSelection(load: (markdown: string, ids: readon
     select(view, 1, 4001);
     const event = selectionFromEditorView(view, selectionContext)!;
     if (event.start_offset !== 0 || event.end_offset !== 2000 || event.selected_text !== '😀'.repeat(2000) || event.suffix_text !== '😀') throw new Error('2000码点边界错误');
+    locateEditorSelection(view, selectionContext, event);
+    if (JSON.stringify(selectionFromEditorView(view, selectionContext)) !== JSON.stringify(event)) throw new Error('容量边界反向定位改变范围');
     const pair = new EditedSnapshotLedger(ctx, fixtureDraft(ctx, capacity, [10], 20), view.state).capture(view.state, editTime);
     select(view, 1, 4003);
     rejected(() => selectionFromEditorView(view, selectionContext));
     rejectedCases.push('2001-not-truncated');
-    return {name: 'capacity-2000', event, expected: event, pair, native_round_trip: true,
+    return {name: 'capacity-2000', event, expected: event, pair, native_round_trip: true, inverse_equal: true,
       projection: new EditorSource(ctx, capacity).blocks.map(block => ({block_type: block.block_type, plain_text: block.plain_text, section_path: block.section_path}))};
   }));
-  return {scope: 'Real PM/native DOM endpoints and shared codepoint projection; no product component or HTTP acceptance', records, rejected: rejectedCases};
+  return {scope: 'Real PM/native DOM endpoints, inverse text/block location and shared codepoint projection; no product component or HTTP acceptance', records, rejected: rejectedCases};
 }
 
 export function keyboardSelection(crepe: Crepe) {
   return crepe.editor.action(ctx => {
     const view = ctx.get(editorViewCtx), event = selectionFromEditorView(view, selectionContext);
+    locateEditorSelection(view, selectionContext, event!);
+    if (JSON.stringify(selectionFromEditorView(view, selectionContext)) !== JSON.stringify(event)) throw new Error('原生键盘反向定位改变选区');
     const markdown = '甲😀乙\n';
     const pair = new EditedSnapshotLedger(ctx, fixtureDraft(ctx, markdown, [10], 20), view.state).capture(view.state, editTime);
-    return {name: 'native-keyboard-emoji', event, pair, native_round_trip: true,
+    return {name: 'native-keyboard-emoji', event, pair, native_round_trip: true, inverse_equal: true,
       projection: new EditorSource(ctx, markdown).blocks.map(block => ({block_type: block.block_type, plain_text: block.plain_text, section_path: block.section_path}))};
   });
 }

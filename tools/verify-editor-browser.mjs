@@ -73,8 +73,10 @@ function resultFrom(output) {
 }
 async function verifySelection() {
   const result = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyEditorSelection())'));
-  assert.equal(result.records.length, 13);
-  assert.deepEqual(result.rejected, ['cross-block', 'surrogate-interior', 'partial-html-atom', 'outside-editor', 'stale-dom-state', 'collapsed-no-event', '2001-not-truncated']);
+  assert.equal(result.records.length, 14);
+  assert.deepEqual(result.rejected, ['cross-block', 'surrogate-interior', 'partial-html-atom', 'outside-editor', 'stale-dom-state', 'collapsed-no-event',
+    'old-document', 'old-version', 'changed-text', 'missing-block', 'inverse-partial-image-alt', 'inverse-partial-synthetic-tail', '2001-not-truncated']);
+  assert.ok(result.records.every(entry => entry.inverse_equal === true));
   await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.prepareSelection())');
   const snapshot = await cli('snapshot');
   const ref = /textbox \[ref=([^\]]+)\]/.exec(snapshot)?.[1];
