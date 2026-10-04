@@ -1,5 +1,6 @@
 """APP-DOC-QUERY-C01/C02 exact document read models and snapshot gates."""
 from typing import Mapping, Any
+from dataclasses import dataclass
 
 from backend.app.shared.validation import MISSING, strict_enum, strict_integer, strict_json_object
 from backend.app.shared.validation import object_fields
@@ -63,3 +64,26 @@ def cancel_manual_draft_input(payload: object) -> ExpectedDraftInput:
 def cancel_manual_draft_result(requirement_id: int, manual_draft_id: int) -> dict:
     return {'requirement_id': strict_integer(requirement_id, 'requirement_id'),
             'manual_draft_id': strict_integer(manual_draft_id, 'manual_draft_id'), 'cancelled': True}
+
+
+@dataclass(frozen=True)
+class SaveManualDraftInput:
+    requirement_id: int
+    expected_version: int
+    markdown_content: str
+    block_state_json: dict
+
+
+def save_manual_draft_input(payload: object) -> SaveManualDraftInput:
+    from backend.app.shared.validation import text_value, reject
+    fields = ('requirement_id', 'expected_version', 'markdown_content', 'block_state_json')
+    data = object_fields(payload, 'body', fields, fields)
+    markdown = text_value(data['markdown_content'], 'markdown_content')
+    if type(data['block_state_json']) is not dict:
+        reject('block_state_json', 'INVALID_TYPE', '必须是JSON对象，不能使用转义字符串')
+    return SaveManualDraftInput(strict_integer(data['requirement_id'], 'requirement_id'),
+        strict_integer(data['expected_version'], 'expected_version'), markdown, data['block_state_json'])
+
+
+def save_manual_draft_result(row: Mapping[str, Any], source_verifier: SourceVerifier) -> dict:
+    return get_manual_draft_result(row, source_verifier)

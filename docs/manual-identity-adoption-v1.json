@@ -1,0 +1,20 @@
+{
+  "decision": "D-009",
+  "user_confirmation": "确认补充稿，按方案接入（推荐）",
+  "recorded_at": "2026-10-04T05:31:16.994Z",
+  "approved": [
+    {
+      "path": "docs/proposals/manual-identity-receipts-v1.md",
+      "sha256": "76738614cacef12a75a0c22b073d5d4bcb4e51da55541d1ab5b6ca54808cfc0e"
+    },
+    {
+      "path": "docs/proposals/manual-identity-receipts-v1.sql",
+      "sha256": "e7e3faa710023da392f1536e556e09018321819b1c5e51c8d0ef346d810ea642"
+    }
+  ],
+  "migration": {
+    "path": "backend/app/infrastructure/migrations/004_manual_identity_proofs.sql",
+    "sha256": "501e4b90e276483f40f4339e3d81f3ae9f456059b92127f585dc904437e4c892",
+    "changes": "Approval annotation and reviewed conservative legacy-draft preflight."
+  }
+}

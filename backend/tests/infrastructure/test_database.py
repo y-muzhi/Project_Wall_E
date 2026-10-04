@@ -33,7 +33,7 @@ class DatabaseTests(unittest.TestCase):
         upgraded = self.database.initialize()
         self.assertFalse(upgraded['initialized'])
         self.assertTrue(upgraded['migrated'])
-        self.assertEqual(upgraded['schema_version'], 3)
+        self.assertEqual(upgraded['schema_version'], 4)
         with closing(sqlite3.connect(upgraded['backup_path'])) as connection:
             self.assertEqual(connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0], 1)
             self.assertEqual(connection.execute('SELECT title FROM requirements').fetchone()[0], '需求甲')
@@ -115,11 +115,11 @@ class DatabaseTests(unittest.TestCase):
     def test_version_checksum_and_missing_object_are_distinct_startup_failures(self):
         self.database.initialize()
         with closing(sqlite3.connect(self.path, isolation_level=None)) as connection:
-            connection.execute('UPDATE schema_migrations SET version=4 WHERE version=3')
+            connection.execute('UPDATE schema_migrations SET version=5 WHERE version=4')
         with self.assertRaises(SchemaMismatch):
             self.database.initialize()
         with closing(sqlite3.connect(self.path, isolation_level=None)) as connection:
-            connection.execute('UPDATE schema_migrations SET version=3 WHERE version=4')
+            connection.execute('UPDATE schema_migrations SET version=4 WHERE version=5')
             connection.execute('UPDATE schema_migrations SET checksum=? WHERE version=1', ('wrong-checksum',))
         with self.assertRaises(SchemaMismatch):
             self.database.initialize()

@@ -35,7 +35,20 @@ class DocumentRepository:
         require_write_transaction(self.connection)
         if draft['document_type'] != 'MANUAL_DRAFT':
             raise ValueError('Draft deletion cannot delete CURRENT')
+        self.connection.execute('DELETE FROM manual_block_origins WHERE draft_id=?', (draft['id'],))
+        self.connection.execute('DELETE FROM manual_block_allocation_ranges WHERE draft_id=?', (draft['id'],))
         context = self.connection.execute('DELETE FROM manual_draft_context WHERE draft_id=?', (draft['id'],))
         document = self.connection.execute("DELETE FROM requirement_documents WHERE id=? AND requirement_id=? AND document_type='MANUAL_DRAFT'", (draft['id'], draft['requirement_id']))
         if context.rowcount != 1 or document.rowcount != 1:
             raise ValueError('Draft or its context disappeared in shared transaction')
+
+    def save_manual_draft(self, draft: sqlite3.Row, snapshot, version: int, at: str) -> sqlite3.Row:
+        require_write_transaction(self.connection)
+        result = self.connection.execute("UPDATE requirement_documents SET markdown_content=?,block_state_json=?,content_version=?,updated_at=? WHERE id=? AND requirement_id=? AND document_type='MANUAL_DRAFT' AND content_version=?",
+            (snapshot.parsed.markdown, snapshot.state_json, version, at, draft['id'], draft['requirement_id'], draft['content_version']))
+        if result.rowcount != 1:
+            raise ValueError('Draft version changed within the shared write transaction')
+        rows = self.by_requirement(draft['requirement_id'], 'MANUAL_DRAFT')
+        if len(rows) != 1 or rows[0]['id'] != draft['id']:
+            raise ValueError('Updated draft is not unique')
+        return rows[0]

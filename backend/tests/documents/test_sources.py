@@ -196,7 +196,7 @@ class ManualSourceMigrationTests(unittest.TestCase):
             with legacy.transaction(write=True) as connection:
                 seed_documents(connection, manual=False)
             result = Database(path).initialize()
-            self.assertEqual(result['schema_version'], 3)
+            self.assertEqual(result['schema_version'], 4)
             self.assertTrue(result['migrated'])
             with closing(sqlite3.connect(result['backup_path'])) as connection:
                 self.assertEqual(connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0], 2)

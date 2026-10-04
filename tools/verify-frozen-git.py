@@ -25,6 +25,10 @@ manual = json.loads((ROOT / 'docs/manual-edit-source-adoption-v1.json').read_tex
 expected.update({entry['path']: entry['sha256'] for entry in manual['approved']})
 expected[manual['migration']['path']] = manual['migration']['sha256']
 expected['docs/manual-edit-source-adoption-v1.json'] = digest((ROOT / 'docs/manual-edit-source-adoption-v1.json').read_bytes())
+identity = json.loads((ROOT / 'docs/manual-identity-adoption-v1.json').read_text(encoding='utf-8'))
+expected.update({entry['path']: entry['sha256'] for entry in identity['approved']})
+expected[identity['migration']['path']] = identity['migration']['sha256']
+expected['docs/manual-identity-adoption-v1.json'] = digest((ROOT / 'docs/manual-identity-adoption-v1.json').read_bytes())
 for path in ('backend/resources/v1/manifest.json', 'backend/app/infrastructure/migrations/002_idempotency_guards.sql', 'docs/resource-adoption-v1.json', 'docs/verification/proposals-v1.json'):
     expected[path] = digest((ROOT / path).read_bytes())
 actual = []
