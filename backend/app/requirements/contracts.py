@@ -62,6 +62,41 @@ def requirement_id_input(value: object = MISSING) -> int:
     return strict_integer(value, 'requirement_id')
 
 
+def get_requirement_input(value: object = MISSING) -> int:
+    return requirement_id_input(value)
+
+
+def get_requirement_result(row: Mapping[str, Any]) -> dict[str, Any]:
+    return requirement_read_model(row)
+
+
+@dataclass(frozen=True)
+class UpdateRequirementInput:
+    requirement_id: int
+    changes: dict[str, str]
+
+
+def update_requirement_input(payload: object) -> UpdateRequirementInput:
+    data = object_fields(payload, 'body', ('requirement_id', 'title', 'initialization_mode'), ('requirement_id',))
+    identity = requirement_id_input(data['requirement_id'])
+    if 'title' not in data and 'initialization_mode' not in data:
+        reject('body', 'REQUIRED', '至少提供title或initialization_mode一项')
+    changes = {}
+    if 'title' in data:
+        changes['title'] = title(data['title'])
+        try:
+            changes['title'].encode('utf-8')
+        except UnicodeEncodeError:
+            reject('title', 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
+    if 'initialization_mode' in data:
+        changes['initialization_mode'] = strict_enum(data['initialization_mode'], 'initialization_mode', ('IDEATION', 'DESIGN'))
+    return UpdateRequirementInput(identity, changes)
+
+
+def update_requirement_result(row: Mapping[str, Any]) -> dict[str, Any]:
+    return requirement_read_model(row)
+
+
 def _stored_time(value: object) -> None:
     if type(value) is not str or re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z', value) is None:
         raise ValueError('Invalid persisted UTC time')

@@ -2,6 +2,7 @@
 import re
 import sqlite3
 
+from backend.app.infrastructure.identifiers import require_write_transaction
 from backend.app.requirements.contracts import ListRequirementsInput, READ_FIELDS, list_requirements_result, requirement_read_model
 from backend.app.shared.pagination import PAGE_SIZE, page_offset
 
@@ -40,3 +41,19 @@ class RequirementRepository:
     def get(self, identity: int) -> dict | None:
         row = self.connection.execute('SELECT ' + COLUMNS + ' FROM requirements WHERE id=?', (identity,)).fetchone()
         return None if row is None else requirement_read_model(row)
+
+    def update_attributes(self, identity: int, changes: dict[str, str], at: str) -> dict:
+        require_write_transaction(self.connection)
+        if not changes or not set(changes) <= {'title', 'initialization_mode'}:
+            raise ValueError('Only submitted mutable attributes may be written')
+        fields = tuple(changes)
+        result = self.connection.execute(
+            'UPDATE requirements SET ' + ','.join(field + '=?' for field in fields) + ',updated_at=? WHERE id=?',
+            (*[changes[field] for field in fields], at, identity),
+        )
+        if result.rowcount != 1:
+            raise ValueError('Requirement disappeared from shared write transaction')
+        row = self.get(identity)
+        if row is None:
+            raise ValueError('Updated requirement is missing')
+        return row

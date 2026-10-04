@@ -4,7 +4,7 @@ from collections.abc import Callable
 from backend.app.infrastructure.database import Database, SchemaMismatch, StorageUnavailable
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.shared.validation import InvalidInput, MISSING
-from .contracts import list_requirements_input, requirement_id_input
+from .contracts import get_requirement_input, get_requirement_result, list_requirements_input
 
 
 def _query(database: Database, validate: Callable, read: Callable, *, not_found: bool = False) -> dict:
@@ -33,5 +33,7 @@ def list_requirements(database: Database, payload: object = MISSING) -> dict:
 
 
 def get_requirement(database: Database, requirement_id: object = MISSING) -> dict:
-    return _query(database, lambda: requirement_id_input(requirement_id),
-                  lambda repository, identity: repository.get(identity), not_found=True)
+    def read(repository: RequirementRepository, identity: int) -> dict | None:
+        model = repository.get(identity)
+        return None if model is None else get_requirement_result(model)
+    return _query(database, lambda: get_requirement_input(requirement_id), read, not_found=True)
