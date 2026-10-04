@@ -42,3 +42,25 @@ def current_at_version(connection: sqlite3.Connection, requirement_id: int, expe
     if rows[0]['content_version'] != expected_version:
         raise Rejected('CONTENT_VERSION_CONFLICT')
     return rows[0]
+
+
+def active_manual_draft(connection: sqlite3.Connection, root: dict) -> sqlite3.Row:
+    require_write_transaction(connection)
+    rows = DocumentRepository(connection).by_requirement(root['id'], 'MANUAL_DRAFT')
+    if root['document_work_state'] != 'MANUAL_EDITING':
+        if rows:
+            raise Rejected('WORK_STATE_INCONSISTENT')
+        # Also distinguish a valid other occupancy from a dangling one.
+        assert_idle(connection, root, remaining_conflicts=frozenset())
+        raise Rejected('WORK_STATE_CONFLICT')
+    if len(rows) != 1 or root['active_operation_type'] != 'MANUAL_DRAFT' or root['active_operation_id'] != rows[0]['id']:
+        raise Rejected('WORK_STATE_INCONSISTENT')
+    try:
+        assert_idle(connection, root, remaining_conflicts=frozenset())
+    except Rejected as error:
+        if error.code != 'WORK_STATE_CONFLICT':
+            raise
+        # The root and all activity/context/source relationships are consistent;
+        # this capability owns that existing occupancy rather than requiring IDLE.
+        return rows[0]
+    raise Rejected('WORK_STATE_INCONSISTENT')

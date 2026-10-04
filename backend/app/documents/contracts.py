@@ -2,6 +2,8 @@
 from typing import Mapping, Any
 
 from backend.app.shared.validation import MISSING, strict_enum, strict_integer, strict_json_object
+from backend.app.shared.validation import object_fields
+from backend.app.shared.command_execution import ExpectedCurrentInput, ExpectedDraftInput
 from .snapshot import SourceVerifier, _time, validate_snapshot
 
 DOCUMENT_FIELDS = ('id', 'requirement_id', 'document_type', 'markdown_content', 'block_state_json',
@@ -41,3 +43,23 @@ def get_manual_draft_result(row: Mapping[str, Any], source_verifier: SourceVerif
     if data['document_type'] != 'MANUAL_DRAFT':
         raise ValueError('Draft read must not project current content')
     return data
+
+
+def start_manual_draft_input(payload: object) -> ExpectedCurrentInput:
+    fields = ('requirement_id', 'expected_content_version', 'idempotency_key')
+    return ExpectedCurrentInput.from_fields(object_fields(payload, 'body', fields, fields))
+
+
+def start_manual_draft_result(draft: Mapping[str, Any], root: Mapping[str, Any], source_verifier: SourceVerifier) -> dict:
+    from backend.app.requirements.contracts import requirement_read_model
+    return {'manual_draft': get_manual_draft_result(draft, source_verifier), 'requirement': requirement_read_model(root)}
+
+
+def cancel_manual_draft_input(payload: object) -> ExpectedDraftInput:
+    fields = ('requirement_id', 'expected_version', 'idempotency_key')
+    return ExpectedDraftInput.from_fields(object_fields(payload, 'body', fields, fields))
+
+
+def cancel_manual_draft_result(requirement_id: int, manual_draft_id: int) -> dict:
+    return {'requirement_id': strict_integer(requirement_id, 'requirement_id'),
+            'manual_draft_id': strict_integer(manual_draft_id, 'manual_draft_id'), 'cancelled': True}

@@ -81,3 +81,23 @@ class RequirementRepository:
         if row is None:
             raise ValueError('Requirement vanished inside shared write transaction')
         return row
+
+    def occupy_manual_draft(self, identity: int, draft_id: int, at: str) -> dict:
+        require_write_transaction(self.connection)
+        result = self.connection.execute("UPDATE requirements SET document_work_state='MANUAL_EDITING',active_operation_type='MANUAL_DRAFT',active_operation_id=?,state_started_at=?,updated_at=? WHERE id=? AND status IN ('INITIALIZING','ACTIVE') AND document_work_state='IDLE'", (draft_id, at, at, identity))
+        if result.rowcount != 1:
+            raise ValueError('Manual occupancy changed inside shared transaction')
+        row = self.get(identity)
+        if row is None:
+            raise ValueError('Occupied requirement is missing')
+        return row
+
+    def release_manual_draft(self, identity: int, draft_id: int, at: str) -> dict:
+        require_write_transaction(self.connection)
+        result = self.connection.execute("UPDATE requirements SET document_work_state='IDLE',active_operation_type=NULL,active_operation_id=NULL,state_started_at=NULL,updated_at=? WHERE id=? AND document_work_state='MANUAL_EDITING' AND active_operation_type='MANUAL_DRAFT' AND active_operation_id=?", (at, identity, draft_id))
+        if result.rowcount != 1:
+            raise ValueError('Manual occupancy changed inside shared transaction')
+        row = self.get(identity)
+        if row is None:
+            raise ValueError('Released requirement is missing')
+        return row

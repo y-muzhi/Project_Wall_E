@@ -46,6 +46,22 @@ class RequirementActionInput:
         return {'requirement_id': self.requirement_id}
 
 
+@dataclass(frozen=True)
+class ExpectedDraftInput:
+    requirement_id: int
+    expected_version: int
+    idempotency_key: str
+
+    @classmethod
+    def from_fields(cls, data: dict) -> 'ExpectedDraftInput':
+        return cls(strict_integer(data['requirement_id'], 'requirement_id'),
+                   strict_integer(data['expected_version'], 'expected_version'),
+                   request_key(data['idempotency_key'], 'idempotency_key'))
+
+    def business_input(self) -> dict:
+        return {'requirement_id': self.requirement_id, 'expected_version': self.expected_version}
+
+
 def operation_time(clock: Callable[[], datetime] | None) -> str:
     at = utc_milliseconds(clock() if clock is not None else datetime.now(timezone.utc))
     if at is None:
@@ -53,7 +69,7 @@ def operation_time(clock: Callable[[], datetime] | None) -> str:
     return at
 
 
-def execute_idempotent(executor: Idempotency, capability: str, request: ExpectedCurrentInput | RequirementActionInput,
+def execute_idempotent(executor: Idempotency, capability: str, request: ExpectedCurrentInput | RequirementActionInput | ExpectedDraftInput,
                        operation: Callable[[sqlite3.Connection], Success], *, allowed_failures: frozenset[str],
                        business_input: dict | None = None) -> dict:
     try:
