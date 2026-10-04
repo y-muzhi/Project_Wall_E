@@ -27,6 +27,47 @@ LIST_FIELDS = ('id', 'requirement_no', 'title', 'requirement_type', 'status', 'u
 
 
 @dataclass(frozen=True)
+class CreateRequirementInput:
+    title: str
+    requirement_type: str
+    template_key: str
+    template_version: str
+    initial_idea: str
+    initialization_mode: str
+    idempotency_key: str
+
+    def business_input(self) -> dict:
+        return {field: getattr(self, field) for field in ('title', 'requirement_type', 'template_key', 'template_version', 'initial_idea', 'initialization_mode')}
+
+
+def create_requirement_input(payload: object) -> CreateRequirementInput:
+    from backend.app.shared.validation import initial_idea, raw_text
+    from backend.app.infrastructure.idempotency import canonical_input, request_key
+    fields = ('title', 'requirement_type', 'template_key', 'template_version', 'initial_idea', 'initialization_mode', 'idempotency_key')
+    data = object_fields(payload, 'body', fields, fields)
+    request = CreateRequirementInput(title(data['title']), strict_enum(data['requirement_type'], 'requirement_type', REQUIREMENT_TYPES),
+        raw_text(data['template_key'], 'template_key', 1, 128), raw_text(data['template_version'], 'template_version', 1, 64),
+        initial_idea(data['initial_idea']), strict_enum(data['initialization_mode'], 'initialization_mode', ('IDEATION', 'DESIGN')),
+        request_key(data['idempotency_key'], 'idempotency_key'))
+    for field, value in request.business_input().items():
+        try:
+            value.encode('utf-8')
+        except UnicodeEncodeError:
+            reject(field, 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
+    canonical_input(request.business_input())
+    return request
+
+
+def create_requirement_result(root: Mapping[str, Any], current_document_id: int, guide_run_id: int) -> dict:
+    value = requirement_read_model(root)
+    strict_integer(current_document_id, 'current_document_id')
+    strict_integer(guide_run_id, 'guide_run_id')
+    if value['status'] != 'INITIALIZING' or value['document_work_state'] != 'GUIDE_ACTIVE' or value['active_operation_type'] != 'GUIDE_RUN' or value['active_operation_id'] != guide_run_id:
+        raise ValueError('Created resource must reference its accepted initialization run')
+    return {'requirement': value, 'current_document_id': current_document_id, 'guide_run_id': guide_run_id}
+
+
+@dataclass(frozen=True)
 class ListRequirementsInput:
     keyword: str | None
     status: tuple[str, ...]

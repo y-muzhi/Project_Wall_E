@@ -6,6 +6,7 @@ from .http_models import ListRequirementsRequest, ListRequirementsResponse, GetR
 from backend.app.shared.http_boundary import handle_http
 from . import commands
 from .http_models import UpdateRequirementRequest, UpdateRequirementResponse, CompleteInitializationRequest, CompleteInitializationResponse, CompleteRequirementRequest, CompleteRequirementResponse, ReactivateRequirementRequest, ReactivateRequirementResponse
+from .http_models import CreateRequirementRequest, CreateRequirementResponse
 
 req_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 
@@ -44,3 +45,7 @@ async def complete_requirement_http(request: Request):
 async def reactivate_requirement_http(request: Request):
     return await handle_http(request, ReactivateRequirementRequest, ReactivateRequirementResponse,
         lambda runtime, parsed: commands.reactivate_requirement(runtime.commands(), parsed.payload))
+@req_router.post('/requirements')
+async def create_requirement_http(request: Request):
+    return await handle_http(request, CreateRequirementRequest, CreateRequirementResponse,
+        lambda runtime, parsed: commands.create_requirement(runtime.commands(), parsed.payload, catalog=runtime.catalog))

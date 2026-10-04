@@ -99,6 +99,11 @@ class FrozenFunction:
     def validate_input(self, value: dict) -> dict:
         return _validate(self.input_schema_json, value)
 
+    def validate_read_manifest(self, value: dict) -> dict:
+        definitions = json.loads(self.input_schema_json)['$defs']
+        schema = {'$schema': 'https://json-schema.org/draft/2020-12/schema', '$ref': '#/$defs/read_manifest', '$defs': definitions}
+        return _validate(json.dumps(schema), value)
+
     def validate_patch(self, value: dict) -> dict:
         definitions = json.loads(self.output_schema_json)['$defs']
         schema = {'$schema': 'https://json-schema.org/draft/2020-12/schema', '$ref': '#/$defs/patch', '$defs': definitions}

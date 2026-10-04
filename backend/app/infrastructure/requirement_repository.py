@@ -42,6 +42,12 @@ class RequirementRepository:
         row = self.connection.execute('SELECT ' + COLUMNS + ' FROM requirements WHERE id=?', (identity,)).fetchone()
         return None if row is None else requirement_read_model(row)
 
+    def create(self, identity: int, number: str, request, guide_run_id: int, at: str) -> dict:
+        require_write_transaction(self.connection)
+        self.connection.execute("INSERT INTO requirements(id,requirement_no,requirement_type,initialization_mode,title,template_key,template_version,status,document_work_state,active_operation_type,active_operation_id,created_at,updated_at,completed_at,state_started_at) VALUES (?,?,?,?,?,?,?,'INITIALIZING','GUIDE_ACTIVE','GUIDE_RUN',?,?,?,NULL,?)",
+            (identity, number, request.requirement_type, request.initialization_mode, request.title, request.template_key, request.template_version, guide_run_id, at, at, at))
+        return self.get(identity)
+
     def update_attributes(self, identity: int, changes: dict[str, str], at: str) -> dict:
         require_write_transaction(self.connection)
         if not changes or not set(changes) <= {'title', 'initialization_mode'}:

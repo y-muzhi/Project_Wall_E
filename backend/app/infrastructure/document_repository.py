@@ -18,6 +18,15 @@ class DocumentRepository:
             (requirement_id, document_type),
         ).fetchall()
 
+    def create_current(self, identity: int, requirement_id: int, snapshot, at: str) -> sqlite3.Row:
+        require_write_transaction(self.connection)
+        self.connection.execute("INSERT INTO requirement_documents VALUES (?,?,'CURRENT',?,?,1,?,?)",
+            (identity, requirement_id, snapshot.parsed.markdown, snapshot.state_json, at, at))
+        rows = self.by_requirement(requirement_id, 'CURRENT')
+        if len(rows) != 1 or rows[0]['id'] != identity:
+            raise ValueError('Created CURRENT is not unique')
+        return rows[0]
+
     def create_manual_draft(self, identity: int, current: sqlite3.Row, at: str) -> sqlite3.Row:
         require_write_transaction(self.connection)
         if current['document_type'] != 'CURRENT' or identity == current['id']:

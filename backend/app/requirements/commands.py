@@ -24,6 +24,58 @@ from .contracts import (
     complete_requirement_input, complete_requirement_result,
     reactivate_requirement_input, reactivate_requirement_result,
 )
+from .contracts import create_requirement_input, create_requirement_result
+from backend.app.infrastructure.guide_repository import GuideRepository
+from backend.app.infrastructure.message_repository import MessageRepository
+from backend.app.infrastructure.document_repository import DocumentRepository
+from backend.app.infrastructure.resources import ConfigInvalid
+from backend.app.infrastructure.identifiers import requirement_number
+from backend.app.documents.scopes import resolve_scope
+
+
+def create_requirement(executor: Idempotency, payload: object, *, catalog: ResourceCatalog | None = None,
+                       clock: Callable[[], datetime] | None = None) -> dict:
+    try:
+        request = create_requirement_input(payload)
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+
+    def operation(connection: sqlite3.Connection) -> Success:
+        try:
+            resources = catalog if catalog is not None else ResourceCatalog()
+            template = resources.template(request.requirement_type, request.template_key, request.template_version)
+            function = resources.freeze('INITIALIZE', 'USER_INSTRUCTION')
+        except TemplateInvalid:
+            raise Rejected('TEMPLATE_INVALID') from None
+        except ConfigInvalid:
+            raise Rejected('CONFIG_INVALID') from None
+        at = operation_time(clock)
+        identity = entity_id(connection, EntityKind.REQUIREMENT)
+        document_id = entity_id(connection, EntityKind.DOCUMENT)
+        message_id = entity_id(connection, EntityKind.MESSAGE)
+        guide_id = entity_id(connection, EntityKind.GUIDE_RUN)
+        root = RequirementRepository(connection).create(identity, requirement_number(connection), request, guide_id, at)
+        sources = DocumentSources(connection, identity, resources)
+        snapshot = create_snapshot(template.markdown, Provenance('SYSTEM', 'TEMPLATE', None), at, sources)
+        current = DocumentRepository(connection).create_current(document_id, identity, snapshot, at)
+        get_current_document_result(current, sources)
+        message = MessageRepository(connection).create_user_text(message_id, identity, guide_id, request.initial_idea, request.idempotency_key, at)
+        scope = resolve_scope(snapshot, 'INITIALIZE', 'DOCUMENT')
+        context_key, context_version = function.context_template.split('@')
+        prompt_key, prompt_version = function.prompt_reference.split('@')
+        manifest = {'document_id': document_id, 'content_version': current['content_version'], 'block_ids': list(scope.read_ids),
+            'message_ids': [message_id], 'template': {'key': template.key, 'version': template.version},
+            'source': {'source_type': 'USER_INSTRUCTION', 'source_id': None},
+            'context_template': {'key': context_key, 'version': context_version},
+            'prompt': {'key': prompt_key, 'version': prompt_version}, 'function_type': function.function_type}
+        function.validate_allowed_targets({'schema_version': 1, 'targets': scope.targets_json})
+        manifest = function.validate_read_manifest(manifest)
+        GuideRepository(connection).accept_initialization(guide_id, root, message, function, scope, manifest, at)
+        data = create_requirement_result(root, document_id, guide_id)
+        return Success({'code': 'CREATED', 'data': data, 'details': None}, 201)
+
+    return execute_idempotent(executor, 'APP-REQ-CMD-C01', request, operation,
+        allowed_failures=frozenset({'TEMPLATE_INVALID', 'CONFIG_INVALID'}), target_identity='Requirements')
 
 
 def update_requirement(database: Database, payload: object, *, clock: Callable[[], datetime] | None = None) -> dict:

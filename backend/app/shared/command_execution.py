@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import sqlite3
-from typing import Callable
+from typing import Callable, Protocol
 
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.idempotency import Idempotency, IdempotencyConflict, RequestInProgress, Scope, Success, request_key
@@ -69,11 +69,17 @@ def operation_time(clock: Callable[[], datetime] | None) -> str:
     return at
 
 
-def execute_idempotent(executor: Idempotency, capability: str, request: ExpectedCurrentInput | RequirementActionInput | ExpectedDraftInput,
+class IdempotentInput(Protocol):
+    idempotency_key: str
+
+    def business_input(self) -> dict: ...
+
+
+def execute_idempotent(executor: Idempotency, capability: str, request: IdempotentInput,
                        operation: Callable[[sqlite3.Connection], Success], *, allowed_failures: frozenset[str],
-                       business_input: dict | None = None) -> dict:
+                       business_input: dict | None = None, target_identity: str | None = None) -> dict:
     try:
-        scope = Scope(capability, f'Requirement:{request.requirement_id}', request.idempotency_key)
+        scope = Scope(capability, f'Requirement:{request.requirement_id}' if target_identity is None else target_identity, request.idempotency_key)
         return executor.execute(scope, request.business_input() if business_input is None else business_input, operation).result
     except Rejected as error:
         code = error.code if error.code in allowed_failures else 'INTERNAL_ERROR'

@@ -7,6 +7,7 @@ from backend.app.shared.http_projection import page, requirement, requirement_su
 from backend.app.shared.validation import decimal_integer
 from .contracts import list_requirements_input, STATUSES, REQUIREMENT_TYPES
 from .contracts import update_requirement_input, complete_initialization_input, complete_requirement_input, reactivate_requirement_input
+from .contracts import create_requirement_input
 from backend.app.shared.http_commands import CommandRequest
 from backend.app.shared.http_projection import exact, revision
 from backend.app.shared.validation import strict_integer
@@ -129,3 +130,28 @@ class ReactivateRequirementResponse(UpdateRequirementResponse):
         if value['status'] != 'ACTIVE' or value['document_work_state'] != 'IDLE':
             raise ValueError('Reactivation response has wrong lifecycle')
         return value, pagination
+class CreateRequirementRequest(CommandRequest):
+    body_fields = ('title', 'requirement_type', 'template_key', 'template_version', 'initial_idea', 'initialization_mode')
+    mandatory = body_fields
+    uses_requirement_path = False
+    validate = staticmethod(create_requirement_input)
+
+    @staticmethod
+    def normalize(payload, validated):
+        return {**validated.business_input(), 'idempotency_key': validated.idempotency_key}
+
+
+class CreateRequirementResponse:
+    success_code = 'CREATED'
+    status = 201
+    errors = frozenset({'INVALID_INPUT', 'TEMPLATE_INVALID', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR', 'CAPACITY_EXHAUSTED'})
+
+    @staticmethod
+    def project(data, request):
+        value = exact(data, ('requirement', 'current_document_id', 'guide_run_id'))
+        root = requirement(value['requirement'])
+        for field in ('current_document_id', 'guide_run_id'):
+            strict_integer(value[field], field)
+        if root['status'] != 'INITIALIZING' or root['document_work_state'] != 'GUIDE_ACTIVE' or root['active_operation_type'] != 'GUIDE_RUN' or root['active_operation_id'] != value['guide_run_id'] or any(root[field] != request.payload[field] for field in ('title', 'requirement_type', 'initialization_mode', 'template_key', 'template_version')):
+            raise ValueError('Created resource contradicts accepted creation input')
+        return {'requirement': root, 'current_document_id': value['current_document_id'], 'guide_run_id': value['guide_run_id']}, None
