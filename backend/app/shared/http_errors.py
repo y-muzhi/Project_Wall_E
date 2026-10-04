@@ -60,6 +60,16 @@ def _request_id(value: str) -> str:
 
 
 def _details(code: str, value: object) -> dict[str, Any] | None:
+    if code in ('PATCH_INVALID', 'TARGET_STALE') and value is not None:
+        if type(value) is not dict or set(value) != {'suggestion_errors'} or type(value['suggestion_errors']) is not list or not 1 <= len(value['suggestion_errors']) <= 100:
+            raise ValueError('Invalid approved suggestion errors')
+        projected = []
+        for item in value['suggestion_errors']:
+            if type(item) is not dict or set(item) != {'suggestion_id', 'code', 'message'} or type(item['suggestion_id']) is not int or not 1 <= item['suggestion_id'] <= MAX_SAFE_INTEGER or item['code'] not in ('PATCH_INVALID', 'TARGET_STALE') or item['message'] != ERRORS[item['code']][2]:
+                raise ValueError('Suggestion errors require program-owned codes and safe messages')
+            projected.append(dict(item))
+        if len({item['suggestion_id'] for item in projected}) != len(projected): raise ValueError('Suggestion errors must have distinct identities')
+        return {'suggestion_errors': projected}
     if code == 'INVALID_INPUT':
         if type(value) is not dict or set(value) != {'field_errors'}:
             raise ValueError('Invalid field error projection')

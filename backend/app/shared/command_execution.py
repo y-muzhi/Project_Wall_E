@@ -12,8 +12,9 @@ from .validation import strict_integer
 
 
 class Rejected(RuntimeError):
-    def __init__(self, code: str):
+    def __init__(self, code: str, *, details=None):
         self.code = code
+        self.details = details
         super().__init__(code)
 
 
@@ -83,6 +84,7 @@ def execute_idempotent(executor: Idempotency, capability: str, request: Idempote
         return executor.execute(scope, request.business_input() if business_input is None else business_input, operation).result
     except Rejected as error:
         code = error.code if error.code in allowed_failures else 'INTERNAL_ERROR'
+        return {'code': code, 'data': None, 'details': error.details if code != 'INTERNAL_ERROR' else None}
     except (IdempotencyConflict, RequestInProgress, CapacityExhausted) as error:
         code = error.code
     except (StorageUnavailable, sqlite3.Error):

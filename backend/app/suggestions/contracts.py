@@ -4,7 +4,7 @@ import json
 from backend.app.documents.snapshot import _time
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.resources import ResourceCatalog
-from backend.app.shared.validation import MISSING, object_fields, strict_integer, strict_enum, strict_json_object, raw_text
+from backend.app.shared.validation import MISSING, object_fields, strict_integer, strict_enum, strict_json_object, raw_text, reject
 from dataclasses import dataclass
 from backend.app.infrastructure.idempotency import request_key
 
@@ -136,3 +136,65 @@ def discard_batch_result(row, items) -> dict:
     if metadata['status'] != 'DISCARDED': raise ValueError('Discard result must reflect the actual batch transition')
     for item in items: strict_enum(item['status'], 'status', DECISIONS)
     return {'code': 'BATCH_DISCARDED', 'data': {'batch': metadata, 'counts': counts_model(suggestion_counts(items))}, 'details': None}
+
+
+@dataclass(frozen=True)
+class DecideSuggestionInput:
+    suggestion_id: int
+    decision: str
+    edited_content: str | None
+    idempotency_key: str
+
+    def business_input(self) -> dict:
+        return {'suggestion_id': self.suggestion_id, 'decision': self.decision, 'edited_content': self.edited_content}
+
+
+def decide_suggestion_input(payload: object) -> DecideSuggestionInput:
+    fields = ('suggestion_id', 'decision', 'edited_content', 'idempotency_key')
+    value = object_fields(payload, 'body', fields, ('suggestion_id', 'decision', 'idempotency_key'))
+    decision = strict_enum(value['decision'], 'decision', DECISIONS[1:])
+    content = value.get('edited_content')
+    if decision == 'EDITED':
+        content = raw_text(value.get('edited_content', MISSING), 'edited_content', 1, 100000)
+        try: content.encode('utf-8', errors='strict')
+        except UnicodeError: reject('edited_content', 'INVALID_FORMAT', '必须使用有效Unicode文本')
+    elif content is not None:
+        reject('edited_content', 'INVALID_FORMAT', '只有EDITED决定可携带编辑内容')
+    return DecideSuggestionInput(strict_integer(value['suggestion_id'], 'suggestion_id'), decision, content, request_key(value['idempotency_key'], 'idempotency_key'))
+
+
+def decide_suggestion_result(row, items, *, protocol) -> dict:
+    suggestion = suggestion_from_row(row, protocol=protocol)
+    if suggestion['status'] == 'PENDING': raise ValueError('Decision response requires a persisted decision')
+    return {'code': 'SUGGESTION_DECIDED', 'data': {'suggestion': suggestion, 'counts': counts_model(suggestion_counts(items))}, 'details': None}
+
+
+@dataclass(frozen=True)
+class CompleteBatchInput:
+    batch_id: int
+    expected_content_version: int
+    idempotency_key: str
+
+    def business_input(self) -> dict:
+        return {'batch_id': self.batch_id, 'expected_content_version': self.expected_content_version}
+
+
+def complete_batch_input(payload: object) -> CompleteBatchInput:
+    fields = ('batch_id', 'expected_content_version', 'idempotency_key')
+    value = object_fields(payload, 'body', fields, fields)
+    return CompleteBatchInput(strict_integer(value['batch_id'], 'batch_id'), strict_integer(value['expected_content_version'], 'expected_content_version'), request_key(value['idempotency_key'], 'idempotency_key'))
+
+
+def stored_patch(item: dict) -> dict:
+    return {field: item[field] for field in ('title', 'explanation', 'impact', 'patch_operation', 'target_ref', 'original_content', 'proposed_markdown')} | {'selector_json': item['selector'], 'proposed_data_json': item['proposed_data']}
+
+
+def complete_batch_result(batch, items, current, sources) -> dict:
+    from backend.app.documents.contracts import get_current_document_result
+    metadata = batch_metadata({field: batch[field] for field in METADATA_FIELDS})
+    counts = counts_model(suggestion_counts(items))
+    document = get_current_document_result(current, sources)
+    if metadata['status'] != 'COMPLETED' or counts['pending'] or document['requirement_id'] != metadata['requirement_id'] or document['content_version'] != (metadata['applied_content_version'] or metadata['base_content_version']):
+        raise ValueError('Completion response requires consistent committed effects')
+    code = 'BATCH_APPLIED' if metadata['completion_result'] == 'CHANGES_APPLIED' else 'BATCH_NO_CHANGE'
+    return {'code': code, 'data': {'batch': metadata, 'counts': counts, 'current_document': document}, 'details': None}

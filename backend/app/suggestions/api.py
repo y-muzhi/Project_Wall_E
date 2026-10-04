@@ -6,6 +6,8 @@ from .http_models import GetBatchRequest, GetBatchResponse
 from .http_models import DiscardBatchRequest, DiscardBatchResponse
 from backend.app.shared.http_boundary import handle_http
 from . import commands
+from .http_models import DecideSuggestionRequest, DecideSuggestionResponse
+from .http_models import CompleteBatchRequest, CompleteBatchResponse
 
 batch_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 
@@ -20,3 +22,15 @@ async def get_batch_http(request: Request):
 async def discard_batch_http(request: Request):
     return await handle_http(request, DiscardBatchRequest, DiscardBatchResponse,
         lambda runtime, parsed: commands.discard_batch(runtime.commands(), parsed.payload))
+
+
+@batch_router.put('/suggestions/{suggestion_id}/decision')
+async def decide_suggestion_http(request: Request):
+    return await handle_http(request, DecideSuggestionRequest, DecideSuggestionResponse,
+        lambda runtime, parsed: commands.decide_suggestion(runtime.commands(), parsed.payload, catalog=runtime.catalog))
+
+
+@batch_router.post('/suggestion-batches/{batch_id}/complete')
+async def complete_batch_http(request: Request):
+    return await handle_http(request, CompleteBatchRequest, CompleteBatchResponse,
+        lambda runtime, parsed: commands.complete_batch(runtime.commands(), parsed.payload, catalog=runtime.catalog))

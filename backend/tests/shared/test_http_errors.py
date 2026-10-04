@@ -46,6 +46,15 @@ class ErrorContractTests(unittest.TestCase):
             response = error_response('CARD_ALREADY_ANSWERED', {'response_message_id': value}, allowed_errors=['CARD_ALREADY_ANSWERED'], request_id=REQUEST_ID)
             self.assertEqual(response.status, 500)
 
+    def test_approved_suggestion_error_details_are_exact_detached_safe_and_bounded(self):
+        details={'suggestion_errors':[{'suggestion_id':11,'code':'TARGET_STALE','message':'修改目标或原内容已变化'}]}
+        value=error_response('TARGET_STALE',details,allowed_errors=['TARGET_STALE'],request_id=REQUEST_ID)
+        self.assertEqual(value.status,409);self.assertEqual(value.body['error']['details'],details)
+        details['suggestion_errors'][0]['message']='secret-marker';self.assertNotIn('secret-marker',str(value.body))
+        for malformed in (details,{'suggestion_errors':[]},{'suggestion_errors':[{'suggestion_id':True,'code':'TARGET_STALE','message':'修改目标或原内容已变化'}]}, {'suggestion_errors':[{'suggestion_id':1,'code':'NEW','message':'secret-marker'}]}):
+            value=error_response('TARGET_STALE',malformed,allowed_errors=['TARGET_STALE'],request_id=REQUEST_ID)
+            self.assertEqual(value.status,500);self.assertNotIn('secret-marker',str(value.body))
+
     def test_unknown_unreachable_and_malformed_results_are_safe_500(self):
         for code, details, allowed in (
             ('UNREGISTERED', {'raw': 'secret-marker'}, ['UNREGISTERED']),

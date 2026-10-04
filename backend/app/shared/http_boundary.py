@@ -96,8 +96,8 @@ async def handle_http(request: Request, request_model: type, response_model: typ
         result = await run_in_threadpool(invoke, runtime, parsed)
         if type(result) is not dict or set(result) != {'code', 'data', 'details'}:
             raise ValueError('Invalid application result contract')
-        success_code = getattr(response_model, 'success_code', 'READ_OK')
-        if result['code'] != success_code:
+        success_codes = getattr(response_model, 'success_codes', (getattr(response_model, 'success_code', 'READ_OK'),))
+        if result['code'] not in success_codes:
             if result['data'] is not None:
                 raise ValueError('Failure results cannot carry success data')
             return failure(result['code'], result['details'])
