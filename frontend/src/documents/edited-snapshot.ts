@@ -4,7 +4,7 @@ import { Fragment, type Node } from '@milkdown/kit/prose/model';
 import type { EditorState } from '@milkdown/kit/prose/state';
 import { validateBlockState, validateDocumentReadModel, type BlockMetadata, type BlockState } from './contracts.ts';
 import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
-import { bindIdentityDocument, identityState, sourceRevision, topBlockIds } from './identity.ts';
+import { bindIdentityDocument, identityState, rebindSourceContext, sourceRevision, topBlockIds } from './identity.ts';
 import { normalizationProof, type RawSourceNormalization } from './source-normalization.ts';
 
 export interface EditedSnapshot {
@@ -14,6 +14,8 @@ export interface EditedSnapshot {
 interface Unit { id: number; node: Node; raw: string; gap: string; actualGap: string; verbatim: boolean; }
 interface Version { node: Node; raw: string; revision: number; }
 interface Layout { document: Node; markdown: string; units: readonly Unit[]; trailer: string; }
+export interface PreparedEditorSnapshot { readonly state: EditorState; readonly pair: EditedSnapshot; }
+const preparations = new WeakMap<PreparedEditorSnapshot, {owner: EditedSnapshotLedger; generation: number; staged: EditedSnapshotLedger}>();
 
 function fail(message: string): never { throw new EditorSourceInvalid(message); }
 function timestamp(value: string): void {
@@ -49,6 +51,7 @@ export class EditedSnapshotLedger {
   private trailer: string;
   private pair: EditedSnapshot;
   private lastTime: string;
+  private generation = 0;
 
   constructor(ctx: Ctx, input: unknown, state: EditorState) {
     const {document, source} = validateDocumentReadModel(ctx, input);
@@ -71,6 +74,51 @@ export class EditedSnapshotLedger {
       this.versions.set(unit.id, [{node: unit.node, raw: unit.raw, revision: sourceRevision(state.doc)}]);
       this.births.set(unit.id, document.block_state_json.blocks[index]!);
     });
+  }
+
+  // Stage the source ledger and the actual parsed editor state together. No
+  // cache, birth fact or timestamp is published until the caller accepts the
+  // exact displayed state. This also rebinds references in unedited blocks.
+  prepare(state: EditorState, at: string, normalization?: RawSourceNormalization): PreparedEditorSnapshot {
+    const staged = Object.create(EditedSnapshotLedger.prototype) as EditedSnapshotLedger;
+    Object.assign(staged, this, {
+      versions: new Map([...this.versions].map(([id, versions]) => [id, [...versions]])),
+      births: new Map(this.births), units: this.units.map(unit => ({...unit})), layouts: [...this.layouts],
+    });
+    const pair = staged.capture(state, at, normalization);
+    const source = new EditorSource(this.ctx, pair.markdown_content);
+    const parsed = bindIdentityDocument(source.document, pair.block_state_json.blocks.map(block => block.block_id), pair.block_state_json.next_block_id);
+    let index = 0;
+    const children: Node[] = [];
+    state.doc.forEach(node => children.push(node.type.name === 'paragraph' && !node.content.size ? node : parsed.child(index++)));
+    if (index !== source.blocks.length) fail('完整源码重绑定没有逐块映射');
+    const rebound = rebindSourceContext(state, state.doc.copy(Fragment.fromArray(children)));
+    const actual = new Map<number, Node>();
+    rebound.doc.forEach(node => { const id = Number(node.attrs.walle_block_id); if (id > 0) actual.set(id, node); });
+    staged.units = staged.units.map(unit => ({...unit, node: actual.get(unit.id)!}));
+    staged.units.forEach(unit => {
+      const versions = staged.versions.get(unit.id)!;
+      if (!versions.some(version => version.node.eq(unit.node) && version.raw === unit.raw)) {
+        versions.push({node: unit.node, raw: unit.raw, revision: sourceRevision(rebound.doc)});
+      }
+    });
+    if (!staged.layouts.some(layout => layout.document.eq(rebound.doc) && layout.markdown === pair.markdown_content)) {
+      staged.layouts.push({document: rebound.doc, markdown: pair.markdown_content,
+        units: staged.units.map(unit => ({...unit})), trailer: staged.trailer});
+    }
+    const preparation = Object.freeze({state: rebound, pair});
+    preparations.set(preparation, {owner: this, generation: this.generation, staged});
+    return preparation;
+  }
+
+  accept(preparation: PreparedEditorSnapshot, displayed: EditorState): EditedSnapshot {
+    const proof = preparations.get(preparation);
+    if (!proof || proof.owner !== this || proof.generation !== this.generation || preparation.state !== displayed) {
+      fail('编辑输出没有同次未过期视图/账本证明');
+    }
+    Object.assign(this, proof.staged);
+    preparations.delete(preparation);
+    return preparation.pair;
   }
 
   capture(state: EditorState, at: string, normalization?: RawSourceNormalization): EditedSnapshot {
@@ -234,6 +282,7 @@ export class EditedSnapshotLedger {
       units: this.units.map(unit => ({...unit})), trailer});
     this.pair = nextPair;
     this.lastTime = at;
+    this.generation++;
     return nextPair;
   }
 }

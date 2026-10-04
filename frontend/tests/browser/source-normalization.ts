@@ -4,6 +4,7 @@ import { undo, redo, closeHistory } from '@milkdown/kit/prose/history';
 import { EditorSource, EditorSourceInvalid } from '../../src/documents/editor-source.ts';
 import { EditedSnapshotLedger, type EditedSnapshot } from '../../src/documents/edited-snapshot.ts';
 import { IdentityInvalid, identityState, topBlockIds } from '../../src/documents/identity.ts';
+import { TextSelection } from '@milkdown/kit/prose/state';
 import { normalizeRawSourceBlock } from '../../src/documents/source-normalization.ts';
 import { fixtureDraft, editTime } from './edited-snapshot.ts';
 
@@ -251,5 +252,135 @@ export async function verifySourceNormalization(load: (markdown: string, ids: re
     equal(replayed.markdown_content, pair.markdown_content, '兄弟容器重做原文'); record(replayed);
   });
   checks.push('nested-middle-container-preserves-raw-rich-siblings-and-path');
-  return {scope: 'Explicit top-level/container raw reparse, actual PM/history and complete local source pair; no complete component or global reference/HTTP save', checks, outputs};
+
+  const references = [
+    {name: 'definition-target', initial: '[a]: /old\r\n\r\n[标签][a]\r\n', value: '[a]: /new\r\n',
+      ids: [10,20], before: {text: '标签', href: '/old'}, after: {text: '标签', href: '/new'}},
+    {name: 'definition-removal', initial: '[a]: /old\r\n\r\n[标签][a]\r\n', value: '移除定义\r\n',
+      ids: [10,20], before: {text: '标签', href: '/old'}, after: {text: '[标签][a]', href: null}},
+    {name: 'definition-addition', initial: '<div>起</div>\r\n\r\n[标签][a]\r\n', value: '[a]: /new\r\n',
+      ids: [10,20], before: {text: '[标签][a]', href: null}, after: {text: '标签', href: '/new'}},
+    {name: 'duplicate-first-definition-removal', initial: '[a]: /old\r\n[a]: /second\r\n\r\n[标签][a]\r\n', value: '移除首定义\r\n',
+      ids: [10,20,30], before: {text: '标签', href: '/old'}, after: {text: '标签', href: '/second'}},
+    {name: 'nested-definition-external-reference', initial: '> [a]: /old\r\n\r\n[标签][a]\r\n', value: '[a]: /new\r\n',
+      ids: [10,20], before: {text: '标签', href: '/old'}, after: {text: '标签', href: '/new'}},
+  ];
+  for (const scenario of references) {
+    const next = scenario.ids.at(-1)! + 10;
+    ledger = await setup(scenario.initial, scenario.ids, next);
+    get().editor.action(ctx => {
+      const view = ctx.get(editorViewCtx);
+      const target = () => {
+        const node = view.state.doc.lastChild!;
+        return {text: node.textContent, href: node.firstChild?.marks.find(mark => mark.type.name === 'link')?.attrs.href ?? null};
+      };
+      equal(target(), scenario.before, '引用初始视图');
+      let position = 1, size = view.state.doc.child(0).content.size;
+      if (view.state.doc.child(0).type.name !== 'walle_raw_source') {
+        view.state.doc.child(0).descendants((node, offset) => {
+          if (node.type.name === 'walle_raw_source') { position = offset + 2; size = node.content.size; }
+        });
+      }
+      view.dispatch(view.state.tr.insertText(scenario.value, position, position + size));
+      const pending = view.state, normalized = normalizeRawSourceBlock(ctx, pending, 0);
+      const prepared = ledger.prepare(normalized.state, editTime, normalized);
+      if (view.state !== pending) throw new Error('上下文预检提前修改视图');
+      view.updateState(prepared.state);
+      const pair = ledger.accept(prepared, view.state);
+      equal(target(), scenario.after, '完整源码与实际引用视图不同');
+      equal(view.dom.querySelector('a')?.getAttribute('href') ?? null, scenario.after.href, '实际DOM仍保留旧引用');
+      equal(new EditorSource(ctx, pair.markdown_content).blocks.at(-1)!.markdown, '[标签][a]\r\n', '重绑定改写未编辑引用原文');
+      equal(topBlockIds(view.state.doc), scenario.ids, '重绑定改变区块身份');
+      equal(pair.block_state_json.next_block_id, next, '重绑定分配新ID');
+      equal(pair.block_state_json.blocks.at(-1)!.last_modified_by_type, 'SYSTEM', '未编辑引用原文伪造修改署名');
+      equal(ledger.capture(view.state, editTime), pair, '重绑定后普通输出改写引用或元数据'); record(pair);
+      if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('跨块引用实际撤销失败');
+      const restored = ledger.prepare(view.state, editTime);
+      view.updateState(restored.state); ledger.accept(restored, view.state);
+      equal(target(), scenario.before, '一次撤销未同时恢复定义与引用视图');
+      equal(restored.pair.markdown_content, scenario.initial, '跨块引用撤销丢失原始源'); record(restored.pair);
+      if (!redo(view.state, tr => view.dispatch(tr))) throw new Error('跨块引用实际重做失败');
+      const replayed = ledger.prepare(view.state, editTime);
+      view.updateState(replayed.state); ledger.accept(replayed, view.state);
+      equal(target(), scenario.after, '一次重做未同时恢复定义与引用视图');
+      equal(replayed.pair.markdown_content, pair.markdown_content, '跨块引用重做原文改变'); record(replayed.pair);
+    });
+    checks.push(`context-${scenario.name}`);
+  }
+
+  const imageSource = '[a]: /old "旧题"\r\n\r\n![图😀][a]\r\n';
+  ledger = await setup(imageSource, [10,20], 30);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx);
+    const image = () => { const node = view.state.doc.child(1).firstChild!; return {type: node.type.name, src: node.attrs.src, alt: node.attrs.alt, title: node.attrs.title}; };
+    view.dispatch(view.state.tr.insertText('[a]: /new "新题"\r\n', 1, 1 + view.state.doc.child(0).content.size));
+    const normalized = normalizeRawSourceBlock(ctx, view.state, 0);
+    const prepared = ledger.prepare(normalized.state, editTime, normalized);
+    view.updateState(prepared.state); const pair = ledger.accept(prepared, view.state);
+    equal(image(), {type: 'image', src: '/new', alt: '图😀', title: '新题'}, '图片引用实际属性没有重绑定');
+    // ProseMirror also renders separator img elements without authored src.
+    equal(view.dom.querySelector('[data-block-id="20"] img[src]')?.getAttribute('src'), '/new', '图片DOM仍为旧来源');
+    equal(new EditorSource(ctx, pair.markdown_content).blocks[1]!.markdown, '![图😀][a]\r\n', '图片引用原文被改写');
+    equal(ledger.capture(view.state, editTime), pair, '图片重绑定后输出不稳定'); record(pair);
+    if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('图片引用撤销失败');
+    const restored = ledger.prepare(view.state, editTime); view.updateState(restored.state); ledger.accept(restored, view.state);
+    equal(image(), {type: 'image', src: '/old', alt: '图😀', title: '旧题'}, '图片引用撤销属性');
+    equal(view.dom.querySelector('[data-block-id="20"] img[src]')?.getAttribute('src'), '/old', '图片撤销DOM');
+    equal(restored.pair.markdown_content, imageSource, '图片撤销原文'); record(restored.pair);
+    if (!redo(view.state, tr => view.dispatch(tr))) throw new Error('图片引用重做失败');
+    const replayed = ledger.prepare(view.state, editTime); view.updateState(replayed.state); ledger.accept(replayed, view.state);
+    equal(image(), {type: 'image', src: '/new', alt: '图😀', title: '新题'}, '图片引用重做属性');
+    equal(view.dom.querySelector('[data-block-id="20"] img[src]')?.getAttribute('src'), '/new', '图片重做DOM'); record(replayed.pair);
+  });
+  checks.push('context-image-reference-src-title-alt-and-dom');
+
+  ledger = await setup('[a]: /old\r\n\r\n[标签][a]\r\n', [10,20], 30);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx), before = view.state;
+    const first = ledger.prepare(before, editTime), second = ledger.prepare(before, editTime);
+    const other = new EditedSnapshotLedger(ctx, fixtureDraft(ctx, '[a]: /old\r\n\r\n[标签][a]\r\n', [10,20], 30), before);
+    for (const action of [() => ledger.accept({...first}, first.state), () => other.accept(first, first.state),
+      () => ledger.accept(first, before.apply(before.tr))]) {
+      try { action(); throw new Error('伪造/跨账本/异视图预检被接受'); }
+      catch (error) { if (!(error instanceof EditorSourceInvalid)) throw error; }
+    }
+    if (view.state !== before) throw new Error('拒绝预检修改原视图');
+    view.updateState(first.state); record(ledger.accept(first, view.state));
+    for (const prepared of [first, second]) {
+      try { ledger.accept(prepared, prepared.state); throw new Error('重复或过期预检被接受'); }
+      catch (error) { if (!(error instanceof EditorSourceInvalid)) throw error; }
+    }
+  });
+  checks.push('context-stage-proof-owner-state-and-generation');
+
+  ledger = await setup('甲\r\n\r\n乙\r\n', [10,20], 30);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx);
+    view.dispatch(view.state.tr.insert(0, view.state.schema.nodes.paragraph!.create()));
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)));
+    const before = view.state, prepared = ledger.prepare(before, editTime);
+    equal(prepared.state.doc.childCount, 3, '上下文重解析删除空caret/gap');
+    equal(prepared.state.selection.from, 1, '上下文重解析移走空caret');
+    equal(topBlockIds(prepared.state.doc), [null,10,20], '上下文重解析给gap分配身份');
+    if (view.state !== before) throw new Error('空gap预检改变视图');
+    view.updateState(prepared.state); const pair = ledger.accept(prepared, view.state);
+    equal(pair.markdown_content, '甲\r\n\r\n乙\r\n', '空gap被伪造为业务源码'); record(pair);
+  });
+  checks.push('context-preserves-unidentified-empty-caret-and-selection');
+
+  ledger = await setup(withFooter, [10,20], 30);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx);
+    view.dispatch(view.state.tr.insertText('<script>\r\n未闭合\r\n', 1, 1 + view.state.doc.child(0).content.size));
+    const before = view.state, normalized = normalizeRawSourceBlock(ctx, before, 0);
+    try { ledger.prepare(normalized.state, editTime, normalized); throw new Error('预检接受吞块源码'); }
+    catch (error) { if (!(error instanceof EditorSourceInvalid)) throw error; }
+    if (view.state !== before) throw new Error('失败预检丢失当前输入');
+    if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('预检失败后的撤销失败');
+    const prepared = ledger.prepare(view.state, editTime);
+    view.updateState(prepared.state); const pair = ledger.accept(prepared, view.state);
+    equal(pair.markdown_content, withFooter, '失败预检污染账本/历史'); record(pair);
+  });
+  checks.push('context-failed-stage-preserves-live-ledger-and-pending-input');
+  return {scope: 'Explicit raw reparse and complete-source reference rebind, actual PM/history/DOM and atomic local pair; no complete component or HTTP/DB save', checks, outputs};
 }

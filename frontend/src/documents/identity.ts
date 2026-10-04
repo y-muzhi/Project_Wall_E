@@ -214,6 +214,36 @@ export function hasRawSource(node: Node): boolean {
   return found;
 }
 
+// Reinterpret the same explicitly mapped blocks after the complete source has
+// been validated. Use a real appendTransaction pipeline so derived reference
+// changes join the originating user edit in history, even across blocks.
+export function rebindSourceContext(state: EditorState, document: Node): EditorState {
+  const current = identityState(state);
+  if (document.type.schema !== state.schema || !document.sameMarkup(state.doc) ||
+      JSON.stringify(topBlockIds(document)) !== JSON.stringify(topBlockIds(state.doc))) {
+    throw new IdentityInvalid('完整源码重绑定缺少同快照身份映射');
+  }
+  if (document.eq(state.doc)) return state;
+  const adapter = new Plugin({appendTransaction: (_transactions, _before, after) => {
+    if (after.doc.eq(document)) return;
+    if (after.doc.childCount !== document.childCount) throw new IdentityInvalid('上下文重绑定改变区块边界');
+    const positions: number[] = [];
+    after.doc.forEach((_node, position) => positions.push(position));
+    const transaction = after.tr;
+    for (let index = after.doc.childCount - 1; index >= 0; index--) {
+      const node = after.doc.child(index), parsed = document.child(index);
+      if (!node.eq(parsed)) transaction.replaceWith(positions[index]!, positions[index]! + node.nodeSize, parsed);
+    }
+    return transaction.setMeta(key, Object.freeze({next_block_id: current.next_block_id, known_ids: new Set(current.known_ids)}));
+  }});
+  const staged = state.reconfigure({plugins: [...state.plugins, adapter]});
+  const rebound = staged.applyTransaction(staged.tr).state;
+  if (!rebound.doc.eq(document) || identityState(rebound).next_block_id !== current.next_block_id) {
+    throw new IdentityInvalid('上下文重绑定未保持完整实际状态');
+  }
+  return rebound.reconfigure({plugins: state.plugins});
+}
+
 export function replaceParsedRawBlock(state: EditorState, index: number, nodes: readonly Node[]): Transaction {
   if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new IdentityInvalid('原始节点位置不合法');
   const original = state.doc.child(index), current = identityState(state);
