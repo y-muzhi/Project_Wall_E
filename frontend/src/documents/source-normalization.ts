@@ -1,7 +1,9 @@
 import type { Ctx } from '@milkdown/kit/ctx';
+import { serializerCtx } from '@milkdown/kit/core';
+import { Fragment } from '@milkdown/kit/prose/model';
 import type { EditorState } from '@milkdown/kit/prose/state';
 import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
-import { identityState, replaceParsedRawBlock } from './identity.ts';
+import { hasRawSource, identityState, replaceParsedRawBlock } from './identity.ts';
 
 export interface RawSourceNormalization { readonly state: EditorState; }
 interface Proof {
@@ -15,9 +17,18 @@ const proofs = new WeakMap<RawSourceNormalization, Proof>();
 // Apply the real transaction/plugin/history pipeline to a staged immutable
 // state. The caller can validate/capture before displaying this actual state.
 export function normalizeRawSourceBlock(ctx: Ctx, state: EditorState, index: number): RawSourceNormalization {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new EditorSourceInvalid('原始节点位置不合法');
   const original = state.doc.maybeChild(index);
-  if (!original || original.type.name !== 'walle_raw_source') throw new EditorSourceInvalid('只能重新解析实际顶层原始节点');
-  const source = Object.freeze(new EditorSource(ctx, original.textContent));
+  if (!original || !hasRawSource(original)) throw new EditorSourceInvalid('重新解析需要实际原始节点');
+  const nested = original.type.name !== 'walle_raw_source';
+  // Serialize the enclosing real block so quote/list indentation and sibling
+  // definitions participate in parsing. Parsing only a child's text would
+  // incorrectly lose its container and reference context.
+  const markdown = nested ? ctx.get(serializerCtx)(state.doc.copy(Fragment.from(original))) : original.textContent;
+  const source = Object.freeze(new EditorSource(ctx, markdown));
+  if (nested && (source.blocks.length !== 1 || source.blocks[0]!.node.type !== original.type)) {
+    throw new EditorSourceInvalid('容器重新解释改变了顶层区块边界');
+  }
   const nodes = source.blocks.map(block => block.node);
   const transaction = replaceParsedRawBlock(state, index, nodes);
   const after = state.applyTransaction(transaction).state;

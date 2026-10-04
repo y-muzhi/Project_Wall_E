@@ -137,8 +137,8 @@ try {
       report.editor_selection = await verifySelection();
     } else {
       report.source_normalization = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization())'));
-      assert.equal(report.source_normalization.checks.length, 16);
-      assert.equal(report.source_normalization.outputs.length, 21);
+      assert.equal(report.source_normalization.checks.length, 23);
+      assert.equal(report.source_normalization.outputs.length, 42);
     }
     const backend = spawn(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/verify-editor-output.py'], {cwd: root, windowsHide: true});
     let stdout = '', stderr = '';
@@ -234,8 +234,8 @@ try {
   assert.equal(report.raw_source.outputs.length, 22);
   report.editor_selection = await verifySelection();
   report.source_normalization = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization())'));
-  assert.equal(report.source_normalization.checks.length, 16);
-  assert.equal(report.source_normalization.outputs.length, 21);
+  assert.equal(report.source_normalization.checks.length, 23);
+  assert.equal(report.source_normalization.outputs.length, 42);
   const backendCommand = [resolve(root, '.venv/Scripts/python.exe'), '-X', 'utf8', 'tools/verify-editor-output.py'];
   const backend = spawn(backendCommand[0], backendCommand.slice(1), {cwd: root, windowsHide: true});
   let backendStdout = '', backendStderr = '';

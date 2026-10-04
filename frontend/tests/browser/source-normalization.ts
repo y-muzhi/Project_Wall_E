@@ -166,5 +166,90 @@ export async function verifySourceNormalization(load: (markdown: string, ids: re
     equal([...identityState(view.state).known_ids], [...identity.known_ids], '容量失败泄漏新ID');
   });
   checks.push('capacity-keeps-pending-source-and-identity');
-  return {scope: 'Explicit top-level raw reparse, actual PM/history and complete local source pair; no complete component or HTTP save', checks, outputs};
+
+  const containers = [
+    {name: 'quote-heading', markdown: '> <div>起</div>\r\n', value: '甲😀\r\n\r\n# 新章\r\n',
+      type: 'blockquote', plain: '甲😀\n新章', descendants: ['paragraph','heading']},
+    {name: 'list-paragraphs', markdown: '- <div>起</div>\r\n', value: '甲\r\n\r\n乙😀\r\n',
+      type: 'bullet_list', plain: '甲\n乙😀', descendants: ['list_item','paragraph','paragraph']},
+    {name: 'quote-list-code', markdown: '> - <div>起</div>\r\n', value: '```python\r\nx😀\r\n```\r\n',
+      type: 'blockquote', plain: 'x😀\n', descendants: ['bullet_list','list_item','code_block']},
+    {name: 'quote-definition-table', markdown: '> [a]: /old\r\n', value: '| 键 | 值 |\r\n| --- | --- |\r\n| A | 一 |\r\n',
+      type: 'blockquote', plain: '键\t值\nA\t一', descendants: ['table','table_header_row','table_header','paragraph','table_header','paragraph','table_row','table_cell','paragraph','table_cell','paragraph']},
+    {name: 'ordered-task', markdown: '2. <div>起</div>\r\n', value: '- [x] 一\r\n- [ ] 二\r\n',
+      type: 'ordered_list', plain: '一\n二', descendants: ['list_item','bullet_list','list_item','paragraph','list_item','paragraph']},
+    {name: 'quote-html-inert', markdown: '> <div>起</div>\r\n', value: '<script>window.__walleNestedReparse=1</script>\r\n',
+      type: 'blockquote', plain: '<script>window.__walleNestedReparse=1</script>\r\n', descendants: ['walle_raw_source']},
+  ];
+  for (const scenario of containers) {
+    const initial = scenario.markdown + '\r\n尾😀\r\n';
+    ledger = await setup(initial, [10,20], 30);
+    get().editor.action(ctx => {
+      const view = ctx.get(editorViewCtx);
+      let rawPosition: number | undefined, rawSize = 0;
+      view.state.doc.child(0).descendants((node, position) => {
+        if (node.type.name === 'walle_raw_source' && rawPosition === undefined) { rawPosition = position + 2; rawSize = node.content.size; }
+      });
+      if (rawPosition === undefined) throw new Error('容器缺少实际原始节点');
+      view.dispatch(view.state.tr.insertText(scenario.value, rawPosition, rawPosition + rawSize));
+      const pending = view.state, normalized = normalizeRawSourceBlock(ctx, pending, 0);
+      const pair = ledger.capture(normalized.state, editTime, normalized);
+      if (view.state !== pending) throw new Error('容器预检提前改变实际视图');
+      view.updateState(normalized.state);
+      const source = new EditorSource(ctx, pair.markdown_content);
+      equal(source.blocks.map(block => ({type: block.block_type, plain: block.plain_text})),
+        [{type: scenario.type, plain: scenario.plain}, {type: 'paragraph', plain: '尾😀'}], `容器重解释投影 ${scenario.name}`);
+      const descendants: string[] = [];
+      view.state.doc.child(0).descendants(node => { if (!node.isText) descendants.push(node.type.name); });
+      equal(descendants, scenario.descendants, `实际子块类型 ${scenario.name}`);
+      equal(topBlockIds(view.state.doc), [10,20], '容器内部编辑改变顶层身份');
+      equal(pair.block_state_json.next_block_id, 30, '容器内部编辑消耗顶层ID');
+      equal(pair.block_state_json.blocks.map(block => block.created_by_type), ['SYSTEM','SYSTEM'], '容器创建来源改变');
+      equal(source.blocks[1]!.markdown, '尾😀\r\n', '容器重解析改变未编辑后继源');
+      if ('__walleNestedReparse' in window || view.dom.querySelector('script')) throw new Error('容器原始HTML执行');
+      record(pair);
+      if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('容器实际撤销未执行');
+      const restored = ledger.capture(view.state, editTime);
+      equal(restored.markdown_content, initial, '容器撤销未恢复原始CRLF/标记'); record(restored);
+      if (!redo(view.state, tr => view.dispatch(tr))) throw new Error('容器实际重做未执行');
+      const replayed = ledger.capture(view.state, editTime);
+      equal(replayed.markdown_content, pair.markdown_content, '容器重做原文不同'); record(replayed);
+    });
+    checks.push(`nested-${scenario.name}`);
+  }
+
+  const middleSource = '# 章\r\n\r\n> <div>起</div>\r\n>\r\n> [stay]: /kept\r\n>\r\n> **尾** [标签][stay]\r\n\r\n后继\r\n';
+  ledger = await setup(middleSource, [10,20,30], 40);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx), top = view.state.doc.child(1);
+    let position = view.state.doc.child(0).nodeSize + 2;
+    view.dispatch(view.state.tr.insertText('甲😀\r\n', position, position + top.child(0).content.size));
+    const normalized = normalizeRawSourceBlock(ctx, view.state, 1);
+    const pair = ledger.capture(normalized.state, editTime, normalized); view.updateState(normalized.state);
+    const source = new EditorSource(ctx, pair.markdown_content);
+    equal(source.blocks.map(block => block.plain_text), ['章','甲😀\n[stay]: /kept\r\n\n尾 标签','后继'], '非首容器及兄弟投影');
+    equal(source.blocks.map(block => block.section_path), [['章'],['章'],['章']], '容器上下文章节路径');
+    equal(topBlockIds(view.state.doc), [10,20,30], '非首容器身份');
+    equal(pair.block_state_json.next_block_id, 40, '非首容器高水位');
+    equal(source.blocks[0]!.markdown, '# 章\r\n', '前标题源改变');
+    equal(source.blocks[2]!.markdown, '后继\r\n', '后继源改变');
+    const quote = view.state.doc.child(1);
+    equal(quote.child(1).textContent, '[stay]: /kept\r\n', '未编辑定义原始换行丢失');
+    let bold = false, link = false;
+    quote.child(2).descendants(node => {
+      if (node.isText && node.text === '尾') bold = node.marks.some(mark => mark.type.name === 'strong');
+      if (node.isText && node.text === '标签') link = node.marks.some(mark => mark.type.name === 'link' && mark.attrs.href === '/kept');
+      if (node.attrs.walle_block_id != null) throw new Error('内部兄弟取得顶层ID');
+    });
+    if (!bold || !link) throw new Error('未编辑兄弟的标记或引用丢失');
+    record(pair);
+    if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('非首容器撤销失败');
+    const restored = ledger.capture(view.state, editTime);
+    equal(restored.markdown_content, middleSource, '兄弟容器撤销原文'); record(restored);
+    if (!redo(view.state, tr => view.dispatch(tr))) throw new Error('非首容器重做失败');
+    const replayed = ledger.capture(view.state, editTime);
+    equal(replayed.markdown_content, pair.markdown_content, '兄弟容器重做原文'); record(replayed);
+  });
+  checks.push('nested-middle-container-preserves-raw-rich-siblings-and-path');
+  return {scope: 'Explicit top-level/container raw reparse, actual PM/history and complete local source pair; no complete component or global reference/HTTP save', checks, outputs};
 }

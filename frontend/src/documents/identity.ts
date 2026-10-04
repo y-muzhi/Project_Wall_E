@@ -204,11 +204,21 @@ export function moveTopBlock(state: EditorState, from: number, to: number): Tran
 // An explicit source-editor operation, not an inference from pasted attrs or
 // equal text. A reparsed raw block keeps its first identity; later parsed
 // blocks are new. All validation/allocation completes before returning a tr.
+export function hasRawSource(node: Node): boolean {
+  if (node.type.name === 'walle_raw_source') return true;
+  let found = false;
+  node.descendants(child => {
+    if (child.type.name === 'walle_raw_source') found = true;
+    return !found;
+  });
+  return found;
+}
+
 export function replaceParsedRawBlock(state: EditorState, index: number, nodes: readonly Node[]): Transaction {
   if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new IdentityInvalid('原始节点位置不合法');
   const original = state.doc.child(index), current = identityState(state);
   const id: unknown = original.attrs[ATTRIBUTE];
-  if (original.type.name !== 'walle_raw_source' || !integer(id) || !current.known_ids.has(id) ||
+  if (!hasRawSource(original) || !integer(id) || !current.known_ids.has(id) ||
       nodes.some(node => node.type.schema !== state.schema || emptyParagraph(node))) throw new IdentityInvalid('重新解析没有实际原始节点/同schema区块证明');
   let logicalCount = nodes.length;
   state.doc.forEach((node, _pos, childIndex) => { if (childIndex !== index && !emptyParagraph(node)) logicalCount++; });

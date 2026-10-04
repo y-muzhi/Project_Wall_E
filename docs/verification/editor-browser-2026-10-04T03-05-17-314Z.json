@@ -1,0 +1,2251 @@
+{
+  "timestamp": "2026-10-04T03:05:17.314Z",
+  "scope": "Independent syntax/context cases and edited output; fixture provenance, not product/HTTP acceptance",
+  "commands": [
+    {
+      "args": [
+        "open",
+        "http://127.0.0.1:5174/tests/browser/editor.html"
+      ],
+      "code": 0,
+      "elapsed_ms": 1820,
+      "stdout": "### Browser `walle-source-1791083117296` opened with pid 11936.\n### Ran Playwright code\n```js\nawait page.goto('http://127.0.0.1:5174/tests/browser/editor.html');\n```\n### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n### Snapshot\n- [Snapshot](.playwright-cli\\page-2026-10-04T03-05-19-354Z.yml)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "snapshot"
+      ],
+      "code": 0,
+      "elapsed_ms": 1070,
+      "stdout": "### Page\n- Page URL: http://127.0.0.1:5174/tests/browser/editor.html\n- Page Title: WALL-E 编辑器契约探针\n### Snapshot\n```yaml\n- generic [active] [ref=e1]:\n  - heading \"编辑器契约探针（测试工具）\" [level=1] [ref=e2]\n  - paragraph [ref=e3]: 此页面用于真实 Milkdown 解析验证，不是业务页面。\n  - generic [ref=e4]:\n    - text: Markdown 源码\n    - textbox \"Markdown 源码\" [ref=e5]\n  - button \"载入源码\" [ref=e6]\n  - textbox [ref=e9]:\n    - heading \"浏览器验证\" [level=1] [ref=e10]\n    - paragraph [ref=e11]: 甲😀乙\n  - status [ref=e12]: \"{ \\\"markdown\\\": \\\"# 浏览器验证\\\\n\\\\n甲😀乙\\\\n\\\", \\\"document\\\": { \\\"type\\\": \\\"doc\\\", \\\"content\\\": [ { \\\"type\\\": \\\"heading\\\", \\\"attrs\\\": { \\\"id\\\": \\\"浏览器验证\\\", \\\"level\\\": 1 }, \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"浏览器验证\\\" } ] }, { \\\"type\\\": \\\"paragraph\\\", \\\"content\\\": [ { \\\"type\\\": \\\"text\\\", \\\"text\\\": \\\"甲😀乙\\\" } ] } ] }, \\\"ast\\\": { \\\"type\\\": \\\"root\\\", \\\"children\\\": [ { \\\"type\\\": \\\"heading\\\", \\\"depth\\\": 1, \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"浏览器验证\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 3, \\\"offset\\\": 2 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 8, \\\"offset\\\": 7 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 1, \\\"column\\\": 8, \\\"offset\\\": 7 } } }, { \\\"type\\\": \\\"paragraph\\\", \\\"children\\\": [ { \\\"type\\\": \\\"text\\\", \\\"value\\\": \\\"甲😀乙\\\", \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 9 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 5, \\\"offset\\\": 13 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 3, \\\"column\\\": 1, \\\"offset\\\": 9 }, \\\"end\\\": { \\\"line\\\": 3, \\\"column\\\": 5, \\\"offset\\\": 13 } } } ], \\\"position\\\": { \\\"start\\\": { \\\"line\\\": 1, \\\"column\\\": 1, \\\"offset\\\": 0 }, \\\"end\\\": { \\\"line\\\": 4, \\\"column\\\": 1, \\\"offset\\\": 14 } } } }\"\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run-code",
+        "async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization())"
+      ],
+      "code": 0,
+      "elapsed_ms": 1702,
+      "stdout": "### Result\n{\"scope\":\"Explicit top-level/container raw reparse, actual PM/history and complete local source pair; no complete component or global reference/HTTP save\",\"checks\":[\"raw-split-source-gaps-and-view\",\"creation-path-and-high-water\",\"repeat-undo-redo-exact-source\",\"paragraph\",\"paragraphs-eof\",\"adjacent-definitions\",\"code\",\"table\",\"list\",\"empty-whitespace\",\"removed-block-whitespace-order-and-history\",\"composition-failure-keeps-pending-source-and-ledger\",\"same-rich-nodes-distinct-raw-history\",\"ordinary-rich-edit-restores-source-revision\",\"proof-and-state-atomic-rejection\",\"capacity-keeps-pending-source-and-identity\",\"nested-quote-heading\",\"nested-list-paragraphs\",\"nested-quote-list-code\",\"nested-quote-definition-table\",\"nested-ordered-task\",\"nested-quote-html-inert\"],\"outputs\":[{\"pair\":{\"markdown_content\":\"\\r\\n\\r\\n甲😀\\r\\n\\r\\n# 新章\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":31,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":30,\"created_by_type\":\"USER\",\"created_source_type\":\"MANUAL_EDIT\",\"created_source_id\":90,\"created_at\":\"2026-10-03T00:01:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\",\"block_type\":\"heading\",\"section_path\":[\"新章\"]},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[\"新章\"],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲😀\",\"section_path\":[]},{\"block_type\":\"heading\",\"plain_text\":\"新章\",\"section_path\":[\"新章\"]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[\"新章\"]}]},{\"pair\":{\"markdown_content\":\"\\r\\n\\r\\n甲😀\\r\\n\\r\\n# 新章\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":31,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":30,\"created_by_type\":\"USER\",\"created_source_type\":\"MANUAL_EDIT\",\"created_source_id\":90,\"created_at\":\"2026-10-03T00:01:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\",\"block_type\":\"heading\",\"section_path\":[\"新章\"]},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[\"新章\"],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲😀\",\"section_path\":[]},{\"block_type\":\"heading\",\"plain_text\":\"新章\",\"section_path\":[\"新章\"]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[\"新章\"]}]},{\"pair\":{\"markdown_content\":\"\\r\\n<div>\\r\\n原样\\r\\n</div>\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":31,\"blocks\":[{\"block_id\":10,\"block_type\":\"html_block\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"html_block\",\"plain_text\":\"<div>\\r\\n原样\\r\\n</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"\\r\\n\\r\\n甲😀\\r\\n\\r\\n# 新章\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":31,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":30,\"created_by_type\":\"USER\",\"created_source_type\":\"MANUAL_EDIT\",\"created_source_id\":90,\"created_at\":\"2026-10-03T00:01:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\",\"block_type\":\"heading\",\"section_path\":[\"新章\"]},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[\"新章\"],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲😀\",\"section_path\":[]},{\"block_type\":\"heading\",\"plain_text\":\"新章\",\"section_path\":[\"新章\"]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[\"新章\"]}]},{\"pair\":{\"markdown_content\":\"甲\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"甲\\n\\n乙\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":21,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"created_by_type\":\"USER\",\"created_source_type\":\"MANUAL_EDIT\",\"created_source_id\":90,\"created_at\":\"2026-10-03T00:01:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\",\"block_type\":\"paragraph\",\"section_path\":[]}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"乙\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"[a]: /one\\r\\n[a]: /two\\r\\n\\r\\n[标签][a]\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":22,\"blocks\":[{\"block_id\":10,\"block_type\":\"link_definition\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"created_by_type\":\"USER\",\"created_source_type\":\"MANUAL_EDIT\",\"created_source_id\":90,\"created_at\":\"2026-10-03T00:01:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\",\"block_type\":\"link_definition\",\"section_path\":[]},{\"block_id\":21,\"created_by_type\":\"USER\",\"created_source_type\":\"MANUAL_EDIT\",\"created_source_id\":90,\"created_at\":\"2026-10-03T00:01:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\",\"block_type\":\"paragraph\",\"section_path\":[]}]}},\"projection\":[{\"block_type\":\"link_definition\",\"plain_text\":\"[a]: /one\\r\\n\",\"section_path\":[]},{\"block_type\":\"link_definition\",\"plain_text\":\"[a]: /two\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"标签\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"```python\\r\\nx😀\\r\\n```\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"code_block\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"code_block\",\"plain_text\":\"x😀\\n\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"| 键 | 值 |\\r\\n| --- | --- |\\r\\n| A | 一 |\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"table\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"table\",\"plain_text\":\"键\\t值\\nA\\t一\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"- 一\\r\\n- 二\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"bullet_list\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"bullet_list\",\"plain_text\":\"一\\n二\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"\\r\\n \\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[]}},\"projection\":[]},{\"pair\":{\"markdown_content\":\"\\r\\n\\n \\n\\r\\n尾\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"尾\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"\\r\\n<div>起</div>\\r\\n\\r\\n尾\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"html_block\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"html_block\",\"plain_text\":\"<div>起</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"\\r\\n<div>起</div>\\r\\n\\r\\n尾\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"html_block\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"html_block\",\"plain_text\":\"<div>起</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"甲\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"甲\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"甲\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"甲\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"新甲\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"新甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"甲\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"甲\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":20,\"blocks\":[{\"block_id\":10,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"}]}},\"projection\":[{\"block_type\":\"paragraph\",\"plain_text\":\"甲\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> 甲😀\\r\\n>\\r\\n> # 新章\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"甲😀\\n新章\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> <div>起</div>\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"<div>起</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> 甲😀\\r\\n>\\r\\n> # 新章\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"甲😀\\n新章\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"* 甲\\r\\n\\r\\n  乙😀\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"bullet_list\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"bullet_list\",\"plain_text\":\"甲\\n乙😀\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"- <div>起</div>\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"bullet_list\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"bullet_list\",\"plain_text\":\"<div>起</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"* 甲\\r\\n\\r\\n  乙😀\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"bullet_list\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"bullet_list\",\"plain_text\":\"甲\\n乙😀\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> * ```python\\r\\n>   x😀\\r\\n>   ```\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"x😀\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> - <div>起</div>\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"<div>起</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> * ```python\\r\\n>   x😀\\r\\n>   ```\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"x😀\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> | 键 | 值 |\\r\\n> | --- | --- |\\r\\n> | A | 一 |\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"键\\t值\\nA\\t一\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> [a]: /old\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"[a]: /old\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> | 键 | 值 |\\r\\n> | --- | --- |\\r\\n> | A | 一 |\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"键\\t值\\nA\\t一\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"2. - [x] 一\\r\\n   - [ ] 二\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"ordered_list\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"ordered_list\",\"plain_text\":\"一\\n二\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"2. <div>起</div>\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"ordered_list\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"ordered_list\",\"plain_text\":\"<div>起</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"2. - [x] 一\\r\\n   - [ ] 二\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"ordered_list\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"ordered_list\",\"plain_text\":\"一\\n二\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> <script>window.__walleNestedReparse=1</script>\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"<script>window.__walleNestedReparse=1</script>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> <div>起</div>\\r\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"<div>起</div>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]},{\"pair\":{\"markdown_content\":\"> <script>window.__walleNestedReparse=1</script>\\r\\n>\\n\\r\\n尾😀\\r\\n\",\"block_state_json\":{\"schema_version\":1,\"next_block_id\":30,\"blocks\":[{\"block_id\":10,\"block_type\":\"blockquote\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"USER\",\"last_modified_source_type\":\"MANUAL_EDIT\",\"last_modified_source_id\":90,\"last_modified_at\":\"2026-10-03T00:01:00.000Z\"},{\"block_id\":20,\"block_type\":\"paragraph\",\"section_path\":[],\"created_by_type\":\"SYSTEM\",\"created_source_type\":\"TEMPLATE\",\"created_source_id\":null,\"created_at\":\"2026-10-03T00:00:00.000Z\",\"last_modified_by_type\":\"SYSTEM\",\"last_modified_source_type\":\"TEMPLATE\",\"last_modified_source_id\":null,\"last_modified_at\":\"2026-10-03T00:00:00.000Z\"}]}},\"projection\":[{\"block_type\":\"blockquote\",\"plain_text\":\"<script>window.__walleNestedReparse=1</script>\\r\\n\",\"section_path\":[]},{\"block_type\":\"paragraph\",\"plain_text\":\"尾😀\",\"section_path\":[]}]}]}\n### Ran Playwright code\n```js\nawait (async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization()))(page);\n```\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "close"
+      ],
+      "code": 0,
+      "elapsed_ms": 1392,
+      "stdout": "Browser 'walle-source-1791083117296' closed\n\n",
+      "stderr": ""
+    }
+  ],
+  "source_normalization": {
+    "scope": "Explicit top-level/container raw reparse, actual PM/history and complete local source pair; no complete component or global reference/HTTP save",
+    "checks": [
+      "raw-split-source-gaps-and-view",
+      "creation-path-and-high-water",
+      "repeat-undo-redo-exact-source",
+      "paragraph",
+      "paragraphs-eof",
+      "adjacent-definitions",
+      "code",
+      "table",
+      "list",
+      "empty-whitespace",
+      "removed-block-whitespace-order-and-history",
+      "composition-failure-keeps-pending-source-and-ledger",
+      "same-rich-nodes-distinct-raw-history",
+      "ordinary-rich-edit-restores-source-revision",
+      "proof-and-state-atomic-rejection",
+      "capacity-keeps-pending-source-and-identity",
+      "nested-quote-heading",
+      "nested-list-paragraphs",
+      "nested-quote-list-code",
+      "nested-quote-definition-table",
+      "nested-ordered-task",
+      "nested-quote-html-inert"
+    ],
+    "outputs": [
+      {
+        "pair": {
+          "markdown_content": "\r\n\r\n甲😀\r\n\r\n# 新章\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 31,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 30,
+                "created_by_type": "USER",
+                "created_source_type": "MANUAL_EDIT",
+                "created_source_id": 90,
+                "created_at": "2026-10-03T00:01:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z",
+                "block_type": "heading",
+                "section_path": [
+                  "新章"
+                ]
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [
+                  "新章"
+                ],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲😀",
+            "section_path": []
+          },
+          {
+            "block_type": "heading",
+            "plain_text": "新章",
+            "section_path": [
+              "新章"
+            ]
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": [
+              "新章"
+            ]
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "\r\n\r\n甲😀\r\n\r\n# 新章\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 31,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 30,
+                "created_by_type": "USER",
+                "created_source_type": "MANUAL_EDIT",
+                "created_source_id": 90,
+                "created_at": "2026-10-03T00:01:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z",
+                "block_type": "heading",
+                "section_path": [
+                  "新章"
+                ]
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [
+                  "新章"
+                ],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲😀",
+            "section_path": []
+          },
+          {
+            "block_type": "heading",
+            "plain_text": "新章",
+            "section_path": [
+              "新章"
+            ]
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": [
+              "新章"
+            ]
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "\r\n<div>\r\n原样\r\n</div>\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 31,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "html_block",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "html_block",
+            "plain_text": "<div>\r\n原样\r\n</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "\r\n\r\n甲😀\r\n\r\n# 新章\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 31,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 30,
+                "created_by_type": "USER",
+                "created_source_type": "MANUAL_EDIT",
+                "created_source_id": 90,
+                "created_at": "2026-10-03T00:01:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z",
+                "block_type": "heading",
+                "section_path": [
+                  "新章"
+                ]
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [
+                  "新章"
+                ],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲😀",
+            "section_path": []
+          },
+          {
+            "block_type": "heading",
+            "plain_text": "新章",
+            "section_path": [
+              "新章"
+            ]
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": [
+              "新章"
+            ]
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\n\n乙",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 21,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "created_by_type": "USER",
+                "created_source_type": "MANUAL_EDIT",
+                "created_source_id": 90,
+                "created_at": "2026-10-03T00:01:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z",
+                "block_type": "paragraph",
+                "section_path": []
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "乙",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "[a]: /one\r\n[a]: /two\r\n\r\n[标签][a]\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 22,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "link_definition",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "created_by_type": "USER",
+                "created_source_type": "MANUAL_EDIT",
+                "created_source_id": 90,
+                "created_at": "2026-10-03T00:01:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z",
+                "block_type": "link_definition",
+                "section_path": []
+              },
+              {
+                "block_id": 21,
+                "created_by_type": "USER",
+                "created_source_type": "MANUAL_EDIT",
+                "created_source_id": 90,
+                "created_at": "2026-10-03T00:01:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z",
+                "block_type": "paragraph",
+                "section_path": []
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "link_definition",
+            "plain_text": "[a]: /one\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "link_definition",
+            "plain_text": "[a]: /two\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "标签",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "```python\r\nx😀\r\n```\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "code_block",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "code_block",
+            "plain_text": "x😀\n",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "| 键 | 值 |\r\n| --- | --- |\r\n| A | 一 |\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "table",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "table",
+            "plain_text": "键\t值\nA\t一",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "- 一\r\n- 二\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "bullet_list",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "bullet_list",
+            "plain_text": "一\n二",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "\r\n \r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": []
+          }
+        },
+        "projection": []
+      },
+      {
+        "pair": {
+          "markdown_content": "\r\n\n \n\r\n尾\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "\r\n<div>起</div>\r\n\r\n尾\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "html_block",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "html_block",
+            "plain_text": "<div>起</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "\r\n<div>起</div>\r\n\r\n尾\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "html_block",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "html_block",
+            "plain_text": "<div>起</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "新甲\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "新甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "甲\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 20,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "paragraph",
+            "plain_text": "甲",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> 甲😀\r\n>\r\n> # 新章\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "甲😀\n新章",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> <div>起</div>\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "<div>起</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> 甲😀\r\n>\r\n> # 新章\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "甲😀\n新章",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "* 甲\r\n\r\n  乙😀\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "bullet_list",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "bullet_list",
+            "plain_text": "甲\n乙😀",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "- <div>起</div>\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "bullet_list",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "bullet_list",
+            "plain_text": "<div>起</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "* 甲\r\n\r\n  乙😀\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "bullet_list",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "bullet_list",
+            "plain_text": "甲\n乙😀",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> * ```python\r\n>   x😀\r\n>   ```\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "x😀\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> - <div>起</div>\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "<div>起</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> * ```python\r\n>   x😀\r\n>   ```\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "x😀\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> | 键 | 值 |\r\n> | --- | --- |\r\n> | A | 一 |\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "键\t值\nA\t一",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> [a]: /old\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "[a]: /old\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> | 键 | 值 |\r\n> | --- | --- |\r\n> | A | 一 |\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "键\t值\nA\t一",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "2. - [x] 一\r\n   - [ ] 二\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "ordered_list",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "ordered_list",
+            "plain_text": "一\n二",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "2. <div>起</div>\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "ordered_list",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "ordered_list",
+            "plain_text": "<div>起</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "2. - [x] 一\r\n   - [ ] 二\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "ordered_list",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "ordered_list",
+            "plain_text": "一\n二",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> <script>window.__walleNestedReparse=1</script>\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "<script>window.__walleNestedReparse=1</script>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> <div>起</div>\r\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "<div>起</div>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      },
+      {
+        "pair": {
+          "markdown_content": "> <script>window.__walleNestedReparse=1</script>\r\n>\n\r\n尾😀\r\n",
+          "block_state_json": {
+            "schema_version": 1,
+            "next_block_id": 30,
+            "blocks": [
+              {
+                "block_id": 10,
+                "block_type": "blockquote",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "USER",
+                "last_modified_source_type": "MANUAL_EDIT",
+                "last_modified_source_id": 90,
+                "last_modified_at": "2026-10-03T00:01:00.000Z"
+              },
+              {
+                "block_id": 20,
+                "block_type": "paragraph",
+                "section_path": [],
+                "created_by_type": "SYSTEM",
+                "created_source_type": "TEMPLATE",
+                "created_source_id": null,
+                "created_at": "2026-10-03T00:00:00.000Z",
+                "last_modified_by_type": "SYSTEM",
+                "last_modified_source_type": "TEMPLATE",
+                "last_modified_source_id": null,
+                "last_modified_at": "2026-10-03T00:00:00.000Z"
+              }
+            ]
+          }
+        },
+        "projection": [
+          {
+            "block_type": "blockquote",
+            "plain_text": "<script>window.__walleNestedReparse=1</script>\r\n",
+            "section_path": []
+          },
+          {
+            "block_type": "paragraph",
+            "plain_text": "尾😀",
+            "section_path": []
+          }
+        ]
+      }
+    ]
+  },
+  "backend_command": {
+    "status": 0,
+    "stdout": "{\"passed\": true, \"pairs_checked\": 39, \"names\": [\"source-normalization-0\", \"source-normalization-1\", \"source-normalization-2\", \"source-normalization-3\", \"source-normalization-4\", \"source-normalization-5\", \"source-normalization-6\", \"source-normalization-7\", \"source-normalization-8\", \"source-normalization-9\", \"source-normalization-10\", \"source-normalization-11\", \"source-normalization-12\", \"source-normalization-13\", \"source-normalization-14\", \"source-normalization-15\", \"source-normalization-16\", \"source-normalization-17\", \"source-normalization-18\", \"source-normalization-19\", \"source-normalization-20\", \"source-normalization-21\", \"source-normalization-22\", \"source-normalization-23\", \"source-normalization-24\", \"source-normalization-25\", \"source-normalization-26\", \"source-normalization-27\", \"source-normalization-28\", \"source-normalization-29\", \"source-normalization-30\", \"source-normalization-31\", \"source-normalization-32\", \"source-normalization-33\", \"source-normalization-34\", \"source-normalization-35\", \"source-normalization-36\", \"source-normalization-37\", \"source-normalization-38\"], \"scope\": \"Actual browser output vs backend parser/schema; fixture provenance only\"}\r\n",
+    "stderr": ""
+  },
+  "backend_output": {
+    "passed": true,
+    "pairs_checked": 39,
+    "names": [
+      "source-normalization-0",
+      "source-normalization-1",
+      "source-normalization-2",
+      "source-normalization-3",
+      "source-normalization-4",
+      "source-normalization-5",
+      "source-normalization-6",
+      "source-normalization-7",
+      "source-normalization-8",
+      "source-normalization-9",
+      "source-normalization-10",
+      "source-normalization-11",
+      "source-normalization-12",
+      "source-normalization-13",
+      "source-normalization-14",
+      "source-normalization-15",
+      "source-normalization-16",
+      "source-normalization-17",
+      "source-normalization-18",
+      "source-normalization-19",
+      "source-normalization-20",
+      "source-normalization-21",
+      "source-normalization-22",
+      "source-normalization-23",
+      "source-normalization-24",
+      "source-normalization-25",
+      "source-normalization-26",
+      "source-normalization-27",
+      "source-normalization-28",
+      "source-normalization-29",
+      "source-normalization-30",
+      "source-normalization-31",
+      "source-normalization-32",
+      "source-normalization-33",
+      "source-normalization-34",
+      "source-normalization-35",
+      "source-normalization-36",
+      "source-normalization-37",
+      "source-normalization-38"
+    ],
+    "scope": "Actual browser output vs backend parser/schema; fixture provenance only"
+  },
+  "passed": true,
+  "server_log": "\n  VITE v8.3.2  ready in 154 ms\n\n  ➜  Local:   http://127.0.0.1:5174/\n",
+  "inputs_before": [
+    {
+      "file": "shared/fixtures/markdown-v1.json",
+      "sha256": "be6593655542dae95005e71fb323a36793d27b70984babdd3daeb09fe51274a2"
+    },
+    {
+      "file": "shared/fixtures/markdown-editor-v1.json",
+      "sha256": "7ef2ce2868a174b8d2baea0470e0e179852528159c6673bc35273be497749531"
+    },
+    {
+      "file": "frontend/package-lock.json",
+      "sha256": "a1f0f7105586372d92bbe2731707269e4f6784c6b23a034b3cb3e10fbf6b9384"
+    },
+    {
+      "file": "frontend/src/documents/selection.ts",
+      "sha256": "5f19bfd03b9bb835ff2a80cde797b817f4ca183005efce5c1bfd40c506f8995c"
+    },
+    {
+      "file": "frontend/src/documents/editor-source.ts",
+      "sha256": "a772a8bb564c7fad5caa48efa97c9aceff7ff081733f512deaa503cd5c43e48d"
+    },
+    {
+      "file": "frontend/src/documents/source-nodes.ts",
+      "sha256": "24f0b1412615c4321bf4bcb125c6c9a93f16bf975a1e39ec987b737df4876f97"
+    },
+    {
+      "file": "frontend/src/documents/identity.ts",
+      "sha256": "00b3df88c9639407ef84f89e697e493648e4dcc8eb42b8a1a19f7d310256bebc"
+    },
+    {
+      "file": "frontend/src/documents/contracts.ts",
+      "sha256": "c949a3d254dfeb176733e73a46d3db614f8c206ec21b66fef60517ea5809ef0e"
+    },
+    {
+      "file": "frontend/tests/browser/contracts.ts",
+      "sha256": "9f63a8b863c170f35150a13a0af65217b751395a6801730de5fe98217750a50b"
+    },
+    {
+      "file": "frontend/src/documents/edited-snapshot.ts",
+      "sha256": "8b211bac7c9b98d99ffe2ce8e06bd91b0f2e267ff01936d52bfab2216546d068"
+    },
+    {
+      "file": "frontend/tests/browser/edited-snapshot.ts",
+      "sha256": "811f78a33d7f265f134978cb42c5933f9e46e6d9b5c5c11de73fcc7f791bffe3"
+    },
+    {
+      "file": "frontend/src/documents/autolink-lexemes.ts",
+      "sha256": "21a63f7270ac0bb4cf26bef9b633e9e7b85cdd3780c233aa01eee9d4aefd80ba"
+    },
+    {
+      "file": "frontend/src/documents/autolink-remark.ts",
+      "sha256": "be1b57a67e6855c144caffafe86efc69ff82107bbc20f7c2f24ee8af244b3af5"
+    },
+    {
+      "file": "frontend/src/documents/inline-marks.ts",
+      "sha256": "4ab59b13754d9572f8560f660135f16d9e0b1235d373f55cc12ee182f28142db"
+    },
+    {
+      "file": "frontend/src/documents/raw-source-remark.ts",
+      "sha256": "deb66ec74b1abfa6803d7e27cde3fed65a290a1a66e40f736cea759244ee8ac3"
+    },
+    {
+      "file": "backend/app/documents/raw_source.py",
+      "sha256": "6ede7b10919a81918ced7fded68a7a9e741e5b912ee7182447bfa97c161f4284"
+    },
+    {
+      "file": "shared/fixtures/raw-source-containers-v1.json",
+      "sha256": "7067228ab445aec6c3ace6ac0658f9bedafcff120e9cabb8f85477a631183537"
+    },
+    {
+      "file": "frontend/tests/browser/raw-source.ts",
+      "sha256": "953d31e9d8fc09d90072698ec4e65021577d377b853b3d4d985eaae29e05e459"
+    },
+    {
+      "file": "frontend/src/documents/editor-selection.ts",
+      "sha256": "e11e79f52a2e5f4d6bdc9c46e60e0b2a11f20cc3531e18d088b2fd94f3af1b0d"
+    },
+    {
+      "file": "frontend/tests/browser/editor-selection.ts",
+      "sha256": "4d59cdb07327503455cae92c83e8ccb0638b7bae2d18c9305ac0d0f8b11b60cf"
+    },
+    {
+      "file": "frontend/src/documents/source-normalization.ts",
+      "sha256": "5062bb1791776e7afe9e70799286981d7d769bc22004ee8f14fc7e74030ae357"
+    },
+    {
+      "file": "frontend/tests/browser/source-normalization.ts",
+      "sha256": "85b59aea92f78ea3e953ed4d943e59bc172b28ed50a5f691c8ffe14207e61ff4"
+    },
+    {
+      "file": "shared/fixtures/editor-selection-v1.json",
+      "sha256": "7288f13689d1c6c51e84675820321a0cece4b9a581f517dd61df232de2d3957c"
+    },
+    {
+      "file": "backend/app/documents/anchors.py",
+      "sha256": "79cd3da567e4a3a162d286bf226ca1a071a55bd4d2b1a1ec96ac9b2d940e15e2"
+    },
+    {
+      "file": "frontend/src/documents/url-domain-unicode.ts",
+      "sha256": "071bcbd06ace0caa307da6f54d9ed193d3e83ce5891cd327d0aaedd50e8994b8"
+    },
+    {
+      "file": "shared/markdown/url-domain-unicode-v1.json",
+      "sha256": "589185c4b9135670c01b594169bd5936293e15832ab72033a472e9fd5456899b"
+    },
+    {
+      "file": "backend/app/documents/autolinks.py",
+      "sha256": "4328b037d4ebf1706d7eaa3389df1254a810d6f5d87f16088670c9a77cb69a1d"
+    },
+    {
+      "file": "backend/app/documents/markdown.py",
+      "sha256": "75294699d867bda2a629bdfba53dcee16789427e64c3058470dd541e4b671745"
+    },
+    {
+      "file": "backend/requirements.lock",
+      "sha256": "f4a25bca4517831e0ac522e74df1796254edb5a1a1976c80d27d4047a6ef3016"
+    },
+    {
+      "file": "backend/app/documents/snapshot.py",
+      "sha256": "c56332eee818c1d453caad7cfb473982f11ec2bfeae22f0ba1900b56500e2582"
+    },
+    {
+      "file": "backend/app/shared/validation.py",
+      "sha256": "9ce3de19738040e39a4d5c964c34ac266797c692fe208c0fd90f0a2efa9a088d"
+    },
+    {
+      "file": "backend/app/shared/time.py",
+      "sha256": "37d5491d12cc050d536d32ffefe46d5ca59354ecd3a4e8a81a4cfbe375555572"
+    },
+    {
+      "file": "backend/app/documents/strikethrough.py",
+      "sha256": "affdbca636e55fe8884daf7ee4de21618aabc2aac67f13db3df04b5380699fba"
+    },
+    {
+      "file": "shared/fixtures/strikethrough-v1.json",
+      "sha256": "45e0d1daa710ff004acfcb902ceb61cb87d7b6c040b2d0757116cb1d50c2efc5"
+    },
+    {
+      "file": "frontend/tests/browser/strikethrough.ts",
+      "sha256": "f1e79925befe0a2787420ccc2747fc3f60959d22be982b2a227a6066baef6fa5"
+    },
+    {
+      "file": "tools/verify-editor-output.py",
+      "sha256": "fc8ca961148a37bf1c90c61ac3a583e87fb8aa59dfa448d767f8ad1ad9413982"
+    },
+    {
+      "file": "shared/fixtures/autolink-v1.json",
+      "sha256": "ce5bfe173c599383bf8c6c1e6927d4ba86f0710fcacee8ec86e41b924da304cf"
+    },
+    {
+      "file": "frontend/tests/browser/autolink-baseline.ts",
+      "sha256": "54e62f5d15319c2afe26e4310184f8aa5206a034d8f8193730f61d192e060d44"
+    },
+    {
+      "file": "tools/autolink-baseline.py",
+      "sha256": "0faf54d88568900f92e6f8ba088804d3d94eb31eb79f50e117221315d984fb2d"
+    },
+    {
+      "file": "shared/fixtures/autolink-context-v1.json",
+      "sha256": "fa7be4cf8fce2e39d34f999eff7ff76623991ebb4c69d30782e4577b76b324ec"
+    },
+    {
+      "file": "frontend/tests/browser/autolink-conformance.ts",
+      "sha256": "71c3ece11be6748f9d7ab6684665e9d023783d5cf6eec2bf4dcbf48f6fcdb66b"
+    },
+    {
+      "file": "shared/fixtures/autolink-unicode-v1.json",
+      "sha256": "ca016c48a0503f40f2b6d2f5fd8689aa3d8889c23cfe594893a7b41e1985b828"
+    },
+    {
+      "file": "frontend/tests/browser/probe.ts",
+      "sha256": "9f9ec4fdf253d41e0968987ea4eaa5e2a8aaec2789b63fc94f8a040902c26f25"
+    },
+    {
+      "file": "frontend/tests/browser/editor.html",
+      "sha256": "a7a15e6b5e1544f9c29f3fa15c22d46da7e64f0d91c85925b8b7b5d6841da7d8"
+    },
+    {
+      "file": "frontend/tests/browser/vite.config.ts",
+      "sha256": "fe2477aa0322372634bca4ea71fcf0b07e62f080e6779b22d63b151ddf6c4768"
+    },
+    {
+      "file": "tools/verify-editor-browser.mjs",
+      "sha256": "4c1487dd195f77da985d6d86a1bce78ba70e18db93d76fdd3364ec43db62e61c"
+    }
+  ],
+  "inputs_after": [
+    {
+      "file": "shared/fixtures/markdown-v1.json",
+      "sha256": "be6593655542dae95005e71fb323a36793d27b70984babdd3daeb09fe51274a2"
+    },
+    {
+      "file": "shared/fixtures/markdown-editor-v1.json",
+      "sha256": "7ef2ce2868a174b8d2baea0470e0e179852528159c6673bc35273be497749531"
+    },
+    {
+      "file": "frontend/package-lock.json",
+      "sha256": "a1f0f7105586372d92bbe2731707269e4f6784c6b23a034b3cb3e10fbf6b9384"
+    },
+    {
+      "file": "frontend/src/documents/selection.ts",
+      "sha256": "5f19bfd03b9bb835ff2a80cde797b817f4ca183005efce5c1bfd40c506f8995c"
+    },
+    {
+      "file": "frontend/src/documents/editor-source.ts",
+      "sha256": "a772a8bb564c7fad5caa48efa97c9aceff7ff081733f512deaa503cd5c43e48d"
+    },
+    {
+      "file": "frontend/src/documents/source-nodes.ts",
+      "sha256": "24f0b1412615c4321bf4bcb125c6c9a93f16bf975a1e39ec987b737df4876f97"
+    },
+    {
+      "file": "frontend/src/documents/identity.ts",
+      "sha256": "00b3df88c9639407ef84f89e697e493648e4dcc8eb42b8a1a19f7d310256bebc"
+    },
+    {
+      "file": "frontend/src/documents/contracts.ts",
+      "sha256": "c949a3d254dfeb176733e73a46d3db614f8c206ec21b66fef60517ea5809ef0e"
+    },
+    {
+      "file": "frontend/tests/browser/contracts.ts",
+      "sha256": "9f63a8b863c170f35150a13a0af65217b751395a6801730de5fe98217750a50b"
+    },
+    {
+      "file": "frontend/src/documents/edited-snapshot.ts",
+      "sha256": "8b211bac7c9b98d99ffe2ce8e06bd91b0f2e267ff01936d52bfab2216546d068"
+    },
+    {
+      "file": "frontend/tests/browser/edited-snapshot.ts",
+      "sha256": "811f78a33d7f265f134978cb42c5933f9e46e6d9b5c5c11de73fcc7f791bffe3"
+    },
+    {
+      "file": "frontend/src/documents/autolink-lexemes.ts",
+      "sha256": "21a63f7270ac0bb4cf26bef9b633e9e7b85cdd3780c233aa01eee9d4aefd80ba"
+    },
+    {
+      "file": "frontend/src/documents/autolink-remark.ts",
+      "sha256": "be1b57a67e6855c144caffafe86efc69ff82107bbc20f7c2f24ee8af244b3af5"
+    },
+    {
+      "file": "frontend/src/documents/inline-marks.ts",
+      "sha256": "4ab59b13754d9572f8560f660135f16d9e0b1235d373f55cc12ee182f28142db"
+    },
+    {
+      "file": "frontend/src/documents/raw-source-remark.ts",
+      "sha256": "deb66ec74b1abfa6803d7e27cde3fed65a290a1a66e40f736cea759244ee8ac3"
+    },
+    {
+      "file": "backend/app/documents/raw_source.py",
+      "sha256": "6ede7b10919a81918ced7fded68a7a9e741e5b912ee7182447bfa97c161f4284"
+    },
+    {
+      "file": "shared/fixtures/raw-source-containers-v1.json",
+      "sha256": "7067228ab445aec6c3ace6ac0658f9bedafcff120e9cabb8f85477a631183537"
+    },
+    {
+      "file": "frontend/tests/browser/raw-source.ts",
+      "sha256": "953d31e9d8fc09d90072698ec4e65021577d377b853b3d4d985eaae29e05e459"
+    },
+    {
+      "file": "frontend/src/documents/editor-selection.ts",
+      "sha256": "e11e79f52a2e5f4d6bdc9c46e60e0b2a11f20cc3531e18d088b2fd94f3af1b0d"
+    },
+    {
+      "file": "frontend/tests/browser/editor-selection.ts",
+      "sha256": "4d59cdb07327503455cae92c83e8ccb0638b7bae2d18c9305ac0d0f8b11b60cf"
+    },
+    {
+      "file": "frontend/src/documents/source-normalization.ts",
+      "sha256": "5062bb1791776e7afe9e70799286981d7d769bc22004ee8f14fc7e74030ae357"
+    },
+    {
+      "file": "frontend/tests/browser/source-normalization.ts",
+      "sha256": "85b59aea92f78ea3e953ed4d943e59bc172b28ed50a5f691c8ffe14207e61ff4"
+    },
+    {
+      "file": "shared/fixtures/editor-selection-v1.json",
+      "sha256": "7288f13689d1c6c51e84675820321a0cece4b9a581f517dd61df232de2d3957c"
+    },
+    {
+      "file": "backend/app/documents/anchors.py",
+      "sha256": "79cd3da567e4a3a162d286bf226ca1a071a55bd4d2b1a1ec96ac9b2d940e15e2"
+    },
+    {
+      "file": "frontend/src/documents/url-domain-unicode.ts",
+      "sha256": "071bcbd06ace0caa307da6f54d9ed193d3e83ce5891cd327d0aaedd50e8994b8"
+    },
+    {
+      "file": "shared/markdown/url-domain-unicode-v1.json",
+      "sha256": "589185c4b9135670c01b594169bd5936293e15832ab72033a472e9fd5456899b"
+    },
+    {
+      "file": "backend/app/documents/autolinks.py",
+      "sha256": "4328b037d4ebf1706d7eaa3389df1254a810d6f5d87f16088670c9a77cb69a1d"
+    },
+    {
+      "file": "backend/app/documents/markdown.py",
+      "sha256": "75294699d867bda2a629bdfba53dcee16789427e64c3058470dd541e4b671745"
+    },
+    {
+      "file": "backend/requirements.lock",
+      "sha256": "f4a25bca4517831e0ac522e74df1796254edb5a1a1976c80d27d4047a6ef3016"
+    },
+    {
+      "file": "backend/app/documents/snapshot.py",
+      "sha256": "c56332eee818c1d453caad7cfb473982f11ec2bfeae22f0ba1900b56500e2582"
+    },
+    {
+      "file": "backend/app/shared/validation.py",
+      "sha256": "9ce3de19738040e39a4d5c964c34ac266797c692fe208c0fd90f0a2efa9a088d"
+    },
+    {
+      "file": "backend/app/shared/time.py",
+      "sha256": "37d5491d12cc050d536d32ffefe46d5ca59354ecd3a4e8a81a4cfbe375555572"
+    },
+    {
+      "file": "backend/app/documents/strikethrough.py",
+      "sha256": "affdbca636e55fe8884daf7ee4de21618aabc2aac67f13db3df04b5380699fba"
+    },
+    {
+      "file": "shared/fixtures/strikethrough-v1.json",
+      "sha256": "45e0d1daa710ff004acfcb902ceb61cb87d7b6c040b2d0757116cb1d50c2efc5"
+    },
+    {
+      "file": "frontend/tests/browser/strikethrough.ts",
+      "sha256": "f1e79925befe0a2787420ccc2747fc3f60959d22be982b2a227a6066baef6fa5"
+    },
+    {
+      "file": "tools/verify-editor-output.py",
+      "sha256": "fc8ca961148a37bf1c90c61ac3a583e87fb8aa59dfa448d767f8ad1ad9413982"
+    },
+    {
+      "file": "shared/fixtures/autolink-v1.json",
+      "sha256": "ce5bfe173c599383bf8c6c1e6927d4ba86f0710fcacee8ec86e41b924da304cf"
+    },
+    {
+      "file": "frontend/tests/browser/autolink-baseline.ts",
+      "sha256": "54e62f5d15319c2afe26e4310184f8aa5206a034d8f8193730f61d192e060d44"
+    },
+    {
+      "file": "tools/autolink-baseline.py",
+      "sha256": "0faf54d88568900f92e6f8ba088804d3d94eb31eb79f50e117221315d984fb2d"
+    },
+    {
+      "file": "shared/fixtures/autolink-context-v1.json",
+      "sha256": "fa7be4cf8fce2e39d34f999eff7ff76623991ebb4c69d30782e4577b76b324ec"
+    },
+    {
+      "file": "frontend/tests/browser/autolink-conformance.ts",
+      "sha256": "71c3ece11be6748f9d7ab6684665e9d023783d5cf6eec2bf4dcbf48f6fcdb66b"
+    },
+    {
+      "file": "shared/fixtures/autolink-unicode-v1.json",
+      "sha256": "ca016c48a0503f40f2b6d2f5fd8689aa3d8889c23cfe594893a7b41e1985b828"
+    },
+    {
+      "file": "frontend/tests/browser/probe.ts",
+      "sha256": "9f9ec4fdf253d41e0968987ea4eaa5e2a8aaec2789b63fc94f8a040902c26f25"
+    },
+    {
+      "file": "frontend/tests/browser/editor.html",
+      "sha256": "a7a15e6b5e1544f9c29f3fa15c22d46da7e64f0d91c85925b8b7b5d6841da7d8"
+    },
+    {
+      "file": "frontend/tests/browser/vite.config.ts",
+      "sha256": "fe2477aa0322372634bca4ea71fcf0b07e62f080e6779b22d63b151ddf6c4768"
+    },
+    {
+      "file": "tools/verify-editor-browser.mjs",
+      "sha256": "4c1487dd195f77da985d6d86a1bce78ba70e18db93d76fdd3364ec43db62e61c"
+    }
+  ]
+}

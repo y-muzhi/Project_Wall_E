@@ -52,3 +52,5 @@ editor-selection.ts正向适配真实EditorState与原生DOM端点，映射到se
 反向定位使用editorRangeForSelection/locateEditorSelection，先核对事件版本/区块/原文，再定位TextSelection或完整代码NodeSelection，不猜测原子内部或部分虚拟尾行。验证完成前不改选区/焦点/滚动；旧document/版本/改文/缺块及不能表示的端点拒绝时状态对象不变。专项现为15合法记录（14原生DOM文本往返、1真实代码块选中样式）、12拒绝及折叠null；默认168对，editor-browser-2026-10-03T16-08-29-798Z.json，44输入hash一致、会话关闭。28前端/TS通过，125后端基础证据仍有效；新的15范围全部经真实后端锚点定位。它尚未接父页面生命周期/历史隔离/HTTP定位事件，不等于完整组件验收。
 
 顶层原始节点重解析使用normalizeRawSourceBlock生成暂存状态，调用EditedSnapshotLedger.capture(state, at, normalization)完成全源码预检，成功后才view.updateState。首块保留ID，额外块取新ID；空白/删除/分块使用实际事务及history恢复。私有walle_source_revision根属性区分相同富文本但不同原文的撤销记录，不序列化到Markdown或公开字段。专项`node tools/verify-editor-browser.mjs --normalization-check`覆盖16检查/21实际输出；默认189对通过真实后端校验，editor-browser-2026-10-03T17-26-06-642Z.json的46输入hash一致并关闭会话。28前端测试及完整TS通过，125后端基础证据未变。此适配仅覆盖显式顶层原始节点；嵌套原始节点、跨块引用上下文、完整组件及真实会话/HTTP/DB保存仍待实现。
+
+normalizeRawSourceBlock现接受包含原始子节点的实际引用/列表，按完整容器源码解析，要求仍为同类型单个顶层块；不把内部新段落分配顶层ID。新增7检查/21对实际输出，核对未编辑定义CRLF、富文本兄弟及真实undo/redo；专项合计23检查/42对，完整210对通过，editor-browser-2026-10-04T03-07-39-396Z.json的46输入hash一致并关闭会话。28前端/完整TS通过。外部引用定义与跨块上下文尚需全局重绑定；上述范围不表示完整编辑器或持久化验收完成。
