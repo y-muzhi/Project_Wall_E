@@ -23,6 +23,10 @@ from .contracts import save_manual_draft_input, save_manual_draft_result
 from .markdown import DocumentInvalid
 from .snapshot import Provenance, create_snapshot, validate_snapshot, validate_template_lock
 from .manual_identity import ManualIdentityProofs
+from .contracts import complete_manual_draft_input, complete_manual_draft_result
+from backend.app.comments.commands import revalidate_anchors
+from backend.app.infrastructure.resources import TemplateInvalid
+from backend.app.shared.validation import strict_json_object
 
 
 def start_manual_draft(executor: Idempotency, payload: object, *, catalog: ResourceCatalog | None = None,
@@ -128,3 +132,70 @@ def save_manual_draft(database: Database, payload: object, *, catalog: ResourceC
     except Exception:
         code = 'INTERNAL_ERROR'
     return {'code': code, 'data': None, 'details': None}
+
+
+def complete_manual_draft(executor: Idempotency, payload: object, *, catalog: ResourceCatalog | None = None,
+                          clock: Callable[[], datetime] | None = None) -> dict:
+    try:
+        request = complete_manual_draft_input(payload)
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+
+    def operation(connection: sqlite3.Connection) -> Success:
+        requirements, documents = RequirementRepository(connection), DocumentRepository(connection)
+        root = requirements.get(request.requirement_id)
+        if root is None:
+            raise Rejected('NOT_FOUND')
+        if root['status'] not in ('INITIALIZING', 'ACTIVE'):
+            raise Rejected('STATE_CONFLICT')
+        draft = active_manual_draft(connection, root)
+        if draft['content_version'] != request.expected_version:
+            raise Rejected('CONTENT_VERSION_CONFLICT')
+        context = connection.execute('SELECT current_document_id,base_content_version,baseline_block_state_json FROM manual_draft_context WHERE draft_id=?', (draft['id'],)).fetchone()
+        current = current_at_version(connection, request.requirement_id, context['base_content_version'])
+        if current['id'] != context['current_document_id']:
+            raise Rejected('WORK_STATE_INCONSISTENT')
+        resources = catalog if catalog is not None else ResourceCatalog()
+        sources = DocumentSources(connection, request.requirement_id, resources)
+        current_model = get_current_document_result(current, sources)
+        if current_model['block_state_json'] != strict_json_object(context['baseline_block_state_json'], 'baseline_block_state_json'):
+            raise ValueError('CURRENT baseline changed without its version changing')
+        try:
+            model = get_manual_draft_result(draft, sources)
+            snapshot = validate_snapshot(model['markdown_content'], model['block_state_json'], sources)
+        except (DocumentInvalid, InvalidInput, ValueError):
+            raise Rejected('DOCUMENT_INVALID') from None
+        proofs = ManualIdentityProofs(connection, draft['id'])
+        baseline = proofs.baseline(sources)
+        proofs.verify_persisted(snapshot, baseline, draft['updated_at'])
+        if root['status'] == 'INITIALIZING':
+            try:
+                template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
+            except TemplateInvalid:
+                raise Rejected('TEMPLATE_INVALID') from None
+            initial = create_snapshot(template.markdown, Provenance('SYSTEM', 'TEMPLATE', None), current['created_at'], sources)
+            locked = tuple(metadata['block_id'] for block, metadata in zip(initial.parsed.blocks, initial.state['blocks']) if block.block_type == 'heading')
+            try:
+                validate_template_lock(snapshot, template, locked)
+            except DocumentInvalid:
+                raise Rejected('TEMPLATE_INVALID') from None
+        at = operation_time(clock)
+        if at < max(draft['updated_at'], current['updated_at'], root['updated_at']):
+            raise ValueError('Completion clock predates persisted activity')
+        updated = documents.replace_current(current, snapshot, increment(current['content_version']), at)
+        revalidate_anchors(connection, {'requirement_id': request.requirement_id,
+            'new_document': {'markdown_content': snapshot.parsed.markdown, 'block_state_json': snapshot.state}}, catalog=resources)
+        # D-004: audit an actual ACTIVE body change, using the real completed session.
+        if root['status'] == 'ACTIVE' and snapshot.parsed.markdown != current['markdown_content']:
+            connection.execute("INSERT INTO document_change_audits VALUES (?,?,?,'MANUAL_EDIT',?,'USER_MANUAL_EDIT',?,?,?)",
+                (entity_id(connection, EntityKind.DOCUMENT_AUDIT), request.requirement_id, current['id'], draft['id'], current['content_version'], updated['content_version'], at))
+        documents.delete_manual_draft(draft)
+        requirements.release_manual_draft(root['id'], draft['id'], at)
+        close_edit_session(connection, draft['id'], 'COMPLETED', at)
+        data = complete_manual_draft_result(updated, sources)
+        return Success({'code': 'DRAFT_COMPLETED', 'data': data, 'details': None}, 200)
+
+    return execute_idempotent(executor, 'APP-DOC-CMD-C03', request, operation, allowed_failures=frozenset({
+        'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT',
+        'CONTENT_VERSION_CONFLICT', 'DOCUMENT_INVALID', 'TEMPLATE_INVALID',
+    }))

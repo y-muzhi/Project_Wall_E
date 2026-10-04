@@ -52,3 +52,16 @@ class DocumentRepository:
         if len(rows) != 1 or rows[0]['id'] != draft['id']:
             raise ValueError('Updated draft is not unique')
         return rows[0]
+
+    def replace_current(self, current: sqlite3.Row, snapshot, version: int, at: str) -> sqlite3.Row:
+        require_write_transaction(self.connection)
+        if current['document_type'] != 'CURRENT':
+            raise ValueError('Replacement must preserve actual CURRENT identity')
+        result = self.connection.execute("UPDATE requirement_documents SET markdown_content=?,block_state_json=?,content_version=?,updated_at=? WHERE id=? AND requirement_id=? AND document_type='CURRENT' AND content_version=?",
+            (snapshot.parsed.markdown, snapshot.state_json, version, at, current['id'], current['requirement_id'], current['content_version']))
+        if result.rowcount != 1:
+            raise ValueError('CURRENT changed within the shared write transaction')
+        rows = self.by_requirement(current['requirement_id'], 'CURRENT')
+        if len(rows) != 1 or rows[0]['id'] != current['id']:
+            raise ValueError('Replaced CURRENT is not unique')
+        return rows[0]

@@ -6,6 +6,7 @@ from .http_models import GetCurrentDocumentRequest, GetCurrentDocumentResponse, 
 from backend.app.shared.http_boundary import handle_http
 from . import commands
 from .http_models import StartManualDraftRequest, StartManualDraftResponse, SaveManualDraftRequest, SaveManualDraftResponse, CancelManualDraftRequest, CancelManualDraftResponse
+from .http_models import CompleteManualDraftRequest, CompleteManualDraftResponse
 
 doc_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 
@@ -38,3 +39,9 @@ async def save_manual_draft_http(request: Request):
 async def cancel_manual_draft_http(request: Request):
     return await handle_http(request, CancelManualDraftRequest, CancelManualDraftResponse,
         lambda runtime, parsed: commands.cancel_manual_draft(runtime.commands(), parsed.payload))
+
+
+@doc_router.post('/requirements/{requirement_id}/manual-draft/complete')
+async def complete_manual_draft_http(request: Request):
+    return await handle_http(request, CompleteManualDraftRequest, CompleteManualDraftResponse,
+        lambda runtime, parsed: commands.complete_manual_draft(runtime.commands(), parsed.payload, catalog=runtime.catalog))

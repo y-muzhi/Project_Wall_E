@@ -4,7 +4,7 @@ from backend.app.shared.http_projection import document
 from backend.app.shared.http_projection import exact, requirement
 from backend.app.shared.http_commands import CommandRequest
 from backend.app.shared.validation import strict_integer
-from .contracts import start_manual_draft_input, save_manual_draft_input, cancel_manual_draft_input
+from .contracts import start_manual_draft_input, save_manual_draft_input, cancel_manual_draft_input, complete_manual_draft_input
 from .http_validation import snapshot_input
 
 
@@ -104,4 +104,23 @@ class CancelManualDraftResponse:
         strict_integer(value['manual_draft_id'], 'manual_draft_id')
         if value['requirement_id'] != request.payload['requirement_id'] or value['cancelled'] is not True:
             raise ValueError('Cancellation response contradicts submitted target')
+        return value, None
+
+
+class CompleteManualDraftRequest(CommandRequest):
+    body_fields = ('expected_version',)
+    mandatory = body_fields
+    validate = staticmethod(complete_manual_draft_input)
+
+
+class CompleteManualDraftResponse:
+    success_code = 'DRAFT_COMPLETED'
+    errors = StartManualDraftResponse.errors | {'DOCUMENT_INVALID', 'TEMPLATE_INVALID'}
+
+    @staticmethod
+    def project(data, request):
+        value = document(data, 'CURRENT')
+        if value['requirement_id'] != request.payload['requirement_id']:
+            raise ValueError('Completed CURRENT belongs to another requirement')
+        # expected_version refers to the draft, never to the returned CURRENT.
         return value, None

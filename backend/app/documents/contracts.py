@@ -87,3 +87,12 @@ def save_manual_draft_input(payload: object) -> SaveManualDraftInput:
 
 def save_manual_draft_result(row: Mapping[str, Any], source_verifier: SourceVerifier) -> dict:
     return get_manual_draft_result(row, source_verifier)
+
+
+def complete_manual_draft_input(payload: object) -> ExpectedDraftInput:
+    fields = ('requirement_id', 'expected_version', 'idempotency_key')
+    return ExpectedDraftInput.from_fields(object_fields(payload, 'body', fields, fields))
+
+
+def complete_manual_draft_result(row: Mapping[str, Any], source_verifier: SourceVerifier) -> dict:
+    return get_current_document_result(row, source_verifier)
