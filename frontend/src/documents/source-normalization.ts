@@ -16,7 +16,7 @@ const proofs = new WeakMap<RawSourceNormalization, Proof>();
 
 // Apply the real transaction/plugin/history pipeline to a staged immutable
 // state. The caller can validate/capture before displaying this actual state.
-export function normalizeRawSourceBlock(ctx: Ctx, state: EditorState, index: number): RawSourceNormalization {
+export function normalizeRawSourceBlock(ctx: Ctx, state: EditorState, index: number, preservedMarkdown?: string): RawSourceNormalization {
   if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new EditorSourceInvalid('原始节点位置不合法');
   const original = state.doc.maybeChild(index);
   if (!original || !hasRawSource(original)) throw new EditorSourceInvalid('重新解析需要实际原始节点');
@@ -24,7 +24,7 @@ export function normalizeRawSourceBlock(ctx: Ctx, state: EditorState, index: num
   // Serialize the enclosing real block so quote/list indentation and sibling
   // definitions participate in parsing. Parsing only a child's text would
   // incorrectly lose its container and reference context.
-  const markdown = nested ? ctx.get(serializerCtx)(state.doc.copy(Fragment.from(original))) : original.textContent;
+  const markdown = preservedMarkdown ?? (nested ? ctx.get(serializerCtx)(state.doc.copy(Fragment.from(original))) : original.textContent);
   const source = Object.freeze(new EditorSource(ctx, markdown));
   if (nested && (source.blocks.length !== 1 || source.blocks[0]!.node.type !== original.type)) {
     throw new EditorSourceInvalid('容器重新解释改变了顶层区块边界');

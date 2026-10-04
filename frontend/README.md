@@ -56,3 +56,5 @@ editor-selection.ts正向适配真实EditorState与原生DOM端点，映射到se
 normalizeRawSourceBlock现接受包含原始子节点的实际引用/列表，按完整容器源码解析，要求仍为同类型单个顶层块；不把内部新段落分配顶层ID。新增7检查/21对实际输出，核对未编辑定义CRLF、富文本兄弟及真实undo/redo；专项合计23检查/42对，完整210对通过，editor-browser-2026-10-04T03-07-39-396Z.json的46输入hash一致并关闭会话。28前端/完整TS通过。外部引用定义与跨块上下文尚需全局重绑定；上述范围不表示完整编辑器或持久化验收完成。
 
 完整源引用上下文使用账本prepare(state, at, normalization?)，它只生成独立预检与重绑定实际EditorState；调用者view.updateState(prepared.state)后以accept(prepared, view.state)发布对应pair。跨账本、伪造、状态错配、过期和重复accept均拒绝。真正appendTransaction使引用派生变化与定义编辑共同undo/redo；原有空caret保持，未编辑引用源码不改写。新增9检查/21对，专项32项/63对、完整231对通过，editor-browser-2026-10-04T03-23-11-919Z.json的46输入hash一致且会话关闭；28前端/完整TS通过。常规容器序列化仍可能把内部兄弟引用改写为旧地址inline链接，下一步须按实际源位置保留这些写法；跨块边界及完整产品组件/HTTP/DB保存仍开放。
+
+已有账本的纯原始文本事务优先使用normalizeRawBlock(state, topIndex)，它经实际AST/节点路径验证，在原源范围中保留兄弟引用、容器和换行，再prepare/accept同步上下文。相比对整个父块常规序列化，它保持同容器引用的后续绑定语义；无映射的富文本同时变化会拒绝且不改视图/账本。新增11检查/29对，专项43项/92对、完整260对通过，editor-browser-2026-10-04T03-35-40-406Z.json的46输入hash一致、会话关闭；28前端/TS、冻结72通过。跨顶层边界、混合编辑及完整RequirementEditor/HTTP/DB保存仍待实现。

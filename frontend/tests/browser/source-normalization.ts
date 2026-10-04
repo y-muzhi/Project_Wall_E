@@ -382,5 +382,102 @@ export async function verifySourceNormalization(load: (markdown: string, ids: re
     equal(pair.markdown_content, withFooter, '失败预检污染账本/历史'); record(pair);
   });
   checks.push('context-failed-stage-preserves-live-ledger-and-pending-input');
+
+  const sourceSplices = [
+    {name: 'quote-reference', markdown: '> [a]: /old\r\n>\r\n> [标签][a]\r\n', hrefs: ['/new']},
+    {name: 'list-reference', markdown: '- [a]: /old\r\n\r\n  [标签][a]\r\n', hrefs: ['/new']},
+    {name: 'quote-list-reference', markdown: '> - [a]: /old\r\n>\r\n>   [标签][a]\r\n', hrefs: ['/new']},
+    {name: 'quote-raw-rich-siblings', markdown: '> [a]: /old\r\n> [stay]: /kept\r\n>\r\n> **保留** [标签][a]\r\n', hrefs: ['/new']},
+    {name: 'ordered-multiline-definition', markdown: '2. [a]:\r\n     /old\r\n     "旧题"\r\n\r\n   [标签][a]\r\n', hrefs: ['/new']},
+    {name: 'quote-CR-definition', markdown: '> [a]: /old\r>\r> [标签][a]\r', hrefs: ['/new']},
+    {name: 'tab-list-definition', markdown: '-\t[a]: /old\r\n\r\n\t[标签][a]\r\n', hrefs: ['/new']},
+    {name: 'multiple-raw-ranges', markdown: '> [a]: /old\r\n> [b]: /old2\r\n>\r\n> [甲][a] **保留** [乙][b]\r\n', hrefs: ['/new','/new2']},
+  ];
+  for (const scenario of sourceSplices) {
+    ledger = await setup(scenario.markdown, [10], 20);
+    get().editor.action(ctx => {
+      const view = ctx.get(editorViewCtx);
+      const edits: {position: number; size: number; value: string}[] = [];
+      view.state.doc.descendants((node, position) => {
+        if (node.type.name === 'walle_raw_source' && node.textContent.includes('/old')) edits.push({position: position + 1,
+          size: node.content.size, value: node.textContent.replaceAll('/old','/new').replace('旧题','新题')});
+      });
+      if (!edits.length) throw new Error('未找到源范围编辑目标');
+      const transaction = view.state.tr;
+      for (const edit of edits.toSorted((a,b) => b.position - a.position)) transaction.insertText(edit.value, edit.position, edit.position + edit.size);
+      view.dispatch(transaction);
+      const pending = view.state, normalized = ledger.normalizeRawBlock(pending, 0);
+      const prepared = ledger.prepare(normalized.state, editTime, normalized);
+      if (view.state !== pending) throw new Error('源范围预检提前修改视图');
+      view.updateState(prepared.state); const pair = ledger.accept(prepared, view.state);
+      const expected = scenario.markdown.replaceAll('/old','/new').replace('旧题','新题');
+      equal(pair.markdown_content, expected, `原始兄弟/容器标记被改写 ${scenario.name}`);
+      equal([...view.dom.querySelectorAll('a')].map(anchor => anchor.getAttribute('href')), scenario.hrefs, '容器内引用DOM未重绑定');
+      equal(topBlockIds(view.state.doc), [10], '原源范围编辑改变顶层身份');
+      equal(pair.block_state_json.next_block_id, 20, '原源范围编辑消耗新ID');
+      equal(pair.block_state_json.blocks[0]!.created_by_type, 'SYSTEM', '原源范围编辑改变创建来源');
+      equal(ledger.capture(view.state, editTime), pair, '原源范围后输出改写兄弟引用'); record(pair);
+      if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('原源范围撤销失败');
+      const restored = ledger.prepare(view.state, editTime); view.updateState(restored.state); ledger.accept(restored, view.state);
+      equal(restored.pair.markdown_content, scenario.markdown, '原源范围撤销没有完整恢复'); record(restored.pair);
+      if (!redo(view.state, tr => view.dispatch(tr))) throw new Error('原源范围重做失败');
+      const replayed = ledger.prepare(view.state, editTime); view.updateState(replayed.state); ledger.accept(replayed, view.state);
+      equal(replayed.pair.markdown_content, expected, '原源范围重做不精确'); record(replayed.pair);
+    });
+    checks.push(`source-splice-${scenario.name}`);
+  }
+
+  const conversionSource = '> <div>起</div>\r\n>\r\n> [a]: /keep\r\n>\r\n> **兄弟** [标签][a]\r\n';
+  ledger = await setup(conversionSource, [10], 20);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx), raw = view.state.doc.firstChild!.firstChild!;
+    view.dispatch(view.state.tr.insertText('甲😀\r\n\r\n# 新章\r\n', 2, 2 + raw.content.size));
+    const normalized = ledger.normalizeRawBlock(view.state, 0), prepared = ledger.prepare(normalized.state, editTime, normalized);
+    view.updateState(prepared.state); const pair = ledger.accept(prepared, view.state);
+    const expected = conversionSource.replace('> <div>起</div>\r\n', '> 甲😀\r\n> \r\n> # 新章\r\n');
+    equal(pair.markdown_content, expected, '原始节点转换重写兄弟引用或空白');
+    equal(view.state.doc.firstChild!.child(0).type.name, 'paragraph', '源范围转换没有真实段落');
+    equal(view.state.doc.firstChild!.child(1).type.name, 'heading', '源范围转换没有真实标题');
+    equal(view.dom.querySelector('a')?.getAttribute('href'), '/keep', '源范围转换丢失兄弟引用'); record(pair);
+    if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('源范围类型转换撤销失败');
+    const restored = ledger.prepare(view.state, editTime); view.updateState(restored.state); ledger.accept(restored, view.state);
+    equal(restored.pair.markdown_content, conversionSource, '源范围类型转换撤销原文'); record(restored.pair);
+    if (!redo(view.state, tr => view.dispatch(tr))) throw new Error('源范围类型转换重做失败');
+    const replayed = ledger.prepare(view.state, editTime); view.updateState(replayed.state); ledger.accept(replayed, view.state);
+    equal(replayed.pair.markdown_content, expected, '源范围类型转换重做原文'); record(replayed.pair);
+  });
+  checks.push('source-splice-type-conversion-keeps-container-reference-syntax');
+
+  ledger = await setup('  <div>起</div>\r\n', [10], 20);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx);
+    view.dispatch(view.state.tr.insertText('  <div>新</div>\r\n', 1, 1 + view.state.doc.firstChild!.content.size));
+    const normalized = ledger.normalizeRawBlock(view.state, 0), prepared = ledger.prepare(normalized.state, editTime, normalized);
+    view.updateState(prepared.state); const pair = ledger.accept(prepared, view.state);
+    equal(pair.markdown_content, '  <div>新</div>\r\n', '顶层原始缩进重复附加'); record(pair);
+  });
+  checks.push('source-splice-top-raw-does-not-duplicate-authored-indent');
+
+  const guardedSource = '> [a]: /old\r\n>\r\n> **原** [标签][a]\r\n';
+  ledger = await setup(guardedSource, [10], 20);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx), positions: {position: number; size: number; value: string}[] = [];
+    view.state.doc.descendants((node, position) => {
+      if (node.type.name === 'walle_raw_source') positions.push({position: position + 1, size: node.content.size, value: node.textContent.replace('/old','/new')});
+      if (node.isText && node.text === '原') positions.push({position, size: node.nodeSize, value: '新原'});
+    });
+    const transaction = view.state.tr;
+    for (const edit of positions.toSorted((a,b) => b.position - a.position)) transaction.insertText(edit.value, edit.position, edit.position + edit.size);
+    view.dispatch(transaction);
+    const before = view.state;
+    try { ledger.normalizeRawBlock(before, 0); throw new Error('原始源范围吞掉并发富文本编辑'); }
+    catch (error) { if (!(error instanceof EditorSourceInvalid)) throw error; }
+    if (view.state !== before || !view.state.doc.textContent.includes('新原')) throw new Error('源范围拒绝丢失当前输入');
+    if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('源范围拒绝后的撤销失败');
+    const prepared = ledger.prepare(view.state, editTime); view.updateState(prepared.state);
+    const pair = ledger.accept(prepared, view.state);
+    equal(pair.markdown_content, guardedSource, '源范围失败污染账本'); record(pair);
+  });
+  checks.push('source-splice-refuses-unmapped-rich-change-atomically');
   return {scope: 'Explicit raw reparse and complete-source reference rebind, actual PM/history/DOM and atomic local pair; no complete component or HTTP/DB save', checks, outputs};
 }

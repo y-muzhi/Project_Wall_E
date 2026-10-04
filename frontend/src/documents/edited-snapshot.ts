@@ -5,7 +5,7 @@ import type { EditorState } from '@milkdown/kit/prose/state';
 import { validateBlockState, validateDocumentReadModel, type BlockMetadata, type BlockState } from './contracts.ts';
 import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
 import { bindIdentityDocument, identityState, rebindSourceContext, sourceRevision, topBlockIds } from './identity.ts';
-import { normalizationProof, type RawSourceNormalization } from './source-normalization.ts';
+import { normalizationProof, normalizeRawSourceBlock, type RawSourceNormalization } from './source-normalization.ts';
 
 export interface EditedSnapshot {
   readonly markdown_content: string;
@@ -74,6 +74,16 @@ export class EditedSnapshotLedger {
       this.versions.set(unit.id, [{node: unit.node, raw: unit.raw, revision: sourceRevision(state.doc)}]);
       this.births.set(unit.id, document.block_state_json.blocks[index]!);
     });
+  }
+
+  normalizeRawBlock(state: EditorState, index: number): RawSourceNormalization {
+    const id = topBlockIds(state.doc)[index];
+    const unit = this.units.find(unit => unit.id === id);
+    const sourceIndex = this.pair.block_state_json.blocks.findIndex(block => block.block_id === id);
+    if (!unit || sourceIndex < 0) fail('原始节点没有当前账本身份/源码');
+    const source = new EditorSource(this.ctx, this.pair.markdown_content);
+    const markdown = source.rewriteRawBlock(sourceIndex, unit.node, state.doc.child(index));
+    return normalizeRawSourceBlock(this.ctx, state, index, markdown);
   }
 
   // Stage the source ledger and the actual parsed editor state together. No
