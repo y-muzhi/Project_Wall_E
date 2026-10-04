@@ -26,6 +26,16 @@ class GuideRepository:
     def running(self) -> list[sqlite3.Row]:
         return self.connection.execute("SELECT id,requirement_id,status,created_at,updated_at FROM guide_runs WHERE status='RUNNING' ORDER BY id").fetchall()
 
+    def get_status(self, identity: int) -> sqlite3.Row | None:
+        return self.connection.execute('SELECT id,requirement_id,action_type,function_type,source_type,source_id,scope_type,scope_ref_json,status,current_step,final_result_json,error_code,error_message,cancel_reason,retry_of_guide_run_id,created_at,started_at,waiting_user_at,ended_at,updated_at FROM guide_runs WHERE id=?', (identity,)).fetchone()
+
+    def status_references(self, run: sqlite3.Row) -> tuple[sqlite3.Row | None, list[sqlite3.Row]]:
+        message = self.connection.execute("SELECT id,requirement_id FROM conversation_messages WHERE guide_run_id=? AND role='ASSISTANT' ORDER BY sequence_no DESC,id DESC LIMIT 1", (run['id'],)).fetchone()
+        batches = self.connection.execute('SELECT id,requirement_id FROM suggestion_batches WHERE guide_run_id=? LIMIT 2', (run['id'],)).fetchall()
+        if message is not None and message['requirement_id'] != run['requirement_id'] or len(batches) > 1 or any(batch['requirement_id'] != run['requirement_id'] for batch in batches):
+            raise ValueError('Run status references must belong to the same requirement')
+        return message, batches
+
     def recover_failed(self, identity: int, code: str, message: str, at: str) -> None:
         require_write_transaction(self.connection)
         for row in self.connection.execute('SELECT started_at FROM llm_uses WHERE guide_run_id=? AND ended_at IS NULL', (identity,)):

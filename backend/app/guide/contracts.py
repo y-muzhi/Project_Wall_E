@@ -3,6 +3,155 @@ from dataclasses import dataclass
 from backend.app.documents.snapshot import _time
 from backend.app.documents.markdown import DocumentInvalid
 from backend.app.shared.validation import object_fields, strict_integer, strict_enum, reject
+from backend.app.shared.validation import MISSING, strict_json_object, selected_text, prefix_text, suffix_text
+from backend.app.infrastructure.idempotency import canonical_input
+from backend.app.infrastructure.resources import FUNCTIONS, ResourceCatalog
+from backend.app.shared.http_errors import ERRORS
+
+GUIDE_STATUSES = ('RUNNING', 'WAITING_USER', 'COMPLETED', 'FAILED', 'CANCELLED')
+GUIDE_STEPS = ('PREPARING', 'CALLING_MODEL', 'VALIDATING', 'PERSISTING', 'WAITING_USER', 'FINISHED')
+STATUS_FIELDS = ('id', 'requirement_id', 'action_type', 'function_type', 'source_type', 'source_id', 'scope', 'status', 'current_step',
+    'final_result', 'suggestion_batch_id', 'latest_assistant_message_id', 'error_code', 'error_message', 'cancel_reason',
+    'retry_of_guide_run_id', 'created_at', 'started_at', 'waiting_user_at', 'ended_at', 'updated_at')
+TASK_ERROR_CODES = frozenset(ERRORS) | {'MODEL_ERROR', 'OUTPUT_INVALID', 'CONTEXT_LIMIT_EXCEEDED', 'INTERRUPTED', 'EXECUTION_TIMEOUT'}
+
+
+def get_guide_run_input(value: object = MISSING) -> int:
+    return strict_integer(value, 'guide_run_id')
+
+
+def _nullable_identity(value, field):
+    return None if value is None else strict_integer(value, field)
+
+
+def _scope(kind: str, reference: object) -> dict:
+    strict_enum(kind, 'scope_type', ('DOCUMENT', 'SECTION', 'BLOCK', 'SELECTION'))
+    if kind == 'DOCUMENT':
+        if reference is not None:
+            raise ValueError('Whole document scope has no reference')
+    else:
+        fields = ('block_id', 'selected_text', 'prefix_text', 'suffix_text') if kind == 'SELECTION' else ('block_id',)
+        object_fields(reference, 'scope_ref', fields, fields)
+        strict_integer(reference['block_id'], 'block_id')
+        if kind == 'SELECTION':
+            selected_text(reference['selected_text']); prefix_text(reference['prefix_text']); suffix_text(reference['suffix_text'])
+    value = {'scope_type': kind, 'scope_ref': reference}
+    canonical_input(value)
+    return value
+
+
+def guide_run_read_model(data: object) -> dict:
+    value = object_fields(data, 'read_model', STATUS_FIELDS, STATUS_FIELDS)
+    for field in ('id', 'requirement_id'):
+        strict_integer(value[field], field)
+    strict_enum(value['action_type'], 'action_type', ('INITIALIZE', 'ASK', 'REVIEW', 'MODIFY'))
+    strict_enum(value['source_type'], 'source_type', ('USER_INSTRUCTION', 'REVIEW_RESULT', 'COMMENT'))
+    if FUNCTIONS.get((value['action_type'], value['source_type']), (None,))[0] != value['function_type']:
+        raise ValueError('Run Function must match its action and source')
+    _nullable_identity(value['source_id'], 'source_id')
+    if (value['source_type'] == 'USER_INSTRUCTION') != (value['source_id'] is None):
+        raise ValueError('Source kind and identity disagree')
+    scope = object_fields(value['scope'], 'scope', ('scope_type', 'scope_ref'), ('scope_type', 'scope_ref'))
+    _scope(scope['scope_type'], scope['scope_ref'])
+    strict_enum(value['status'], 'status', GUIDE_STATUSES)
+    strict_enum(value['current_step'], 'current_step', GUIDE_STEPS)
+    for field in ('suggestion_batch_id', 'latest_assistant_message_id', 'retry_of_guide_run_id'):
+        _nullable_identity(value[field], field)
+    if value['retry_of_guide_run_id'] == value['id']:
+        raise ValueError('Retry cannot refer to itself')
+    if (value['status'] in ('COMPLETED', 'FAILED', 'CANCELLED')) != (value['ended_at'] is not None):
+        raise ValueError('Run terminal time is inconsistent')
+    created, updated = _time(value['created_at']), _time(value['updated_at'])
+    if created > updated:
+        raise ValueError('Run activity time precedes creation')
+    for field in ('started_at', 'waiting_user_at', 'ended_at'):
+        if value[field] is not None and not created <= _time(value[field]) <= updated:
+            raise ValueError('Run event time is outside its activity interval')
+    if value['status'] == 'FAILED':
+        strict_enum(value['error_code'], 'error_code', TASK_ERROR_CODES)
+        if type(value['error_message']) is not str or not value['error_message']:
+            raise ValueError('Failed runs require a program-produced safe message')
+    elif value['error_code'] is not None or value['error_message'] is not None:
+        raise ValueError('Only failed runs expose errors')
+    if value['status'] == 'CANCELLED':
+        if type(value['cancel_reason']) is not str or not value['cancel_reason']:
+            raise ValueError('Cancelled run requires its reason')
+    elif value['cancel_reason'] is not None:
+        raise ValueError('Only cancelled runs expose cancellation reason')
+    if value['status'] == 'COMPLETED':
+        final = object_fields(value['final_result'], 'final_result', ('summary', 'assistant_message_id', 'current_document_version', 'suggestion_batch_id'), ('summary', 'assistant_message_id', 'current_document_version', 'suggestion_batch_id'))
+        if type(final['summary']) is not str or not final['summary']:
+            raise ValueError('Completed result needs a safe readable summary')
+        for field in ('assistant_message_id', 'current_document_version', 'suggestion_batch_id'):
+            _nullable_identity(final[field], field)
+        if final['suggestion_batch_id'] != value['suggestion_batch_id']:
+            raise ValueError('Completed batch references disagree')
+    elif value['final_result'] is not None:
+        raise ValueError('Only completed runs expose a final result')
+    return json_detached(value)
+
+
+def json_detached(value: dict) -> dict:
+    import json
+    return json.loads(canonical_input(value))
+
+
+def get_guide_run_result(connection, row, message, batches, *, catalog: ResourceCatalog | None = None) -> dict:
+    value = {field: row[field] for field in STATUS_FIELDS if field not in ('scope', 'final_result', 'suggestion_batch_id', 'latest_assistant_message_id')}
+    reference = None if row['scope_ref_json'] is None else strict_json_object(row['scope_ref_json'], 'scope_ref_json')
+    value['scope'] = _scope(row['scope_type'], reference)
+    value['suggestion_batch_id'] = None if not batches else batches[0]['id']
+    if batches and row['action_type'] != 'MODIFY':
+        raise ValueError('Only a MODIFY run can own a suggestion batch')
+    value['latest_assistant_message_id'] = None if message is None else message['id']
+    value['final_result'] = None
+    if row['status'] == 'COMPLETED':
+        # D-005 C07 business result, never raw model output or a Prompt snapshot.
+        effects = strict_json_object(row['final_result_json'], 'final_result_json')
+        fields = ('guide_run_id', 'status', 'assistant_message_id', 'current_document', 'suggestion_batch_id')
+        object_fields(effects, 'final_result_json', (*fields, 'review_result'), fields)
+        if 'review_result' in effects:
+            if row['action_type'] != 'REVIEW':
+                raise ValueError('Only a REVIEW run can retain a review_result')
+            if effects['review_result'] is not None:
+                resources = catalog if catalog is not None else ResourceCatalog()
+                resources.freeze('REVIEW', 'USER_INSTRUCTION').validate_review_result(effects['review_result'])
+        strict_integer(effects['guide_run_id'], 'guide_run_id')
+        _nullable_identity(effects['suggestion_batch_id'], 'suggestion_batch_id')
+        if effects['guide_run_id'] != row['id'] or effects['status'] != 'COMPLETED' or effects['suggestion_batch_id'] != value['suggestion_batch_id']:
+            raise ValueError('Completed effect record contradicts its actual run')
+        assistant_id = _nullable_identity(effects['assistant_message_id'], 'assistant_message_id')
+        if assistant_id is not None:
+            assistant = connection.execute("SELECT 1 FROM conversation_messages WHERE id=? AND requirement_id=? AND guide_run_id=? AND role='ASSISTANT'", (assistant_id, row['requirement_id'], row['id'])).fetchone()
+            if assistant is None:
+                raise ValueError('Completed assistant reference is not owned by this run')
+        version = None
+        if effects['current_document'] is not None:
+            if row['action_type'] != 'INITIALIZE':
+                raise ValueError('Only INITIALIZE can write CURRENT during AI result submission')
+            current = object_fields(effects['current_document'], 'current_document', ('id', 'content_version'), ('id', 'content_version'))
+            strict_integer(current['id'], 'current_document.id'); version = strict_integer(current['content_version'], 'current_document.content_version')
+            actual = connection.execute("SELECT id,content_version FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'", (row['requirement_id'],)).fetchall()
+            if len(actual) != 1 or actual[0]['id'] != current['id'] or actual[0]['content_version'] < version:
+                raise ValueError('Completed document effect does not belong to this actual CURRENT history')
+        summaries = {'INITIALIZE': '初始化任务已完成', 'ASK': '回答任务已完成', 'REVIEW': '检查任务已完成', 'MODIFY': '修改任务已完成'}
+        summary = '修改建议已生成' if row['action_type'] == 'MODIFY' and batches else summaries[row['action_type']]
+        value['final_result'] = {'summary': summary, 'assistant_message_id': assistant_id, 'current_document_version': version, 'suggestion_batch_id': value['suggestion_batch_id']}
+    if connection.execute('SELECT 1 FROM requirements WHERE id=?', (row['requirement_id'],)).fetchone() is None:
+        raise ValueError('Run requirement is missing')
+    if row['source_type'] != 'USER_INSTRUCTION':
+        table = 'guide_runs' if row['source_type'] == 'REVIEW_RESULT' else 'comments'
+        fields = 'requirement_id,action_type,status' if table == 'guide_runs' else 'requirement_id'
+        source = connection.execute('SELECT '+fields+' FROM '+table+' WHERE id=?', (row['source_id'],)).fetchone()
+        if source is None or source['requirement_id'] != row['requirement_id']:
+            raise ValueError('Run source belongs to another requirement')
+        if table == 'guide_runs' and (source['action_type'] != 'REVIEW' or source['status'] != 'COMPLETED'):
+            raise ValueError('Review source must be a completed REVIEW run')
+    if row['retry_of_guide_run_id'] is not None:
+        previous = connection.execute('SELECT requirement_id,status,created_at FROM guide_runs WHERE id=?', (row['retry_of_guide_run_id'],)).fetchone()
+        if previous is None or previous['requirement_id'] != row['requirement_id'] or previous['status'] != 'FAILED' or previous['created_at'] > row['created_at']:
+            raise ValueError('Retry source is not a prior failed run of this requirement')
+    return guide_run_read_model(value)
 
 
 @dataclass(frozen=True)
