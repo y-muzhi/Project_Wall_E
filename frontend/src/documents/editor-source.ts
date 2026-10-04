@@ -207,7 +207,7 @@ export class EditorSource {
       const lines = sourceLines(value);
       const replacement = lines.length ? lines.map((line, lineIndex) =>
         (lineIndex ? range.continuation_prefix : range.first_prefix) + line).join('') :
-        range.first_prefix + (/(?:\r\n|\r|\n)$/.exec(raw.slice(range.start_utf16, range.end_utf16))?.[0] ?? '');
+        range.path.length ? range.first_prefix + (/(?:\r\n|\r|\n)$/.exec(raw.slice(range.start_utf16, range.end_utf16))?.[0] ?? '') : '';
       raw = raw.slice(0, range.start_utf16) + replacement + raw.slice(range.end_utf16);
     }
     return raw;

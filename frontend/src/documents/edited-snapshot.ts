@@ -4,7 +4,7 @@ import { Fragment, type Node } from '@milkdown/kit/prose/model';
 import type { EditorState } from '@milkdown/kit/prose/state';
 import { validateBlockState, validateDocumentReadModel, type BlockMetadata, type BlockState } from './contracts.ts';
 import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
-import { bindIdentityDocument, identityState, rebindSourceContext, sourceRevision, topBlockIds } from './identity.ts';
+import { bindIdentityDocument, hasRawSource, identityState, IdentityInvalid, rebindSourceContext, replaceParsedSourceDocument, sourceRevision, topBlockIds } from './identity.ts';
 import { normalizationProof, normalizeRawSourceBlock, type RawSourceNormalization } from './source-normalization.ts';
 
 export interface EditedSnapshot {
@@ -86,15 +86,84 @@ export class EditedSnapshotLedger {
     return normalizeRawSourceBlock(this.ctx, state, index, markdown);
   }
 
-  // Stage the source ledger and the actual parsed editor state together. No
-  // cache, birth fact or timestamp is published until the caller accepts the
-  // exact displayed state. This also rebinds references in unedited blocks.
-  prepare(state: EditorState, at: string, normalization?: RawSourceNormalization): PreparedEditorSnapshot {
+  // A raw-source edit may legitimately swallow a later block, or split into
+  // several blocks. Reparse the complete authored source and map intersecting
+  // old source spans in document order. First split/merge ownership follows
+  // the approved rule; later pieces allocate new IDs above the live high water.
+  prepareRawDocument(state: EditorState, index: number, at: string): PreparedEditorSnapshot {
+    timestamp(at);
+    if (at < this.lastTime) fail('编辑时间不能倒退');
+    const identity = identityState(state), stateIds = topBlockIds(state.doc);
+    const initial = new EditorSource(this.ctx, this.pair.markdown_content);
+    let logical = 0, selected = -1;
+    state.doc.forEach((node, _position, childIndex) => {
+      if (node.type.name === 'paragraph' && !node.content.size) return;
+      const unit = this.units[logical];
+      if (!unit || unit.id !== stateIds[childIndex] || (childIndex !== index && !unit.node.eq(node))) fail('完整原始源编辑没有同次节点身份映射');
+      if (childIndex === index) selected = logical;
+      logical++;
+    });
+    if (logical !== this.units.length || selected < 0 || identity.next_block_id < this.pair.block_state_json.next_block_id) fail('完整原始源编辑缺少当前账本基线');
+    if (!hasRawSource(state.doc.child(index))) fail('完整原始源编辑需要实际原始节点');
+    const original = initial.blocks[selected]!;
+    const raw = initial.rewriteRawBlock(selected, this.units[selected]!.node, state.doc.child(index));
+    if (raw === original.markdown) return this.prepare(state, at);
+    const markdown = this.pair.markdown_content.slice(0, original.start_utf16) + raw + this.pair.markdown_content.slice(original.end_utf16);
+    const source = new EditorSource(this.ctx, markdown), delta = raw.length - original.markdown.length;
+    const owners = initial.blocks.map((block, blockIndex) => ({id: this.units[blockIndex]!.id,
+      start: block.start_utf16 + (blockIndex > selected ? delta : 0),
+      end: blockIndex === selected ? block.start_utf16 + raw.length : block.end_utf16 + (blockIndex > selected ? delta : 0)}));
+    let ownerIndex = 0, next = identity.next_block_id;
+    const used = new Set<number>();
+    const ids = source.blocks.map(block => {
+      while (ownerIndex < owners.length && owners[ownerIndex]!.end <= block.start_utf16) ownerIndex++;
+      const owner = owners[ownerIndex];
+      let id = owner && owner.start < block.end_utf16 ? owner.id : undefined;
+      if (id === undefined || used.has(id)) {
+        if (next >= Number.MAX_SAFE_INTEGER) throw new IdentityInvalid('区块ID容量耗尽', true);
+        id = next++;
+      }
+      used.add(id);
+      return id;
+    });
+    const prior = new Map(this.pair.block_state_json.blocks.map(block => [block.block_id, block]));
+    const oldRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
+    const origin = {last_modified_by_type: 'USER' as const, last_modified_source_type: 'MANUAL_EDIT' as const,
+      last_modified_source_id: this.sessionId, last_modified_at: at};
+    const blocks = source.blocks.map((block, blockIndex) => {
+      const id = ids[blockIndex]!, old = prior.get(id);
+      const changed = !old || oldRaw.get(id) !== block.markdown || JSON.stringify(old.section_path) !== JSON.stringify(block.section_path);
+      return {block_id: id, ...(old ?? {created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
+        created_source_id: this.sessionId, created_at: at}), ...(changed ? origin : {}),
+        block_type: block.block_type, section_path: block.section_path};
+    });
+    const validated = validateBlockState(this.ctx, markdown, {schema_version: 1, next_block_id: next, blocks});
+    const rebound = replaceParsedSourceDocument(state, source.document, ids, next);
+    const staged = this.fork();
+    staged.units = source.blocks.map((block, blockIndex) => ({id: ids[blockIndex]!, node: rebound.doc.child(blockIndex), raw: block.markdown,
+      gap: source.parts[blockIndex * 2]!, actualGap: source.parts[blockIndex * 2]!, verbatim: true}));
+    staged.trailer = source.parts.at(-1)!;
+    staged.pair = Object.freeze({markdown_content: markdown, block_state_json: validated.state});
+    staged.lastTime = at;
+    staged.generation++;
+    staged.units.forEach((unit, blockIndex) => { if (!staged.births.has(unit.id)) staged.births.set(unit.id, validated.state.blocks[blockIndex]!); });
+    return this.preparation(staged, rebound, staged.pair);
+  }
+
+  private fork(): EditedSnapshotLedger {
     const staged = Object.create(EditedSnapshotLedger.prototype) as EditedSnapshotLedger;
     Object.assign(staged, this, {
       versions: new Map([...this.versions].map(([id, versions]) => [id, [...versions]])),
       births: new Map(this.births), units: this.units.map(unit => ({...unit})), layouts: [...this.layouts],
     });
+    return staged;
+  }
+
+  // Stage the source ledger and the actual parsed editor state together. No
+  // cache, birth fact or timestamp is published until the caller accepts the
+  // exact displayed state. This also rebinds references in unedited blocks.
+  prepare(state: EditorState, at: string, normalization?: RawSourceNormalization): PreparedEditorSnapshot {
+    const staged = this.fork();
     const pair = staged.capture(state, at, normalization);
     const source = new EditorSource(this.ctx, pair.markdown_content);
     const parsed = bindIdentityDocument(source.document, pair.block_state_json.blocks.map(block => block.block_id), pair.block_state_json.next_block_id);
@@ -103,14 +172,19 @@ export class EditedSnapshotLedger {
     state.doc.forEach(node => children.push(node.type.name === 'paragraph' && !node.content.size ? node : parsed.child(index++)));
     if (index !== source.blocks.length) fail('完整源码重绑定没有逐块映射');
     const rebound = rebindSourceContext(state, state.doc.copy(Fragment.fromArray(children)));
+    return this.preparation(staged, rebound, pair);
+  }
+
+  private preparation(staged: EditedSnapshotLedger, rebound: EditorState, pair: EditedSnapshot): PreparedEditorSnapshot {
     const actual = new Map<number, Node>();
     rebound.doc.forEach(node => { const id = Number(node.attrs.walle_block_id); if (id > 0) actual.set(id, node); });
     staged.units = staged.units.map(unit => ({...unit, node: actual.get(unit.id)!}));
     staged.units.forEach(unit => {
-      const versions = staged.versions.get(unit.id)!;
+      const versions = staged.versions.get(unit.id) ?? [];
       if (!versions.some(version => version.node.eq(unit.node) && version.raw === unit.raw)) {
         versions.push({node: unit.node, raw: unit.raw, revision: sourceRevision(rebound.doc)});
       }
+      staged.versions.set(unit.id, versions);
     });
     if (!staged.layouts.some(layout => layout.document.eq(rebound.doc) && layout.markdown === pair.markdown_content)) {
       staged.layouts.push({document: rebound.doc, markdown: pair.markdown_content,

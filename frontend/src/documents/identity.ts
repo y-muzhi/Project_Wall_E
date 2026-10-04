@@ -244,6 +244,35 @@ export function rebindSourceContext(state: EditorState, document: Node): EditorS
   return rebound.reconfigure({plugins: state.plugins});
 }
 
+// IDs are supplied by explicit source-span ownership, never text matching.
+// The complete parser may merge/split blocks across the edited raw boundary.
+export function replaceParsedSourceDocument(state: EditorState, parsed: Node, ids: readonly number[], next: number): EditorState {
+  const current = identityState(state);
+  validateInitial(ids, next);
+  const allocated = ids.filter(id => !current.known_ids.has(id));
+  if (parsed.type.schema !== state.schema || next < current.next_block_id || next - current.next_block_id !== allocated.length ||
+      allocated.some((id, index) => id !== current.next_block_id + index)) throw new IdentityInvalid('完整源身份分配缺少连续高水位证明');
+  const bound = bindIdentityDocument(parsed, ids, next);
+  if (!(SOURCE_REVISION in state.doc.attrs)) throw new IdentityInvalid('源码历史属性未安装');
+  const revision = Math.max(sourceCounters.get(state.schema) ?? 1, sourceRevision(state.doc) + 1);
+  if (revision > MAX_SAFE) throw new IdentityInvalid('源码历史容量耗尽', true);
+  const document = state.doc.type.create({...state.doc.attrs, [SOURCE_REVISION]: revision}, bound.content, state.doc.marks);
+  const known = new Set([...current.known_ids, ...allocated]);
+  let applied = false;
+  const adapter = new Plugin({appendTransaction: (_transactions, _before, after) => {
+    if (after.doc.eq(document)) return;
+    if (applied) throw new IdentityInvalid('完整源解析与编辑器插件解释不一致');
+    applied = true;
+    return after.tr.replaceWith(0, after.doc.content.size, document.content).setDocAttribute(SOURCE_REVISION, revision)
+      .setMeta(key, Object.freeze({next_block_id: next, known_ids: known}));
+  }});
+  const staged = state.reconfigure({plugins: [...state.plugins, adapter]});
+  const after = staged.applyTransaction(staged.tr).state;
+  if (!after.doc.eq(document) || identityState(after).next_block_id !== next) throw new IdentityInvalid('完整源解析状态不一致');
+  sourceCounters.set(state.schema, revision + 1);
+  return after.reconfigure({plugins: state.plugins});
+}
+
 export function replaceParsedRawBlock(state: EditorState, index: number, nodes: readonly Node[]): Transaction {
   if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new IdentityInvalid('原始节点位置不合法');
   const original = state.doc.child(index), current = identityState(state);

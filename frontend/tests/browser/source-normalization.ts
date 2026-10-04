@@ -479,5 +479,118 @@ export async function verifySourceNormalization(load: (markdown: string, ids: re
     equal(pair.markdown_content, guardedSource, '源范围失败污染账本'); record(pair);
   });
   checks.push('source-splice-refuses-unmapped-rich-change-atomically');
+
+  function globalRewrite(value: string, topIndex = 0) {
+    return get().editor.action(ctx => {
+      const view = ctx.get(editorViewCtx);
+      let position = 1;
+      for (let child = 0; child < topIndex; child++) position += view.state.doc.child(child).nodeSize;
+      const node = view.state.doc.child(topIndex);
+      view.dispatch(view.state.tr.insertText(value, position, position + node.content.size));
+      const before = view.state, prepared = ledger!.prepareRawDocument(before, topIndex, editTime);
+      if (view.state !== before) throw new Error('完整源预检提前改变视图');
+      view.updateState(prepared.state); return ledger!.accept(prepared, view.state);
+    });
+  }
+  function historyPair(direction: 'undo' | 'redo') {
+    return get().editor.action(ctx => {
+      const view = ctx.get(editorViewCtx), command = direction === 'undo' ? undo : redo;
+      if (!command(view.state, tr => view.dispatch(tr))) throw new Error('完整源实际历史没有执行');
+      const prepared = ledger!.prepare(view.state, editTime); view.updateState(prepared.state);
+      return ledger!.accept(prepared, view.state);
+    });
+  }
+
+  const globalInitial = '<div>起</div>\r\n\r\n# 后继\r\n\r\n**尾**😀\r\n';
+  ledger = await setup(globalInitial, [10,20,21], 30);
+  const mergedSource = '<script>\r\n未闭合\r\n\r\n# 后继\r\n\r\n**尾**😀\r\n';
+  const merged = globalRewrite('<script>\r\n未闭合\r\n');
+  equal(merged.markdown_content, mergedSource, '完整源未闭合HTML丢失后继源码');
+  equal(merged.block_state_json.blocks.map(block => [block.block_id,block.block_type]), [[10,'html_block']], '完整源合并没有保留文档顺序首ID');
+  equal(merged.block_state_json.next_block_id, 30, '合并退回/分配高水位'); record(merged);
+  const restoredMerge = historyPair('undo');
+  equal(restoredMerge.markdown_content, globalInitial, '跨块合并撤销没有恢复完整源');
+  equal(restoredMerge.block_state_json.blocks.map(block => block.block_id), [10,20,21], '实际历史未恢复删除身份'); record(restoredMerge);
+  const replayedMerge = historyPair('redo'); equal(replayedMerge.markdown_content, mergedSource, '合并重做原文'); record(replayedMerge);
+  checks.push('global-unclosed-html-merges-with-source-ownership-and-history');
+
+  get().editor.action(ctx => { const view = ctx.get(editorViewCtx); view.dispatch(closeHistory(view.state.tr)); });
+  const closedSource = '<script>\r\n未闭合\r\n</script>\r\n\r\n# 后继\r\n\r\n**尾**😀\r\n';
+  const split = globalRewrite(closedSource);
+  equal(split.markdown_content, closedSource, '关闭HTML后完整源改变');
+  equal(split.block_state_json.blocks.map(block => block.block_id), [10,30,31], '重新分块错误猜回已删除旧ID');
+  equal(split.block_state_json.next_block_id, 32, '重新分块高水位');
+  equal(split.block_state_json.blocks.map(block => block.created_by_type), ['SYSTEM','USER','USER'], '重新分块创建事实');
+  equal(split.block_state_json.blocks[1]!.created_source_id, 90, '重新分块来源不是实际输入草稿'); record(split);
+  const restoredSplit = historyPair('undo');
+  equal(restoredSplit.markdown_content, mergedSource, '分块撤销原源');
+  equal(restoredSplit.block_state_json.blocks.map(block => block.block_id), [10], '分块撤销身份');
+  equal(restoredSplit.block_state_json.next_block_id, 32, '分块撤销回退高水位'); record(restoredSplit);
+  const replayedSplit = historyPair('redo');
+  equal(replayedSplit.markdown_content, closedSource, '分块重做原源');
+  equal(replayedSplit.block_state_json.blocks.map(block => block.block_id), [10,30,31], '分块重做重分配ID'); record(replayedSplit);
+  checks.push('global-close-html-splits-new-identities-with-monotonic-history');
+
+  ledger = await setup('<div>起</div>\n\n尾\n', [10,20], 30);
+  const joinedParagraph = globalRewrite('甲');
+  equal(joinedParagraph.markdown_content, '甲\n尾\n', '无尾行原始编辑重组源码');
+  equal(joinedParagraph.block_state_json.blocks.map(block => [block.block_id,block.block_type]), [[10,'paragraph']], '跨界段落合并身份'); record(joinedParagraph);
+  const restoredParagraph = historyPair('undo'); equal(restoredParagraph.markdown_content, '<div>起</div>\n\n尾\n', '跨界段落撤销源'); record(restoredParagraph);
+  const replayedParagraph = historyPair('redo'); equal(replayedParagraph.markdown_content, '甲\n尾\n', '跨界段落重做源'); record(replayedParagraph);
+  checks.push('global-source-without-ending-merges-real-paragraphs');
+
+  const codeInitial = '# 前\r\n\r\n<div>起</div>\r\n\r\n尾😀\r\n';
+  ledger = await setup(codeInitial, [5,10,20], 30);
+  const unclosedCode = globalRewrite('```python\r\n未闭合\r\n', 1);
+  equal(unclosedCode.markdown_content, '# 前\r\n\r\n```python\r\n未闭合\r\n\r\n尾😀\r\n', '非首原始节点完整源');
+  equal(unclosedCode.block_state_json.blocks.map(block => [block.block_id,block.block_type]), [[5,'heading'],[10,'code_block']], '未闭合代码身份/类型');
+  get().editor.action(ctx => {
+    equal(ctx.get(editorViewCtx).state.doc.child(1).type.name, 'code_block', '完整源未建立真实代码节点');
+    equal(new EditorSource(ctx, unclosedCode.markdown_content).blocks[1]!.plain_text, '未闭合\n\n尾😀\n', '完整源代码投影丢失后继');
+  }); record(unclosedCode);
+  const restoredCode = historyPair('undo'); equal(restoredCode.markdown_content, codeInitial, '完整源代码撤销'); record(restoredCode);
+  const replayedCode = historyPair('redo'); equal(replayedCode.markdown_content, unclosedCode.markdown_content, '完整源代码重做'); record(replayedCode);
+  checks.push('global-nonfirst-code-preserves-prefix-and-absorbed-source');
+
+  ledger = await setup('\r\n<div>起</div>\r\n\r\n# 后继\r\n', [10,20], 30);
+  const deletedRaw = globalRewrite('\r\n \r\n');
+  equal(deletedRaw.markdown_content, '\r\n\r\n \r\n\r\n# 后继\r\n', '原始节点删除空白顺序');
+  equal(deletedRaw.block_state_json.blocks.map(block => block.block_id), [20], '原始空白错误抢占后继ID'); record(deletedRaw);
+  const restoredDeleted = historyPair('undo'); equal(restoredDeleted.block_state_json.blocks.map(block => block.block_id), [10,20], '删除源撤销身份'); record(restoredDeleted);
+  const replayedDeleted = historyPair('redo'); equal(replayedDeleted.markdown_content, deletedRaw.markdown_content, '删除源重做空白'); record(replayedDeleted);
+  checks.push('global-whitespace-deletion-keeps-successor-identity');
+
+  ledger = await setup('<div>起</div>\r\n', [10], 20);
+  const emptyGlobal = globalRewrite('\r\n \r\n');
+  equal(emptyGlobal.markdown_content, '\r\n \r\n', '完整源空文档丢失空白');
+  equal(emptyGlobal.block_state_json.blocks, [], '完整源空文档伪造业务块');
+  get().editor.action(ctx => equal(topBlockIds(ctx.get(editorViewCtx).state.doc), [null], '完整源空caret分配ID')); record(emptyGlobal);
+  const restoredEmpty = historyPair('undo'); equal(restoredEmpty.markdown_content, '<div>起</div>\r\n', '完整源空文档撤销'); record(restoredEmpty);
+  const replayedEmpty = historyPair('redo'); equal(replayedEmpty.markdown_content, emptyGlobal.markdown_content, '完整源空文档重做'); record(replayedEmpty);
+  checks.push('global-empty-source-has-real-caret-without-business-block');
+
+  ledger = await setup('<div>起</div>\r\n', [10], 20);
+  const clearedGlobal = globalRewrite('');
+  equal(clearedGlobal.markdown_content, '', '清空顶层原始文本错误保留已删除尾行');
+  equal(clearedGlobal.block_state_json.blocks, [], '完全清空原始源仍有业务块'); record(clearedGlobal);
+  const restoredCleared = historyPair('undo'); equal(restoredCleared.markdown_content, '<div>起</div>\r\n', '完全清空原始源撤销'); record(restoredCleared);
+  const replayedCleared = historyPair('redo'); equal(replayedCleared.markdown_content, '', '完全清空原始源重做'); record(replayedCleared);
+  checks.push('global-cleared-top-raw-removes-its-source-ending');
+
+  ledger = await setup('<div>起</div>\n', [10], Number.MAX_SAFE_INTEGER - 1);
+  get().editor.action(ctx => {
+    const view = ctx.get(editorViewCtx);
+    view.dispatch(view.state.tr.insertText('一\n\n二\n\n三\n', 1, 1 + view.state.doc.firstChild!.content.size));
+    const before = view.state, oldIdentity = identityState(before);
+    try { ledger.prepareRawDocument(before, 0, editTime); throw new Error('完整源容量耗尽仍分配'); }
+    catch (error) { if (!(error instanceof IdentityInvalid) || error.code !== 'CAPACITY_EXCEEDED') throw error; }
+    if (view.state !== before) throw new Error('完整源容量失败改变视图');
+    equal(identityState(view.state).next_block_id, oldIdentity.next_block_id, '完整源容量失败改变高水位');
+    equal([...identityState(view.state).known_ids], [...oldIdentity.known_ids], '完整源容量失败改变已知身份');
+    if (!undo(view.state, tr => view.dispatch(tr))) throw new Error('完整源容量失败撤销');
+    const prepared = ledger.prepare(view.state, editTime); view.updateState(prepared.state);
+    record(ledger.accept(prepared, view.state));
+  });
+  checks.push('global-capacity-failure-does-not-publish-source-or-identity');
   return {scope: 'Explicit raw reparse and complete-source reference rebind, actual PM/history/DOM and atomic local pair; no complete component or HTTP/DB save', checks, outputs};
 }

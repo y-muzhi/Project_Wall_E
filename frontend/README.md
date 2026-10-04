@@ -58,3 +58,5 @@ normalizeRawSourceBlock现接受包含原始子节点的实际引用/列表，�
 完整源引用上下文使用账本prepare(state, at, normalization?)，它只生成独立预检与重绑定实际EditorState；调用者view.updateState(prepared.state)后以accept(prepared, view.state)发布对应pair。跨账本、伪造、状态错配、过期和重复accept均拒绝。真正appendTransaction使引用派生变化与定义编辑共同undo/redo；原有空caret保持，未编辑引用源码不改写。新增9检查/21对，专项32项/63对、完整231对通过，editor-browser-2026-10-04T03-23-11-919Z.json的46输入hash一致且会话关闭；28前端/完整TS通过。常规容器序列化仍可能把内部兄弟引用改写为旧地址inline链接，下一步须按实际源位置保留这些写法；跨块边界及完整产品组件/HTTP/DB保存仍开放。
 
 已有账本的纯原始文本事务优先使用normalizeRawBlock(state, topIndex)，它经实际AST/节点路径验证，在原源范围中保留兄弟引用、容器和换行，再prepare/accept同步上下文。相比对整个父块常规序列化，它保持同容器引用的后续绑定语义；无映射的富文本同时变化会拒绝且不改视图/账本。新增11检查/29对，专项43项/92对、完整260对通过，editor-browser-2026-10-04T03-35-40-406Z.json的46输入hash一致、会话关闭；28前端/TS、冻结72通过。跨顶层边界、混合编辑及完整RequirementEditor/HTTP/DB保存仍待实现。
+
+纯原始文本编辑跨顶层边界使用prepareRawDocument(state, topIndex, at)，直接预检完整源与实际新树，再view.updateState/accept。显式源区间归属决定拆/合身份；HTML吸收后继源码、闭合后再拆分分配新ID，真实undo可恢复旧ID而next不回退。新8检查/22对，专项51项/114对、完整282对通过，editor-browser-2026-10-04T03-56-11-943Z.json的46输入hash不变并关闭会话；28前端/完整TS通过。混合编辑、重建整树的精确光标、完整RequirementEditor及真实来源/HTTP/DB保存尚未接入。
