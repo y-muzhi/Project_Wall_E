@@ -4,14 +4,15 @@ import { Fragment, type Node } from '@milkdown/kit/prose/model';
 import type { EditorState } from '@milkdown/kit/prose/state';
 import { validateBlockState, validateDocumentReadModel, type BlockMetadata, type BlockState } from './contracts.ts';
 import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
-import { bindIdentityDocument, identityState, topBlockIds } from './identity.ts';
+import { bindIdentityDocument, identityState, sourceRevision, topBlockIds } from './identity.ts';
+import { normalizationProof, type RawSourceNormalization } from './source-normalization.ts';
 
 export interface EditedSnapshot {
   readonly markdown_content: string;
   readonly block_state_json: BlockState;
 }
 interface Unit { id: number; node: Node; raw: string; gap: string; actualGap: string; verbatim: boolean; }
-interface Version { node: Node; raw: string; }
+interface Version { node: Node; raw: string; revision: number; }
 interface Layout { document: Node; markdown: string; units: readonly Unit[]; trailer: string; }
 
 function fail(message: string): never { throw new EditorSourceInvalid(message); }
@@ -67,17 +68,31 @@ export class EditedSnapshotLedger {
     this.layouts = [{document: state.doc, markdown: document.markdown_content,
       units: this.units.map(unit => ({...unit})), trailer: this.trailer}];
     this.units.forEach((unit, index) => {
-      this.versions.set(unit.id, [{node: unit.node, raw: unit.raw}]);
+      this.versions.set(unit.id, [{node: unit.node, raw: unit.raw, revision: sourceRevision(state.doc)}]);
       this.births.set(unit.id, document.block_state_json.blocks[index]!);
     });
   }
 
-  capture(state: EditorState, at: string): EditedSnapshot {
+  capture(state: EditorState, at: string, normalization?: RawSourceNormalization): EditedSnapshot {
     timestamp(at);
     if (at < this.lastTime) fail('编辑时间不能倒退');
     const identity = identityState(state);
     if (identity.next_block_id < this.pair.block_state_json.next_block_id) fail('编辑高水位不能倒退');
     const ids = topBlockIds(state.doc);
+    const revision = sourceRevision(state.doc);
+    const normalized = normalization ? normalizationProof(normalization, state) : undefined;
+    const sourceOverrides = new Map<number, {raw: string; gap: string; index: number}>();
+    if (normalized) {
+      const beforeNext = identityState(normalized.before).next_block_id;
+      const sourceIds = normalized.source.blocks.map((_block, index) => ids[normalized.index + index]!);
+      if (sourceIds.some((id, index) => id === null || !identity.known_ids.has(id) ||
+          (index === 0 ? id !== normalized.original_id : id !== beforeNext + index - 1))) fail('重新分块没有实际身份映射');
+      const expected = bindIdentityDocument(normalized.source.document, sourceIds, identity.next_block_id);
+      normalized.source.blocks.forEach((block, index) => {
+        if (!expected.child(index).eq(state.doc.child(normalized.index + index))) fail('重新分块改变实际解析内容');
+        sourceOverrides.set(sourceIds[index]!, {raw: block.markdown, gap: normalized.source.parts[index * 2]!, index});
+      });
+    }
     const targets: Unit[] = [];
     const used = new Set<number>();
     state.doc.forEach((node, _pos, index) => {
@@ -87,10 +102,11 @@ export class EditedSnapshotLedger {
       if (id == null || id >= identity.next_block_id || !identity.known_ids.has(id) ||
           (!this.births.has(id) && id < this.initialNext) || used.has(id)) fail('区块没有同会话身份证明');
       used.add(id);
-      const previous = this.versions.get(id)?.findLast(version => version.node.eq(node));
-      const raw = previous?.raw ?? (node.type.name === 'walle_raw_source' ? node.textContent :
+      const override = sourceOverrides.get(id);
+      const previous = this.versions.get(id)?.findLast(version => version.revision <= revision && version.node.eq(node));
+      const raw = override?.raw ?? previous?.raw ?? (node.type.name === 'walle_raw_source' ? node.textContent :
         this.ctx.get(serializerCtx)(state.doc.copy(Fragment.from(node))));
-      targets.push({id, node, raw, gap: '', actualGap: '', verbatim: previous !== undefined});
+      targets.push({id, node, raw, gap: '', actualGap: '', verbatim: override !== undefined || previous !== undefined});
     });
 
     // Preserve authored gaps. A removed block transfers its gap to the next
@@ -109,6 +125,7 @@ export class EditedSnapshotLedger {
     let pending = '';
     for (const old of this.units) {
       pending += old.gap;
+      if (normalized?.source.blocks.length === 0 && old.id === normalized.original_id) pending += normalized.source.markdown;
       const recipient = surviving.has(old.id) ? old.id : emptySuccessors.get(old.id);
       if (recipient !== undefined && !gaps.has(recipient)) { gaps.set(recipient, pending); pending = ''; }
     }
@@ -116,13 +133,26 @@ export class EditedSnapshotLedger {
     let runStart = 0;
     targets.forEach((unit, index) => {
       if (!gaps.has(unit.id)) return;
-      targets[runStart]!.gap = gaps.get(unit.id)!;
+      let recipient = runStart;
+      while (recipient < index && (sourceOverrides.get(targets[recipient]!.id)?.index ?? 0) > 0) recipient++;
+      targets[recipient]!.gap = gaps.get(unit.id)!;
       runStart = index + 1;
     });
+    if (normalized) {
+      targets.forEach(unit => { unit.gap += sourceOverrides.get(unit.id)?.gap ?? ''; });
+      const trailing = normalized.source.blocks.length ? normalized.source.parts.at(-1)! :
+        this.units.some(unit => unit.id === normalized.original_id) ? '' : normalized.source.markdown;
+      if (trailing) {
+        const followingIds = new Set(ids.slice(normalized.index + normalized.source.blocks.length).filter(id => id !== null));
+        const following = targets.find(unit => followingIds.has(unit.id));
+        if (following) following.gap = trailing + following.gap;
+        else trailer = trailing + trailer;
+      }
+    }
     // Same-session history can restore a complete prior node layout, including
     // its authored gaps. This does not assign identities: the identity plugin
     // has already proved every ID above. Content alone never selects an ID.
-    const restoredLayout = this.layouts.findLast(layout => layout.document.eq(state.doc));
+    const restoredLayout = normalized ? undefined : this.layouts.findLast(layout => layout.document.eq(state.doc));
     if (restoredLayout) {
       const restored = new Map(restoredLayout.units.map(unit => [unit.id, unit]));
       for (const unit of targets) {
@@ -144,8 +174,10 @@ export class EditedSnapshotLedger {
       const previous = targets[index - 1];
       const unchangedBoundary = previous && adjacent.has(`${previous.id}:${unit.id}`) &&
         previous.raw === oldRaw.get(previous.id) && unit.raw === oldRaw.get(unit.id);
+      const normalizedBoundary = previous && sourceOverrides.has(previous.id) && sourceOverrides.has(unit.id) &&
+        sourceOverrides.get(previous.id)!.index + 1 === sourceOverrides.get(unit.id)!.index;
       if (unchangedBoundary) gap = oldActualGaps.get(unit.id)!;
-      if (previous && !unchangedBoundary) {
+      if (previous && !unchangedBoundary && !normalizedBoundary) {
         const boundary = (/[ \t\r\n]*$/.exec(markdown)?.[0] ?? '') + unit.gap + (/^[ \t\r\n]*/.exec(unit.raw)?.[0] ?? '');
         const endings = boundary.match(/\r\n|\r|\n/g)?.length ?? 0;
         const ending = markdown.endsWith('\r\n') ? '\r\n' : markdown.endsWith('\r') ? '\r' : '\n';
@@ -190,7 +222,8 @@ export class EditedSnapshotLedger {
     targets.forEach((unit, index) => {
       if (!this.births.has(unit.id)) this.births.set(unit.id, validated.state.blocks[index]!);
       const history = this.versions.get(unit.id) ?? [];
-      if (!history.some(version => version.node.eq(unit.node))) history.push({node: unit.node, raw: source.blocks[index]!.markdown});
+      const raw = source.blocks[index]!.markdown;
+      if (!history.some(version => version.node.eq(unit.node) && version.raw === raw && version.revision <= revision)) history.push({node: unit.node, raw, revision});
       this.versions.set(unit.id, history);
     });
     // Only authored gaps transfer on a later edit. Syntax separators added by

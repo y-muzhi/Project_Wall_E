@@ -10,6 +10,8 @@ import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 
 const MAX_SAFE = 9_007_199_254_740_991;
 const ATTRIBUTE = 'walle_block_id';
+const SOURCE_REVISION = 'walle_source_revision';
+const sourceCounters = new WeakMap<EditorState['schema'], number>();
 const key = new PluginKey<IdentityState>('WALLE_BLOCK_IDENTITY');
 const moveKey = new PluginKey('WALLE_EXPLICIT_MOVE');
 
@@ -74,6 +76,12 @@ export function topBlockIds(doc: Node): readonly (number | null)[] {
   const result: (number | null)[] = [];
   doc.forEach(node => result.push(integer(node.attrs[ATTRIBUTE]) ? node.attrs[ATTRIBUTE] as number : null));
   return Object.freeze(result);
+}
+
+export function sourceRevision(doc: Node): number {
+  const revision: unknown = doc.attrs[SOURCE_REVISION] ?? 0;
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) throw new IdentityInvalid('源码历史修订不合法');
+  return revision;
 }
 
 export function createIdentityPlugin(ids: readonly number[], next: number): Plugin<IdentityState> {
@@ -193,6 +201,46 @@ export function moveTopBlock(state: EditorState, from: number, to: number): Tran
       .filter(move => integer(state.doc.child(move.old_index).attrs[ATTRIBUTE])));
 }
 
+// An explicit source-editor operation, not an inference from pasted attrs or
+// equal text. A reparsed raw block keeps its first identity; later parsed
+// blocks are new. All validation/allocation completes before returning a tr.
+export function replaceParsedRawBlock(state: EditorState, index: number, nodes: readonly Node[]): Transaction {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new IdentityInvalid('原始节点位置不合法');
+  const original = state.doc.child(index), current = identityState(state);
+  const id: unknown = original.attrs[ATTRIBUTE];
+  if (original.type.name !== 'walle_raw_source' || !integer(id) || !current.known_ids.has(id) ||
+      nodes.some(node => node.type.schema !== state.schema || emptyParagraph(node))) throw new IdentityInvalid('重新解析没有实际原始节点/同schema区块证明');
+  let logicalCount = nodes.length;
+  state.doc.forEach((node, _pos, childIndex) => { if (childIndex !== index && !emptyParagraph(node)) logicalCount++; });
+  if (logicalCount > 10_000) throw new IdentityInvalid('顶层区块超过容量');
+  let next = current.next_block_id;
+  const known = new Set(current.known_ids);
+  const replacements = nodes.map((node, childIndex) => {
+    let assigned = id;
+    if (childIndex) {
+      if (next >= MAX_SAFE) throw new IdentityInvalid('区块ID容量耗尽', true);
+      assigned = next++;
+      known.add(assigned);
+    }
+    return rewrite(node, assigned);
+  });
+  if (!replacements.length && state.doc.childCount === 1) {
+    const caret = state.schema.nodes.paragraph!.createAndFill();
+    if (!caret) throw new IdentityInvalid('空文档缺少实际caret节点');
+    replacements.push(rewrite(caret, null));
+  }
+  let position = 0;
+  for (let childIndex = 0; childIndex < index; childIndex++) position += state.doc.child(childIndex).nodeSize;
+  if (!(SOURCE_REVISION in state.doc.attrs)) throw new IdentityInvalid('源码历史属性未安装');
+  const revision = Math.max(sourceCounters.get(state.schema) ?? 1, sourceRevision(state.doc) + 1);
+  if (revision > MAX_SAFE) throw new IdentityInvalid('源码历史容量耗尽', true);
+  const transaction = state.tr.replaceWith(position, position + original.nodeSize, Fragment.fromArray(replacements))
+    .setDocAttribute(SOURCE_REVISION, revision)
+    .setMeta(key, Object.freeze({next_block_id: next, known_ids: known}));
+  sourceCounters.set(state.schema, revision + 1);
+  return transaction;
+}
+
 // ProseMirror's generic backward/forward deletion sometimes removes an empty
 // paragraph instead of joining. For an actual top-level paragraph join, the
 // approved rule keeps the first identity even when that first part is empty.
@@ -221,7 +269,10 @@ export function installIdentityAttributes(crepe: Crepe): void {
     ctx.record(ready).update(schemaTimerCtx, timers => [...timers, ready]);
     return async () => {
       await ctx.wait(InitReady);
-      ctx.update(nodesCtx, nodes => nodes.map(([name, schema]) => [name, schema.group?.split(' ').includes('block')
+      ctx.update(nodesCtx, nodes => nodes.map(([name, schema]) => [name, name === 'doc'
+        ? {...schema, attrs: {...schema.attrs, [SOURCE_REVISION]: {default: 0, validate: (value: unknown) => {
+          if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new IdentityInvalid('源码历史属性不合法');
+        }}}} : schema.group?.split(' ').includes('block')
         ? {...schema, attrs: {...schema.attrs, [ATTRIBUTE]: {default: null, validate: (value: unknown) => {
           if (value !== null && !integer(value)) throw new IdentityInvalid('节点身份属性不合法');
         }}}} : schema]));

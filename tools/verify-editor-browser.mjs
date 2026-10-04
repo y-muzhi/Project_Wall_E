@@ -13,7 +13,8 @@ const autolinkOnly = process.argv.includes('--autolink-check');
 const strikethroughOnly = process.argv.includes('--strikethrough-check');
 const rawSourceOnly = process.argv.includes('--raw-source-check');
 const selectionOnly = process.argv.includes('--selection-check');
-if ([baselineOnly, autolinkOnly, strikethroughOnly, rawSourceOnly, selectionOnly].filter(Boolean).length > 1) throw new Error('独立检查模式不能混用');
+const normalizationOnly = process.argv.includes('--normalization-check');
+if ([baselineOnly, autolinkOnly, strikethroughOnly, rawSourceOnly, selectionOnly, normalizationOnly].filter(Boolean).length > 1) throw new Error('独立检查模式不能混用');
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const commands = [];
@@ -43,6 +44,7 @@ const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdow
   'frontend/src/documents/raw-source-remark.ts', 'backend/app/documents/raw_source.py',
   'shared/fixtures/raw-source-containers-v1.json', 'frontend/tests/browser/raw-source.ts',
   'frontend/src/documents/editor-selection.ts', 'frontend/tests/browser/editor-selection.ts',
+  'frontend/src/documents/source-normalization.ts', 'frontend/tests/browser/source-normalization.ts',
   'shared/fixtures/editor-selection-v1.json', 'backend/app/documents/anchors.py',
   'frontend/src/documents/url-domain-unicode.ts', 'shared/markdown/url-domain-unicode-v1.json',
   'backend/app/documents/autolinks.py', 'backend/app/documents/markdown.py', 'backend/requirements.lock',
@@ -116,7 +118,7 @@ try {
     assert.equal(report.frontend_baseline.records.length, 22);
     assert.equal(report.backend_baseline.records.length, 22);
     report.conforms = !report.frontend_baseline.mismatches.length && !report.backend_baseline.mismatches.length;
-  } else if (autolinkOnly || strikethroughOnly || rawSourceOnly || selectionOnly) {
+  } else if (autolinkOnly || strikethroughOnly || rawSourceOnly || selectionOnly || normalizationOnly) {
     report.scope = 'Independent syntax/context cases and edited output; fixture provenance, not product/HTTP acceptance';
     if (autolinkOnly) {
       report.autolink_conformance = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkConformance())'));
@@ -131,8 +133,12 @@ try {
       report.raw_source = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyRawSource())'));
       assert.equal(report.raw_source.records.length, 18);
       assert.equal(report.raw_source.outputs.length, 22);
-    } else {
+    } else if (selectionOnly) {
       report.editor_selection = await verifySelection();
+    } else {
+      report.source_normalization = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization())'));
+      assert.equal(report.source_normalization.checks.length, 16);
+      assert.equal(report.source_normalization.outputs.length, 21);
     }
     const backend = spawn(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/verify-editor-output.py'], {cwd: root, windowsHide: true});
     let stdout = '', stderr = '';
@@ -144,7 +150,8 @@ try {
     report.backend_command = {status: code, stdout, stderr};
     if (code !== 0) throw new Error(`后端拒绝方言快照\n${stderr}`);
     report.backend_output = JSON.parse(stdout);
-    assert.equal(report.backend_output.pairs_checked, selectionOnly ? report.editor_selection.records.length : (report.autolink_conformance ?? report.strikethrough ?? report.raw_source).outputs.length);
+    assert.equal(report.backend_output.pairs_checked, selectionOnly ? report.editor_selection.records.length :
+      (report.autolink_conformance ?? report.strikethrough ?? report.raw_source ?? report.source_normalization).outputs.length);
   } else {
   const output = await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verify())');
   report.result = resultFrom(output);
@@ -226,6 +233,9 @@ try {
   assert.equal(report.raw_source.records.length, 18);
   assert.equal(report.raw_source.outputs.length, 22);
   report.editor_selection = await verifySelection();
+  report.source_normalization = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization())'));
+  assert.equal(report.source_normalization.checks.length, 16);
+  assert.equal(report.source_normalization.outputs.length, 21);
   const backendCommand = [resolve(root, '.venv/Scripts/python.exe'), '-X', 'utf8', 'tools/verify-editor-output.py'];
   const backend = spawn(backendCommand[0], backendCommand.slice(1), {cwd: root, windowsHide: true});
   let backendStdout = '', backendStderr = '';
@@ -238,7 +248,7 @@ try {
   if (backendStatus !== 0) throw new Error(`后端拒绝真实编辑器快照\n${backendStderr}`);
   report.backend_output = JSON.parse(backendStdout);
   assert.equal(report.backend_output.passed, true);
-  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length + report.strikethrough.outputs.length + report.raw_source.outputs.length + report.editor_selection.records.length);
+  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length + report.strikethrough.outputs.length + report.raw_source.outputs.length + report.editor_selection.records.length + report.source_normalization.outputs.length);
   }
   report.passed = true;
 } catch (error) {

@@ -13,6 +13,7 @@ import { autolinkConformance } from './autolink-conformance.ts';
 import { verifyStrikethrough } from './strikethrough.ts';
 import { verifyRawSource } from './raw-source.ts';
 import { verifyEditorSelection, keyboardSelection } from './editor-selection.ts';
+import { verifySourceNormalization } from './source-normalization.ts';
 
 let crepe: Crepe | undefined;
 let ledger: EditedSnapshotLedger | undefined;
@@ -59,6 +60,7 @@ Object.assign(window, { editorProbe: {
   verifyEditorSelection: () => verifyEditorSelection((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
   prepareSelection: () => load('甲😀乙\n', true, {ids: [10], next: 20}),
   keyboardSelection: () => keyboardSelection(crepe!),
+  verifySourceNormalization: () => verifySourceNormalization((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),
   prepareIdentity: async () => {
     const markdown = '甲乙\n\n尾\n';
     await load(markdown, true, {ids: [10, 20], next: 30});

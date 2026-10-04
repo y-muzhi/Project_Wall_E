@@ -36,6 +36,8 @@ def main():
         records.append((f'strikethrough-{index}', entry['pair'], entry['projection']))
     for index, entry in enumerate(report.get('raw_source', {}).get('outputs', [])):
         records.append((f'raw-source-{index}', entry['pair'], entry['projection']))
+    for index, entry in enumerate(report.get('source_normalization', {}).get('outputs', [])):
+        records.append((f'source-normalization-{index}', entry['pair'], entry['projection']))
     for index, entry in enumerate(report.get('editor_selection', {}).get('records', [])):
         records.append((f'editor-selection-{index}', entry['pair'], entry['projection']))
         snapshot = validate_snapshot(entry['pair']['markdown_content'], entry['pair']['block_state_json'], fixture_origin)
