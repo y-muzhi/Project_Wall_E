@@ -9,6 +9,7 @@ import re
 from typing import Mapping, Any
 
 from backend.app.shared.pagination import page_number, page_metadata
+from backend.app.shared.command_execution import ExpectedCurrentInput
 from backend.app.shared.time import utc_milliseconds
 from backend.app.shared.validation import (
     MISSING, keyword, object_fields, reject, strict_enum, strict_integer, title,
@@ -95,6 +96,18 @@ def update_requirement_input(payload: object) -> UpdateRequirementInput:
 
 def update_requirement_result(row: Mapping[str, Any]) -> dict[str, Any]:
     return requirement_read_model(row)
+
+
+def complete_initialization_input(payload: object) -> ExpectedCurrentInput:
+    fields = ('requirement_id', 'expected_content_version', 'idempotency_key')
+    return ExpectedCurrentInput.from_fields(object_fields(payload, 'body', fields, fields))
+
+
+def complete_initialization_result(root: Mapping[str, Any], revision: Mapping[str, Any], document: Mapping[str, Any]) -> dict:
+    from backend.app.revisions.contracts import revision_summary
+    return {'requirement': requirement_read_model(root), 'baseline_revision': revision_summary(revision),
+            'current_document': {'id': strict_integer(document['id'], 'id'),
+                                 'content_version': strict_integer(document['content_version'], 'content_version')}}
 
 
 def _stored_time(value: object) -> None:

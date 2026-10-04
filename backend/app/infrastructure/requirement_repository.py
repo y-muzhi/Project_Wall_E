@@ -57,3 +57,13 @@ class RequirementRepository:
         if row is None:
             raise ValueError('Updated requirement is missing')
         return row
+
+    def activate_initialization(self, identity: int, at: str) -> dict:
+        require_write_transaction(self.connection)
+        result = self.connection.execute("UPDATE requirements SET status='ACTIVE',updated_at=? WHERE id=? AND status='INITIALIZING'", (at, identity))
+        if result.rowcount != 1:
+            raise ValueError('Initialization state changed inside shared write transaction')
+        row = self.get(identity)
+        if row is None:
+            raise ValueError('Activated requirement is missing')
+        return row

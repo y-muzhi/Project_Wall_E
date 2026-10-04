@@ -4,6 +4,7 @@ from typing import Any, Mapping
 
 from backend.app.documents.snapshot import SourceVerifier, _time, validate_snapshot
 from backend.app.shared.pagination import page_number, page_metadata
+from backend.app.shared.command_execution import ExpectedCurrentInput
 from backend.app.shared.validation import (
     MISSING, object_fields, revision_description, strict_enum, strict_integer, strict_json_object,
 )
@@ -15,6 +16,33 @@ SUMMARY_FIELDS = ('id', 'requirement_id', 'version_no', 'revision_type', 'descri
 class ListRevisionsInput:
     requirement_id: int
     page: int
+
+
+@dataclass(frozen=True)
+class CreateManualRevisionInput:
+    current: ExpectedCurrentInput
+    description: str | None
+
+    def business_input(self) -> dict:
+        return {**self.current.business_input(), 'description': self.description}
+
+
+def create_manual_revision_input(payload: object) -> CreateManualRevisionInput:
+    required = ('requirement_id', 'expected_content_version', 'idempotency_key')
+    data = object_fields(payload, 'body', (*required, 'description'), required)
+    current = ExpectedCurrentInput.from_fields(data)
+    description = revision_description(data.get('description'))
+    if description is not None:
+        try:
+            description.encode('utf-8')
+        except UnicodeEncodeError:
+            from backend.app.shared.validation import reject
+            reject('description', 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
+    return CreateManualRevisionInput(current, description)
+
+
+def create_manual_revision_result(row: Mapping[str, Any]) -> dict:
+    return revision_summary(row)
 
 
 def list_revisions_input(payload: object) -> ListRevisionsInput:
