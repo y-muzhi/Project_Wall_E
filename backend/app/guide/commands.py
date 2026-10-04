@@ -7,9 +7,12 @@ from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.requirement_repository import RequirementRepository
-from backend.app.shared.command_execution import Rejected
+from backend.app.shared.command_execution import Rejected, execute_idempotent, operation_time
+from backend.app.infrastructure.idempotency import Idempotency, Success
 from backend.app.shared.validation import InvalidInput
 from .contracts import recover_runs_input, recover_runs_result
+from .contracts import cancel_guide_run_input, cancel_guide_run_result
+from .contracts import fail_guide_run_input, fail_guide_run_result
 
 RECOVERY_ERRORS = {'INTERRUPTED': '运行因进程中断而结束', 'EXECUTION_TIMEOUT': '运行连续15分钟没有进展'}
 TERMINAL_RUNS = frozenset({'COMPLETED', 'FAILED', 'CANCELLED'})
@@ -111,6 +114,94 @@ def recover_runs(database: Database, payload: object, *, process_lock: ProcessLo
         return result
     except Rejected:
         code = 'WORK_STATE_INCONSISTENT'
+    except (StorageUnavailable, sqlite3.Error):
+        code = 'STORAGE_UNAVAILABLE'
+    except Exception:
+        code = 'INTERNAL_ERROR'
+    return {'code': code, 'data': None, 'details': None}
+
+
+def cancel_guide_run(executor: Idempotency, payload: object, *, clock=None) -> dict:
+    """C03 atomic logical cancellation; no network I/O in the transaction."""
+    try:
+        request = cancel_guide_run_input(payload)
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection):
+        guides = GuideRepository(connection)
+        run = guides.get_status(request.guide_run_id)
+        if run is None:
+            raise Rejected('NOT_FOUND')
+        if run['status'] == 'CANCELLED':
+            # A new cancellation key still observes the original result; the
+            # requirement may legitimately own a newer operation by now.
+            return Success(cancel_guide_run_result(run), 200)
+        if run['status'] not in ('RUNNING', 'WAITING_USER') or run['current_step'] == 'PERSISTING':
+            raise Rejected('STATE_CONFLICT')
+        requirements = RequirementRepository(connection)
+        root = requirements.get(run['requirement_id'])
+        if root is None or root['document_work_state'] != 'GUIDE_ACTIVE' or root['active_operation_type'] != 'GUIDE_RUN' or root['active_operation_id'] != run['id']:
+            raise Rejected('WORK_STATE_INCONSISTENT')
+        try:
+            assert_idle(connection, root, remaining_conflicts=frozenset())
+        except Rejected as error:
+            if error.code != 'WORK_STATE_CONFLICT':
+                raise
+        else:
+            raise Rejected('WORK_STATE_INCONSISTENT')
+        at = operation_time(clock)
+        if _time(run['created_at']) > _time(run['updated_at']) or run['updated_at'] > at or root['updated_at'] > at:
+            raise ValueError('Cancellation cannot precede persisted activity')
+        cancelled = guides.cancel(run['id'], at)
+        requirements.recover_occupancy(root, None, None, at)
+        return Success(cancel_guide_run_result(cancelled), 200)
+    return execute_idempotent(executor, 'APP-GUIDE-CMD-C03', request, operation,
+        target_identity=f'GuideRun:{request.guide_run_id}',
+        allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_INCONSISTENT'}))
+
+
+def fail_guide_run(database: Database, payload: object, *, process_lock: ProcessLock, clock=None) -> dict:
+    """C08 trusted failure summary; a late failure never overwrites a result."""
+    try:
+        request = fail_guide_run_input(payload)
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    try:
+        process_lock.assert_owned()
+        if process_lock.path != ProcessLock.for_database(database.path).path:
+            raise RuntimeError('Failure writer must own the same actual database')
+        with database.transaction(write=True) as connection:
+            guides, requirements = GuideRepository(connection), RequirementRepository(connection)
+            run = guides.get_status(request.guide_run_id)
+            if run is None:
+                raise Rejected('NOT_FOUND')
+            # P01 requires RUNNING. A committed WAITING_USER result is also
+            # protected from a delayed attempt failure, just like terminal runs.
+            if run['status'] != 'RUNNING':
+                result = fail_guide_run_result(run, False, unchanged=True)
+            else:
+                root = requirements.get(run['requirement_id'])
+                if root is None:
+                    raise Rejected('WORK_STATE_INCONSISTENT')
+                owns = root['document_work_state'] == 'GUIDE_ACTIVE' and root['active_operation_type'] == 'GUIDE_RUN' and root['active_operation_id'] == run['id']
+                if owns:
+                    try:
+                        assert_idle(connection, root, remaining_conflicts=frozenset())
+                    except Rejected as error:
+                        if error.code != 'WORK_STATE_CONFLICT':
+                            raise
+                    else:
+                        raise Rejected('WORK_STATE_INCONSISTENT')
+                at = operation_time(clock)
+                if _time(run['created_at']) > _time(run['updated_at']) or run['updated_at'] > at or (owns and root['updated_at'] > at):
+                    raise ValueError('Failure cannot precede persisted activity')
+                guides.recover_failed(run['id'], request.error_code, request.safe_message, at)
+                if owns:
+                    requirements.recover_occupancy(root, None, None, at)
+                result = fail_guide_run_result(guides.get_status(run['id']), owns, unchanged=False)
+        return result
+    except Rejected as error:
+        code = error.code if error.code in ('NOT_FOUND', 'WORK_STATE_INCONSISTENT') else 'INTERNAL_ERROR'
     except (StorageUnavailable, sqlite3.Error):
         code = 'STORAGE_UNAVAILABLE'
     except Exception:

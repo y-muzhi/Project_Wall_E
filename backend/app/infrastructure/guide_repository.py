@@ -3,6 +3,9 @@ import sqlite3
 from .identifiers import require_write_transaction
 from .idempotency import canonical_input
 from backend.app.documents.snapshot import _time
+from backend.app.shared.pagination import PAGE_SIZE, page_offset
+
+STATUS_COLUMNS = 'id,requirement_id,action_type,function_type,source_type,source_id,scope_type,scope_ref_json,status,current_step,error_code,error_message,cancel_reason,retry_of_guide_run_id,created_at,started_at,waiting_user_at,ended_at,updated_at'
 
 
 class GuideRepository:
@@ -27,7 +30,22 @@ class GuideRepository:
         return self.connection.execute("SELECT id,requirement_id,status,created_at,updated_at FROM guide_runs WHERE status='RUNNING' ORDER BY id").fetchall()
 
     def get_status(self, identity: int) -> sqlite3.Row | None:
-        return self.connection.execute('SELECT id,requirement_id,action_type,function_type,source_type,source_id,scope_type,scope_ref_json,status,current_step,final_result_json,error_code,error_message,cancel_reason,retry_of_guide_run_id,created_at,started_at,waiting_user_at,ended_at,updated_at FROM guide_runs WHERE id=?', (identity,)).fetchone()
+        return self.connection.execute('SELECT '+STATUS_COLUMNS+',final_result_json FROM guide_runs WHERE id=?', (identity,)).fetchone()
+
+    def _count_history(self, where: str, values: tuple) -> int:
+        return self.connection.execute('SELECT count(*) FROM guide_runs'+where, values).fetchone()[0]
+
+    def list_history(self, request) -> tuple[int, list[sqlite3.Row]]:
+        clauses, values = ['requirement_id=?'], [request.requirement_id]
+        for field in ('status', 'action_type'):
+            choices = getattr(request, field)
+            if choices:
+                clauses.append(field+' IN ('+','.join('?' for _ in choices)+')'); values.extend(choices)
+        where, bindings = ' WHERE '+' AND '.join(clauses), tuple(values)
+        total = self._count_history(where, bindings)
+        rows = self.connection.execute('SELECT '+STATUS_COLUMNS+' FROM guide_runs'+where+' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?',
+            (*bindings, PAGE_SIZE, page_offset(request.page))).fetchall()
+        return total, rows
 
     def status_references(self, run: sqlite3.Row) -> tuple[sqlite3.Row | None, list[sqlite3.Row]]:
         message = self.connection.execute("SELECT id,requirement_id FROM conversation_messages WHERE guide_run_id=? AND role='ASSISTANT' ORDER BY sequence_no DESC,id DESC LIMIT 1", (run['id'],)).fetchone()
@@ -46,3 +64,16 @@ class GuideRepository:
             raise ValueError('Recovered run changed within its shared transaction')
         # Preserve all earlier transport/parse/validation facts and unknown usage.
         self.connection.execute("UPDATE llm_uses SET call_status='FAILED',ended_at=?,error_code=?,error_message=? WHERE guide_run_id=? AND ended_at IS NULL", (at, code, message, identity))
+
+    def cancel(self, identity: int, at: str) -> sqlite3.Row:
+        require_write_transaction(self.connection)
+        for row in self.connection.execute('SELECT started_at FROM llm_uses WHERE guide_run_id=? AND ended_at IS NULL', (identity,)):
+            if _time(row['started_at']) > at:
+                raise ValueError('Cancellation cannot precede an unfinished attempt')
+        result = self.connection.execute("UPDATE guide_runs SET status='CANCELLED',current_step='FINISHED',cancel_reason='USER_REQUESTED',final_result_json=NULL,error_code=NULL,error_message=NULL,ended_at=?,updated_at=? WHERE id=? AND status IN ('RUNNING','WAITING_USER') AND current_step<>'PERSISTING'", (at, at, identity))
+        if result.rowcount != 1:
+            raise ValueError('Cancellation lost its shared transaction state gate')
+        # An unfinished request is logically cancelled, not a proven Provider
+        # failure. Preserve transport/parse/validation facts and unknown usage.
+        self.connection.execute("UPDATE llm_uses SET call_status='CANCELLED',ended_at=? WHERE guide_run_id=? AND ended_at IS NULL", (at, identity))
+        return self.get_status(identity)
