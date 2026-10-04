@@ -14,7 +14,8 @@ const strikethroughOnly = process.argv.includes('--strikethrough-check');
 const rawSourceOnly = process.argv.includes('--raw-source-check');
 const selectionOnly = process.argv.includes('--selection-check');
 const normalizationOnly = process.argv.includes('--normalization-check');
-if ([baselineOnly, autolinkOnly, strikethroughOnly, rawSourceOnly, selectionOnly, normalizationOnly].filter(Boolean).length > 1) throw new Error('独立检查模式不能混用');
+const receiptsOnly = process.argv.includes('--receipts-check');
+if ([baselineOnly, autolinkOnly, strikethroughOnly, rawSourceOnly, selectionOnly, normalizationOnly, receiptsOnly].filter(Boolean).length > 1) throw new Error('独立检查模式不能混用');
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const commands = [];
@@ -55,7 +56,17 @@ const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdow
   'shared/fixtures/autolink-context-v1.json', 'frontend/tests/browser/autolink-conformance.ts',
   'shared/fixtures/autolink-unicode-v1.json',
   'frontend/tests/browser/probe.ts', 'frontend/tests/browser/editor.html',
-  'frontend/tests/browser/vite.config.ts', 'tools/verify-editor-browser.mjs'];
+  'frontend/tests/browser/vite.config.ts', 'tools/verify-editor-browser.mjs',
+  'frontend/tests/browser/save-receipts.ts', 'tools/editor-save-roundtrip.py',
+  'backend/app/documents/commands.py', 'backend/app/documents/contracts.py', 'backend/app/documents/manual_identity.py',
+  'backend/app/documents/sources.py', 'backend/app/documents/guards.py', 'backend/app/documents/queries.py',
+  'backend/app/infrastructure/document_repository.py', 'backend/app/infrastructure/requirement_repository.py',
+  'backend/app/infrastructure/database.py', 'backend/app/infrastructure/idempotency.py',
+  'backend/app/infrastructure/process_lock.py', 'backend/app/infrastructure/resources.py',
+  'backend/app/infrastructure/identifiers.py', 'backend/app/shared/command_execution.py',
+  'backend/app/infrastructure/migrations/001_initial.sql', 'backend/app/infrastructure/migrations/002_idempotency_guards.sql',
+  'backend/app/infrastructure/migrations/003_manual_edit_sources.sql', 'backend/app/infrastructure/migrations/004_manual_identity_proofs.sql',
+  'backend/tests/infrastructure/test_database.py'];
 async function inputHashes() {
   return Promise.all(inputFiles.map(async file => ({file,
     sha256: createHash('sha256').update(await readFile(resolve(root, file))).digest('hex')})));
@@ -67,11 +78,49 @@ const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--config
 let serverLog = '';
 vite.stdout.on('data', data => { serverLog += data; });
 vite.stderr.on('data', data => { serverLog += data; });
-const report = {timestamp: new Date().toISOString(), scope: 'Source/projection, local edited pairs and Crepe identity keyboard integration; no product pages or HTTP/DB save acceptance', commands};
+const report = {timestamp: new Date().toISOString(), scope: 'Source/projection, local pairs, Crepe identity/history and actual SQLite save receipts via isolated diagnostic subprocess bridge; no product pages or HTTP acceptance', commands};
 function resultFrom(output) {
   const match = /### Result\s*\n([\s\S]*?)\n### Ran Playwright code/.exec(output);
   if (!match) throw new Error('浏览器未返回结构化结果');
   return JSON.parse(match[1]);
+}
+async function verifyReceipts() {
+  const database = resolve(artifacts, `receipt-${session}.sqlite`);
+  const calls = [];
+  async function native(operation, request) {
+    const child = spawn(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/editor-save-roundtrip.py', operation, '--database', database], {cwd: root, windowsHide: true});
+    let stdout = '', stderr = '';
+    child.stdout.on('data', data => { stdout += data; });
+    child.stderr.on('data', data => { stderr += data; });
+    const exited = new Promise((accept, reject) => { child.once('error', reject); child.once('exit', accept); });
+    child.stdin.end(request ? JSON.stringify(request) : undefined);
+    const status = await exited;
+    if (status !== 0) throw new Error(`实际保存探针失败: ${stderr}`);
+    const result = JSON.parse(stdout);
+    calls.push({operation, request, result, status, stderr});
+    assert.equal(result.code, operation === 'init' ? 'DRAFT_STARTED' : operation === 'save' ? 'DRAFT_SAVED' : 'READ_OK');
+    return operation === 'init' ? result.data.manual_draft : result.data;
+  }
+  const initial = await native('init');
+  async function phase(name, document) {
+    await cli('snapshot');
+    return resultFrom(await cli('run-code', `async (page) => await page.evaluate(document => window.editorProbe.receipts.${name}(document), ${JSON.stringify(document)})`));
+  }
+  let value = await phase('start', initial);
+  for (const name of ['first', 'second', 'third', 'fourth']) {
+    const receipt = await native('save', value.request);
+    value = await phase(name, receipt);
+  }
+  assert.equal(value.checks.length, 11);
+  assert.equal(value.outputs.length, 16);
+  assert.deepEqual(value.ids, [1,4,2,5]);
+  assert.equal(value.next, 6);
+  const persisted = await native('read');
+  assert.equal(persisted.content_version, 5);
+  assert.deepEqual(persisted.block_state_json, value.outputs.at(-1).pair.block_state_json);
+  return {...value, database_path: database, requirement_id: initial.requirement_id, native_calls: calls,
+    database_sha256: createHash('sha256').update(await readFile(database)).digest('hex'),
+    scope: 'Actual Crepe/history and real SQLite application save roundtrips; diagnostic subprocess bridge, no HTTP/product UI acceptance'};
 }
 async function verifySelection() {
   const result = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifyEditorSelection())'));
@@ -118,8 +167,8 @@ try {
     assert.equal(report.frontend_baseline.records.length, 22);
     assert.equal(report.backend_baseline.records.length, 22);
     report.conforms = !report.frontend_baseline.mismatches.length && !report.backend_baseline.mismatches.length;
-  } else if (autolinkOnly || strikethroughOnly || rawSourceOnly || selectionOnly || normalizationOnly) {
-    report.scope = 'Independent syntax/context cases and edited output; fixture provenance, not product/HTTP acceptance';
+  } else if (autolinkOnly || strikethroughOnly || rawSourceOnly || selectionOnly || normalizationOnly || receiptsOnly) {
+    report.scope = receiptsOnly ? 'Actual Crepe/history and isolated SQLite save receipt roundtrips, no product/HTTP acceptance' : 'Independent syntax/context cases and edited output; fixture provenance, not product/HTTP acceptance';
     if (autolinkOnly) {
       report.autolink_conformance = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.autolinkConformance())'));
       assert.equal(report.autolink_conformance.records.length, 56);
@@ -135,6 +184,8 @@ try {
       assert.equal(report.raw_source.outputs.length, 22);
     } else if (selectionOnly) {
       report.editor_selection = await verifySelection();
+    } else if (receiptsOnly) {
+      report.receipts = await verifyReceipts();
     } else {
       report.source_normalization = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization())'));
       assert.equal(report.source_normalization.checks.length, 51);
@@ -151,7 +202,7 @@ try {
     if (code !== 0) throw new Error(`后端拒绝方言快照\n${stderr}`);
     report.backend_output = JSON.parse(stdout);
     assert.equal(report.backend_output.pairs_checked, selectionOnly ? report.editor_selection.records.length :
-      (report.autolink_conformance ?? report.strikethrough ?? report.raw_source ?? report.source_normalization).outputs.length);
+      (report.autolink_conformance ?? report.strikethrough ?? report.raw_source ?? report.source_normalization ?? report.receipts).outputs.length);
   } else {
   const output = await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verify())');
   report.result = resultFrom(output);
@@ -236,6 +287,7 @@ try {
   report.source_normalization = resultFrom(await cli('run-code', 'async (page) => await page.evaluate(() => window.editorProbe.verifySourceNormalization())'));
   assert.equal(report.source_normalization.checks.length, 51);
   assert.equal(report.source_normalization.outputs.length, 114);
+  report.receipts = await verifyReceipts();
   const backendCommand = [resolve(root, '.venv/Scripts/python.exe'), '-X', 'utf8', 'tools/verify-editor-output.py'];
   const backend = spawn(backendCommand[0], backendCommand.slice(1), {cwd: root, windowsHide: true});
   let backendStdout = '', backendStderr = '';
@@ -248,7 +300,7 @@ try {
   if (backendStatus !== 0) throw new Error(`后端拒绝真实编辑器快照\n${backendStderr}`);
   report.backend_output = JSON.parse(backendStdout);
   assert.equal(report.backend_output.passed, true);
-  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length + report.strikethrough.outputs.length + report.raw_source.outputs.length + report.editor_selection.records.length + report.source_normalization.outputs.length);
+  assert.equal(report.backend_output.pairs_checked, report.identity_types.length + report.edited_snapshots.outputs.length + report.identity_checks.length + report.autolink_conformance.outputs.length + report.strikethrough.outputs.length + report.raw_source.outputs.length + report.editor_selection.records.length + report.source_normalization.outputs.length + report.receipts.outputs.length);
   }
   report.passed = true;
 } catch (error) {

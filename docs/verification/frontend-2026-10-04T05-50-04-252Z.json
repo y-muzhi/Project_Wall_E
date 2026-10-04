@@ -1,0 +1,48 @@
+{
+  "scope": "Installed dependencies, TypeScript, projection offsets, identity transactions and actual remark autolinks (default/development conditions); no browser/business acceptance",
+  "recordedAt": "2026-10-04T05:50:04.252Z",
+  "node": "v24.15.0",
+  "passed": true,
+  "results": [
+    {
+      "args": [
+        "ls",
+        "--depth=0"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "walle-frontend@0.6.0 C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\frontend\n├── @milkdown/crepe@7.22.2\n├── @milkdown/kit@7.22.2\n├── @types/node@26.6.4\n├── @types/react-dom@19.3.0\n├── @types/react@19.3.0\n├── @vitejs/plugin-react@6.1.1\n├── react-dom@19.3.0\n├── react@19.3.0\n├── typescript@7.0.2\n└── vite@8.3.2\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "\n> walle-frontend@0.6.0 typecheck\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "test"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "\n> walle-frontend@0.6.0 test\n> node --test tests/*.test.mjs\n\n✔ actual literal tokenizer handles Unicode and astral letters in URL domains without widening email rules (7.4829ms)\n✔ all Unicode codepoints match the shared selected-backend profile, including ranges and astral boundaries (31.0054ms)\n✔ actual remark tokenizer matches independent GFM literal cases before emphasis/entity decoding (9.0889ms)\n✔ actual tokenizer respects independent source, entity, image and container contexts (7.3744ms)\n✔ literal links respect inline chunk boundaries in real tables, lists, headings and quotes (2.2193ms)\n✔ long invalid candidates, nested URL paths and link labels keep exact text without repeated path scans (3360.8115ms)\n✔ editing identical blocks follows transaction positions, retains IDs and selection (3.9242ms)\n✔ copied attributes before original get new ID; pasted unknown IDs and nested IDs are removed (0.8987ms)\n✔ split at middle and at start keeps first part; joining keeps first document ID (1.8831ms)\n✔ forward join of an empty first paragraph keeps first identity and ordinary mid-text deletion is deferred (0.2861ms)\n✔ explicit movement preserves origins, including identical content and complete containers (0.9555ms)\n✔ undo/redo restore same allocated IDs while high water never decreases (0.6178ms)\n✔ removed identity is only restored by actual local history, never a later pasted copy (1.0145ms)\n✔ atom blocks retain ID when typing elsewhere; whole unknown replacements receive new ID (0.5049ms)\n✔ empty caret has no business ID; deletion does not recycle IDs and undo restores old one (0.3944ms)\n✔ a new empty gap paragraph consumes no ID until actual text appears (0.6243ms)\n✔ capacity rejects entire transaction with original document/high-water untouched (0.6313ms)\n✔ 10000-block boundary keeps unrelated nodes and selections; further block insertion fails atomically (25.8858ms)\n✔ invalid initial identities fail; changing an ID attr cannot steal another block ID (0.5526ms)\n✔ actual flow chunks preserve raw source without reintroducing nested container markers (4.3231ms)\n✔ shared independent Markdown projection and selection fixtures (1.275ms)\n✔ Unicode offsets count codepoints including combining marks, ZWJ and CRLF (0.1266ms)\n✔ surrogate interiors, invalid Unicode and coerced integers are rejected (0.3353ms)\n✔ selection keeps raw text and immediate context, binds snapshot identity (0.161ms)\n✔ 100-codepoint context boundaries do not split emoji or normalize content (0.1298ms)\n✔ 2000-codepoint selection is accepted; 2001 never truncated (0.963ms)\n✔ collapsed, reversed, extra fields and wrong snapshot values cannot form selection (0.3431ms)\n✔ installed production remark extension implements independent GFM single/double/width cases (11.987ms)\nℹ tests 28\nℹ suites 0\nℹ pass 28\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 3582.9697\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "--conditions=development",
+        "--test",
+        "tests/autolinks.test.mjs"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "✔ actual remark tokenizer matches independent GFM literal cases before emphasis/entity decoding (10.3459ms)\n✔ actual tokenizer respects independent source, entity, image and container contexts (7.1527ms)\n✔ literal links respect inline chunk boundaries in real tables, lists, headings and quotes (0.8628ms)\n✔ long invalid candidates, nested URL paths and link labels keep exact text without repeated path scans (1647.7042ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1871.9776\n",
+      "stderr": ""
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import { verifyStrikethrough } from './strikethrough.ts';
 import { verifyRawSource } from './raw-source.ts';
 import { verifyEditorSelection, keyboardSelection } from './editor-selection.ts';
 import { verifySourceNormalization } from './source-normalization.ts';
+import { receiptScenario } from './save-receipts.ts';
 
 let crepe: Crepe | undefined;
 let ledger: EditedSnapshotLedger | undefined;
@@ -51,7 +52,11 @@ async function load(markdown: string, adapted = false, identity?: {ids: readonly
   status.textContent = JSON.stringify(result, null, 2);
   return result;
 }
+const receipts = receiptScenario(async document => {
+  await load(document.markdown_content, true, {ids: document.block_state_json.blocks.map(block => block.block_id), next: document.block_state_json.next_block_id});
+}, () => crepe!);
 Object.assign(window, { editorProbe: {
+  receipts,
   load,
   autolinkBaseline: () => autolinkBaseline(markdown => load(markdown, true), () => crepe!),
   autolinkConformance: () => autolinkConformance((markdown, ids, next) => load(markdown, true, {ids, next}), () => crepe!),

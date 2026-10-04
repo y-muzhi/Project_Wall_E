@@ -9,6 +9,10 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from backend.app.infrastructure.database import Database
+from backend.app.documents.sources import DocumentSources
+from backend.app.infrastructure.resources import ResourceCatalog
+
 from backend.app.documents.snapshot import validate_snapshot  # noqa: E402
 from backend.app.documents.anchors import create_selection_anchor, locate  # noqa: E402
 
@@ -38,6 +42,17 @@ def main():
         records.append((f'raw-source-{index}', entry['pair'], entry['projection']))
     for index, entry in enumerate(report.get('source_normalization', {}).get('outputs', [])):
         records.append((f'source-normalization-{index}', entry['pair'], entry['projection']))
+    receipt_count = 0
+    if 'receipts' in report:
+        receipt = report['receipts']
+        with Database(receipt['database_path']).transaction() as connection:
+            sources = DocumentSources(connection, receipt['requirement_id'], ResourceCatalog())
+            for entry in receipt['outputs']:
+                snapshot = validate_snapshot(entry['pair']['markdown_content'], entry['pair']['block_state_json'], sources)
+                actual = [{'block_type': block.block_type, 'plain_text': block.plain_text, 'section_path': list(block.section_path)} for block in snapshot.parsed.blocks]
+                if actual != entry['projection']:
+                    raise AssertionError('Actual receipt roundtrip projection differs')
+                receipt_count += 1
     for index, entry in enumerate(report.get('editor_selection', {}).get('records', [])):
         records.append((f'editor-selection-{index}', entry['pair'], entry['projection']))
         snapshot = validate_snapshot(entry['pair']['markdown_content'], entry['pair']['block_state_json'], fixture_origin)
@@ -54,8 +69,8 @@ def main():
                    'section_path': list(block.section_path)} for block in snapshot.parsed.blocks]
         if actual != expected:
             raise AssertionError(f'{name}: frontend/backend projection mismatch: {actual!r} != {expected!r}')
-    print(json.dumps({'passed': True, 'pairs_checked': len(records), 'names': [name for name, _, _ in records],
-                      'scope': 'Actual browser output vs backend parser/schema; fixture provenance only'}, ensure_ascii=False))
+    print(json.dumps({'passed': True, 'pairs_checked': len(records)+receipt_count, 'real_source_receipt_pairs': receipt_count, 'names': [name for name, _, _ in records],
+                      'scope': 'Browser/parser pairs; legacy syntax cases use explicit fixture origins, receipt cases use actual SQLite sources'}, ensure_ascii=False))
 
 
 if __name__ == '__main__':

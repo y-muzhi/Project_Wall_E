@@ -15,7 +15,13 @@ interface Unit { id: number; node: Node; raw: string; gap: string; actualGap: st
 interface Version { node: Node; raw: string; revision: number; }
 interface Layout { document: Node; markdown: string; units: readonly Unit[]; trailer: string; }
 export interface PreparedEditorSnapshot { readonly state: EditorState; readonly pair: EditedSnapshot; }
+export interface ManualDraftSubmission extends EditedSnapshot {
+  readonly requirement_id: number;
+  readonly expected_version: number;
+}
 const preparations = new WeakMap<PreparedEditorSnapshot, {owner: EditedSnapshotLedger; generation: number; staged: EditedSnapshotLedger}>();
+const submissions = new WeakMap<ManualDraftSubmission, EditedSnapshotLedger>();
+const creationFields = ['created_by_type', 'created_source_type', 'created_source_id', 'created_at'] as const;
 
 function fail(message: string): never { throw new EditorSourceInvalid(message); }
 function timestamp(value: string): void {
@@ -43,6 +49,8 @@ function intent(node: Node): unknown {
 export class EditedSnapshotLedger {
   private readonly ctx: Ctx;
   private readonly sessionId: number;
+  private readonly requirementId: number;
+  private readonly documentCreatedAt: string;
   private readonly initialNext: number;
   private readonly versions = new Map<number, Version[]>();
   private readonly births = new Map<number, BlockMetadata>();
@@ -52,6 +60,12 @@ export class EditedSnapshotLedger {
   private pair: EditedSnapshot;
   private lastTime: string;
   private generation = 0;
+  private confirmedVersion: number;
+  private confirmedNext: number;
+  private confirmedAt: string;
+  private allocations: {start: number; end: number; at: string}[] = [];
+  private pending: ManualDraftSubmission | undefined;
+  private closed = false;
 
   constructor(ctx: Ctx, input: unknown, state: EditorState) {
     const {document, source} = validateDocumentReadModel(ctx, input);
@@ -62,6 +76,11 @@ export class EditedSnapshotLedger {
         !state.doc.eq(bindIdentityDocument(source.document, ids, identity.next_block_id))) fail('载入快照与编辑器状态不一致');
     this.ctx = ctx;
     this.sessionId = document.id;
+    this.requirementId = document.requirement_id;
+    this.documentCreatedAt = document.created_at;
+    this.confirmedVersion = document.content_version;
+    this.confirmedNext = document.block_state_json.next_block_id;
+    this.confirmedAt = document.updated_at;
     this.initialNext = identity.next_block_id;
     this.units = source.blocks.map((block, index) => ({id: ids[index]!, node: state.doc.child(index),
       raw: block.markdown, gap: source.parts[index * 2]!, actualGap: source.parts[index * 2]!, verbatim: true}));
@@ -76,7 +95,90 @@ export class EditedSnapshotLedger {
     });
   }
 
+  private live(): void { if (this.closed) fail('编辑会话已结束'); }
+
+  private creationFor(id: number, at: string) {
+    const birth = this.births.get(id);
+    if (birth) return birth;
+    const range = this.allocations.find(range => range.start <= id && id < range.end);
+    return {created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
+      created_source_id: this.sessionId, created_at: range?.at ?? at};
+  }
+
+  // The parent sends this exact frozen payload. Local edits may continue while
+  // it is in flight; a response alone cannot prove which request it confirms.
+  beginSave(): ManualDraftSubmission {
+    this.live();
+    if (this.pending || this.confirmedVersion >= Number.MAX_SAFE_INTEGER) fail('已有待确认保存或版本容量耗尽');
+    const submission = Object.freeze({requirement_id: this.requirementId, expected_version: this.confirmedVersion, ...this.pair});
+    submissions.set(submission, this);
+    this.pending = submission;
+    return submission;
+  }
+
+  acknowledgeSave(submission: ManualDraftSubmission, input: unknown): EditedSnapshot {
+    this.live();
+    if (submissions.get(submission) !== this || this.pending !== submission || submission.expected_version !== this.confirmedVersion) fail('保存回执没有当前会话的实际提交证明');
+    const {document} = validateDocumentReadModel(this.ctx, input);
+    if (document.id !== this.sessionId || document.requirement_id !== this.requirementId || document.document_type !== 'MANUAL_DRAFT' ||
+        document.created_at !== this.documentCreatedAt || document.content_version !== submission.expected_version + 1 ||
+        document.updated_at < this.confirmedAt || document.markdown_content !== submission.markdown_content ||
+        document.block_state_json.next_block_id !== submission.block_state_json.next_block_id ||
+        document.block_state_json.blocks.some((block, index) => block.block_id !== submission.block_state_json.blocks[index]?.block_id)) fail('保存回执不对应实际提交快照/版本');
+    const received = new Map(document.block_state_json.blocks.map(block => [block.block_id, block]));
+    const newOrigin = (at: string) => ({created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
+      created_source_id: this.sessionId, created_at: at});
+    for (const block of document.block_state_json.blocks) {
+      const expected = block.block_id >= this.confirmedNext ? newOrigin(document.updated_at) : this.creationFor(block.block_id, document.updated_at);
+      if (creationFields.some(field => block[field] !== expected[field])) fail('保存回执改变既有出生事实或未证明新分配时间');
+    }
+    const staged = this.fork();
+    if (document.block_state_json.next_block_id > this.confirmedNext) {
+      staged.allocations.push({start: this.confirmedNext, end: document.block_state_json.next_block_id, at: document.updated_at});
+    }
+    const authoritativeBirth = (block: BlockMetadata): BlockMetadata => {
+      const origin = received.get(block.block_id) ?? (block.block_id >= this.confirmedNext && block.block_id < document.block_state_json.next_block_id ? newOrigin(document.updated_at) : undefined);
+      if (!origin) return block;
+      const creation = Object.fromEntries(creationFields.map(field => [field, origin[field]]));
+      return {...block, ...creation, last_modified_at: block.last_modified_at < origin.created_at ? origin.created_at : block.last_modified_at};
+    };
+    staged.births.clear();
+    this.births.forEach((block, id) => staged.births.set(id, Object.freeze(authoritativeBirth(block))));
+    const serverSource = new EditorSource(this.ctx, document.markdown_content);
+    const serverRaw = new Map(document.block_state_json.blocks.map((block, index) => [block.block_id, serverSource.blocks[index]!.markdown]));
+    const currentRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
+    const current = this.pair.block_state_json.blocks.map(block => {
+      const acknowledged = received.get(block.block_id);
+      const unchanged = acknowledged && currentRaw.get(block.block_id) === serverRaw.get(block.block_id) &&
+        JSON.stringify(block.section_path) === JSON.stringify(acknowledged.section_path);
+      return unchanged ? acknowledged : authoritativeBirth(block);
+    });
+    const validated = validateBlockState(this.ctx, this.pair.markdown_content, {...this.pair.block_state_json, blocks: current});
+    staged.pair = Object.freeze({markdown_content: this.pair.markdown_content, block_state_json: validated.state});
+    staged.confirmedVersion = document.content_version;
+    staged.confirmedNext = document.block_state_json.next_block_id;
+    staged.confirmedAt = document.updated_at;
+    staged.lastTime = this.lastTime < document.updated_at ? document.updated_at : this.lastTime;
+    staged.pending = undefined;
+    staged.generation++;
+    Object.assign(this, staged);
+    submissions.delete(submission);
+    return this.pair;
+  }
+
+  dispose(): void {
+    this.closed = true;
+    if (this.pending) submissions.delete(this.pending);
+    this.pending = undefined;
+    this.births.clear();
+    this.versions.clear();
+    this.layouts.length = 0;
+    this.allocations.length = 0;
+    this.generation++;
+  }
+
   normalizeRawBlock(state: EditorState, index: number): RawSourceNormalization {
+    this.live();
     const id = topBlockIds(state.doc)[index];
     const unit = this.units.find(unit => unit.id === id);
     const sourceIndex = this.pair.block_state_json.blocks.findIndex(block => block.block_id === id);
@@ -91,6 +193,7 @@ export class EditedSnapshotLedger {
   // old source spans in document order. First split/merge ownership follows
   // the approved rule; later pieces allocate new IDs above the live high water.
   prepareRawDocument(state: EditorState, index: number, at: string): PreparedEditorSnapshot {
+    this.live();
     timestamp(at);
     if (at < this.lastTime) fail('编辑时间不能倒退');
     const identity = identityState(state), stateIds = topBlockIds(state.doc);
@@ -133,8 +236,7 @@ export class EditedSnapshotLedger {
     const blocks = source.blocks.map((block, blockIndex) => {
       const id = ids[blockIndex]!, old = prior.get(id);
       const changed = !old || oldRaw.get(id) !== block.markdown || JSON.stringify(old.section_path) !== JSON.stringify(block.section_path);
-      return {block_id: id, ...(old ?? {created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
-        created_source_id: this.sessionId, created_at: at}), ...(changed ? origin : {}),
+      return {block_id: id, ...(old ?? this.creationFor(id, at)), ...(changed ? origin : {}),
         block_type: block.block_type, section_path: block.section_path};
     });
     const validated = validateBlockState(this.ctx, markdown, {schema_version: 1, next_block_id: next, blocks});
@@ -155,6 +257,7 @@ export class EditedSnapshotLedger {
     Object.assign(staged, this, {
       versions: new Map([...this.versions].map(([id, versions]) => [id, [...versions]])),
       births: new Map(this.births), units: this.units.map(unit => ({...unit})), layouts: [...this.layouts],
+      allocations: [...this.allocations],
     });
     return staged;
   }
@@ -163,6 +266,7 @@ export class EditedSnapshotLedger {
   // cache, birth fact or timestamp is published until the caller accepts the
   // exact displayed state. This also rebinds references in unedited blocks.
   prepare(state: EditorState, at: string, normalization?: RawSourceNormalization): PreparedEditorSnapshot {
+    this.live();
     const staged = this.fork();
     const pair = staged.capture(state, at, normalization);
     const source = new EditorSource(this.ctx, pair.markdown_content);
@@ -196,6 +300,7 @@ export class EditedSnapshotLedger {
   }
 
   accept(preparation: PreparedEditorSnapshot, displayed: EditorState): EditedSnapshot {
+    this.live();
     const proof = preparations.get(preparation);
     if (!proof || proof.owner !== this || proof.generation !== this.generation || preparation.state !== displayed) {
       fail('编辑输出没有同次未过期视图/账本证明');
@@ -206,6 +311,7 @@ export class EditedSnapshotLedger {
   }
 
   capture(state: EditorState, at: string, normalization?: RawSourceNormalization): EditedSnapshot {
+    this.live();
     timestamp(at);
     if (at < this.lastTime) fail('编辑时间不能倒退');
     const identity = identityState(state);
@@ -343,8 +449,7 @@ export class EditedSnapshotLedger {
         JSON.stringify(old.section_path) !== JSON.stringify(parsed.section_path);
       const origin = {last_modified_by_type: 'USER' as const, last_modified_source_type: 'MANUAL_EDIT' as const,
         last_modified_source_id: this.sessionId, last_modified_at: at};
-      return {block_id: unit.id, ...(old ?? birth ?? {created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
-        created_source_id: this.sessionId, created_at: at}), ...(changed ? origin : {}),
+      return {block_id: unit.id, ...(old ?? birth ?? this.creationFor(unit.id, at)), ...(changed ? origin : {}),
         block_type: parsed.block_type, section_path: parsed.section_path};
     });
     const validated = validateBlockState(this.ctx, markdown, {schema_version: 1, next_block_id: identity.next_block_id, blocks});
