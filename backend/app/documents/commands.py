@@ -21,7 +21,7 @@ from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.identifiers import increment, CapacityExhausted
 from .contracts import save_manual_draft_input, save_manual_draft_result
 from .markdown import DocumentInvalid
-from .snapshot import validate_snapshot
+from .snapshot import Provenance, create_snapshot, validate_snapshot, validate_template_lock
 from .manual_identity import ManualIdentityProofs
 
 
@@ -91,7 +91,8 @@ def save_manual_draft(database: Database, payload: object, *, catalog: ResourceC
             draft = active_manual_draft(connection, root)
             if draft['content_version'] != request.expected_version:
                 raise Rejected('CONTENT_VERSION_CONFLICT')
-            sources = DocumentSources(connection, request.requirement_id, catalog if catalog is not None else ResourceCatalog())
+            resources = catalog if catalog is not None else ResourceCatalog()
+            sources = DocumentSources(connection, request.requirement_id, resources)
             # Stored corruption is an internal failure; client pair failures are DOCUMENT_INVALID.
             persisted = get_manual_draft_result(draft, sources)
             prior = validate_snapshot(persisted['markdown_content'], persisted['block_state_json'], sources)
@@ -101,9 +102,18 @@ def save_manual_draft(database: Database, payload: object, *, catalog: ResourceC
             at = operation_time(clock)
             if at < draft['updated_at']:
                 raise ValueError('Operation clock predates persisted draft')
+            locked_template = None
+            locked_ids = ()
+            if root['status'] == 'INITIALIZING':
+                locked_template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
+                current = connection.execute('SELECT p.created_at FROM manual_draft_context c JOIN requirement_documents p ON p.id=c.current_document_id WHERE c.draft_id=?', (draft['id'],)).fetchone()
+                initial = create_snapshot(locked_template.markdown, Provenance('SYSTEM', 'TEMPLATE', None), current['created_at'], sources)
+                locked_ids = tuple(metadata['block_id'] for block, metadata in zip(initial.parsed.blocks, initial.state['blocks']) if block.block_type == 'heading')
             try:
                 candidate = validate_snapshot(request.markdown_content, request.block_state_json, sources)
                 authoritative = proofs.derive(candidate, prior, baseline, at, sources)
+                if locked_template is not None:
+                    validate_template_lock(authoritative, locked_template, locked_ids)
             except DocumentInvalid:
                 raise Rejected('DOCUMENT_INVALID') from None
             updated = DocumentRepository(connection).save_manual_draft(draft, authoritative, increment(draft['content_version']), at)

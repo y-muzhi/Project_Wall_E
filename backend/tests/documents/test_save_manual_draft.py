@@ -16,6 +16,7 @@ from backend.app.documents.sources import DocumentSources
 from backend.app.infrastructure.database import CommitOutcomeUnknown
 from backend.app.shared.time import utc_milliseconds
 from backend.app.shared.validation import MAX_SAFE_INTEGER
+from backend.app.requirements.commands import complete_initialization
 from backend.tests.documents import test_commands as draft_fixtures
 from backend.tests.documents.test_commands import INSTANT, LATER, KEY
 from backend.tests.infrastructure.test_database import insert_requirement
@@ -29,6 +30,8 @@ class SaveManualDraftTests(unittest.TestCase):
 
     def setUp(self):
         draft_fixtures.DraftCommandTests.setUp(self)
+        initialized = complete_initialization(self.executor, self.start_payload(), catalog=self.catalog, clock=lambda: INSTANT)
+        self.assertEqual(initialized['code'], 'INITIALIZATION_COMPLETED')
         self.draft = self.start()['data']['manual_draft']
 
     def tearDown(self):
@@ -67,9 +70,10 @@ class SaveManualDraftTests(unittest.TestCase):
         self.assertEqual(self.current_facts(), current)
         with self.database.transaction() as connection:
             self.assertEqual(tuple(connection.execute('SELECT * FROM requirements').fetchone()), root)
-            for table in ('revisions', 'comments', 'document_change_audits', 'manual_block_origins', 'manual_block_allocation_ranges'):
+            for table in ('comments', 'document_change_audits', 'manual_block_origins', 'manual_block_allocation_ranges'):
                 self.assertEqual(connection.execute('SELECT count(*) FROM '+table).fetchone()[0], 0)
-            self.assertEqual(connection.execute('SELECT count(*) FROM idempotency_records').fetchone()[0], 1)
+            self.assertEqual(connection.execute('SELECT count(*) FROM revisions').fetchone()[0], 1)
+            self.assertEqual(connection.execute('SELECT count(*) FROM idempotency_records').fetchone()[0], 2)
 
     def test_new_birth_uses_first_server_allocation_time_and_deleted_saved_id_restores(self):
         submitted = self.appended()
