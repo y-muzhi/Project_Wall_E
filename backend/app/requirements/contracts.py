@@ -9,7 +9,7 @@ import re
 from typing import Mapping, Any
 
 from backend.app.shared.pagination import page_number, page_metadata
-from backend.app.shared.command_execution import ExpectedCurrentInput
+from backend.app.shared.command_execution import ExpectedCurrentInput, RequirementActionInput
 from backend.app.shared.time import utc_milliseconds
 from backend.app.shared.validation import (
     MISSING, keyword, object_fields, reject, strict_enum, strict_integer, title,
@@ -108,6 +108,24 @@ def complete_initialization_result(root: Mapping[str, Any], revision: Mapping[st
     return {'requirement': requirement_read_model(root), 'baseline_revision': revision_summary(revision),
             'current_document': {'id': strict_integer(document['id'], 'id'),
                                  'content_version': strict_integer(document['content_version'], 'content_version')}}
+
+
+def complete_requirement_input(payload: object) -> ExpectedCurrentInput:
+    fields = ('requirement_id', 'expected_content_version', 'idempotency_key')
+    return ExpectedCurrentInput.from_fields(object_fields(payload, 'body', fields, fields))
+
+
+def complete_requirement_result(row: Mapping[str, Any]) -> dict:
+    return requirement_read_model(row)
+
+
+def reactivate_requirement_input(payload: object) -> RequirementActionInput:
+    fields = ('requirement_id', 'idempotency_key')
+    return RequirementActionInput.from_fields(object_fields(payload, 'body', fields, fields))
+
+
+def reactivate_requirement_result(row: Mapping[str, Any]) -> dict:
+    return requirement_read_model(row)
 
 
 def _stored_time(value: object) -> None:

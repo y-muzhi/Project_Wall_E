@@ -67,3 +67,17 @@ class RequirementRepository:
         if row is None:
             raise ValueError('Activated requirement is missing')
         return row
+
+    def change_lifecycle(self, identity: int, previous: str, status: str, at: str) -> dict:
+        require_write_transaction(self.connection)
+        if (previous, status) not in (('ACTIVE', 'COMPLETED'), ('COMPLETED', 'ACTIVE')):
+            raise ValueError('Unregistered lifecycle transition')
+        completed_at = at if status == 'COMPLETED' else None
+        result = self.connection.execute('UPDATE requirements SET status=?,completed_at=?,updated_at=? WHERE id=? AND status=?',
+                                         (status, completed_at, at, identity, previous))
+        if result.rowcount != 1:
+            raise ValueError('Lifecycle changed inside shared write transaction')
+        row = self.get(identity)
+        if row is None:
+            raise ValueError('Requirement vanished inside shared write transaction')
+        return row

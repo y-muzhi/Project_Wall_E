@@ -13,7 +13,7 @@ const results = commands.map(([command, args]) => {
   const result = spawnSync(command, args, { cwd: root, encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
   return { command, args, exitCode: result.status, error: result.error?.message ?? null, stdout: result.stdout, stderr: result.stderr };
 });
-const record = { batch: 'P1/P2 foundations, implemented P3 document units and P4 read queries/requirement attributes/initialization baseline/manual revision commands; scope is the actual test names, not whole business acceptance', recordedAt: new Date().toISOString(), node: process.version, cwd: root, results };
+const record = { batch: 'P1/P2 foundations, implemented P3 document units and P4 read queries/requirement lifecycle/initialization baseline/manual revision commands; scope is the actual test names, not whole business acceptance', recordedAt: new Date().toISOString(), node: process.version, cwd: root, results };
 mkdirSync(resolve(root, 'docs/verification'), { recursive: true });
 const stamp = record.recordedAt.replaceAll(':', '-').replaceAll('.', '-');
 const path = resolve(root, `docs/verification/P2-${stamp}.json`);

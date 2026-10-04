@@ -19,7 +19,11 @@ from backend.app.infrastructure.identifiers import EntityKind, entity_id
 from backend.app.infrastructure.resources import ResourceCatalog, TemplateInvalid
 from backend.app.infrastructure.revision_repository import RevisionRepository
 from backend.app.shared.command_execution import Rejected, execute_idempotent, operation_time
-from .contracts import complete_initialization_input, complete_initialization_result
+from .contracts import (
+    complete_initialization_input, complete_initialization_result,
+    complete_requirement_input, complete_requirement_result,
+    reactivate_requirement_input, reactivate_requirement_result,
+)
 
 
 def update_requirement(database: Database, payload: object, *, clock: Callable[[], datetime] | None = None) -> dict:
@@ -102,4 +106,45 @@ def complete_initialization(executor: Idempotency, payload: object, *, catalog: 
     return execute_idempotent(executor, 'APP-REQ-CMD-C03', request, operation, allowed_failures=frozenset({
         'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT',
         'CONTENT_VERSION_CONFLICT', 'DOCUMENT_INVALID', 'TEMPLATE_INVALID',
+    }))
+
+
+def complete_requirement(executor: Idempotency, payload: object, *, clock: Callable[[], datetime] | None = None) -> dict:
+    try:
+        request = complete_requirement_input(payload)
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection: sqlite3.Connection) -> Success:
+        repository = RequirementRepository(connection)
+        root = repository.get(request.requirement_id)
+        if root is None:
+            raise Rejected('NOT_FOUND')
+        if root['status'] != 'ACTIVE':
+            raise Rejected('STATE_CONFLICT')
+        assert_idle(connection, root, remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}))
+        current_at_version(connection, request.requirement_id, request.expected_content_version)
+        row = repository.change_lifecycle(request.requirement_id, 'ACTIVE', 'COMPLETED', operation_time(clock))
+        return Success({'code': 'REQUIREMENT_COMPLETED', 'data': complete_requirement_result(row), 'details': None}, 200)
+    return execute_idempotent(executor, 'APP-REQ-CMD-C04', request, operation, allowed_failures=frozenset({
+        'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT',
+    }))
+
+
+def reactivate_requirement(executor: Idempotency, payload: object, *, clock: Callable[[], datetime] | None = None) -> dict:
+    try:
+        request = reactivate_requirement_input(payload)
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection: sqlite3.Connection) -> Success:
+        repository = RequirementRepository(connection)
+        root = repository.get(request.requirement_id)
+        if root is None:
+            raise Rejected('NOT_FOUND')
+        if root['status'] != 'COMPLETED':
+            raise Rejected('STATE_CONFLICT')
+        assert_idle(connection, root, remaining_conflicts=frozenset())
+        row = repository.change_lifecycle(request.requirement_id, 'COMPLETED', 'ACTIVE', operation_time(clock))
+        return Success({'code': 'REACTIVATED', 'data': reactivate_requirement_result(row), 'details': None}, 200)
+    return execute_idempotent(executor, 'APP-REQ-CMD-C05', request, operation, allowed_failures=frozenset({
+        'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT',
     }))
