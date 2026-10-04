@@ -48,6 +48,17 @@ class RequirementRepository:
             (identity, number, request.requirement_type, request.initialization_mode, request.title, request.template_key, request.template_version, guide_run_id, at, at, at))
         return self.get(identity)
 
+    def all_roots(self) -> list[dict]:
+        return [requirement_read_model(row) for row in self.connection.execute('SELECT ' + COLUMNS + ' FROM requirements ORDER BY id')]
+
+    def recover_occupancy(self, root: dict, batch_id: int | None, started_at: str | None, at: str) -> None:
+        require_write_transaction(self.connection)
+        state, kind = ('IDLE', None) if batch_id is None else ('SUGGESTION_REVIEWING', 'SUGGESTION_BATCH')
+        result = self.connection.execute('UPDATE requirements SET document_work_state=?,active_operation_type=?,active_operation_id=?,state_started_at=?,updated_at=? WHERE id=? AND document_work_state=? AND active_operation_type IS ? AND active_operation_id IS ?',
+            (state, kind, batch_id, started_at, at, root['id'], root['document_work_state'], root['active_operation_type'], root['active_operation_id']))
+        if result.rowcount != 1:
+            raise ValueError('Recovery occupancy changed within the shared transaction')
+
     def update_attributes(self, identity: int, changes: dict[str, str], at: str) -> dict:
         require_write_transaction(self.connection)
         if not changes or not set(changes) <= {'title', 'initialization_mode'}:

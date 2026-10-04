@@ -2,6 +2,7 @@
 import sqlite3
 from .identifiers import require_write_transaction
 from .idempotency import canonical_input
+from backend.app.documents.snapshot import _time
 
 
 class GuideRepository:
@@ -21,3 +22,17 @@ class GuideRepository:
         if row is None:
             raise ValueError('Accepted run is missing')
         return row
+
+    def running(self) -> list[sqlite3.Row]:
+        return self.connection.execute("SELECT id,requirement_id,status,created_at,updated_at FROM guide_runs WHERE status='RUNNING' ORDER BY id").fetchall()
+
+    def recover_failed(self, identity: int, code: str, message: str, at: str) -> None:
+        require_write_transaction(self.connection)
+        for row in self.connection.execute('SELECT started_at FROM llm_uses WHERE guide_run_id=? AND ended_at IS NULL', (identity,)):
+            if _time(row['started_at']) > at:
+                raise ValueError('Recovery cannot precede the unfinished attempt')
+        result = self.connection.execute("UPDATE guide_runs SET status='FAILED',current_step='FINISHED',final_result_json=NULL,ended_at=?,updated_at=?,error_code=?,error_message=? WHERE id=? AND status='RUNNING'", (at, at, code, message, identity))
+        if result.rowcount != 1:
+            raise ValueError('Recovered run changed within its shared transaction')
+        # Preserve all earlier transport/parse/validation facts and unknown usage.
+        self.connection.execute("UPDATE llm_uses SET call_status='FAILED',ended_at=?,error_code=?,error_message=? WHERE guide_run_id=? AND ended_at IS NULL", (at, code, message, identity))
