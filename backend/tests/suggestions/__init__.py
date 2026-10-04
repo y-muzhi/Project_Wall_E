@@ -1,0 +1,1 @@
+"""Suggestion aggregate application tests."""

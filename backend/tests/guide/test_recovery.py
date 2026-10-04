@@ -51,7 +51,7 @@ class RecoveryTests(unittest.TestCase):
         with self.database.transaction(write=True) as connection:
             connection.execute("UPDATE guide_runs SET status=?,current_step='FINISHED',ended_at=?,updated_at=?,final_result_json=?,error_code=?,error_message=?,cancel_reason=? WHERE id=?",(status,self.at,self.at,json.dumps({'summary':'explicit historical fixture'}) if status=='COMPLETED' else None,'MODEL_ERROR' if status=='FAILED' else None,'safe fixture failure' if status=='FAILED' else None,'USER_REQUESTED' if status=='CANCELLED' else None,self.run))
 
-    def batch_fixture(self,identity=10,*,parent_id=10,status='PENDING',owned=True):
+    def batch_fixture(self,identity=10,*,parent_id=10,status='PENDING',owned=True,source_type='USER_INSTRUCTION',source_id=None):
         # Native initialization is used for the ACTIVE baseline; remaining
         # historical MODIFY/batch rows are explicit complete storage fixtures.
         root=self.row('requirements',self.req)
@@ -62,20 +62,23 @@ class RecoveryTests(unittest.TestCase):
             result=complete_initialization(self.executor,{'requirement_id':self.req,'expected_content_version':1,'idempotency_key':creation.OTHER},catalog=self.catalog,clock=lambda:creation.INSTANT)
             self.assertEqual(result['code'],'INITIALIZATION_COMPLETED',result)
         run=self.row('guide_runs',self.run)
-        function=self.catalog.freeze('MODIFY','USER_INSTRUCTION')
-        run.update(id=parent_id,action_type='MODIFY',function_type=function.function_type,context_template_key='MODIFY_CONTEXT',context_template_version='v1',prompt_version='v1',mode_snapshot=None,
+        function=self.catalog.freeze('MODIFY',source_type)
+        context_key,context_version=function.context_template.split('@');prompt_key,prompt_version=function.prompt_reference.split('@')
+        run.update(id=parent_id,action_type='MODIFY',source_type=source_type,source_id=source_id,function_type=function.function_type,context_template_key=context_key,context_template_version=context_version,prompt_version=prompt_version,mode_snapshot=None,
             status='COMPLETED',current_step='FINISHED',ended_at=self.at,final_result_json=json.dumps({'summary':'explicit batch fixture'}),idempotency_key=f'00000000-0000-4000-8000-{parent_id:012d}')
         manifest=json.loads(run['read_scope_manifest_json'])
-        manifest.update(function_type=function.function_type,context_template={'key':'MODIFY_CONTEXT','version':'v1'},prompt={'key':'MODIFY_REQUIREMENT','version':'v1'},message_ids=[100+parent_id])
+        manifest.update(function_type=function.function_type,context_template={'key':context_key,'version':context_version},prompt={'key':prompt_key,'version':prompt_version},message_ids=[100+parent_id],source={'source_type':source_type,'source_id':source_id})
         run.update(trigger_message_id=100+parent_id,instruction_summary='explicit historical modification instruction',read_scope_manifest_json=json.dumps(manifest))
         original=parse_markdown(self.row('requirement_documents',self.created['current_document_id'])['markdown_content']).blocks[0].markdown
         with self.database.transaction(write=True) as connection:
             MessageRepository(connection).create_user_text(100+parent_id,self.req,parent_id,run['instruction_summary'],run['idempotency_key'],self.at)
             connection.execute('INSERT INTO guide_runs('+','.join(run)+') VALUES ('+','.join('?' for _ in run)+')',tuple(run.values()))
-            connection.execute("INSERT INTO suggestion_batches VALUES (?, ?, ?, 'USER_INSTRUCTION', NULL, 'fixture batch', 'fixture summary', ?, NULL, NULL, 1, NULL, ?, ?, ?)",(identity,self.req,parent_id,status,self.at,self.at if status=='DISCARDED' else None,self.at))
+            connection.execute("INSERT INTO suggestion_batches VALUES (?, ?, ?, ?, ?, 'fixture batch', 'fixture summary', ?, NULL, NULL, 1, NULL, ?, ?, ?)",(identity,self.req,parent_id,source_type,source_id,status,self.at,self.at if status=='DISCARDED' else None,self.at))
             connection.execute("INSERT INTO suggestions(id,batch_id,order_no,title,explanation,impact,patch_operation,target_ref_json,selector_json,proposed_markdown,proposed_data_json,original_content,status,user_edited_content,validation_status,validation_error,created_at,updated_at,decided_at) VALUES (?,?,1,'fixture suggestion','fixture explanation',NULL,'REPLACE_BLOCK','{\"block_id\":1}',NULL,'# replacement',NULL,?,'PENDING',NULL,'VALID',NULL,?,?,NULL)",(identity,identity,original,self.at,self.at))
             if owned:
                 connection.execute("UPDATE requirements SET document_work_state='GUIDE_ACTIVE',active_operation_type='GUIDE_RUN',active_operation_id=?,state_started_at=? WHERE id=?",(parent_id,self.at,self.req))
+            for kind,value in (('GuideRun',parent_id),('ConversationMessage',run['trigger_message_id']),('SuggestionBatch',identity),('Suggestion',identity)):
+                connection.execute('INSERT INTO sequences VALUES (?,?) ON CONFLICT(entity_kind) DO UPDATE SET last_value=max(last_value,excluded.last_value)',(kind,value))
         return parent_id
 
     def test_startup_fails_unowned_running_and_only_unfinished_attempt_with_no_provider(self):

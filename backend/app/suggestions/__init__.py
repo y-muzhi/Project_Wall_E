@@ -1,0 +1,1 @@
+"""Suggestion batch application capabilities."""
