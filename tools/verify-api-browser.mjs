@@ -6,9 +6,11 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 
 const root = resolve(import.meta.dirname, '..'), session = `walle-api-${Date.now()}`;
+const propertiesOnly=process.argv.includes('--properties');assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:[]);
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
+if(propertiesOnly)report.scope='Focused actual property controls/browser/production API/isolated SQLite with native I02/I05 bootstrap; no claim of full 37-binding rerun, Provider or product-page acceptance';
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
 const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
@@ -74,6 +76,7 @@ try {
   assert(live); await cli('open', 'http://127.0.0.1:5175/tests/browser/api.html'); opened = true;
   await cli('snapshot');
   await cli('run-code', 'async (page) => { await page.waitForFunction(() => document.querySelector("#status")?.textContent === "READY", null, {timeout: 15000}); return true; }');
+  if(!propertiesOnly){
   report.workbench_empty = result(await cli('run-code','async (page) => { await page.evaluate(() => window.apiProbe.mountWorkbench(false)); await page.waitForFunction(() => window.workbenchProbe?.state().phase === "EMPTY"); const value=await page.evaluate(() => window.workbenchProbe.state()); if(value.state.result.pagination.total!==0||await page.getByText("暂无需求",{exact:true}).count()!==1)throw new Error("Native empty workbench missing"); await page.evaluate(() => window.workbenchProbe.destroy()); return {passed:true,total:0}; }'));
   report.browser = result(await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.run())'));
   assert.equal(report.browser.passed, true);
@@ -324,17 +327,44 @@ try {
     }
     await page.evaluate(()=>window.lifecycleProbe.destroy());return {...probe,replay_wires:wires.filter(wire=>wire.method==='POST')};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.lifecycle.passed,true);
+  }else {report.property_bootstrap=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.bootstrapProperties())'));assert.equal(report.property_bootstrap.passed,true);}
+  const propertyBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountProperties());return before;}'));
+  for(const [index,label,input] of [[0,'需求标题','待保存标题'],[1,'初始化模式','待保存模式']]){
+    await cli('run-code',`async(page)=>{
+      const scope=page.getByRole('region',{name:${JSON.stringify(label)},exact:true});await scope.getByRole('button',{name:${JSON.stringify('修改'+label)},exact:true}).click();
+      const field=scope.getByLabel(${JSON.stringify(input)},{exact:true});
+      if(${index}===0){await field.fill('取消的标题');await field.press('Enter');if((await page.evaluate(()=>window.propertyProbe.state())).prepares.title)throw Error('Enter submitted title');}
+      else await field.selectOption((await page.evaluate(()=>window.propertyProbe.state())).mode_choice);
+      await scope.getByRole('button',{name:'取消',exact:true}).click();if((await page.evaluate(()=>window.propertyProbe.state())).prepares[${JSON.stringify(index===0?'title':'initialization_mode')}])throw Error('Cancel patched property');
+      await scope.getByRole('button',{name:${JSON.stringify('修改'+label)},exact:true}).click();
+      if(${index}===0){await field.fill('😀'.repeat(21));await scope.getByRole('button',{name:'保存',exact:true}).click();await scope.getByText('最多允许 20 个字符',{exact:true}).waitFor();if((await page.evaluate(()=>window.propertyProbe.state())).prepares.title)throw Error('Invalid title prepared PATCH');await field.fill('  '+ '😀'.repeat(20)+'  ');}
+      else await field.selectOption((await page.evaluate(()=>window.propertyProbe.state())).mode_choice);
+      await scope.getByRole('button',{name:'保存',exact:true}).click();await page.waitForFunction(()=>window.propertyProbe.state().receipt_held);await scope.getByText('保存中…',{exact:true}).waitFor();
+      if(!await field.isDisabled()||(await page.evaluate(()=>window.propertyProbe.state())).state.receipt!==null)throw Error('In-flight PATCH input/receipt not protected');await page.evaluate(()=>window.propertyProbe.releaseReceipt());await page.waitForFunction(()=>window.propertyProbe.state().phase==='UNKNOWN');
+      await scope.getByRole('button',{name:'读取实际属性',exact:true}).click();await scope.getByRole('button',{name:'重新读取当前详情',exact:true}).waitFor();
+      const state=await page.evaluate(()=>window.propertyProbe.state());if(state.phase!=='OBSERVED'||state.state.receipt!==null||state.submits[${JSON.stringify(index===0?'title':'initialization_mode')}]!==1||!await scope.getByRole('button',{name:'继续编辑',exact:true}).isDisabled())throw Error('GET pretended own PATCH receipt or bypassed read failure');
+      if(${index}===0)await page.screenshot({path:'output/playwright/property-observed.png'});
+      await scope.getByRole('button',{name:'重新读取当前详情',exact:true}).click();await page.waitForFunction(expected=>window.propertyProbe.state().reads===expected,${index*3+2});await scope.getByRole('button',{name:'继续编辑',exact:true}).click();
+      await scope.getByRole('button',{name:'保存',exact:true}).click();await page.waitForFunction(()=>window.propertyProbe.state().phase==='VIEW');await page.evaluate(()=>window.propertyProbe.advance());return true;
+    }`.replace(/\r?\n/g,' '));
+  }
+  report.properties=result(await cli('run-code',`async(page)=>{
+    const probe=await page.evaluate(()=>window.propertyProbe.inspect()),wires=(await page.evaluate(()=>window.apiProbe.wireFacts())).slice(${propertyBefore}),patches=wires.filter(wire=>wire.method==='PATCH');
+    if(patches.length!==4||patches.some(wire=>wire.status!==200||wire.key!==null||wire.content_type!=='application/json'))throw Error('Property PATCH/key/header contract changed');
+    for(const item of probe.results){const pair=patches.filter(wire=>wire.path==='/api/v1/requirements/'+item.identity);if(pair.length!==2||pair.some(wire=>Object.keys(JSON.parse(wire.body)).length!==1||JSON.parse(wire.body)[item.field]!==item.actual_value)||item.updated_at!==item.first_written_at)throw Error('Property only-field or no-change timestamp failed');}
+    await page.evaluate(()=>window.propertyProbe.destroy());return {...probe,patch_wires:patches};
+  }`.replace(/\r?\n/g,' ')));assert.equal(report.properties.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
-  const health=await fetch('http://127.0.0.1:5175/api/v1/requirements?page=1');assert.equal(health.status,200);const checked=await health.json();assert.equal(checked.meta.pagination.total,24);
+  const health=await fetch('http://127.0.0.1:5175/api/v1/requirements?page=1');assert.equal(health.status,200);const checked=await health.json();assert.equal(checked.meta.pagination.total,propertiesOnly?2:24);
   report.passed = true;
 } catch (error) { report.passed = false; report.error = String(error); globalThis.process.exitCode = 1;
   report.development_exit_before_cleanup={code:vite?.child.exitCode??null,signal:vite?.child.signalCode??null};
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),property:window.propertyProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }
@@ -354,12 +384,13 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 28 || closed.facts.requirements !== 24 || closed.facts.requirement_documents !== 24 || closed.facts.revisions !== 5 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
+      const expected=propertiesOnly?{llm_uses:0,guide_runs:2,requirements:2,requirement_documents:2,revisions:1,comments:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:5,comments:2};
+      if (Object.entries(expected).some(([key,value])=>closed.facts[key]!==value)|| native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
   report.changed_inputs = [...new Set([...Object.keys(report.inputs_before), ...Object.keys(report.inputs_after)])].filter(key => report.inputs_before[key] !== report.inputs_after[key]);
   if (report.changed_inputs.length) { report.passed = false; report.error ??= 'Inputs changed during verification'; globalThis.process.exitCode = 1; }
-  const path = resolve(root, 'docs/verification', `api-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
+  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ passed: report.passed, evidence: path, error: report.error }));
 }

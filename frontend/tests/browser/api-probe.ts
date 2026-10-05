@@ -19,6 +19,7 @@ import {mountManualControlsProbe} from './manual-controls-probe.tsx';
 import {manualSessionProbe} from './manual-session-probe.ts';
 import {GuideRunPolling} from '../../src/guide/polling.ts';
 import {mountLifecycleProbe} from './lifecycle-probe.tsx';
+import {mountPropertyProbe} from './property-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -36,7 +37,7 @@ const transport: typeof fetch = async (input, options) => {
     ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
       (String(input).startsWith('/api/v1/requirements/') &&
         ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft')||String(input).endsWith('/complete-initialization')||String(input).endsWith('/complete')||String(input).endsWith('/reactivate'))) ||
-          (options?.method === 'DELETE' && String(input).endsWith('/manual-draft'))))
+          (options?.method === 'DELETE' && String(input).endsWith('/manual-draft')) || (options?.method==='PATCH'&&/^\/api\/v1\/requirements\/\d+$/.test(String(input)))))
       ? { ...(options?.body!==undefined?{body:String(options.body)}:{}), key: new Headers(options?.headers).get('Idempotency-Key')!,content_type:new Headers(options?.headers).get('Content-Type') } : {}),
     ...(response.status >= 400 ? { error_response: received } : {}) }); return response;
 };
@@ -44,6 +45,17 @@ const api = editor.editor.action(ctx => new WalleApi(new ApiClient(transport), c
 const status = document.querySelector<HTMLElement>('#status')!;
 let lastRequirement = 0;
 const hostProbe = editorHostProbe(api, () => lastRequirement);
+
+async function bootstrapProperties(){
+  for(const title of ['实际模式验证','实际标题验证']){
+    const created=(await api.prepareCreateRequirement({title,requirement_type:'NEW',template_key:'new-requirement',template_version:'v1',initialization_mode:'DESIGN',initial_idea:'明确的属性专项验证输入'}).submit()).data;
+    const due=Date.now()+10000;let finished=false;
+    while(Date.now()<due){const run=(await api.getGuideRun(created.guide_run_id)).data;if(run.status==='FAILED'){require(run.error_code==='CONFIG_INVALID');finished=true;break;}await new Promise(resolve=>setTimeout(resolve,25));}require(finished);
+    if(title==='实际标题验证'){require(created.requirement.id===2);const current=(await api.getCurrentDocument(2)).data;await api.prepareCompleteInitialization(2,current.content_version).submit();}
+    else require(created.requirement.id===1);
+  }
+  return {passed:true,requirements:2,scope:'Two real I02 creations/native failed configuration Runs, actual I05 on second; no fabricated business state or Provider'};
+}
 
 async function run() {
   const records: { name: string; status: 'SUCCESS' | 'REJECTED'; error?: string }[] = [];
@@ -132,6 +144,8 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountManualControls:async(operation:'COMPLETE'|'CANCEL',localMode:'AVAILABLE'|'COMPARE'|'NONE')=>{Object.assign(window,{manualControlsProbe:await mountManualControlsProbe(api,2,operation,localMode)});},
  manualSession:()=>manualSessionProbe(api,2),
  mountLifecycle:async()=>{Object.assign(window,{lifecycleProbe:await mountLifecycleProbe(api)});},
+ mountProperties:async()=>{Object.assign(window,{propertyProbe:await mountPropertyProbe(api)});},
+ bootstrapProperties,
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
