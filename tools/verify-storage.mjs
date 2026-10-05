@@ -1,9 +1,19 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const python = resolve(root, '.venv/Scripts/python.exe');
+function inputHashes() {
+  const files = readdirSync(resolve(root, 'backend'), { recursive: true, withFileTypes: true })
+    .filter(entry => entry.isFile() && /\.(py|sql|json|md|lock)$/.test(entry.name))
+    .map(entry => resolve(entry.parentPath, entry.name));
+  files.push(resolve(root, 'tools/verify-storage.mjs'));
+  return Object.fromEntries(files.sort().map(path => [path.slice(root.length + 1).replaceAll('\\', '/'),
+    createHash('sha256').update(readFileSync(path)).digest('hex')]));
+}
+const before = inputHashes();
 const commands = [
   ['node', ['tools/spec-audit.mjs', 'check']],
   [python, ['-m', 'pip', 'check']],
@@ -13,11 +23,13 @@ const results = commands.map(([command, args]) => {
   const result = spawnSync(command, args, { cwd: root, encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
   return { command, args, exitCode: result.status, error: result.error?.message ?? null, stdout: result.stdout, stderr: result.stderr };
 });
-const record = { batch: 'P1/P2 foundations, implemented P3 document units and P4 queries/lifecycle/baseline/revisions/draft start-save-complete-cancel, D-009 identity proofs, all-comment C06, durable initial-run acceptance, OS-lock-bound C09 recovery, Guide status/history/create/continue/retry/comment acceptance, logical cancellation and failure bookkeeping, P5 comments and suggestion batch complete reads/decision/application/discard, message cursor reads, derived card state and whole-card submission acceptance, C03 model-context snapshot reads and exact frozen input assembly/conservative budget rejection (expanded-budget compiler fixtures are diagnostic only, not production compatibility), D-007 frozen model profile, private audit sanitization and actual SQLite request preparation/transport/parse/failure/retention stages (no live requests or trusted-result success producer), and thirty-seven actual HTTP adapters; scope is the actual test names, not scheduled/background execution, live connection cancellation, real AI message/batch production, product pages or whole business acceptance', recordedAt: new Date().toISOString(), node: process.version, cwd: root, results };
+const after = inputHashes();
+const changedInputs = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(path => before[path] !== after[path]);
+const record = { batch: 'P1/P2 foundations, implemented P3 document units and P4 queries/lifecycle/baseline/revisions/draft start-save-complete-cancel, D-009 identity proofs, all-comment C06, durable initial-run acceptance, OS-lock-bound C09 recovery, Guide status/history/create/continue/retry/comment acceptance, logical cancellation and failure bookkeeping, P5 comments and suggestion batch complete reads/decision/application/discard, message cursor reads, derived card state and whole-card submission acceptance, C03 model-context snapshot reads and exact frozen input assembly/conservative budget rejection (expanded-budget compiler fixtures are diagnostic only, not production compatibility), D-007 frozen model profile, private audit sanitization and actual SQLite request preparation/transport/parse/failure/retention stages, actual loopback HTTP gateway single-attempt/error/usage/cancellation tests plus real prepared-audit integration (no Volcengine or paid request, tokenizer proof, trusted-result success producer or scheduler), and thirty-seven actual HTTP adapters; scope is the actual test names, not real AI message/batch production, product pages or whole business acceptance', recordedAt: new Date().toISOString(), node: process.version, cwd: root, inputs: { before, after, changedInputs }, results };
 mkdirSync(resolve(root, 'docs/verification'), { recursive: true });
 const stamp = record.recordedAt.replaceAll(':', '-').replaceAll('.', '-');
 const path = resolve(root, `docs/verification/P2-${stamp}.json`);
 writeFileSync(path, JSON.stringify(record, null, 2) + '\n');
-const passed = results.every(result => result.exitCode === 0 && result.error === null);
+const passed = changedInputs.length === 0 && results.every(result => result.exitCode === 0 && result.error === null);
 console.log(JSON.stringify({ passed, evidence: path, scope: record.batch }));
 if (!passed) process.exitCode = 1;
