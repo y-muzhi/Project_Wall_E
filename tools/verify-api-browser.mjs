@@ -218,6 +218,8 @@ try {
     return {passed:true,native_draft_version:actual.version,restore_reads:final.restoreReads,panel_reads:final.panelReads,preferences:final.geometry.preferences,
       scope:'Real layout/keyboard/native viewport, actual editor draft I11/I03/I08/I10 and panel reads; held and discarded actual re-read for race/failure. Parent is explicit diagnostic, not complete detail product or Windows IME'};
   }`.replace(/\r?\n/g,' ')));
+  report.detail_read=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.detailRead())'));
+  assert.equal(report.detail_read.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
