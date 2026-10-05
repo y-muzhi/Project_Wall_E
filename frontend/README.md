@@ -1,13 +1,16 @@
 # 前端实施边界
 
-已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。当前包含选区辅助函数、真实Crepe源码/身份适配和本地编辑快照输出；业务页面、路由及HTTP尚未创建。
+已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。当前包含选区辅助函数、真实Crepe源码/身份适配、本地编辑快照输出、API原请求保护传输层和37个强类型业务绑定及全部公共读取模型。业务页面、路由与构建入口仍在实施。
 
 在项目根运行：
 
 ```powershell
 node tools/verify-frontend.mjs
 node tools/verify-editor-browser.mjs
+node tools/verify-api-browser.mjs
 ```
+
+实际API探针使用独立SQLite文件、正式后端factory/后台与uvicorn、Vite同源代理及真实浏览器/Crepe解析。37接口均实际到达，明确包含缺资源及非法状态拒绝；7份正文/草稿与1份历史快照通过真实Markdown/元数据配对，草稿4与CURRENT2独立；缺模型配置真实失败且LLMUse为0。该探针是测试工具，不是业务页面或真实模型效果验收，结束关闭自有浏览器/Vite/API服务。详细范围见[验证说明](../docs/verification/frontend-api-notes.md)。
 
 在本目录重新安装/检查：
 

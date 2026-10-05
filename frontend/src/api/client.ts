@@ -78,6 +78,44 @@ function snapshot(value: unknown, seen = new Set<unknown>()): Json {
   seen.delete(value);
   return result;
 }
+/** Capture once before a business binding closes over response expectations. */
+export function snapshotObject(value: unknown): JsonObject {
+  object(value);
+  const copied = snapshot(value) as JsonObject;
+  function freeze(item: Json): void {
+    if (item !== null && typeof item === 'object') { for (const child of Object.values(item)) freeze(child); Object.freeze(item); }
+  }
+  freeze(copied); return copied;
+}
+function errorDetails(code: string, value: unknown): JsonObject | null {
+  if (code === 'CARD_ALREADY_ANSWERED') {
+    const result = exact(value, ['response_message_id']); positiveInteger(result.response_message_id); return result as JsonObject;
+  }
+  if (code === 'VALIDATION_FAILED') {
+    const result = exact(value, ['field_errors']);
+    if (!Array.isArray(result.field_errors) || result.field_errors.length === 0) throw new TypeError('Missing field errors');
+    const reasons = new Set(['REQUIRED', 'INVALID_TYPE', 'INVALID_FORMAT', 'INVALID_ENUM', 'TOO_SHORT', 'TOO_LONG', 'OUT_OF_RANGE', 'UNKNOWN_FIELD', 'DUPLICATE_PARAMETER']);
+    for (const value of result.field_errors) {
+      const item = exact(value, ['field', 'reason', 'message']);
+      if (Object.values(item).some(value => typeof value !== 'string' || value.length === 0) || !reasons.has(item.reason as string)) throw new TypeError('Invalid field error');
+    }
+    return result as JsonObject;
+  }
+  if ((code === 'PATCH_INVALID' || code === 'TARGET_STALE') && value !== null) {
+    const result = exact(value, ['suggestion_errors']);
+    if (!Array.isArray(result.suggestion_errors) || result.suggestion_errors.length < 1 || result.suggestion_errors.length > 100) throw new TypeError('Invalid suggestion errors');
+    const ids = new Set<number>();
+    for (const value of result.suggestion_errors) {
+      const item = exact(value, ['suggestion_id', 'code', 'message']), identity = positiveInteger(item.suggestion_id);
+      if (ids.has(identity) || !['PATCH_INVALID', 'TARGET_STALE'].includes(item.code as string) ||
+          item.message !== (item.code === 'PATCH_INVALID' ? '修改建议结构不合法或不能组合应用' : '修改目标或原内容已变化')) throw new TypeError('Invalid suggestion error');
+      ids.add(identity);
+    }
+    return result as JsonObject;
+  }
+  if (value !== null) throw new TypeError('Unregistered error details');
+  return null;
+}
 function meta(value: unknown): ApiMeta {
   const row = object(value);
   exact(row, Object.hasOwn(row, 'pagination') ? ['request_id', 'pagination'] : ['request_id']);
@@ -157,7 +195,7 @@ export class ApiClient {
       if (typeof error.code !== 'string' || !/^[A-Z][A-Z_]+$/.test(error.code) || typeof error.message !== 'string' || !error.message) throw new TypeError('Invalid API error');
       if (!Object.hasOwn(ERROR_STATUS, error.code) || ERROR_STATUS[error.code] !== response.status) throw new TypeError('Unregistered error');
       if (mutation && (error.code === 'INTERNAL_ERROR' || error.code === 'STORAGE_UNAVAILABLE')) throw new ApiUnknown(true);
-      const details = error.details === null ? null : object(error.details) as JsonObject;
+      const details = errorDetails(error.code, error.details);
       throw new ApiRejected(error.code, error.message, details, context.request_id, response.status);
     } catch (error) {
       if (error instanceof ApiRejected) throw error;

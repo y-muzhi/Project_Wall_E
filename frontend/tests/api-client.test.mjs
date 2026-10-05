@@ -10,6 +10,21 @@ const failure = (code, details=null) => ({success:false,data:null,error:{code,me
 const decode = value => { const row=exact(value,['id']);return {id:positiveInteger(row.id)}; };
 const unknown = promise => assert.rejects(promise, error => error instanceof ApiUnknown && error.mutation);
 
+test('registered failure details are exact; malformed denial cannot be treated as known nonexecution', async () => {
+  const valid = [ ['VALIDATION_FAILED', 422, {field_errors:[{field:'title',reason:'REQUIRED',message:'必须提供'}]}],
+    ['PATCH_INVALID',422,{suggestion_errors:[{suggestion_id:3,code:'PATCH_INVALID',message:'修改建议结构不合法或不能组合应用'}]}] ];
+  for (const [code,status,details] of valid) {
+    const client=new ApiClient(async()=>json(failure(code,details),status),()=>KEY);
+    await assert.rejects(client.commit(client.prepare('POST','/api/v1/requirements',{}, {idempotent:true,success_status:201}),decode),
+      error=>error instanceof ApiRejected&&JSON.stringify(error.details)===JSON.stringify(details));
+  }
+  const invalid=[['VALIDATION_FAILED',422,null],['VALIDATION_FAILED',422,{field_errors:[]}],['VALIDATION_FAILED',422,{field_errors:[{field:'x',reason:'PRIVATE',message:'x'}]}],
+    ['CARD_ALREADY_ANSWERED',409,{response_message_id:0}],['STATE_CONFLICT',409,{invented:'x'}],
+    ['PATCH_INVALID',422,{suggestion_errors:[{suggestion_id:3,code:'PATCH_INVALID',message:'stack'}]}]];
+  for(const [code,status,details] of invalid){const client=new ApiClient(async()=>json(failure(code,details),status),()=>KEY);
+    await unknown(client.commit(client.prepare('POST','/api/v1/requirements',{}, {idempotent:true,success_status:201}),decode));}
+});
+
 test('same user action resends exact immutable JSON and key after lost response, new action gets new key', async () => {
   const calls=[];let replies=0;let keys=0;
   const client=new ApiClient(async (url,options) => {
