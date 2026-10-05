@@ -1,0 +1,17 @@
+test_before_startup_no_acceptance_then_actual_missing_config_run_failure_remains_readable (backend.tests.test_service.ServiceTests.test_before_startup_no_acceptance_then_actual_missing_config_run_failure_remains_readable) ... Executing <Task finished name='Task-1' coro=<ServiceTests.asyncSetUp() done, defined at C:\Users\羊牧之\Documents\ChatGPT\Project_Wall_E 2\backend\tests\test_service.py:23> result=None created at D:\Anaconda3\Lib\asyncio\runners.py:100> took 0.571 seconds
+Executing <Task pending name='Task-2' coro=<ServiceTests.test_before_startup_no_acceptance_then_actual_missing_config_run_failure_remains_readable() running at C:\Users\羊牧之\Documents\ChatGPT\Project_Wall_E 2\backend\tests\test_service.py:44> cb=[_run_until_complete_cb() at D:\Anaconda3\Lib\asyncio\base_events.py:181, <1 more>, WorkerThread.stop()] created at D:\Anaconda3\Lib\asyncio\runners.py:100> took 0.448 seconds
+ok
+test_missing_database_refuses_startup_without_creating_it (backend.tests.test_service.ServiceTests.test_missing_database_refuses_startup_without_creating_it) ... Executing <Task finished name='Task-34' coro=<ServiceTests.asyncSetUp() done, defined at C:\Users\羊牧之\Documents\ChatGPT\Project_Wall_E 2\backend\tests\test_service.py:23> result=None created at D:\Anaconda3\Lib\asyncio\runners.py:100> took 0.551 seconds
+ok
+test_shutdown_retires_actual_http_write_thread_before_lock_release_no_late_commit (backend.tests.test_service.ServiceTests.test_shutdown_retires_actual_http_write_thread_before_lock_release_no_late_commit) ... Executing <Task finished name='Task-40' coro=<ServiceTests.asyncSetUp() done, defined at C:\Users\羊牧之\Documents\ChatGPT\Project_Wall_E 2\backend\tests\test_service.py:23> result=None created at D:\Anaconda3\Lib\asyncio\runners.py:100> took 0.551 seconds
+ok
+test_startup_finishes_actual_recovery_before_first_http_and_second_instance_refuses (backend.tests.test_service.ServiceTests.test_startup_finishes_actual_recovery_before_first_http_and_second_instance_refuses) ... Executing <Task finished name='Task-56' coro=<ServiceTests.asyncSetUp() done, defined at C:\Users\羊牧之\Documents\ChatGPT\Project_Wall_E 2\backend\tests\test_service.py:23> result=None created at D:\Anaconda3\Lib\asyncio\runners.py:100> took 0.590 seconds
+ok
+test_actual_cli_init_tcp_native_acceptance_second_process_refusal_graceful_close_and_restart (backend.tests.test_service_process.ServiceProcessTests.test_actual_cli_init_tcp_native_acceptance_second_process_refusal_graceful_close_and_restart) ... ok
+test_actual_process_startup_missing_database_refuses_before_binding_and_does_not_initialize (backend.tests.test_service_process.ServiceProcessTests.test_actual_process_startup_missing_database_refuses_before_binding_and_does_not_initialize) ... ok
+test_forced_process_death_releases_os_lock_and_next_actual_startup_interrupts_without_resend (backend.tests.test_service_process.ServiceProcessTests.test_forced_process_death_releases_os_lock_and_next_actual_startup_interrupts_without_resend) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 15.342s
+
+OK

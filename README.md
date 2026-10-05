@@ -1,6 +1,6 @@
 # WALL-E V1_0.6
 
-项目正在从零实施。两份设计已完整逐段阅读，公共方案、火山模型配置、人工来源/身份回执和完整事实证据/卡片等价v2资源已获用户确认。后端基础及已实现文档/需求/消息/审计/本机HTTP网关、版本资源、可信输出、C07、编排与后台管理能力723项完整回归通过；前端40项测试及完整TypeScript检查通过，298对编辑器快照和最新16对实际SQLite保存回执保留原验证范围。已实现13个只读及24个写入HTTP适配器、提交后实际调度和前端原请求保护传输层；正式服务入口与完整页面尚未实现，应用尚不可运行。
+项目正在从零实施。两份设计已完整逐段阅读，公共方案、火山模型配置、人工来源/身份回执和完整事实证据/卡片等价v2资源已获用户确认。后端基础及文档/需求/消息/审计/本机HTTP网关、版本资源、可信输出、C07、编排、后台和正式API生命周期730项完整回归通过；前端40项测试及完整TypeScript检查通过，298对编辑器快照和最新16对实际SQLite保存回执保留原验证范围。13个只读及24个写入HTTP适配器已接入正式服务，前端原请求保护传输层已验证；完整页面尚未实现，不能作为完整应用交付。
 
 接续首先阅读 [实现进度](docs/实现进度.md) 和 [需求映射](docs/需求实现映射.md)。不能将本准备批次当作完整交付。
 
@@ -23,9 +23,10 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend/requirements.lock
 .\.venv\Scripts\python.exe -m backend.app.infrastructure.database init
 .\.venv\Scripts\python.exe -m backend.app.infrastructure.database check
+.\.venv\Scripts\python.exe -m backend.app
 node tools/verify-storage.mjs
 ```
 
-默认数据库为项目data/wall-e.sqlite，可用WALLE_DATABASE_PATH指定绝对路径。当前Schema版本4；升级先备份，无法证明的旧人工来源或草稿分配历史拒绝升级并保留原事实。重复初始化仅校验已有结构；未知版本保留数据并拒绝。入口只初始化/检查，不启动业务服务。验证记录保存在docs/verification；阶段计划见[实施计划](docs/实施计划.md)。当前没有服务在运行。
+默认数据库为项目data/wall-e.sqlite，可用WALLE_DATABASE_PATH指定绝对路径。当前Schema版本4；升级先备份，无法证明的旧人工来源或草稿分配历史拒绝升级并保留原事实。重复初始化仅校验已有结构；未知版本保留数据并拒绝。服务绑定127.0.0.1:8000，单进程、不启用reload，先校验已有库、取得OS锁并完成恢复，再接受HTTP；缺库拒绝启动。Ctrl+C退出由uvicorn调用关闭生命周期。模型凭据及正式计数兼容仍需配置/证明，缺失时AI运行真实失败，不生成示例业务结果。验证记录保存在docs/verification；[服务验证范围](docs/verification/service-notes.md)和[实施计划](docs/实施计划.md)列出待完成项。本轮仅使用隔离临时库测试，测试进程已关闭。
 
 前端安装/基础验证范围见[前端说明](frontend/README.md)。项目根验证：`node tools/verify-frontend.mjs`。这不是页面或浏览器验收。

@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 from backend.app.infrastructure.database import Database
 from backend.app.infrastructure.idempotency import Idempotency, canonical_input, request_key
 from backend.app.infrastructure.resources import ResourceCatalog
+from backend.app.infrastructure.execution_lease import LeasedDatabase, ExecutionRetired
 from .http_errors import error_response, new_request_id
 from .validation import InvalidInput, query_fields, reject, strict_json_object
 
@@ -106,7 +107,8 @@ async def handle_http(request: Request, request_model: type, response_model: typ
             raise ValueError('Success results cannot carry error details')
         if runtime.worker is not None:
             from backend.app.guide.worker import GuideWorker
-            if not isinstance(runtime.worker, GuideWorker) or runtime.worker.database is not runtime.database:
+            base = runtime.database.database if isinstance(runtime.database, LeasedDatabase) else runtime.database
+            if not isinstance(runtime.worker, GuideWorker) or runtime.worker.database is not base:
                 raise ValueError('Post-commit dispatcher must own this actual runtime database')
             await runtime.worker.after_commit(result)
         data, pagination = response_model.project(result['data'], parsed)
@@ -115,6 +117,8 @@ async def handle_http(request: Request, request_model: type, response_model: typ
         if pagination is not None:
             meta['pagination'] = pagination
         return JSONResponse({'success': True, 'data': data, 'error': None, 'meta': meta}, status_code=getattr(response_model, 'status', 200))
+    except ExecutionRetired:
+        return failure('STORAGE_UNAVAILABLE')
     except Exception:
         return failure('INTERNAL_ERROR')
 
