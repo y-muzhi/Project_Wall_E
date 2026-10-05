@@ -189,6 +189,28 @@ def apply_adoptions(snapshot: Snapshot, adoptions: list[Adoption], authority: Wr
     if not checked:
         return snapshot
     units, trailer, next_id = _apply_checked_units(snapshot, checked)
+    return _adopt_composition(snapshot, units, trailer, next_id, checked, time, source_verifier)
+
+
+def apply_confirmed_facts(snapshot, patches, authority, guide_run_id, operation_time, source_verifier):
+    """INITIALIZE only: caller already proves each actual user confirmation.
+
+    No manufactured batch. The real initializer is the shared source relation.
+    """
+    if type(patches) is not list or len(patches) > 100:
+        raise PatchInvalid('事实采用列表结构或容量不合法')
+    if not patches:return snapshot
+    time = _time(operation_time)
+    origin = Provenance('AI', 'GUIDE_RUN', guide_run_id)
+    if source_verifier(origin) is not True:
+        raise DocumentInvalid('事实来源不是当前真实初始化运行')
+    checked = [(patch, origin) for patch in validate_bundle(snapshot, patches, authority)]
+    units, trailer, next_id = _apply_checked_units(snapshot, checked)
+    return _adopt_composition(snapshot, units, trailer, next_id, checked, time, source_verifier)
+
+
+def _adopt_composition(snapshot, units, trailer, next_id, checked, time, source_verifier):
+    """Common metadata rules, exact bytes, identity and actual source proof."""
     markdown, identities = _compose(units, trailer, snapshot)
     if markdown == snapshot.parsed.markdown and identities == tuple(snapshot.by_id) and next_id == snapshot.next_block_id:
         return snapshot

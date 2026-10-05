@@ -33,6 +33,11 @@ from backend.app.comments.contracts import get_comment_result
 from backend.app.documents.anchors import locate
 from backend.app.infrastructure.document_repository import DocumentRepository
 from .contracts import retry_guide_run_input, retry_guide_run_result
+
+
+def persist_ai_result(database, payload, *, process_lock, profile, catalog=None, clock=None):
+    from .result_persistence import persist_ai_result as persist
+    return persist(database,payload,process_lock=process_lock,profile=profile,catalog=catalog,clock=clock)
 from types import SimpleNamespace
 
 RECOVERY_ERRORS = {'INTERRUPTED': '运行因进程中断而结束', 'EXECUTION_TIMEOUT': '运行连续15分钟没有进展'}

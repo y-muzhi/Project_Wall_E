@@ -465,6 +465,36 @@ def get_model_context_input(guide_run_id: object = MISSING) -> int:
     return strict_integer(guide_run_id, 'guide_run_id')
 
 
+@dataclass(frozen=True)
+class PersistAIResultInput:
+    guide_run_id: int
+    llm_use_id: int
+    trusted_output: object
+
+
+def persist_ai_result_input(payload):
+    from .trusted_output import require_receipt
+    fields=('guide_run_id','llm_use_id','trusted_output')
+    value=object_fields(payload,'body',fields,fields)
+    return PersistAIResultInput(strict_integer(value['guide_run_id'],'guide_run_id'),strict_integer(value['llm_use_id'],'llm_use_id'),require_receipt(value['trusted_output']))
+
+
+def persist_ai_result_result(effects):
+    fields=('guide_run_id','status','assistant_message_id','current_document','suggestion_batch_id')
+    value=object_fields(effects,'C07 result',fields,fields)
+    strict_integer(value['guide_run_id'],'guide_run_id');strict_integer(value['assistant_message_id'],'assistant_message_id')
+    strict_enum(value['status'],'status',('COMPLETED','WAITING_USER'))
+    if value['current_document'] is not None:
+        document=object_fields(value['current_document'],'current_document',('id','content_version'),('id','content_version'))
+        strict_integer(document['id'],'id');strict_integer(document['content_version'],'content_version')
+        if value['status'] != 'COMPLETED' or value['suggestion_batch_id'] is not None:raise ValueError('CURRENT effect only completes initialization')
+    if value['suggestion_batch_id'] is not None:
+        strict_integer(value['suggestion_batch_id'],'suggestion_batch_id')
+        if value['status'] != 'COMPLETED':raise ValueError('Suggestion result cannot be waiting')
+    import json
+    return {'code':'AI_RESULT_PERSISTED','data':json.loads(canonical_input(value)),'details':None}
+
+
 def get_model_context_result(value: dict) -> dict:
     fields = ('run', 'requirement', 'current_document', 'template', 'scope',
               'allowed_targets', 'user_input', 'history', 'source', 'read_manifest')

@@ -1,4 +1,4 @@
-"""Actual loopback TCP server/HTTP transport, never a paid provider or AI fixture.
+"""Actual loopback TCP server/HTTP transport, never paid provider/effect proof.
 
 The private forwarding transport preserves the fixed external request URL and
 headers as observed, then routes it to the controlled local diagnostic server.
@@ -322,3 +322,31 @@ class ModelGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fixture.row('guide_runs',fixture.run),run);self.assertEqual(fixture.row('requirements',fixture.req),root)
         with self.assertRaises(Rejected):fixture.parse(identity)
         self.assertIsNone(fixture.row('llm_uses',identity)['trusted_output_json'])
+
+    async def test_real_tcp_response_reaches_trusted_validation_and_atomic_business_submit(self):
+        from backend.app.guide.trusted_output import produce_trusted_output
+        from backend.app.guide.commands import persist_ai_result
+        from backend.app.guide.queries import get_guide_run
+        from backend.tests.requirements import test_create_requirement as creation
+        fixture=self.audit_fixture();identity=fixture.prepare()['id']
+        current=fixture.row('requirement_documents',fixture.created['current_document_id'])
+        output={'schema_version':1,'response_type':'INITIALIZE_TEXT','message':'真实TCP传输的受控诊断正文','confirmed_fact_patches':[]}
+        raw=envelope();raw['choices'][0]['message']['content']=json.dumps(output,ensure_ascii=False)
+        self.queue(value=raw);result=await self.gateway().send(self.profile,fixture.context)
+        self.assertTrue(result.succeeded);self.store_transport(fixture,identity,result)
+        self.assertEqual(fixture.parse(identity),output)
+        receipt=produce_trusted_output(fixture.database,identity,process_lock=fixture.lock,profile=self.profile,catalog=fixture.catalog,
+            clock=lambda:creation.INSTANT+timedelta(seconds=4))
+        self.assertIsNotNone(receipt)
+        persisted=persist_ai_result(fixture.database,{'guide_run_id':fixture.run,'llm_use_id':identity,'trusted_output':receipt},
+            process_lock=fixture.lock,profile=self.profile,catalog=fixture.catalog,clock=lambda:creation.INSTANT+timedelta(seconds=5))
+        self.assertEqual(persisted['code'],'AI_RESULT_PERSISTED',persisted)
+        message=fixture.row('conversation_messages',persisted['data']['assistant_message_id'])
+        self.assertEqual(message['content'],output['message']);self.assertEqual(message['role'],'ASSISTANT')
+        self.assertEqual(get_guide_run(fixture.database,fixture.run,catalog=fixture.catalog)['data']['status'],'COMPLETED')
+        audit=fixture.row('llm_uses',identity)
+        self.assertEqual((audit['call_status'],audit['parse_status'],audit['validation_status']),('SUCCEEDED','SUCCEEDED','SUCCEEDED'))
+        self.assertEqual((audit['input_tokens'],audit['output_tokens'],audit['cost']),(123,10,None))
+        self.assertEqual(json.loads(audit['request_snapshot_json'])['request'],json.loads(self.server.receipts[0]['body']))
+        self.assertEqual(fixture.row('requirement_documents',current['id']),current)
+        self.assertEqual(len(self.server.receipts),1)

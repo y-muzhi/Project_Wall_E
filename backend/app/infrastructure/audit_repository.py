@@ -29,6 +29,32 @@ def _owned(connection, run):
     return root
 
 
+def verify_actual_context(connection, run_id, function, supplied_input, system_text, manifest_json, catalog):
+    """Recheck exactly the real C03 facts and permitted whole-field trimming."""
+    actual = read_context(connection,run_id,catalog)['data']
+    expected = assemble_input(actual,function);supplied = function.validate_input(supplied_input)
+    if any(supplied[key] != expected[key] for key in expected if key not in ('current_document','history','read_manifest')):
+        raise Rejected('SOURCE_INVALID')
+    expected_blocks = {item['metadata']['block_id']:item for item in expected['current_document']['read_blocks']}
+    blocks = supplied['current_document']['read_blocks'];block_ids = [item['metadata']['block_id'] for item in blocks]
+    if len(set(block_ids)) != len(block_ids) or block_ids != [identity for identity in expected_blocks if identity in block_ids] or any(expected_blocks.get(item['metadata']['block_id']) != item for item in blocks):
+        raise Rejected('SOURCE_INVALID')
+    required = set(actual['scope']['required_read_block_ids']) | {item['block_id'] for item in supplied['allowed_targets']}
+    if not required.issubset(block_ids) or supplied['current_document']['id'] != expected['current_document']['id'] or supplied['current_document']['content_version'] != expected['current_document']['content_version']:
+        raise Rejected('SOURCE_INVALID')
+    history = supplied['history'];suffix = expected['history'][-len(history):] if history else []
+    if history != suffix: raise Rejected('SOURCE_INVALID')
+    selected = [actual['user_input'],*(item for item in actual['history'] if item['id'] in {entry['id'] for entry in history})]
+    message_ids = {item['id'] for item in selected}
+    message_ids.update(item['reply_to_message_id'] for item in selected if item['message_type']=='CARD_RESPONSE')
+    manifest = {**expected['read_manifest'],'block_ids':block_ids,'message_ids':[identity for identity in expected['read_manifest']['message_ids'] if identity in message_ids]}
+    if supplied['read_manifest'] != manifest or strict_json_object(manifest_json) != manifest:
+        raise Rejected('SOURCE_INVALID')
+    system = function.prompt+'\n'+json.dumps(json.loads(function.output_schema_json),ensure_ascii=False,separators=(',',':'))
+    if system_text != system: raise Rejected('CONFIG_INVALID')
+    return actual, supplied
+
+
 class AuditRepository:
     def __init__(self, connection): self.connection = connection
 
@@ -46,27 +72,8 @@ class AuditRepository:
         frozen = catalog.restore(run['function_type'],run['prompt_version'],prompt_version=run['prompt_version'],context_template=run['context_template_key']+'@'+run['context_template_version'])
         if function != frozen or type(profile) is not ModelProfile: raise Rejected('CONFIG_INVALID')
         if run['updated_at'] > at or root['updated_at'] > at: raise ValueError('Attempt cannot precede persisted activity')
-        actual = read_context(self.connection,run_id,catalog)['data']
-        expected = assemble_input(actual,function);supplied = function.validate_input(context.input)
-        if any(supplied[key] != expected[key] for key in expected if key not in ('current_document','history','read_manifest')):
-            raise Rejected('SOURCE_INVALID')
-        expected_blocks = {item['metadata']['block_id']:item for item in expected['current_document']['read_blocks']}
-        blocks = supplied['current_document']['read_blocks'];block_ids = [item['metadata']['block_id'] for item in blocks]
-        if len(set(block_ids)) != len(block_ids) or block_ids != [identity for identity in expected_blocks if identity in block_ids] or any(expected_blocks.get(item['metadata']['block_id']) != item for item in blocks):
-            raise Rejected('SOURCE_INVALID')
-        required = set(actual['scope']['required_read_block_ids']) | {item['block_id'] for item in supplied['allowed_targets']}
-        if not required.issubset(block_ids) or supplied['current_document']['id'] != expected['current_document']['id'] or supplied['current_document']['content_version'] != expected['current_document']['content_version']:
-            raise Rejected('SOURCE_INVALID')
-        history = supplied['history'];suffix = expected['history'][-len(history):] if history else []
-        if history != suffix: raise Rejected('SOURCE_INVALID')
-        selected = [actual['user_input'],*(item for item in actual['history'] if item['id'] in {entry['id'] for entry in history})]
-        message_ids = {item['id'] for item in selected}
-        message_ids.update(item['reply_to_message_id'] for item in selected if item['message_type']=='CARD_RESPONSE')
-        manifest = {**expected['read_manifest'],'block_ids':block_ids,'message_ids':[identity for identity in expected['read_manifest']['message_ids'] if identity in message_ids]}
-        if supplied['read_manifest'] != manifest or strict_json_object(context.manifest_json) != manifest:
-            raise Rejected('SOURCE_INVALID')
-        system = function.prompt+'\n'+json.dumps(json.loads(function.output_schema_json),ensure_ascii=False,separators=(',',':'))
-        if context.system != system: raise Rejected('CONFIG_INVALID')
+        actual, supplied = verify_actual_context(self.connection,run_id,function,context.input,context.system,context.manifest_json,catalog)
+        manifest = supplied['read_manifest']
         last = self.connection.execute('SELECT * FROM llm_uses WHERE guide_run_id=? ORDER BY call_no DESC,attempt_no DESC LIMIT 1',(run_id,)).fetchone()
         if call_no is None:
             if run['current_step'] != 'PREPARING' or last is not None and last['ended_at'] is None: raise Rejected('STATE_CONFLICT')
