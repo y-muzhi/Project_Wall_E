@@ -5,6 +5,7 @@ from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.shared.validation import MISSING, InvalidInput
 from .contracts import get_guide_run_input, get_guide_run_result
 from .contracts import list_guide_runs_input, list_guide_runs_result
+from .model_context import get_model_context
 
 
 def get_guide_run(database: Database, guide_run_id: object = MISSING, *, catalog: ResourceCatalog | None = None) -> dict:

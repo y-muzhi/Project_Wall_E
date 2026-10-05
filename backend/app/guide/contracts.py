@@ -459,3 +459,17 @@ def fail_guide_run_result(row, released: bool, *, unchanged: bool) -> dict:
     if (row['status'] in ('COMPLETED', 'FAILED', 'CANCELLED')) != (ended is not None):
         raise ValueError('Failure result has inconsistent terminal time')
     return {'code': 'RUN_FINAL_UNCHANGED' if unchanged else 'RUN_FAILED', 'data': {'guide_run_id': row['id'], 'status': row['status'], 'ended_at': ended, 'occupancy_released': released}, 'details': None}
+
+
+def get_model_context_input(guide_run_id: object = MISSING) -> int:
+    return strict_integer(guide_run_id, 'guide_run_id')
+
+
+def get_model_context_result(value: dict) -> dict:
+    fields = ('run', 'requirement', 'current_document', 'template', 'scope',
+              'allowed_targets', 'user_input', 'history', 'source', 'read_manifest')
+    object_fields(value, 'model_context', fields, fields)
+    # Each component is projected and validated from the same read transaction.
+    # Detach all JSON values before releasing that snapshot to the caller.
+    import json
+    return {'code': 'READ_OK', 'data': json.loads(canonical_input(value)), 'details': None}
