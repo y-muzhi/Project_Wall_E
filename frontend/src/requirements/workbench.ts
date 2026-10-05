@@ -76,5 +76,7 @@ export class RequirementWorkbench {
     this.pending = pending; this.publish({ requested: query, loading: true, error: null, field_error: null }); return pending;
   }
   refresh(): Promise<void> { return this.query(this.value.requested, true); }
+  /** Stop only this page's read, retaining the last confirmed list for return. */
+  pause(): void { if(this.closed)return;this.generation++;this.controller?.abort();this.controller=undefined;this.pending=undefined;this.publish({loading:false}); }
   dispose(): void { this.closed = true; this.generation++; this.controller?.abort(); this.listeners.clear(); }
 }

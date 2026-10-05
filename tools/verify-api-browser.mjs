@@ -11,6 +11,7 @@ const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Progr
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
+const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
 async function hashes() {
   const files = [];
   async function walk(path) {
@@ -63,7 +64,7 @@ try {
     await wait(100);
   }
   assert.equal(ready?.ready, true); assert.match(ready.url, /^http:\/\/127\.0\.0\.1:[0-9]+$/);
-  vite = subprocess(globalThis.process.execPath, ['node_modules/vite/bin/vite.js', '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
+  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js', '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
     { cwd: resolve(root, 'frontend'), env: { ...env, WALLE_PROBE_API_URL: ready.url } });
   let live = false;
   for (let index = 0; index < 100; index++) {
@@ -73,6 +74,7 @@ try {
   assert(live); await cli('open', 'http://127.0.0.1:5175/tests/browser/api.html'); opened = true;
   await cli('snapshot');
   await cli('run-code', 'async (page) => { await page.waitForFunction(() => document.querySelector("#status")?.textContent === "READY", null, {timeout: 15000}); return true; }');
+  report.workbench_empty = result(await cli('run-code','async (page) => { await page.evaluate(() => window.apiProbe.mountWorkbench(false)); await page.waitForFunction(() => window.workbenchProbe?.state().phase === "EMPTY"); const value=await page.evaluate(() => window.workbenchProbe.state()); if(value.state.result.pagination.total!==0||await page.getByText("暂无需求",{exact:true}).count()!==1)throw new Error("Native empty workbench missing"); await page.evaluate(() => window.workbenchProbe.destroy()); return {passed:true,total:0}; }'));
   report.browser = result(await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.run())'));
   assert.equal(report.browser.passed, true);
   const reached = new Set(report.browser.records.map(record => record.name)); assert.equal(reached.size, 37);
@@ -127,20 +129,67 @@ try {
     await page.evaluate(()=>window.createProbe.destroy());return {...native,wires,ordered_five_errors:true,nested_modal_cleanup:true,synthetic_composition_guard:true};
   }`.replace(/\r?\n/g,' ')));
   assert.equal(report.create_drawer.passed, true); assert.equal(report.create_drawer.actual_list_count, 1);
+  await cli('run-code','async (page) => { await page.evaluate(() => window.apiProbe.mountWorkbench(true)); await page.waitForFunction(() => window.workbenchProbe.state().phase === "READY"); return true; }');
+  await cli('snapshot');
+  report.workbench_queries=result(await cli('run-code',`async(page)=>{
+    const input=page.getByRole('textbox',{name:'请输入需求编号或需求标题'});await input.fill('未提交草稿');
+    let state=await page.evaluate(()=>window.workbenchProbe.state());if(state.reads.length!==1||state.state.result.pagination.total!==24)throw new Error('Input caused query or wrong native total');
+    await page.getByRole('button',{name:'需求状态：全部'}).click();await page.getByLabel('已完成',{exact:true}).uncheck();await page.mouse.click(5,5);
+    await page.waitForFunction(()=>window.workbenchProbe.state().phase==='READY'&&window.workbenchProbe.state().reads.length===2);
+    state=await page.evaluate(()=>window.workbenchProbe.state());if(state.reads[1].keyword!==undefined||state.state.requested.keyword!=='')throw new Error('Filter submitted draft');
+    await input.fill('工作台条目');await input.press('Enter');await page.waitForFunction(()=>window.workbenchProbe.state().phase==='READY'&&window.workbenchProbe.state().state.result.pagination.total===21);
+    await page.getByRole('button',{name:'第 2 页',exact:true}).click();await page.waitForFunction(()=>window.workbenchProbe.state().phase==='READY'&&window.workbenchProbe.state().state.result.pagination.page===2);
+    if(await page.locator('.workbench-table tbody tr').count()!==1)throw new Error('Native page2 wrong count');await input.fill('另一个未提交草稿');
+    await page.getByRole('button',{name:'第 1 页',exact:true}).click();await page.waitForFunction(()=>window.workbenchProbe.state().phase==='READY'&&window.workbenchProbe.state().state.result.pagination.page===1);
+    state=await page.evaluate(()=>window.workbenchProbe.state());if(state.reads.at(-1).keyword!=='工作台条目'||state.state.result.items.length!==20)throw new Error('Paging submitted draft');
+    await page.screenshot({path:'output/playwright/workbench-native.png'});return {passed:true,reads:state.reads,requested:state.state.requested,total:state.state.result.pagination.total};
+  }`.replace(/\r?\n/g,' ')));
+  report.workbench_return=result(await cli('run-code',`async(page)=>{
+    await page.evaluate(()=>window.scrollTo(0,500));const title=page.locator('.workbench-table tbody tr').nth(10).locator('a'),box=await title.boundingBox();if(!box)throw new Error('Visible native row missing');
+    await page.mouse.move(box.x+3,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+55,box.y+box.height/2,{steps:8});await page.mouse.up();
+    let state=await page.evaluate(()=>window.workbenchProbe.state());if(state.opened.length||!await page.evaluate(()=>window.getSelection()?.toString()))throw new Error('Drag navigated or no actual selection');
+    await title.click();await page.waitForSelector('[data-native-detail]');state=await page.evaluate(()=>window.workbenchProbe.state());const saved=state.entry;
+    if(state.opened.length!==1||saved.query.keyword!=='工作台条目'||saved.query.page!==1||saved.scroll<=0)throw new Error('Native detail entry not saved');
+    const updated=await page.evaluate(()=>window.workbenchProbe.updateOpened());await page.evaluate(()=>window.workbenchProbe.holdNext());await page.goBack();await page.waitForFunction(()=>window.workbenchProbe.state().held&&window.workbenchProbe.state().phase==='REFRESHING');
+    if(await page.locator('.workbench-table tbody tr').count()!==20||await page.evaluate(()=>window.scrollY)!==0)throw new Error('Return lost old rows or restored before fresh response');
+    await page.evaluate(()=>window.workbenchProbe.release());await page.waitForFunction(saved=>window.workbenchProbe.state().phase==='READY'&&Math.abs(window.scrollY-saved.scroll)<=1,saved);
+    state=await page.evaluate(()=>window.workbenchProbe.state());const session=await page.evaluate(()=>window.workbenchProbe.sessionSnapshot());
+    if(!state.state.result.items.some(row=>row.id===updated.id&&row.title===updated.title))throw new Error('Return did not show actual intervening native title update');
+    if(state.entry.entry_id!==saved.entry_id||session.query.keyword!=='工作台条目'||session.scroll!==saved.scroll)throw new Error('Wrong session/history entry restored');
+    return {passed:true,entry:saved,restored_scroll:state.scroll,session,scope:'Real browser Back/native API refresh held after actual read; same entry restored after render, no whole-page reload claim'};
+  }`.replace(/\r?\n/g,' ')));
+  report.workbench_states=result(await cli('run-code',`async(page)=>{
+    await page.evaluate(()=>window.workbenchProbe.outOfRange());await page.waitForFunction(()=>window.workbenchProbe.state().phase==='OUT_OF_RANGE');
+    await page.getByRole('button',{name:'返回有效页'}).click();await page.waitForFunction(()=>window.workbenchProbe.state().phase==='READY'&&window.workbenchProbe.state().state.requested.page===2);
+    await page.evaluate(()=>window.workbenchProbe.dropNextRead());const input=page.getByRole('textbox',{name:'请输入需求编号或需求标题'});await input.fill('不存在工作台文本');await input.press('Enter');
+    await page.waitForFunction(()=>window.workbenchProbe.state().phase==='REFRESH_ERROR');let state=await page.evaluate(()=>window.workbenchProbe.state());
+    if(state.state.confirmed.keyword!=='工作台条目'||state.state.requested.keyword!=='不存在工作台文本'||await page.locator('.workbench-table tbody tr').count()!==1)throw new Error('Refresh loss discarded successful condition/row');
+    if(await page.getByText('没有符合条件的需求',{exact:true}).count())throw new Error('Failed refresh claimed empty result');
+    await page.getByRole('button',{name:'重试查询'}).click();await page.waitForFunction(()=>window.workbenchProbe.state().phase==='NO_MATCH');
+    await input.fill('😀'.repeat(101));const before=(await page.evaluate(()=>window.workbenchProbe.state())).reads.length;await input.press('Enter');
+    if((await page.evaluate(()=>window.workbenchProbe.state())).reads.length!==before||!await page.getByRole('alert').filter({hasText:'100'}).count())throw new Error('Invalid keyword submitted or error absent');
+    await page.evaluate(()=>window.workbenchProbe.mainNavigation());await page.waitForFunction(()=>window.workbenchProbe.state().phase==='READY'&&window.workbenchProbe.state().state.requested.keyword==='');
+    state=await page.evaluate(()=>window.workbenchProbe.state());if(state.state.requested.status.length!==3||state.state.requested.requirement_type.length!==2||state.state.requested.page!==1)throw new Error('Main navigation did not reset');
+    await page.evaluate(()=>window.workbenchProbe.destroy());return {passed:true,main_query:state.state.requested,states:['EMPTY','READY','REFRESHING','OUT_OF_RANGE','REFRESH_ERROR','NO_MATCH'],scope:'Refresh error is explicit local discard after actual native successful GET, not real offline TCP or full navigation product acceptance'};
+  }`.replace(/\r?\n/g,' ')));
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
+  report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
+  const health=await fetch('http://127.0.0.1:5175/api/v1/requirements?page=1');assert.equal(health.status,200);const checked=await health.json();assert.equal(checked.meta.pagination.total,24);
   report.passed = true;
 } catch (error) { report.passed = false; report.error = String(error); globalThis.process.exitCode = 1;
+  report.development_exit_before_cleanup={code:vite?.child.exitCode??null,signal:vite?.child.signalCode??null};
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }
 finally {
   if (opened) try { await cli('close'); } catch (error) { report.close_error = String(error); report.passed = false; globalThis.process.exitCode = 1; }
   if (vite) { await killOwned(vite); report.vite = vite.record; }
+  report.native_diagnostic_files=await Promise.all((await readdir(nativeDiagnostics)).map(async name=>{const path=resolve(nativeDiagnostics,name);return {path,sha256:createHash('sha256').update(await readFile(path)).digest('hex')};}));
   if (native) {
     if (native.child.exitCode === null && native.child.signalCode === null) {
       native.child.stdin.end('shutdown\n');
@@ -153,7 +202,7 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 7 || closed.facts.requirements !== 3 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
+      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 28 || closed.facts.requirements !== 24 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
