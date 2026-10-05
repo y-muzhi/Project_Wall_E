@@ -19,8 +19,9 @@ export class GuideRunPolling {
     this.identity = positiveInteger(identity); this.read = read; this.clock = timing;
   }
   get state(): PollingState { return this.value; }
-  subscribe(listener: (state: PollingState) => void): () => void { this.listeners.add(listener); listener(this.value); return () => this.listeners.delete(listener); }
-  private publish(changes: Partial<PollingState>): void { this.value = Object.freeze({ ...this.value, ...changes }); for (const listener of this.listeners) listener(this.value); }
+  subscribe(listener: (state: PollingState) => void): () => void { this.listeners.add(listener); this.notify(listener); return () => this.listeners.delete(listener); }
+  private notify(listener: (state: PollingState) => void): void { try { listener(this.value); } catch(error) { console.error('WALL-E run observer failed', error); } }
+  private publish(changes: Partial<PollingState>): void { this.value = Object.freeze({ ...this.value, ...changes }); for (const listener of this.listeners) this.notify(listener); }
   setVisible(visible: boolean): void {
     if (this.disposed || visible === this.visible) return;
     this.visible = visible; this.generation++; this.cancelTimer?.(); this.cancelTimer = undefined;

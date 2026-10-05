@@ -17,6 +17,7 @@ import { manualStartProbe } from './manual-start-probe.ts';
 import {prepareRecoveryAdoption,resumeRecoveryAdoption} from './recovery-adoption-probe.ts';
 import {mountManualControlsProbe} from './manual-controls-probe.tsx';
 import {manualSessionProbe} from './manual-session-probe.ts';
+import {GuideRunPolling} from '../../src/guide/polling.ts';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -129,4 +130,15 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  recoveryAdoptionPrepare:()=>prepareRecoveryAdoption(api,2),recoveryAdoptionResume:()=>resumeRecoveryAdoption(api),
  mountManualControls:async(operation:'COMPLETE'|'CANCEL',localMode:'AVAILABLE'|'COMPARE'|'NONE')=>{Object.assign(window,{manualControlsProbe:await mountManualControlsProbe(api,2,operation,localMode)});},
  manualSession:()=>manualSessionProbe(api,2),
+ pollingObserver:async()=>{
+  const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
+  const fault=new Error('Explicit private observer diagnostic');
+  const poll=new GuideRunPolling(native.id,async(id,signal)=>{reads++;return (await api.getGuideRun(id,signal)).data;});
+  const original=console.error;let faults=0;console.error=(...args)=>{if(args[0]==='WALL-E run observer failed'&&args[1]===fault)faults++;else original(...args);};
+  try{poll.subscribe(()=>{throw fault;});poll.subscribe(state=>{if(state.confirmed)healthy++;});poll.setVisible(true);
+   const due=Date.now()+10000;while(!poll.state.confirmed&&Date.now()<due)await new Promise(resolve=>setTimeout(resolve,20));
+   require(reads===1&&healthy===1&&faults===3&&poll.state.confirmed?.id===native.id&&poll.state.confirmed.status==='FAILED'&&!poll.state.connection_error&&!poll.state.polling);
+   return {passed:true,native_run_id:native.id,actual_reads:reads,isolated_observer_faults:faults,healthy_delivery:healthy,native_status:poll.state.confirmed.status,scope:'Actual I19/I16/native failed-config run and controlled view observer faults; no Provider or whole acceptance'};
+  }finally{poll.dispose();console.error=original;}
+ },
  wireFacts: () => wires, transportFacts: () => responses, creationWires: () => wires.filter(wire => wire.body?.includes('真实抽屉😀')), destroy: () => editor.destroy() } }); status.textContent = 'READY';

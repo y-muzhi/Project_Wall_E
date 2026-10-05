@@ -296,6 +296,8 @@ try {
   }
   report.manual_session=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.manualSession())'));
   assert.equal(report.manual_session.passed,true);
+  report.polling_observer=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.pollingObserver())'));
+  assert.equal(report.polling_observer.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);

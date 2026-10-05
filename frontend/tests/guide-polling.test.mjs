@@ -76,3 +76,20 @@ test('wrong run identity is a query failure; a subscribed refresh cannot start a
   poll.subscribe(state => { if (state.querying && refresh) { refresh = false; poll.refresh(); } });
   poll.setVisible(true); await flush(); assert.equal(calls, 2); assert.equal(poll.state.confirmed.status, 'WAITING_USER'); assert.equal(poll.state.connection_error, false); poll.dispose();
 });
+test('observer exceptions cannot prevent the owned query, rewrite its confirmed status, or turn STOP into retries', async t => {
+  const logged=[];t.mock.method(console,'error',(...args)=>logged.push(args));
+  for(const status of ['RUNNING','WAITING_USER','FAILED']){
+    const clock=timing();let calls=0;const seen=[];
+    const poll=new GuideRunPolling(2,async()=>{calls++;return run(status);},clock);
+    poll.subscribe(state=>{if(state.querying||state.confirmed)throw Error('view observer');});poll.subscribe(state=>seen.push(state));
+    poll.setVisible(true);await flush();assert.equal(calls,1);assert.equal(poll.state.confirmed.status,status);assert.equal(poll.state.connection_error,false);
+    assert.equal(seen.at(-1),poll.state);assert.deepEqual(clock.delays,status==='RUNNING'?[1000]:[]);poll.dispose();
+  }
+  assert(logged.length>=6);
+});
+test('initial observer failure is isolated and still provides an owned unsubscribe',async t=>{
+  t.mock.method(console,'error',()=>{});const clock=timing();let calls=0;
+  const poll=new GuideRunPolling(2,async()=>{calls++;return run('FAILED');},clock);
+  const release=poll.subscribe(()=>{throw Error('initial view');});assert.equal(typeof release,'function');release();poll.setVisible(true);await flush();
+  assert.equal(calls,1);assert.equal(poll.state.confirmed.status,'FAILED');poll.dispose();
+});
