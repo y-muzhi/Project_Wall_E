@@ -5,6 +5,7 @@ import { require } from '../../src/api/decoding.ts';
 import { installSourceNodes } from '../../src/documents/source-nodes.ts';
 import type { DocumentReadModel } from '../../src/documents/contracts.ts';
 import { recoveryProbe } from './recovery-probe.ts';
+import { autosaveProbe } from './autosave-probe.ts';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -89,7 +90,8 @@ async function run() {
   const expected = Array.from({ length: 37 }, (_, index) => 'I' + String(index + 1).padStart(2, '0'));
   require(expected.every(name => records.some(record => record.name === name)));
   const recovery = await editor.editor.action(ctx => recoveryProbe(ctx, api, identity, retried.data.id));
-  const result = { passed: true, records, wires, pairs, history, recovery, current_version: current.content_version, draft_version: draftVersion,
+  const autosave = await autosaveProbe(api, identity);
+  const result = { passed: true, records, wires, pairs, history, recovery, autosave, current_version: current.content_version, draft_version: draftVersion,
     scope: 'Actual same-origin Vite proxy / production API / isolated SQLite / real Crepe paired documents; failure/config cases explicit, no paid Provider, product page or whole acceptance' };
   status.textContent = JSON.stringify({ ...result, pairs: pairs.length }, null, 2); return result;
 }

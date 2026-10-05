@@ -80,6 +80,9 @@ try {
   assert.equal(report.browser.pairs.length, 7); assert.equal(report.browser.history.source_content_version, 2);
   assert.equal(report.browser.recovery.passed, true); assert.equal(report.browser.recovery.capacity_records, 20);
   assert.equal(report.browser.recovery.checks.length, 7);
+  assert.equal(report.browser.autosave.passed, true); assert.equal(report.browser.autosave.writes.length, 3);
+  assert.equal(report.browser.autosave.peak_inflight, 1); assert.equal(report.browser.autosave.confirmed_draft_version, 4);
+  assert.equal(report.browser.autosave.native_cohort.final_version, 6); assert.equal(report.browser.autosave.native_cohort.retired_proof_refused, true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.passed = true;

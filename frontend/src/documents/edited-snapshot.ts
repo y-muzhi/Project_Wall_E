@@ -65,6 +65,7 @@ export class EditedSnapshotLedger {
   private confirmedAt: string;
   private allocations: {start: number; end: number; at: string}[] = [];
   private pending: ManualDraftSubmission | undefined;
+  private readonly unresolved = new Set<ManualDraftSubmission>();
   private closed = false;
 
   constructor(ctx: Ctx, input: unknown, state: EditorState) {
@@ -116,9 +117,30 @@ export class EditedSnapshotLedger {
     return submission;
   }
 
+  get currentSnapshot(): EditedSnapshot { this.live(); return this.pair; }
+  get savedVersion(): number { this.live(); return this.confirmedVersion; }
+
+  /** An ended browser request can remain unconfirmed at the server. Keep its
+   * exact submission proof while allowing the newest local pair to compete at
+   * the same confirmed version. Only one version-guarded write can win.
+   */
+  suspendSave(submission: ManualDraftSubmission): void {
+    this.live();
+    if (this.pending !== submission || submissions.get(submission) !== this) fail('不能挂起没有本会话证明的提交');
+    this.unresolved.add(submission); this.pending = undefined;
+  }
+
+  /** Used only for a definite rejection, never for network/abort/500/503. */
+  rejectSave(submission: ManualDraftSubmission): void {
+    this.live();
+    if (submissions.get(submission) !== this || this.pending !== submission && !this.unresolved.has(submission)) fail('不能释放没有本会话证明的提交');
+    if (this.pending === submission) this.pending = undefined;
+    this.unresolved.delete(submission); submissions.delete(submission);
+  }
+
   acknowledgeSave(submission: ManualDraftSubmission, input: unknown): EditedSnapshot {
     this.live();
-    if (submissions.get(submission) !== this || this.pending !== submission || submission.expected_version !== this.confirmedVersion) fail('保存回执没有当前会话的实际提交证明');
+    if (submissions.get(submission) !== this || this.pending !== submission && !this.unresolved.has(submission) || submission.expected_version !== this.confirmedVersion) fail('保存回执没有当前会话的实际提交证明');
     const {document} = validateDocumentReadModel(this.ctx, input);
     if (document.id !== this.sessionId || document.requirement_id !== this.requirementId || document.document_type !== 'MANUAL_DRAFT' ||
         document.created_at !== this.documentCreatedAt || document.content_version !== submission.expected_version + 1 ||
@@ -160,7 +182,10 @@ export class EditedSnapshotLedger {
     staged.confirmedAt = document.updated_at;
     staged.lastTime = this.lastTime < document.updated_at ? document.updated_at : this.lastTime;
     staged.pending = undefined;
+    staged.unresolved.clear();
     staged.generation++;
+    for (const ticket of this.unresolved) submissions.delete(ticket);
+    if (this.pending) submissions.delete(this.pending);
     Object.assign(this, staged);
     submissions.delete(submission);
     return this.pair;
@@ -169,6 +194,8 @@ export class EditedSnapshotLedger {
   dispose(): void {
     this.closed = true;
     if (this.pending) submissions.delete(this.pending);
+    for (const ticket of this.unresolved) submissions.delete(ticket);
+    this.unresolved.clear();
     this.pending = undefined;
     this.births.clear();
     this.versions.clear();
@@ -258,6 +285,7 @@ export class EditedSnapshotLedger {
       versions: new Map([...this.versions].map(([id, versions]) => [id, [...versions]])),
       births: new Map(this.births), units: this.units.map(unit => ({...unit})), layouts: [...this.layouts],
       allocations: [...this.allocations],
+      unresolved: new Set(this.unresolved),
     });
     return staged;
   }
