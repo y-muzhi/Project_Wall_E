@@ -1,0 +1,48 @@
+{
+  "scope": "Installed dependencies, TypeScript, projection offsets, identity transactions and actual remark autolinks (default/development conditions); no browser/business acceptance",
+  "recordedAt": "2026-10-05T09:05:41.602Z",
+  "node": "v24.15.0",
+  "passed": true,
+  "results": [
+    {
+      "args": [
+        "ls",
+        "--depth=0"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "walle-frontend@0.6.0 C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\frontend\n├── @milkdown/crepe@7.22.2\n├── @milkdown/kit@7.22.2\n├── @types/node@26.6.4\n├── @types/react-dom@19.3.0\n├── @types/react@19.3.0\n├── @vitejs/plugin-react@6.1.1\n├── react-dom@19.3.0\n├── react@19.3.0\n├── typescript@7.0.2\n└── vite@8.3.2\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "\n> walle-frontend@0.6.0 typecheck\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "test"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "\n> walle-frontend@0.6.0 test\n> node --test tests/*.test.mjs\n\n✔ same user action resends exact immutable JSON and key after lost response, new action gets new key (22.1832ms)\n✔ nonidempotent property edit sends no key and missing PATCH fields remain absent (0.4008ms)\n✔ empty-body command omits both body and Content-Type while preserving action header (0.3333ms)\n✔ wrong envelope/status/content/body/unsafe integers/success decoder cannot confirm mutation success (2.3097ms)\n✔ native explicit business rejection retains safe details and request ID, no failure pagination (0.6523ms)\n✔ server storage or internal error on a mutation may follow a real commit and stays unknown (0.4821ms)\n✔ read failure cannot change an already-confirmed business state; repeated filters use repeated query keys (0.3772ms)\n✔ page and cursor metadata preserve empty/out-of-range and next cursor definitions (0.4592ms)\n✔ preparation rejects malformed Unicode, undefined, nonplain/cyclic/nonfinite/unsafe values before any send (0.3255ms)\n✔ forged or another-client command is rejected before sending; actual abort remains unknown (0.302ms)\n✔ actual literal tokenizer handles Unicode and astral letters in URL domains without widening email rules (7.1764ms)\n✔ all Unicode codepoints match the shared selected-backend profile, including ranges and astral boundaries (32.1934ms)\n✔ actual remark tokenizer matches independent GFM literal cases before emphasis/entity decoding (11.2956ms)\n✔ actual tokenizer respects independent source, entity, image and container contexts (8.2063ms)\n✔ literal links respect inline chunk boundaries in real tables, lists, headings and quotes (0.8475ms)\n✔ long invalid candidates, nested URL paths and link labels keep exact text without repeated path scans (5020.915ms)\n✔ editing identical blocks follows transaction positions, retains IDs and selection (3.1486ms)\n✔ copied attributes before original get new ID; pasted unknown IDs and nested IDs are removed (1.113ms)\n✔ split at middle and at start keeps first part; joining keeps first document ID (1.4983ms)\n✔ forward join of an empty first paragraph keeps first identity and ordinary mid-text deletion is deferred (0.429ms)\n✔ explicit movement preserves origins, including identical content and complete containers (1.116ms)\n✔ undo/redo restore same allocated IDs while high water never decreases (0.7566ms)\n✔ removed identity is only restored by actual local history, never a later pasted copy (0.415ms)\n✔ atom blocks retain ID when typing elsewhere; whole unknown replacements receive new ID (0.3741ms)\n✔ empty caret has no business ID; deletion does not recycle IDs and undo restores old one (0.3165ms)\n✔ a new empty gap paragraph consumes no ID until actual text appears (0.8448ms)\n✔ capacity rejects entire transaction with original document/high-water untouched (0.5794ms)\n✔ 10000-block boundary keeps unrelated nodes and selections; further block insertion fails atomically (26.5185ms)\n✔ invalid initial identities fail; changing an ID attr cannot steal another block ID (0.7516ms)\n✔ actual flow chunks preserve raw source without reintroducing nested container markers (4.3293ms)\n✔ shared independent Markdown projection and selection fixtures (1.8295ms)\n✔ Unicode offsets count codepoints including combining marks, ZWJ and CRLF (0.1431ms)\n✔ surrogate interiors, invalid Unicode and coerced integers are rejected (0.3402ms)\n✔ selection keeps raw text and immediate context, binds snapshot identity (0.2193ms)\n✔ 100-codepoint context boundaries do not split emoji or normalize content (0.6567ms)\n✔ 2000-codepoint selection is accepted; 2001 never truncated (0.3013ms)\n✔ collapsed, reversed, extra fields and wrong snapshot values cannot form selection (0.2013ms)\n✔ installed production remark extension implements independent GFM single/double/width cases (12.0104ms)\nℹ tests 38\nℹ suites 0\nℹ pass 38\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 5262.4868\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "--conditions=development",
+        "--test",
+        "tests/autolinks.test.mjs"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "stdout": "✔ actual remark tokenizer matches independent GFM literal cases before emphasis/entity decoding (11.778ms)\n✔ actual tokenizer respects independent source, entity, image and container contexts (8.5056ms)\n✔ literal links respect inline chunk boundaries in real tables, lists, headings and quotes (1.2702ms)\n✔ long invalid candidates, nested URL paths and link labels keep exact text without repeated path scans (4926.2113ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 5731.0168\n",
+      "stderr": ""
+    }
+  ]
+}

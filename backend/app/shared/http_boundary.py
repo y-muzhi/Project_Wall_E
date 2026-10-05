@@ -25,6 +25,7 @@ class HttpRuntime:
     database: Database
     catalog: ResourceCatalog
     executor: Idempotency | None = None
+    worker: object | None = None
 
     def commands(self) -> Idempotency:
         if not isinstance(self.executor, Idempotency) or self.executor.database is not self.database:
@@ -103,6 +104,11 @@ async def handle_http(request: Request, request_model: type, response_model: typ
             return failure(result['code'], result['details'])
         if result['details'] is not None:
             raise ValueError('Success results cannot carry error details')
+        if runtime.worker is not None:
+            from backend.app.guide.worker import GuideWorker
+            if not isinstance(runtime.worker, GuideWorker) or runtime.worker.database is not runtime.database:
+                raise ValueError('Post-commit dispatcher must own this actual runtime database')
+            await runtime.worker.after_commit(result)
         data, pagination = response_model.project(result['data'], parsed)
         canonical_input(data)  # No nonfinite numbers, unsafe integers, bad Unicode or ORM objects.
         meta = {'request_id': request_id}

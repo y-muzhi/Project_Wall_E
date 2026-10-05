@@ -54,7 +54,7 @@ class ControlledServer(ThreadingHTTPServer):
     daemon_threads=True
     def __init__(self):
         super().__init__(('127.0.0.1',0),ControlledHandler)
-        self.responses=[];self.receipts=[];self.entered=Event();self.peer_closed=Event();self.errors=[];self.inspect_request=None
+        self.responses=[];self.receipts=[];self.entered=Event();self.peer_closed=Event();self.errors=[];self.inspect_request=None;self.hold_timeout=2
     def handle_error(self, request, client_address):
         self.errors.append(type(sys.exception()).__name__)
 
@@ -77,7 +77,7 @@ class ControlledHandler(BaseHTTPRequestHandler):
         if behavior=='hold':
             # The client is waiting for body bytes; after logical task cancel
             # its real TCP connection must close, independently of this server.
-            self.connection.settimeout(2)
+            self.connection.settimeout(self.server.hold_timeout)
             try:
                 if self.connection.recv(1)==b'': self.server.peer_closed.set()
             except (socket.timeout,OSError): pass

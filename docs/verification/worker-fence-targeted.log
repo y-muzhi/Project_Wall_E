@@ -1,0 +1,8 @@
+test_shutdown_fences_actual_c07_inflight_sql_then_startup_recovers_without_late_commit (backend.tests.guide.test_worker.WorkerTests.test_shutdown_fences_actual_c07_inflight_sql_then_startup_recovers_without_late_commit) ... Executing <Task finished name='Task-1' coro=<WorkerTests.asyncSetUp() done, defined at C:\Users\����֮\Documents\ChatGPT\Project_Wall_E 2\backend\tests\guide\test_worker.py:39> result=None created at D:\Anaconda3\Lib\asyncio\runners.py:100> took 0.563 seconds
+Executing <Task pending name='walle-guide-1' coro=<GuideWorker._drive() running at C:\Users\����֮\Documents\ChatGPT\Project_Wall_E 2\backend\app\guide\worker.py:96> cb=[GuideWorker.dispatch.<locals>.<lambda>() at C:\Users\����֮\Documents\ChatGPT\Project_Wall_E 2\backend\app\guide\worker.py:91] created at D:\Anaconda3\Lib\asyncio\tasks.py:410> took 0.267 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 17.248s
+
+OK
