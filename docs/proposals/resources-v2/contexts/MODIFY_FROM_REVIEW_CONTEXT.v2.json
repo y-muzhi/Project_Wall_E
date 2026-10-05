@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "function_type": "MODIFY_FROM_REVIEW",
+  "input_schema": "MODIFY_FROM_REVIEW_INPUT@v1",
+  "output_schema": "MODIFY_OUTPUT@v1",
+  "prompt": "MODIFY_FROM_REVIEW@v2",
+  "action_type": "MODIFY",
+  "source_type": "REVIEW_RESULT",
+  "transport": {
+    "system": [
+      "frozen_prompt",
+      "frozen_output_schema"
+    ],
+    "user": "one_serialized_input_object",
+    "stream": false,
+    "tool_calling": false
+  },
+  "field_order": [
+    "schema_version",
+    "function_type",
+    "action_type",
+    "source_type",
+    "requirement",
+    "current_document",
+    "template",
+    "scope",
+    "allowed_targets",
+    "user_input",
+    "history",
+    "source",
+    "read_manifest"
+  ],
+  "budget": {
+    "total_tokens": 32768,
+    "input_tokens": 24576,
+    "output_tokens": 8192,
+    "prompt_tokens": 4096,
+    "current_user_tokens": 4096,
+    "source_tokens": 4096,
+    "history_tokens": 2048,
+    "template_tokens": 4096,
+    "counting": "conservative_utf8_bytes_pending_provider_proof"
+  },
+  "history_limit": 10,
+  "neighbor_blocks_each_side": 2,
+  "trim_order": [
+    "oldest_history_whole_message",
+    "optional_neighbor_whole_block"
+  ],
+  "required_data_overflow": "CONTEXT_LIMIT_EXCEEDED",
+  "excluded": [
+    "MANUAL_DRAFT",
+    "UNAPPLIED_SUGGESTION",
+    "REVISION_BODY",
+    "UNRELATED_COMMENT",
+    "LLM_USE",
+    "REASONING",
+    "UNSELECTED_RECOMMENDATION"
+  ]
+}

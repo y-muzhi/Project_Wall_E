@@ -1,0 +1,85 @@
+{
+  "recordedAt": "2026-10-05T05:30:45.950128+00:00",
+  "scope": "Actual SQLite/C03/frozen Schema/patch authority counterexamples; adversarial candidates only, no Provider, adoption, completed business or real-effect claim.",
+  "cases": [
+    {
+      "actual_user_message": "审批人尚未确定，不能写成部门经理。",
+      "actual_user_message_id": 1,
+      "candidate": {
+        "schema_version": 1,
+        "response_type": "INITIALIZE_TEXT",
+        "message": "adversarial diagnostic only",
+        "confirmed_fact_patches": [
+          {
+            "patch": {
+              "title": "diagnostic fabricated approval role",
+              "explanation": "adversarial constructed candidate, never adopted",
+              "impact": null,
+              "target_ref": {
+                "block_id": 3
+              },
+              "original_content": "待确认。\n",
+              "patch_operation": "REPLACE_BLOCK",
+              "selector_json": null,
+              "proposed_markdown": "审批人为部门经理。",
+              "proposed_data_json": null
+            },
+            "evidence": [
+              {
+                "message_id": 1,
+                "quoted_text": "审批人"
+              }
+            ]
+          }
+        ]
+      },
+      "schema_passed": true,
+      "actual_authority_patch_passed": true,
+      "verbatim_user_quote_passed": true,
+      "fact_consistency_proven": false,
+      "reason": "The full actual USER statement denies or conditions the asserted department-manager role; its short quote does not confirm the candidate fact.",
+      "database_unchanged": true,
+      "current_sha256": "76862a6984dde3cebe62d5635fea45cbe4910142a5e5bc84c939416b0b66a879"
+    },
+    {
+      "actual_user_message": "如果审批人是部门经理，是否会更快？目前还未决定。",
+      "actual_user_message_id": 1,
+      "candidate": {
+        "schema_version": 1,
+        "response_type": "INITIALIZE_TEXT",
+        "message": "adversarial diagnostic only",
+        "confirmed_fact_patches": [
+          {
+            "patch": {
+              "title": "diagnostic fabricated approval role",
+              "explanation": "adversarial constructed candidate, never adopted",
+              "impact": null,
+              "target_ref": {
+                "block_id": 3
+              },
+              "original_content": "待确认。\n",
+              "patch_operation": "REPLACE_BLOCK",
+              "selector_json": null,
+              "proposed_markdown": "审批人为部门经理。",
+              "proposed_data_json": null
+            },
+            "evidence": [
+              {
+                "message_id": 1,
+                "quoted_text": "部门经理"
+              }
+            ]
+          }
+        ]
+      },
+      "schema_passed": true,
+      "actual_authority_patch_passed": true,
+      "verbatim_user_quote_passed": true,
+      "fact_consistency_proven": false,
+      "reason": "The full actual USER statement denies or conditions the asserted department-manager role; its short quote does not confirm the candidate fact.",
+      "database_unchanged": true,
+      "current_sha256": "76862a6984dde3cebe62d5635fea45cbe4910142a5e5bc84c939416b0b66a879"
+    }
+  ],
+  "counterexample_reproduced": true
+}

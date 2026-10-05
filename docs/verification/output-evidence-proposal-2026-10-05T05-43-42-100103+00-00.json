@@ -1,0 +1,29 @@
+{
+  "recordedAt": "2026-10-05T05:43:42.100103+00:00",
+  "scope": "Candidate structural/reference/byte checks only; no activation, model compatibility or completed AI business.",
+  "passed": true,
+  "files_checked": 30,
+  "unchanged_schema_template_files": [
+    "schemas/ASK_INPUT.v1.json",
+    "schemas/ASK_OUTPUT.v1.json",
+    "schemas/INITIALIZE_INPUT.v1.json",
+    "schemas/INITIALIZE_OUTPUT.v1.json",
+    "schemas/MODIFY_FROM_COMMENT_INPUT.v1.json",
+    "schemas/MODIFY_FROM_REVIEW_INPUT.v1.json",
+    "schemas/MODIFY_INPUT.v1.json",
+    "schemas/MODIFY_OUTPUT.v1.json",
+    "schemas/REVIEW_INPUT.v1.json",
+    "schemas/REVIEW_OUTPUT.v1.json",
+    "templates/catalog.v1.json",
+    "templates/change-requirement.v1.json",
+    "templates/change-requirement.v1.md",
+    "templates/new-requirement.v1.json",
+    "templates/new-requirement.v1.md"
+  ],
+  "function_count": 6,
+  "budget_transport_unchanged": true,
+  "unapproved_catalog_activation_rejected": true,
+  "verified_native_inputs_checked": 205,
+  "changed_native_inputs": [],
+  "candidate_manifest_sha256": "06a2048688b5d014a69384ed39b2599993caa00cc59c2af96102039da98757dd"
+}
