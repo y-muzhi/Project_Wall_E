@@ -109,6 +109,15 @@ class RequirementRepository:
             raise ValueError('Occupied requirement is missing')
         return row
 
+    def occupy_guide(self, identity: int, guide_id: int, at: str) -> dict:
+        require_write_transaction(self.connection)
+        result = self.connection.execute("UPDATE requirements SET document_work_state='GUIDE_ACTIVE',active_operation_type='GUIDE_RUN',active_operation_id=?,state_started_at=?,updated_at=? WHERE id=? AND document_work_state='IDLE'", (guide_id, at, at, identity))
+        if result.rowcount != 1:
+            raise ValueError('Guide occupancy changed inside shared transaction')
+        row = self.get(identity)
+        if row is None: raise ValueError('Occupied requirement is missing')
+        return row
+
     def release_manual_draft(self, identity: int, draft_id: int, at: str) -> dict:
         require_write_transaction(self.connection)
         result = self.connection.execute("UPDATE requirements SET document_work_state='IDLE',active_operation_type=NULL,active_operation_id=NULL,state_started_at=NULL,updated_at=? WHERE id=? AND document_work_state='MANUAL_EDITING' AND active_operation_type='MANUAL_DRAFT' AND active_operation_id=?", (at, identity, draft_id))

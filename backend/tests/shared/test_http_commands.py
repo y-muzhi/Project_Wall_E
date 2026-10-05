@@ -36,9 +36,9 @@ class HttpCommandTests(unittest.TestCase):
         self.assertEqual(set(value), {'success', 'data', 'error', 'meta'})
         self.assertEqual(str(UUID(value['meta']['request_id'])), value['meta']['request_id'])
         self.assertEqual(UUID(value['meta']['request_id']).version, 4)
-        self.assertEqual(value['success'], status in (200, 201))
+        self.assertEqual(value['success'], status in (200, 201, 202))
         self.assertNotIn('pagination', value['meta'])
-        if status in (200, 201):
+        if status in (200, 201, 202):
             self.assertIsNone(value['error'])
         else:
             self.assertIsNone(value['data'])

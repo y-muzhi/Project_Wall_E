@@ -10,6 +10,8 @@ from backend.app.shared.http_errors import ERRORS
 from backend.app.infrastructure.idempotency import request_key
 from backend.app.shared.pagination import page_number, page_metadata
 from backend.app.shared.validation import raw_text
+from backend.app.shared.validation import instruction
+from backend.app.messages.contracts import message_read_model
 
 GUIDE_STATUSES = ('RUNNING', 'WAITING_USER', 'COMPLETED', 'FAILED', 'CANCELLED')
 GUIDE_STEPS = ('PREPARING', 'CALLING_MODEL', 'VALIDATING', 'PERSISTING', 'WAITING_USER', 'FINISHED')
@@ -17,6 +19,84 @@ STATUS_FIELDS = ('id', 'requirement_id', 'action_type', 'function_type', 'source
     'final_result', 'suggestion_batch_id', 'latest_assistant_message_id', 'error_code', 'error_message', 'cancel_reason',
     'retry_of_guide_run_id', 'created_at', 'started_at', 'waiting_user_at', 'ended_at', 'updated_at')
 TASK_ERROR_CODES = frozenset(ERRORS) | {'MODEL_ERROR', 'OUTPUT_INVALID', 'CONTEXT_LIMIT_EXCEEDED', 'INTERRUPTED', 'EXECUTION_TIMEOUT'}
+
+
+@dataclass(frozen=True)
+class CreateGuideRunInput:
+    requirement_id: int
+    expected_content_version: int
+    action_type: str
+    instruction: str
+    scope_type: str
+    scope_ref_json: str
+    source_type: str
+    source_id: int | None
+    idempotency_key: str
+
+    @property
+    def scope_ref(self):
+        import json
+        return json.loads(self.scope_ref_json)
+
+    def business_input(self):
+        return {field: getattr(self, field) for field in ('requirement_id', 'expected_content_version', 'action_type', 'instruction', 'scope_type', 'source_type', 'source_id')} | {'scope_ref': self.scope_ref}
+
+
+def create_guide_run_input(payload):
+    fields = ('requirement_id', 'expected_content_version', 'action_type', 'instruction', 'scope_type', 'scope_ref', 'source_type', 'source_id', 'idempotency_key')
+    data = object_fields(payload, 'body', fields, tuple(field for field in fields if field not in ('scope_ref', 'source_id')))
+    kind = strict_enum(data['scope_type'], 'scope_type', ('DOCUMENT', 'SECTION', 'BLOCK', 'SELECTION'))
+    reference = data.get('scope_ref')
+    if kind == 'DOCUMENT':
+        if reference is not None: reject('scope_ref', 'INVALID_FORMAT', '全文范围必须省略引用或为null')
+    else:
+        if 'scope_ref' not in data: reject('scope_ref', 'REQUIRED', '此范围必须提供引用')
+        _scope(kind, reference)
+    source = strict_enum(data['source_type'], 'source_type', ('USER_INSTRUCTION', 'REVIEW_RESULT'))
+    identity = data.get('source_id')
+    if source == 'USER_INSTRUCTION':
+        if identity is not None: reject('source_id', 'INVALID_FORMAT', '用户指令来源必须省略身份或为null')
+    else:
+        identity = strict_integer(data.get('source_id', MISSING), 'source_id')
+    text = instruction(data['instruction'])
+    try:
+        import json
+        canonical_input({'scope_ref': reference, 'instruction': text})
+        encoded_ref = json.dumps(reference, ensure_ascii=False, separators=(',', ':'))
+    except (ValueError, UnicodeError, RecursionError): reject('body', 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
+    return CreateGuideRunInput(strict_integer(data['requirement_id'], 'requirement_id'), strict_integer(data['expected_content_version'], 'expected_content_version'),
+        strict_enum(data['action_type'], 'action_type', ('INITIALIZE', 'ASK', 'REVIEW', 'MODIFY')), text, kind, encoded_ref, source, identity, request_key(data['idempotency_key'], 'idempotency_key'))
+
+
+@dataclass(frozen=True)
+class ContinueGuideRunInput:
+    guide_run_id: int
+    instruction: str
+    idempotency_key: str
+
+    def business_input(self):
+        return {'guide_run_id': self.guide_run_id, 'instruction': self.instruction}
+
+
+def continue_guide_run_input(payload):
+    fields = ('guide_run_id', 'instruction', 'idempotency_key')
+    data = object_fields(payload, 'body', fields, fields)
+    text = instruction(data['instruction'])
+    try: canonical_input({'instruction': text})
+    except (ValueError, UnicodeError): reject('instruction', 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
+    return ContinueGuideRunInput(strict_integer(data['guide_run_id'], 'guide_run_id'), text, request_key(data['idempotency_key'], 'idempotency_key'))
+
+
+def create_guide_run_result(run, message):
+    accepted = guide_run_accepted({key: run[key] for key in ('id', 'requirement_id', 'status', 'current_step')})
+    value = message_read_model({key: message[key] for key in ('id', 'requirement_id', 'guide_run_id', 'sequence_no', 'role', 'content', 'message_type', 'reply_to_message_id', 'created_at')} | {'structured_content': None, 'card_state': None})
+    if value['guide_run_id'] != accepted['id'] or value['requirement_id'] != accepted['requirement_id'] or value['message_type'] != 'TEXT' or value['role'] != 'USER':
+        raise ValueError('Accepted user instruction must belong to the accepted run')
+    return {'code': 'GUIDE_ACCEPTED', 'data': {'guide_run': accepted, 'user_message': value}, 'details': None}
+
+
+def continue_guide_run_result(run):
+    return {'code': 'GUIDE_CONTINUED', 'data': guide_run_accepted({key: run[key] for key in ('id', 'requirement_id', 'status', 'current_step')}), 'details': None}
 
 
 def get_guide_run_input(value: object = MISSING) -> int:

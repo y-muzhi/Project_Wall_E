@@ -7,6 +7,10 @@ from backend.app.shared.http_boundary import idempotency_header
 from .contracts import cancel_guide_run_input, guide_run_accepted
 from .contracts import list_guide_runs_input, guide_run_summary, GUIDE_STATUSES
 from backend.app.shared.http_projection import page
+from backend.app.shared.http_commands import CommandRequest
+from backend.app.shared.validation import object_fields
+from backend.app.messages.contracts import message_read_model
+from .contracts import create_guide_run_input, continue_guide_run_input
 
 
 @dataclass(frozen=True)
@@ -79,3 +83,51 @@ class ListGuideRunsResponse:
                 raise ValueError('History response contains another requirement')
             return value
         return page(data, project_item, request.payload['page'])
+
+
+class CreateGuideRunRequest(CommandRequest):
+    body_fields = ('expected_version', 'action_type', 'instruction', 'scope_type', 'scope_ref', 'source_type', 'source_id')
+    mandatory = ('expected_version', 'action_type', 'instruction', 'scope_type', 'source_type')
+    rename = {'expected_version': 'expected_content_version'}
+    validate = staticmethod(create_guide_run_input)
+    normalize = staticmethod(lambda payload, validated: validated.business_input() | {'idempotency_key': validated.idempotency_key})
+
+
+class CreateGuideRunResponse:
+    success_code = 'GUIDE_ACCEPTED'
+    status = 202
+    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+
+    @staticmethod
+    def project(data, request):
+        value = object_fields(data, 'data', ('guide_run', 'user_message'), ('guide_run', 'user_message'))
+        run, message = guide_run_accepted(value['guide_run']), message_read_model(value['user_message'])
+        if run['requirement_id'] != request.payload['requirement_id'] or run['status'] != 'RUNNING' or run['current_step'] != 'PREPARING' or message['guide_run_id'] != run['id'] or message['requirement_id'] != run['requirement_id'] or message['role'] != 'USER' or message['message_type'] != 'TEXT' or message['content'] != request.payload['instruction']:
+            raise ValueError('Accepted response contradicts the submitted instruction/run')
+        return {'guide_run': run, 'user_message': message}, None
+
+
+class ContinueGuideRunRequest(CommandRequest):
+    body_fields = ('instruction',)
+    mandatory = body_fields
+    uses_requirement_path = False
+
+    @classmethod
+    def parse(cls, request, body):
+        request_query(request)
+        value = object_fields(body, 'body', cls.body_fields, cls.mandatory)
+        validated = continue_guide_run_input({**value, 'guide_run_id': decimal_integer(request.path_params['guide_run_id'], 'guide_run_id'), 'idempotency_key': idempotency_header(request)})
+        return cls(validated.business_input() | {'idempotency_key': validated.idempotency_key})
+
+
+class ContinueGuideRunResponse:
+    success_code = 'GUIDE_CONTINUED'
+    status = 202
+    errors = CreateGuideRunResponse.errors - {'CONTENT_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID'}
+
+    @staticmethod
+    def project(data, request):
+        value = guide_run_accepted(data)
+        if value['id'] != request.payload['guide_run_id'] or value['status'] != 'RUNNING' or value['current_step'] != 'PREPARING':
+            raise ValueError('Continuation must reference the accepted original run')
+        return value, None

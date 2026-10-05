@@ -29,6 +29,35 @@ class GuideRepository:
     def running(self) -> list[sqlite3.Row]:
         return self.connection.execute("SELECT id,requirement_id,status,created_at,updated_at FROM guide_runs WHERE status='RUNNING' ORDER BY id").fetchall()
 
+    def get(self, identity: int):
+        return self.connection.execute('SELECT * FROM guide_runs WHERE id=?', (identity,)).fetchone()
+
+    def accept(self, identity, root, message, function, scope, manifest, at, *, trigger_type='CREATE_GUIDE_RUN'):
+        require_write_transaction(self.connection)
+        if message['requirement_id'] != root['id'] or message['guide_run_id'] != identity or message['role'] != 'USER' or message['message_type'] != 'TEXT':
+            raise ValueError('Accepted run must bind its real USER instruction')
+        context_key, context_version = function.context_template.split('@')
+        _, prompt_version = function.prompt_reference.split('@')
+        values = {'id': identity, 'requirement_id': root['id'], 'idempotency_key': message['idempotency_key'], 'trigger_message_id': message['id'], 'trigger_type': trigger_type,
+            'source_type': function.source_type, 'source_id': manifest['source']['source_id'], 'function_type': function.function_type, 'context_template_key': context_key,
+            'context_template_version': context_version, 'prompt_version': prompt_version, 'action_type': function.action_type,
+            'mode_snapshot': root['initialization_mode'] if function.action_type == 'INITIALIZE' else None, 'instruction_summary': message['content'],
+            'scope_type': scope.scope_type, 'scope_ref_json': None if scope.input_ref is None else canonical_input(scope.input_ref),
+            'read_scope_manifest_json': canonical_input(manifest), 'allowed_targets_json': scope.authority_json, 'status': 'RUNNING', 'current_step': 'PREPARING',
+            'final_result_json': None, 'created_at': at, 'started_at': None, 'waiting_user_at': None, 'ended_at': None, 'updated_at': at,
+            'error_code': None, 'error_message': None, 'cancel_reason': None, 'retry_of_guide_run_id': None}
+        self.connection.execute('INSERT INTO guide_runs('+','.join(values)+') VALUES ('+','.join('?' for _ in values)+')', tuple(values.values()))
+        return self.get(identity)
+
+    def continue_run(self, identity, message, at, *, trigger_type='CONTINUE_GUIDE_RUN'):
+        require_write_transaction(self.connection)
+        run = self.get(identity)
+        if run is None or message['requirement_id'] != run['requirement_id'] or message['guide_run_id'] != identity or message['role'] != 'USER' or message['message_type'] != 'TEXT':
+            raise ValueError('Continuation must bind its real USER instruction')
+        result = self.connection.execute("UPDATE guide_runs SET trigger_message_id=?,trigger_type=?,instruction_summary=?,status='RUNNING',current_step='PREPARING',updated_at=? WHERE id=? AND status='WAITING_USER' AND action_type IN ('ASK','REVIEW','MODIFY')", (message['id'], trigger_type, message['content'], at, identity))
+        if result.rowcount != 1: raise ValueError('Continuation lost its shared state gate')
+        return self.get(identity)
+
     def get_status(self, identity: int) -> sqlite3.Row | None:
         return self.connection.execute('SELECT '+STATUS_COLUMNS+',final_result_json FROM guide_runs WHERE id=?', (identity,)).fetchone()
 

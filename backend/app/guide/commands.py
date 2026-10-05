@@ -13,9 +13,116 @@ from backend.app.shared.validation import InvalidInput
 from .contracts import recover_runs_input, recover_runs_result
 from .contracts import cancel_guide_run_input, cancel_guide_run_result
 from .contracts import fail_guide_run_input, fail_guide_run_result
+from .contracts import create_guide_run_input, create_guide_run_result, continue_guide_run_input, continue_guide_run_result, get_guide_run_result
+from backend.app.documents.guards import current_at_version
+from backend.app.documents.contracts import get_current_document_result
+from backend.app.documents.snapshot import validate_snapshot
+from backend.app.documents.sources import DocumentSources
+from backend.app.documents.scopes import resolve_scope, ScopeInvalid
+from backend.app.infrastructure.identifiers import EntityKind, entity_id
+from backend.app.infrastructure.message_repository import MessageRepository
+from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, TemplateInvalid, ProtocolInvalid
+from backend.app.shared.validation import strict_json_object
 
 RECOVERY_ERRORS = {'INTERRUPTED': '运行因进程中断而结束', 'EXECUTION_TIMEOUT': '运行连续15分钟没有进展'}
 TERMINAL_RUNS = frozenset({'COMPLETED', 'FAILED', 'CANCELLED'})
+
+
+def _owned_guide(connection, root, run):
+    if root is None: raise Rejected('WORK_STATE_INCONSISTENT')
+    if root['document_work_state'] != 'GUIDE_ACTIVE' or root['active_operation_type'] != 'GUIDE_RUN' or root['active_operation_id'] != run['id']:
+        # Distinguish a legitimate other activity from dangling ownership.
+        assert_idle(connection, root, remaining_conflicts=frozenset())
+        raise Rejected('WORK_STATE_CONFLICT')
+    try: assert_idle(connection, root, remaining_conflicts=frozenset())
+    except Rejected as error:
+        if error.code != 'WORK_STATE_CONFLICT': raise
+    else: raise Rejected('WORK_STATE_INCONSISTENT')
+
+
+def _review_source(connection, resources, request):
+    if request.source_type == 'USER_INSTRUCTION': return
+    if request.action_type != 'MODIFY': raise Rejected('SOURCE_INVALID')
+    guides = GuideRepository(connection)
+    source = guides.get_status(request.source_id)
+    if source is None or source['requirement_id'] != request.requirement_id or source['action_type'] != 'REVIEW' or source['status'] != 'COMPLETED':
+        raise Rejected('SOURCE_INVALID')
+    try:
+        message, batches = guides.status_references(source)
+        get_guide_run_result(connection, source, message, batches, catalog=resources)
+        effects = strict_json_object(source['final_result_json'])
+        if effects.get('review_result') is None: raise ValueError('Missing formal review result')
+        resources.freeze('REVIEW', 'USER_INSTRUCTION').validate_review_result(effects['review_result'])
+    except ConfigInvalid: raise
+    except (ValueError, InvalidInput, ProtocolInvalid): raise Rejected('SOURCE_INVALID') from None
+
+
+def create_guide_run(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    """C01 real accepted USER/run/occupancy transaction; dispatch is separate."""
+    try: request = create_guide_run_input(payload)
+    except InvalidInput as error: return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection):
+        requirements = RequirementRepository(connection)
+        root = requirements.get(request.requirement_id)
+        if root is None: raise Rejected('NOT_FOUND')
+        allowed = {'INITIALIZING': ('INITIALIZE',), 'ACTIVE': ('ASK', 'REVIEW', 'MODIFY'), 'COMPLETED': ('ASK',)}
+        if request.action_type not in allowed[root['status']]: raise Rejected('STATE_CONFLICT')
+        assert_idle(connection, root, remaining_conflicts=frozenset())
+        current = current_at_version(connection, root['id'], request.expected_content_version)
+        try:
+            resources = catalog if catalog is not None else ResourceCatalog()
+            _review_source(connection, resources, request)
+            function = resources.freeze(request.action_type, request.source_type)
+            template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
+        except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
+        sources = DocumentSources(connection, root['id'], resources)
+        try:
+            model = get_current_document_result(current, sources)
+            snapshot = validate_snapshot(model['markdown_content'], model['block_state_json'], sources)
+        except ValueError: raise Rejected('WORK_STATE_INCONSISTENT') from None
+        try: scope = resolve_scope(snapshot, request.action_type, request.scope_type, request.scope_ref)
+        except ScopeInvalid: raise Rejected('SCOPE_INVALID') from None
+        at = operation_time(clock)
+        if root['updated_at'] > at or current['updated_at'] > at: raise ValueError('Acceptance cannot precede persisted activity')
+        guide_id, message_id = entity_id(connection, EntityKind.GUIDE_RUN), entity_id(connection, EntityKind.MESSAGE)
+        message = MessageRepository(connection).create_user_text(message_id, root['id'], guide_id, request.instruction, request.idempotency_key, at)
+        context_key, context_version = function.context_template.split('@')
+        prompt_key, prompt_version = function.prompt_reference.split('@')
+        manifest = {'document_id': current['id'], 'content_version': current['content_version'], 'block_ids': list(scope.read_ids), 'message_ids': [message_id],
+            'template': {'key': template.key, 'version': template.version}, 'source': {'source_type': request.source_type, 'source_id': request.source_id},
+            'context_template': {'key': context_key, 'version': context_version}, 'prompt': {'key': prompt_key, 'version': prompt_version}, 'function_type': function.function_type}
+        function.validate_allowed_targets({'schema_version': 1, 'targets': scope.targets_json})
+        manifest = function.validate_read_manifest(manifest)
+        run = GuideRepository(connection).accept(guide_id, root, message, function, scope, manifest, at)
+        requirements.occupy_guide(root['id'], guide_id, at)
+        return Success(create_guide_run_result(run, message), 202)
+    return execute_idempotent(executor, 'APP-GUIDE-CMD-C01', request, operation, allowed_failures=frozenset({
+        'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'CONFIG_INVALID'}))
+
+
+def continue_guide_run(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    """C02 ordinary text resumes the existing frozen run, never formal answers."""
+    try: request = continue_guide_run_input(payload)
+    except InvalidInput as error: return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection):
+        guides = GuideRepository(connection)
+        run = guides.get(request.guide_run_id)
+        if run is None: raise Rejected('NOT_FOUND')
+        if run['action_type'] not in ('ASK', 'REVIEW', 'MODIFY') or run['status'] != 'WAITING_USER': raise Rejected('STATE_CONFLICT')
+        root = RequirementRepository(connection).get(run['requirement_id'])
+        _owned_guide(connection, root, run)
+        try:
+            resources = catalog if catalog is not None else ResourceCatalog()
+            function = resources.restore(run['function_type'], run['prompt_version'], prompt_version=run['prompt_version'], context_template=run['context_template_key']+'@'+run['context_template_version'])
+        except ConfigInvalid: raise Rejected('CONFIG_INVALID') from None
+        if function.action_type != run['action_type'] or function.source_type != run['source_type']: raise Rejected('WORK_STATE_INCONSISTENT')
+        at = operation_time(clock)
+        if run['updated_at'] > at or root['updated_at'] > at: raise ValueError('Continuation cannot precede persisted activity')
+        message = MessageRepository(connection).create_user_text(entity_id(connection, EntityKind.MESSAGE), root['id'], run['id'], request.instruction, request.idempotency_key, at)
+        resumed = guides.continue_run(run['id'], message, at)
+        return Success(continue_guide_run_result(resumed), 202)
+    return execute_idempotent(executor, 'APP-GUIDE-CMD-C02', request, operation, target_identity=f'GuideRun:{request.guide_run_id}',
+        allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONFIG_INVALID'}))
 
 
 def _pending_batches(connection, requirement_id):
