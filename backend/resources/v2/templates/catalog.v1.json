@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "proposal": false,
+  "requirement_types": [
+    {
+      "value": "NEW",
+      "label": "需求新增"
+    },
+    {
+      "value": "CHANGE",
+      "label": "需求改造"
+    }
+  ],
+  "initialization_modes": [
+    {
+      "value": "IDEATION",
+      "label": "灵感模式"
+    },
+    {
+      "value": "DESIGN",
+      "label": "设计模式"
+    }
+  ],
+  "templates": [
+    {
+      "template_key": "new-requirement",
+      "template_version": "v1",
+      "label": "需求新增规格",
+      "requirement_types": [
+        "NEW"
+      ],
+      "markdown_path": "templates/new-requirement.v1.md",
+      "locked_headings": [
+        {
+          "level": 1,
+          "text": "需求新增规格"
+        },
+        {
+          "level": 2,
+          "text": "背景与目标"
+        },
+        {
+          "level": 2,
+          "text": "用户与使用场景"
+        },
+        {
+          "level": 2,
+          "text": "范围与边界"
+        },
+        {
+          "level": 2,
+          "text": "业务流程"
+        },
+        {
+          "level": 2,
+          "text": "业务规则"
+        },
+        {
+          "level": 2,
+          "text": "数据与术语"
+        },
+        {
+          "level": 2,
+          "text": "交互与接口"
+        },
+        {
+          "level": 2,
+          "text": "异常与恢复"
+        },
+        {
+          "level": 2,
+          "text": "权限与敏感数据"
+        },
+        {
+          "level": 2,
+          "text": "质量与约束"
+        },
+        {
+          "level": 2,
+          "text": "验收标准"
+        },
+        {
+          "level": 2,
+          "text": "待确认事项与风险"
+        }
+      ]
+    },
+    {
+      "template_key": "change-requirement",
+      "template_version": "v1",
+      "label": "需求改造规格",
+      "requirement_types": [
+        "CHANGE"
+      ],
+      "markdown_path": "templates/change-requirement.v1.md",
+      "locked_headings": [
+        {
+          "level": 1,
+          "text": "需求改造规格"
+        },
+        {
+          "level": 2,
+          "text": "现状与改造动机"
+        },
+        {
+          "level": 2,
+          "text": "目标与预期收益"
+        },
+        {
+          "level": 2,
+          "text": "用户与使用场景"
+        },
+        {
+          "level": 2,
+          "text": "改造范围与保持项"
+        },
+        {
+          "level": 2,
+          "text": "现有流程与目标流程"
+        },
+        {
+          "level": 2,
+          "text": "业务规则变更"
+        },
+        {
+          "level": 2,
+          "text": "数据与兼容影响"
+        },
+        {
+          "level": 2,
+          "text": "交互与接口变更"
+        },
+        {
+          "level": 2,
+          "text": "迁移与发布"
+        },
+        {
+          "level": 2,
+          "text": "回退与异常恢复"
+        },
+        {
+          "level": 2,
+          "text": "权限与敏感数据"
+        },
+        {
+          "level": 2,
+          "text": "质量与约束"
+        },
+        {
+          "level": 2,
+          "text": "验收与回归标准"
+        },
+        {
+          "level": 2,
+          "text": "待确认事项与风险"
+        }
+      ]
+    }
+  ]
+}

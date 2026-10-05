@@ -24,7 +24,7 @@ from backend.app.infrastructure.message_repository import MessageRepository
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, TemplateInvalid, ProtocolInvalid
 from backend.app.shared.validation import strict_json_object
 from .contracts import submit_card_responses_input, submit_card_responses_result
-from backend.app.messages.cards import CardsInvalid, decode_cards, validate_responses
+from backend.app.messages.cards import CardsInvalid, decode_cards, validate_responses, formal_answer_text
 from backend.app.messages.queries import card_state, project_message
 from .contracts import modify_from_comment_input, modify_from_comment_result
 from backend.app.infrastructure.comment_repository import CommentRepository
@@ -137,17 +137,7 @@ def continue_guide_run(executor: Idempotency, payload: object, *, catalog=None, 
 
 
 def _answer_summary(cards, answers):
-    by_key = {answer['card_key']: answer for answer in answers['responses']}
-    lines = []
-    for card in cards['cards']:
-        answer = by_key[card['card_key']]
-        lines.append(card['question'])
-        if answer['skipped']: lines.append('已跳过')
-        else:
-            options = {option['option_key']: option for option in card['options']}
-            lines.extend(options[key]['label'] for key in answer['selected_option_keys'])
-            if answer['custom_answer'] is not None: lines.append(answer['custom_answer'])
-    return '\n'.join(lines)
+    return formal_answer_text(cards, answers)
 
 
 def submit_card_responses(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:

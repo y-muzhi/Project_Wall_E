@@ -16,6 +16,8 @@ from .idempotency import canonical_input
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v1'
 MANIFEST_SHA256 = '79b9435a8c410009ba93936354a6f15f90d911d6ae0f81194022322b25899bbc'
+V2_ROOT = DEFAULT_ROOT.parent / 'v2'
+V2_MANIFEST_SHA256 = 'b30923bccfa873fce9fa7e45c74bae399e0051d6ca873b21346677f4cd36d905'
 STRICT_VALIDATOR = validators.extend(Draft202012Validator, type_checker=Draft202012Validator.TYPE_CHECKER.redefine('integer', lambda checker, value: type(value) is int))
 FUNCTIONS = {
     ('INITIALIZE', 'USER_INSTRUCTION'): ('INITIALIZE_REQUIREMENT', 'INITIALIZE'),
@@ -175,8 +177,13 @@ def _inspect_schema(node, root):
 
 
 class ResourceCatalog:
-    def __init__(self, root: Path | str = DEFAULT_ROOT):
-        self.root = Path(root).resolve()
+    def __init__(self, root: Path | str | None = None, *, versioned_root: Path | str | None = None):
+        # Explicit v1 roots are useful for immutable historical deployments and
+        # diagnostics. The installed default registers both approved releases,
+        # activating only v2 for newly accepted runs, with no latest discovery.
+        installed = root is None
+        self.root = Path(DEFAULT_ROOT if installed else root).resolve()
+        self._active_version = 'v1'
         try:
             raw_manifest = (self.root / 'manifest.json').read_bytes()
             if hashlib.sha256(raw_manifest).hexdigest() != MANIFEST_SHA256:
@@ -229,10 +236,59 @@ class ResourceCatalog:
                 if metadata != template:
                     raise ConfigInvalid('Template catalog and metadata do not agree')
                 self._templates[(key, version)] = FixedTemplate(key, version, template['label'], tuple(template['requirement_types']), texts[template['markdown_path']], tuple(LockedHeading(**heading) for heading in template['locked_headings']), MANIFEST_SHA256)
+            if installed or versioned_root is not None:
+                self._load_v2(Path(V2_ROOT if versioned_root is None else versioned_root).resolve(), texts)
+                self._active_version = 'v2'
         except ConfigInvalid:
             raise
         except Exception as error:
             raise ConfigInvalid('Frozen resource catalog cannot be loaded') from error
+
+    def _load_v2(self, root: Path, legacy: dict[str, str]) -> None:
+        raw = (root / 'manifest.json').read_bytes()
+        if hashlib.sha256(raw).hexdigest() != V2_MANIFEST_SHA256:
+            raise ConfigInvalid('Versioned manifest differs from approved D-010 release')
+        manifest = strict_json_object(raw)
+        if manifest['status'] != 'APPROVED' or manifest['decision'] != 'D-010' or manifest['version'] != 'v2' or manifest['base_manifest_sha256'] != MANIFEST_SHA256:
+            raise ConfigInvalid('Versioned release lacks approved base identity')
+        texts = {}
+        for entry in manifest['files']:
+            relative = Path(entry['path']); path = (root / relative).resolve()
+            if relative.is_absolute() or not path.is_relative_to(root) or entry['path'] in texts:
+                raise ConfigInvalid('Unsafe or duplicate versioned resource path')
+            content = path.read_bytes()
+            if len(content) != entry['bytes'] or hashlib.sha256(content).hexdigest() != entry['sha256']:
+                raise ConfigInvalid('Frozen versioned resource content has changed')
+            texts[entry['path']] = content.decode('utf-8', errors='strict')
+        if len(texts) != 30:
+            raise ConfigInvalid('Complete approved v2 release required')
+        # Public schemas, templates and their frontend signature are the exact
+        # v1 resources. Never reconstruct these from a different release.
+        for path, content in legacy.items():
+            if path.startswith(('schemas/', 'templates/')) and texts.get(path) != content:
+                raise ConfigInvalid('D-010 does not change schemas or templates')
+        resource = strict_json_object(texts['functions.v2.json'])
+        if resource['proposal'] is not False or len(resource['functions']) != 6:
+            raise ConfigInvalid('All six approved v2 Functions required')
+        seen = set()
+        for entry in resource['functions']:
+            action_source = entry['action_type'], entry['source_type']
+            expected, context_key = FUNCTIONS[action_source]
+            old = self._functions[(expected, 'v1')]
+            if action_source in seen or entry['function_type'] != expected or entry['version'] != 'v2' or entry['context_template'] != context_key + '_CONTEXT@v2' or entry['prompt'] != expected + '@v2':
+                raise ConfigInvalid('Versioned Function mapping differs from approved protocol')
+            seen.add(action_source)
+            if (entry['input_schema'], entry['output_schema']) != (old.input_schema, old.output_schema):
+                raise ConfigInvalid('Versioned schemas must retain v1 identities')
+            context = texts['contexts/' + entry['context_template'].replace('@', '.') + '.json']
+            policy = strict_json_object(context)
+            old_policy = old.context_policy
+            if policy != {**old_policy, 'prompt': entry['prompt']}:
+                raise ConfigInvalid('D-010 does not change context or budget policy')
+            self._functions[(expected, 'v2')] = FrozenFunction(expected, 'v2', *action_source,
+                old.input_schema, old.output_schema, entry['context_template'], entry['prompt'],
+                texts['prompts/' + entry['prompt'].replace('@', '.') + '.md'], context,
+                old.input_schema_json, old.output_schema_json, V2_MANIFEST_SHA256)
 
     def template(self, requirement_type: str, key: str, version: str) -> FixedTemplate:
         template = self._templates.get((key, version))
@@ -243,7 +299,7 @@ class ResourceCatalog:
     def freeze(self, action_type: str, source_type: str) -> FrozenFunction:
         try:
             function, _ = FUNCTIONS[(action_type, source_type)]
-            return self.restore(function, 'v1')
+            return self.restore(function, self._active_version)
         except (KeyError, TypeError):
             raise ConfigInvalid('No Function matches this action and source') from None
 

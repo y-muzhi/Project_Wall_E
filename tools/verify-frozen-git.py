@@ -29,6 +29,13 @@ identity = json.loads((ROOT / 'docs/manual-identity-adoption-v1.json').read_text
 expected.update({entry['path']: entry['sha256'] for entry in identity['approved']})
 expected[identity['migration']['path']] = identity['migration']['sha256']
 expected['docs/manual-identity-adoption-v1.json'] = digest((ROOT / 'docs/manual-identity-adoption-v1.json').read_bytes())
+output_path = ROOT / 'docs/output-evidence-adoption-v2.json'
+if output_path.exists():
+    output = json.loads(output_path.read_text(encoding='utf-8'))
+    expected.update({entry['path']: entry['sha256'] for entry in output['approved']})
+    expected.update({'backend/resources/v2/' + entry['path']: entry['sha256'] for entry in output['files']})
+    expected['backend/resources/v2/manifest.json'] = output['manifest_sha256']
+    expected['docs/output-evidence-adoption-v2.json'] = digest(output_path.read_bytes())
 for path in ('backend/resources/v1/manifest.json', 'backend/app/infrastructure/migrations/002_idempotency_guards.sql', 'docs/resource-adoption-v1.json', 'docs/verification/proposals-v1.json'):
     expected[path] = digest((ROOT / path).read_bytes())
 actual = []

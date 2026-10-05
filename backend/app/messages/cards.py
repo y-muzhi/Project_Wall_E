@@ -5,6 +5,21 @@ from backend.app.shared.validation import InvalidInput, strict_json_object, ordi
 class CardsInvalid(ValueError): pass
 
 
+def formal_answer_text(cards, answers):
+    """One existing C06 summary for persistence and exact evidence verification."""
+    by_key = {answer['card_key']: answer for answer in answers['responses']}
+    lines = []
+    for card in cards['cards']:
+        answer = by_key[card['card_key']]
+        lines.append(card['question'])
+        if answer['skipped']: lines.append('已跳过')
+        else:
+            options = {option['option_key']: option for option in card['options']}
+            lines.extend(options[key]['label'] for key in answer['selected_option_keys'])
+            if answer['custom_answer'] is not None: lines.append(answer['custom_answer'])
+    return '\n'.join(lines)
+
+
 def validate_cards(value, protocol):
     cards = protocol.validate_cards(value)
     keys = [card['card_key'] for card in cards['cards']]

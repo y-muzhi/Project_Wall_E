@@ -45,7 +45,7 @@ def output(response_type, **fields):
 
 class ResourceTests(unittest.TestCase):
     def setUp(self):
-        self.catalog = ResourceCatalog()
+        self.catalog = ResourceCatalog(DEFAULT_ROOT)  # exact historical v1 release
 
     def test_all_six_mappings_freeze_and_restore_without_version_fallback(self):
         for name, action, source, context in EXPECTED:

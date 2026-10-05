@@ -12,7 +12,7 @@ from backend.app.infrastructure.identifiers import block_id
 from backend.app.shared.validation import MAX_SAFE_INTEGER
 from .markdown import DocumentInvalid, ParsedBlock, parse_markdown
 from .patch_errors import PatchInvalid
-from .patch_validation import validate_combination, validate_patch
+from .patch_validation import validate_combination, validate_patch, validate_bundle
 from .scopes import WriteAuthority
 from .snapshot import Provenance, Snapshot, SourceVerifier, _time, validate_snapshot
 from .tables import RowReplacement, replace_rows, table_model
@@ -24,6 +24,14 @@ class Adoption:
     patch: dict
     decision: str
     edited_content: str | None = None
+
+
+@dataclass(frozen=True)
+class PatchPreview:
+    """Structural composition only; no manufactured author/source metadata."""
+    markdown: str
+    block_ids: tuple[int, ...]
+    next_block_id: int
 
 
 @dataclass
@@ -45,7 +53,7 @@ class _Unit:
         self.parsed = parse_markdown(markdown).blocks[0]
 
 
-def _paths(units: list[_Unit], cause: Provenance) -> None:
+def _paths(units: list[_Unit], cause: Provenance | None) -> None:
     stack = []
     for unit in units:
         block = unit.parsed
@@ -99,29 +107,8 @@ def _compose(units: list[_Unit], trailer: str, prior: Snapshot) -> tuple[str, tu
     return result, tuple(identity for _, _, identity in expected)
 
 
-def apply_adoptions(snapshot: Snapshot, adoptions: list[Adoption], authority: WriteAuthority, batch_id: int, operation_time: str, source_verifier: SourceVerifier) -> Snapshot:
-    """Apply accepted/edited decisions in order_no order, or return original.
-
-    REJECTED decisions are supplied by the application as no effective patches;
-    PENDING/batch status/version checks belong to that application's transaction.
-    """
-    if type(adoptions) is not list or len(adoptions) > 100 or any(type(item) is not Adoption for item in adoptions):
-        raise PatchInvalid('采用列表结构或容量不合法')
-    orders = [item.order_no for item in adoptions]
-    if any(type(order) is not int or not 1 <= order <= MAX_SAFE_INTEGER for order in orders) or len(set(orders)) != len(orders):
-        raise PatchInvalid('建议顺序必须为唯一正整数')
-    time = _time(operation_time)
-    checked = []
-    for item in sorted(adoptions, key=lambda entry: entry.order_no):
-        if item.decision not in ('ACCEPTED', 'EDITED') or item.decision == 'ACCEPTED' and item.edited_content is not None or item.decision == 'EDITED' and item.edited_content is None:
-            raise PatchInvalid('采用决定或编辑内容不匹配')
-        origin = Provenance('AI' if item.decision == 'ACCEPTED' else 'USER', 'SUGGESTION_BATCH', batch_id)
-        if source_verifier(origin) is not True:
-            raise DocumentInvalid('采用来源不属于当前文档')
-        checked.append((validate_patch(snapshot, item.patch, authority, edited_content=item.edited_content), origin))
-    validate_combination(tuple(patch for patch, _ in checked))
-    if not checked:
-        return snapshot
+def _apply_checked_units(snapshot: Snapshot, checked):
+    """Shared exact composition; origins are absent in structural previews."""
     units = []
     offset = 0
     for identity, (block, _) in snapshot.by_id.items():
@@ -162,6 +149,46 @@ def apply_adoptions(snapshot: Snapshot, adoptions: list[Adoption], authority: Wr
             if target.markdown != proposed:
                 target.update_markdown(proposed, origin)
         _paths(units, origin)
+    return units, trailer, next_id
+
+
+def preview_patches(snapshot: Snapshot, patches: list[dict], authority: WriteAuthority) -> PatchPreview:
+    """Prove an entire candidate bundle composes, without DB/SourceVerifier.
+
+    Only a program-validated original Snapshot is accepted upstream. This
+    preview does not fabricate a future batch, source relation or BlockState,
+    allocate persistent IDs, change a version or authorize C07 by itself.
+    """
+    checked = validate_bundle(snapshot, patches, authority)
+    units, trailer, next_id = _apply_checked_units(snapshot, [(patch, None) for patch in checked])
+    markdown, identities = _compose(units, trailer, snapshot)
+    return PatchPreview(markdown, identities, next_id)
+
+
+def apply_adoptions(snapshot: Snapshot, adoptions: list[Adoption], authority: WriteAuthority, batch_id: int, operation_time: str, source_verifier: SourceVerifier) -> Snapshot:
+    """Apply accepted/edited decisions in order_no order, or return original.
+
+    REJECTED decisions are supplied by the application as no effective patches;
+    PENDING/batch status/version checks belong to that application's transaction.
+    """
+    if type(adoptions) is not list or len(adoptions) > 100 or any(type(item) is not Adoption for item in adoptions):
+        raise PatchInvalid('采用列表结构或容量不合法')
+    orders = [item.order_no for item in adoptions]
+    if any(type(order) is not int or not 1 <= order <= MAX_SAFE_INTEGER for order in orders) or len(set(orders)) != len(orders):
+        raise PatchInvalid('建议顺序必须为唯一正整数')
+    time = _time(operation_time)
+    checked = []
+    for item in sorted(adoptions, key=lambda entry: entry.order_no):
+        if item.decision not in ('ACCEPTED', 'EDITED') or item.decision == 'ACCEPTED' and item.edited_content is not None or item.decision == 'EDITED' and item.edited_content is None:
+            raise PatchInvalid('采用决定或编辑内容不匹配')
+        origin = Provenance('AI' if item.decision == 'ACCEPTED' else 'USER', 'SUGGESTION_BATCH', batch_id)
+        if source_verifier(origin) is not True:
+            raise DocumentInvalid('采用来源不属于当前文档')
+        checked.append((validate_patch(snapshot, item.patch, authority, edited_content=item.edited_content), origin))
+    validate_combination(tuple(patch for patch, _ in checked))
+    if not checked:
+        return snapshot
+    units, trailer, next_id = _apply_checked_units(snapshot, checked)
     markdown, identities = _compose(units, trailer, snapshot)
     if markdown == snapshot.parsed.markdown and identities == tuple(snapshot.by_id) and next_id == snapshot.next_block_id:
         return snapshot

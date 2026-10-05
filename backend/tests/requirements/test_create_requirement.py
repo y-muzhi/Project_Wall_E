@@ -15,7 +15,7 @@ from backend.app.documents.sources import DocumentSources
 from backend.app.infrastructure.database import Database, CommitOutcomeUnknown
 from backend.app.infrastructure.idempotency import Idempotency, Scope
 from backend.app.infrastructure.process_lock import ProcessLock
-from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid
+from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, DEFAULT_ROOT
 from backend.app.requirements.commands import create_requirement
 from backend.app.requirements.contracts import create_requirement_input
 from backend.app.shared.validation import MAX_SAFE_INTEGER
@@ -33,7 +33,7 @@ class CreateRequirementTests(unittest.TestCase):
         self.lock=ProcessLock.for_database(self.path).acquire()
         self.addCleanup(self.directory.cleanup);self.addCleanup(self.lock.release)
         self.executor=Idempotency(self.database,self.lock,clock=lambda:INSTANT)
-        self.catalog=ResourceCatalog()
+        self.catalog=ResourceCatalog(DEFAULT_ROOT)  # preserve all existing v1 assertions
 
     def payload(self,**changes):
         return {'title':'\u3000需求😀\t','requirement_type':'NEW','template_key':'new-requirement','template_version':'v1','initial_idea':'\u3000first\r\nsecond\t','initialization_mode':'DESIGN','idempotency_key':KEY,**changes}
