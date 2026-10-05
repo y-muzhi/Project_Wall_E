@@ -10,6 +10,7 @@ import { editorHostProbe } from './editor-host-probe.ts';
 import { readLimitsProbe } from './read-limits-probe.ts';
 import { mountCreateProbe } from './create-probe.tsx';
 import { mountWorkbenchProbe } from './workbench-probe.tsx';
+import { mountDetailFrameProbe } from './detail-frame-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -111,4 +112,5 @@ async function run() {
 Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimitsProbe(api), mountCreate: () => {
   const probe = mountCreateProbe(api); Object.assign(window,{createProbe:probe});
 }, mountWorkbench:async(seed:boolean)=>{Object.assign(window,{workbenchProbe:await mountWorkbenchProbe(api,seed)});},
+ mountDetailFrame:async()=>{Object.assign(window,{detailFrameProbe:await mountDetailFrameProbe(api,2)});},
  wireFacts: () => wires, transportFacts: () => responses, creationWires: () => wires.filter(wire => wire.body?.includes('真实抽屉😀')), destroy: () => editor.destroy() } }); status.textContent = 'READY';

@@ -172,6 +172,52 @@ try {
     state=await page.evaluate(()=>window.workbenchProbe.state());if(state.state.requested.status.length!==3||state.state.requested.requirement_type.length!==2||state.state.requested.page!==1)throw new Error('Main navigation did not reset');
     await page.evaluate(()=>window.workbenchProbe.destroy());return {passed:true,main_query:state.state.requested,states:['EMPTY','READY','REFRESHING','OUT_OF_RANGE','REFRESH_ERROR','NO_MATCH'],scope:'Refresh error is explicit local discard after actual native successful GET, not real offline TCP or full navigation product acceptance'};
   }`.replace(/\r?\n/g,' ')));
+  report.detail_layout_geometry=result(await cli('run-code',`async(page)=>{
+    await page.setViewportSize({width:1600,height:900});await page.evaluate(()=>window.apiProbe.mountDetailFrame());
+    await page.waitForSelector('#detail-frame-editor .ProseMirror');await page.locator('#native-detail-frame .detail-header').scrollIntoViewIfNeeded();
+    const frame=page.locator('#native-detail-frame');
+    if(await frame.getByRole('complementary',{name:'辅助面板'}).isVisible())throw Error('Actual ACTIVE default panel should be closed');
+    await frame.getByRole('button',{name:/^辅助面板/}).click();const resize=frame.getByRole('separator',{name:'调整辅助面板宽度'});
+    const handle=await resize.boundingBox();if(!handle)throw Error('Resize handle geometry missing');
+    await page.mouse.move(handle.x+handle.width/2,handle.y+20);await page.mouse.down();await page.mouse.move(handle.x+handle.width/2-100,handle.y+20,{steps:10});await page.mouse.up();
+    if(Math.abs((await page.evaluate(()=>window.detailFrameProbe.state())).geometry.preferences.right_width-520)>1)throw Error('Native drag width not stored');
+    await resize.focus();for(let i=0;i<4;i++)await page.keyboard.press('ArrowLeft');
+    let state=await page.evaluate(()=>window.detailFrameProbe.state());if(state.geometry.preferences.right_width!==600)throw Error('Keyboard width not stored');
+    await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>{
+      const s=window.detailFrameProbe.state().geometry,region=document.querySelector('#native-detail-frame .detail-document-region'),panel=document.querySelector('#native-detail-frame .detail-panel');
+      return s.mode==='DESKTOP'&&s.right_width<600&&s.document_width>=640&&region?.getBoundingClientRect().width>=639.9&&Math.abs(panel?.getBoundingClientRect().width-s.right_width)<0.1;
+    });
+    state=await page.evaluate(()=>window.detailFrameProbe.state());const doc=await frame.locator('.detail-document-region').boundingBox();if(doc.width<639.9||state.geometry.preferences.right_width!==600||state.geometry.right_width>=600)throw Error('Desktop clamp lost minimum/preference '+JSON.stringify({geometry:state.geometry,doc}));
+    await page.setViewportSize({width:1024,height:900});await page.waitForFunction(()=>window.detailFrameProbe.state().geometry.mode==='COMPACT');
+    if(await frame.getByRole('complementary',{name:'文档大纲'}).isVisible()||!await frame.getByRole('complementary',{name:'辅助面板'}).isVisible())throw Error('Compact did not prioritize right panel');
+    await frame.getByRole('button',{name:'大纲',exact:true}).click();if(!await frame.getByRole('complementary',{name:'文档大纲'}).isVisible()||await frame.getByRole('complementary',{name:'辅助面板'}).isVisible())throw Error('Compact outline mutual exclusion');
+    await frame.getByRole('button',{name:/^辅助面板/}).click();await frame.getByRole('tab',{name:'评论',exact:true}).click();
+    await page.waitForFunction(()=>window.detailFrameProbe.state().panelReads.includes('COMMENTS'));
+    state=await page.evaluate(()=>window.detailFrameProbe.state());if(!state.geometry.preferences.left_open||state.geometry.preferences.right_tab!=='COMMENTS')throw Error('Auto collapse persisted');
+    return {passed:true,preferences:state.geometry.preferences,document_minimum:doc.width,native_drag:true,keyboard_resize:true};
+  }`.replace(/\r?\n/g,' ')));
+  report.detail_layout=result(await cli('run-code',`async(page)=>{
+    const frame=page.locator('#native-detail-frame');let state;
+    const editor=frame.getByRole('textbox',{name:'人工编辑草稿'});await editor.click();await editor.press('Control+Home');await editor.press('End');await editor.press('Enter');await editor.pressSequentially('窄屏保存真实输入😀');
+    await page.setViewportSize({width:1000,height:900});await page.waitForFunction(()=>window.detailFrameProbe.state().guard.phase==='BLOCKED'&&!window.detailFrameProbe.state().guard.saving);
+    state=await page.evaluate(()=>window.detailFrameProbe.state());if(!state.readonly||state.save.confirmed_version!==2||state.save.status!=='SAVED'||await frame.getByRole('textbox').count()||await frame.getByRole('tab').count())throw Error('Narrow failed actual save/input block');
+    const actual=await page.evaluate(()=>window.detailFrameProbe.inspect());if(!actual.markdown.includes('窄屏保存真实输入😀'))throw Error('Narrow content not native persisted');
+    await frame.getByText('当前窗口过窄，请将窗口调整至至少 1024px',{exact:true}).waitFor();await page.screenshot({path:'output/playwright/detail-narrow.png'});
+    await page.evaluate(()=>window.detailFrameProbe.holdNextRead());await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>window.detailFrameProbe.state().held);
+    if(await frame.getByRole('textbox').count()||await frame.getByRole('button',{name:'布局诊断操作'}).count())throw Error('Restoration opened before actual read');
+    await page.setViewportSize({width:900,height:900});await page.waitForFunction(()=>window.detailFrameProbe.state().guard.phase==='BLOCKED');await page.evaluate(()=>window.detailFrameProbe.release());
+    await page.evaluate(()=>window.detailFrameProbe.dropNextRead());await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>window.detailFrameProbe.state().guard.phase==='RESTORE_FAILED');
+    if(await frame.getByRole('textbox').count())throw Error('Failed read opened operations');await frame.getByRole('button',{name:'重新读取',exact:true}).click();
+    await page.waitForFunction(()=>window.detailFrameProbe.state().guard.phase==='SUPPORTED');state=await page.evaluate(()=>window.detailFrameProbe.state());
+    if(state.readonly||!state.editor_connected||state.restoreReads!==3||state.errors.length||state.geometry.preferences.right_width!==600)throw Error('Restore lost instance/preferences or state');
+    await page.setViewportSize({width:1600,height:900});await page.waitForFunction(()=>window.detailFrameProbe.state().geometry.right_width===600);
+    await frame.getByRole('tab',{name:'版本记录',exact:true}).click();await page.waitForFunction(()=>window.detailFrameProbe.state().panelReads.includes('REVISIONS'));
+    await frame.locator('.detail-header').scrollIntoViewIfNeeded();await page.screenshot({path:'output/playwright/detail-desktop.png'});
+    if(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth))throw Error('Detail produced page overflow');
+    const final=await page.evaluate(()=>window.detailFrameProbe.state());await page.evaluate(()=>window.detailFrameProbe.destroy());await page.setViewportSize({width:1280,height:720});
+    return {passed:true,native_draft_version:actual.version,restore_reads:final.restoreReads,panel_reads:final.panelReads,preferences:final.geometry.preferences,
+      scope:'Real layout/keyboard/native viewport, actual editor draft I11/I03/I08/I10 and panel reads; held and discarded actual re-read for race/failure. Parent is explicit diagnostic, not complete detail product or Windows IME'};
+  }`.replace(/\r?\n/g,' ')));
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
@@ -182,7 +228,7 @@ try {
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }
@@ -202,7 +248,7 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 28 || closed.facts.requirements !== 24 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
+      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 28 || closed.facts.requirements !== 24 || closed.facts.requirement_documents !== 24 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
