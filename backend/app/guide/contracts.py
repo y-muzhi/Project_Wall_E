@@ -465,6 +465,25 @@ def get_model_context_input(guide_run_id: object = MISSING) -> int:
     return strict_integer(guide_run_id, 'guide_run_id')
 
 
+def execute_guide_run_input(payload):
+    value = object_fields(payload, 'body', ('guide_run_id',), ('guide_run_id',))
+    return strict_integer(value['guide_run_id'], 'guide_run_id')
+
+
+def execute_guide_run_result(code, row, last_call_no):
+    if code not in ('AI_FINISHED', 'AI_WAITING_USER', 'AI_STOPPED'):
+        raise ValueError('Unknown ORCH result')
+    identity = strict_integer(row['id'], 'guide_run_id')
+    status = strict_enum(row['status'], 'status', GUIDE_STATUSES)
+    step = strict_enum(row['current_step'], 'current_step', GUIDE_STEPS)
+    if code == 'AI_FINISHED' and (status, step) != ('COMPLETED', 'FINISHED') or code == 'AI_WAITING_USER' and (status, step) != ('WAITING_USER', 'WAITING_USER'):
+        raise ValueError('ORCH result must reflect the committed state')
+    if code == 'AI_STOPPED' and status == 'RUNNING': raise ValueError('A live run was not stopped')
+    if last_call_no is not None: strict_integer(last_call_no, 'last_call_no')
+    return {'code': code, 'data': {'guide_run_id': identity, 'status': status,
+        'current_step': step, 'last_call_no': last_call_no}, 'details': None}
+
+
 @dataclass(frozen=True)
 class PersistAIResultInput:
     guide_run_id: int
