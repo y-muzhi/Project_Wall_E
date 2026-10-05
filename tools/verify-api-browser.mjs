@@ -298,6 +298,32 @@ try {
   assert.equal(report.manual_session.passed,true);
   report.polling_observer=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.pollingObserver())'));
   assert.equal(report.polling_observer.passed,true);
+  const lifecycleBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountLifecycle());return before;}'));
+  await cli('snapshot');
+  for(const [index,label] of ['完成初始化','完成需求','重新激活'].entries()){
+    await cli('run-code',`async(page)=>{
+      const scope=page.locator('#native-lifecycle-controls'),dialog=page.getByRole('dialog',{name:${JSON.stringify(label+'？')},exact:true});
+      await scope.getByRole('button',{name:${JSON.stringify(label)},exact:true}).click();await dialog.waitFor();const cancel=dialog.getByRole('button',{name:'取消',exact:true});
+      if(!await cancel.evaluate(element=>element===document.activeElement))throw Error('Lifecycle lacks safe confirmation focus');await cancel.click();
+      if(Object.values((await page.evaluate(()=>window.lifecycleProbe.state())).prepares).length!==${index})throw Error('Dismissal issued lifecycle request');
+      await scope.getByRole('button',{name:${JSON.stringify(label)},exact:true}).click();await dialog.getByRole('button',{name:${JSON.stringify('确认'+label)},exact:true}).click();
+      await page.waitForFunction(()=>window.lifecycleProbe.state().phase==='UNKNOWN');if(${index}===0)await page.screenshot({path:'output/playwright/lifecycle-unknown.png'});
+      await dialog.getByRole('button',{name:'保留请求并关闭弹窗',exact:true}).click();await scope.getByRole('button',{name:'确认生命周期变更结果',exact:true}).click();
+      await dialog.getByRole('button',{name:'重新确认结果',exact:true}).click();await scope.getByRole('button',{name:'重新读取实际详情',exact:true}).waitFor();
+      const state=await page.evaluate(()=>window.lifecycleProbe.state());if(state.phase!=='CONFIRMED'||state.adoptions!==${index})throw Error('Read failure rewrote lifecycle receipt');
+      await scope.getByRole('button',{name:'重新读取实际详情',exact:true}).click();await page.waitForFunction(index=>window.lifecycleProbe.state().stage===index+1,${index});return true;
+    }`.replace(/\r?\n/g,' '));
+  }
+  report.lifecycle=result(await cli('run-code',`async(page)=>{
+    const probe=await page.evaluate(()=>window.lifecycleProbe.inspect()),wires=(await page.evaluate(()=>window.apiProbe.wireFacts())).slice(${lifecycleBefore});
+    const root='/api/v1/requirements/'+probe.identity;
+    for(const suffix of ['/complete-initialization','/complete','/reactivate']){
+      const pair=wires.filter(wire=>wire.method==='POST'&&wire.path===root+suffix);if(pair.length!==2||pair.some(wire=>wire.status!==200||!wire.key)||pair[0].key!==pair[1].key||pair[0].body!==pair[1].body)throw Error('Lifecycle original action changed');
+      if(suffix==='/reactivate'){if(pair.some(wire=>'body' in wire||wire.content_type!==null))throw Error('Reactivate sent a JSON body/Content-Type');}
+      else{const body=JSON.parse(pair[0].body),field=suffix==='/complete'?'expected_version':'expected_content_version';if(Object.keys(body).length!==1||body[field]!==probe.source_current_version)throw Error('Lifecycle version/body uses wrong contract');}
+    }
+    await page.evaluate(()=>window.lifecycleProbe.destroy());return {...probe,replay_wires:wires.filter(wire=>wire.method==='POST')};
+  }`.replace(/\r?\n/g,' ')));assert.equal(report.lifecycle.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
@@ -308,7 +334,7 @@ try {
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }
@@ -328,7 +354,7 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 28 || closed.facts.requirements !== 24 || closed.facts.requirement_documents !== 24 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
+      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 28 || closed.facts.requirements !== 24 || closed.facts.requirement_documents !== 24 || closed.facts.revisions !== 5 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();

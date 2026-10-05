@@ -18,6 +18,7 @@ import {prepareRecoveryAdoption,resumeRecoveryAdoption} from './recovery-adoptio
 import {mountManualControlsProbe} from './manual-controls-probe.tsx';
 import {manualSessionProbe} from './manual-session-probe.ts';
 import {GuideRunPolling} from '../../src/guide/polling.ts';
+import {mountLifecycleProbe} from './lifecycle-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -25,7 +26,7 @@ const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!
   [Crepe.Feature.Table]: false, [Crepe.Feature.Latex]: false, [Crepe.Feature.TopBar]: false, [Crepe.Feature.AI]: false,
 } });
 await installSourceNodes(editor); await editor.create(); editor.setReadonly(true);
-const wires: { path: string; method: string; status: number; body?: string; key?: string; error_response?: string }[] = [];
+const wires: { path: string; method: string; status: number; body?: string; key?: string; content_type?:string|null; error_response?: string }[] = [];
 const responses: { path: string; status: number; response: string }[] = [];
 const transport: typeof fetch = async (input, options) => {
   let response: Response;
@@ -34,9 +35,9 @@ const transport: typeof fetch = async (input, options) => {
   wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status,
     ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
       (String(input).startsWith('/api/v1/requirements/') &&
-        ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft'))) ||
+        ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft')||String(input).endsWith('/complete-initialization')||String(input).endsWith('/complete')||String(input).endsWith('/reactivate'))) ||
           (options?.method === 'DELETE' && String(input).endsWith('/manual-draft'))))
-      ? { body: String(options?.body), key: new Headers(options?.headers).get('Idempotency-Key')! } : {}),
+      ? { ...(options?.body!==undefined?{body:String(options.body)}:{}), key: new Headers(options?.headers).get('Idempotency-Key')!,content_type:new Headers(options?.headers).get('Content-Type') } : {}),
     ...(response.status >= 400 ? { error_response: received } : {}) }); return response;
 };
 const api = editor.editor.action(ctx => new WalleApi(new ApiClient(transport), ctx));
@@ -130,6 +131,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  recoveryAdoptionPrepare:()=>prepareRecoveryAdoption(api,2),recoveryAdoptionResume:()=>resumeRecoveryAdoption(api),
  mountManualControls:async(operation:'COMPLETE'|'CANCEL',localMode:'AVAILABLE'|'COMPARE'|'NONE')=>{Object.assign(window,{manualControlsProbe:await mountManualControlsProbe(api,2,operation,localMode)});},
  manualSession:()=>manualSessionProbe(api,2),
+ mountLifecycle:async()=>{Object.assign(window,{lifecycleProbe:await mountLifecycleProbe(api)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
