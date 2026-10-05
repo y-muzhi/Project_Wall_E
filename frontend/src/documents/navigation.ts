@@ -39,7 +39,7 @@ function blockElement(ctx:Ctx,id:number):HTMLElement|null{
 export class DocumentNavigation{
   private readonly root:HTMLElement;private readonly port:NavigationPort;private readonly scrollport:HTMLElement|null;
   private readonly listeners=new Set<()=>void>();private readonly removers:(()=>void)[]=[];private observer:MutationObserver;private resize:ResizeObserver;
-  private frame:number|null=null;private needsRead=false;private closed=false;
+  private frame:number|null=null;private needsRead=false;private closed=false;private visible=true;
   private value:NavigationState=Object.freeze({content:null,active_heading:null,selected_block:null,source_block:null,toolbar:null,error:null});
   private constructor(root:HTMLElement,port:NavigationPort,scrollport:HTMLElement|null){
     this.root=root;this.port=port;this.scrollport=scrollport;
@@ -73,7 +73,7 @@ export class DocumentNavigation{
   }
   private bounds():{top:number;bottom:number}{const box=this.scrollport?.getBoundingClientRect();return {top:Math.max(0,box?.top??0),bottom:Math.min(window.innerHeight,box?.bottom??window.innerHeight)};}
   private measure():void{
-    if(this.closed||this.value.error||!this.value.content)return;const bounds=this.bounds();let heading:number|null=null,first:number|null=null;
+    if(this.closed||!this.visible||this.value.error||!this.value.content)return;const bounds=this.bounds();let heading:number|null=null,first:number|null=null;
     const scrolling=this.scrollport??document.scrollingElement,atEnd=scrolling!==null&&scrolling.scrollHeight-scrolling.clientHeight-scrolling.scrollTop<=1;
     if(this.root.getClientRects().length){for(const entry of this.value.content.outline){const element=this.port.element(entry.block_id);if(!element?.getClientRects().length)continue;const top=element.getBoundingClientRect().top;first??=entry.block_id;if(top<=(atEnd?bounds.bottom-1:bounds.top+24))heading=entry.block_id;else break;}}
     heading??=first;const element=this.value.selected_block===null?null:this.port.element(this.value.selected_block),box=element?.getBoundingClientRect();
@@ -81,15 +81,16 @@ export class DocumentNavigation{
     this.publish({active_heading:heading,toolbar:visible?Object.freeze({left:Math.max(8,Math.min(window.innerWidth-80,box.left-76)),top:Math.max(bounds.top+4,Math.min(bounds.bottom-40,box.top))}):null});
   }
   private selectTarget(target:EventTarget|null):void{
-    if(this.value.error||!this.value.content||!(target instanceof Node))return;
+    if(!this.visible||this.value.error||!this.value.content||!(target instanceof Node))return;
     for(const block of this.value.content.blocks){const element=this.port.element(block.block_id);if(element&&(element===target||element.contains(target))){this.publish({selected_block:block.block_id});this.measure();return;}}
   }
   locate(blockId:number):boolean{
-    if(this.closed||this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId))return false;
+    if(this.closed||!this.visible||this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId))return false;
     const element=this.port.element(blockId);if(!element?.getClientRects().length)return false;
     if(this.scrollport){const top=element.getBoundingClientRect().top-this.scrollport.getBoundingClientRect().top-this.scrollport.clientTop;this.scrollport.scrollTop+=top;}
     else element.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'});this.publish({selected_block:blockId});this.measure();return true;
   }
-  source(blockId:number|null):void{if(this.closed)return;if(blockId!==null&&(this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId)))return;this.publish({source_block:blockId});}
+  source(blockId:number|null):void{if(this.closed)return;if(blockId!==null&&(!this.visible||this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId)))return;this.publish({source_block:blockId});}
+  setVisible(visible:boolean):void{if(this.closed||this.visible===visible)return;this.visible=visible;if(visible)this.refresh();else this.publish({toolbar:null,source_block:null,active_heading:null});}
   dispose():void{if(this.closed)return;this.closed=true;for(const remove of this.removers)remove();this.observer.disconnect();this.resize.disconnect();if(this.frame!==null)cancelAnimationFrame(this.frame);this.listeners.clear();}
 }

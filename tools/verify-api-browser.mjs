@@ -6,8 +6,8 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 
 const root = resolve(import.meta.dirname, '..'), session = `walle-api-${Date.now()}`;
-const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly;
-assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:[]);
+const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),documentOnly=process.argv.includes('--document'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly||documentOnly;
+assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:documentOnly?['--document']:[]);
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
@@ -15,6 +15,7 @@ if(propertiesOnly)report.scope='Focused actual property controls/browser/product
 if(headerOnly)report.scope='Focused actual requirement header command ownership/browser/production API/isolated SQLite with native I02/I05 bootstrap; no full 37-binding rerun, editor/session/page or Provider acceptance';
 if(revisionsOnly)report.scope='Focused actual revision save/list/immutable history viewer/browser/production API/isolated SQLite with native I02/I05 bootstrap; no full 37-binding rerun, product route/manual-history session, effects or Provider acceptance';
 if(navigationOnly)report.scope='Focused native actual manual save/complete/current/Revision heading identity navigation, source metadata, scroll and focus; no full 37-binding rerun, product route/comments/true IME or Provider acceptance';
+if(documentOnly)report.scope='Focused native detail document/header/manual session/Revision lifetime integration, actual save before history, retained editor and failed/fresh restoration; no full bindings, route/AI/comments/true IME or Provider acceptance';
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
 const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
@@ -70,7 +71,9 @@ try {
     await wait(100);
   }
   assert.equal(ready?.ready, true); assert.match(ready.url, /^http:\/\/127\.0\.0\.1:[0-9]+$/);
-  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js', '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
+  const compiledFixture=resolve(directory,`compiled-${session}`);
+  if(documentOnly){const build=subprocess(globalThis.process.execPath,['node_modules/vite/bin/vite.js','build','--config','tests/browser/api-vite.config.ts','--outDir',compiledFixture],{cwd:resolve(root,'frontend'),env:{...env,WALLE_PROBE_API_URL:ready.url}});await build.exited;report.fixture_build=build.record;assert.equal(build.record.code,0,'Actual compiled diagnostic fixture required');}
+  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js',...(documentOnly?['preview','--outDir',compiledFixture]:[]), '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
     { cwd: resolve(root, 'frontend'), env: { ...env, WALLE_PROBE_API_URL: ready.url } });
   let live = false;
   for (let index = 0; index < 100; index++) {
@@ -332,7 +335,7 @@ try {
     await page.evaluate(()=>window.lifecycleProbe.destroy());return {...probe,replay_wires:wires.filter(wire=>wire.method==='POST')};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.lifecycle.passed,true);
   }else {report.property_bootstrap=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.bootstrapProperties())'));assert.equal(report.property_bootstrap.passed,true);}
-  if(!headerOnly&&!revisionsOnly&&!navigationOnly){
+  if(!headerOnly&&!revisionsOnly&&!navigationOnly&&!documentOnly){
   const propertyBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountProperties());return before;}'));
   for(const [index,label,input] of [[0,'需求标题','待保存标题'],[1,'初始化模式','待保存模式']]){
     await cli('run-code',`async(page)=>{
@@ -360,7 +363,7 @@ try {
     await page.evaluate(()=>window.propertyProbe.destroy());return {...probe,patch_wires:patches};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.properties.passed,true);
   }
-  if(!propertiesOnly&&!revisionsOnly&&!navigationOnly){
+  if(!propertiesOnly&&!revisionsOnly&&!navigationOnly&&!documentOnly){
     const headerBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountHeader());return before;}'));
     await cli('run-code',`async(page)=>{
       const scope=page.locator('#native-requirement-header'),title=scope.getByRole('region',{name:'需求标题',exact:true});await title.getByRole('button',{name:'修改需求标题',exact:true}).click();await title.getByLabel('待保存标题',{exact:true}).fill('  工具栏保留标题😀  ');
@@ -384,7 +387,7 @@ try {
       const patches=wires.filter(wire=>wire.method==='PATCH');if(patches.length!==1||patches[0].key!==null||Object.keys(JSON.parse(patches[0].body)).join()!=='title')throw Error('Header title PATCH contract');await page.evaluate(()=>window.headerProbe.destroy());return {...native,command_wires:wires.filter(wire=>wire.method!=='GET')};
     }`.replace(/\r?\n/g,' ')));assert.equal(report.header.passed,true);
   }
-  if(!propertiesOnly&&!headerOnly&&!navigationOnly){
+  if(!propertiesOnly&&!headerOnly&&!navigationOnly&&!documentOnly){
     const revisionBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountRevisions());return before;}'));
     await cli('run-code',`async(page)=>{
       const scope=page.getByRole('region',{name:'保存手动版本',exact:true}),description=scope.getByLabel('版本说明（可选）',{exact:true});await description.fill('😀'.repeat(1001));await scope.getByRole('button',{name:'保存版本',exact:true}).click();await scope.getByText('最多允许 1000 个字符',{exact:true}).waitFor();if((await page.evaluate(()=>window.revisionsProbe.state())).prepares!==0)throw Error('Invalid description submitted');
@@ -407,6 +410,36 @@ try {
       if(posts.length!==22||posts.some(wire=>wire.status!==201||!wire.key)||posts[0].key!==posts[1].key||posts[0].body!==posts[1].body||new Set(posts.map(wire=>wire.key)).size!==21)throw Error('Revision original/new actions differ');const body=JSON.parse(posts[0].body);if(Object.keys(body).sort().join()!=='description,expected_version'||[...body.description].length!==1000||body.expected_version!==native.current_version)throw Error('Revision body/version/description contract');
       await page.evaluate(()=>window.revisionsProbe.destroy());return {...native,original_creation_wires:posts.slice(0,2),independent_pagination_creations:20};
     }`.replace(/\r?\n/g,' ')));assert.equal(report.revisions.passed,true);
+  }
+  if(documentOnly){
+    await cli('run-code','async(page)=>{await page.evaluate(()=>window.apiProbe.mountDocumentOwner());await page.getByRole("button",{name:"人工编辑",exact:true}).waitFor();return true;}');await cli('snapshot');
+    await cli('run-code',`async(page)=>{
+      await page.getByRole('button',{name:'人工编辑',exact:true}).click();await page.getByRole('button',{name:'继续后端草稿',exact:true}).waitFor();await page.getByRole('button',{name:'继续后端草稿',exact:true}).click();
+      await page.waitForFunction(()=>window.documentOwnerProbe.state().manual?.recovery==='SERVER_SELECTED'&&!window.documentOwnerProbe.state().busy&&!window.documentOwnerProbe.state().manual.readonly);await page.evaluate(()=>window.documentOwnerProbe.remember());
+      const input=page.getByRole('textbox',{name:'人工编辑草稿',exact:true});await input.click();await input.press('Control+End');await input.press('End');await input.pressSequentially('历史停放保留😀');
+      await page.getByRole('button',{name:'查看 V1',exact:true}).click();await page.waitForFunction(()=>window.documentOwnerProbe.state().mode==='HISTORY'&&!window.documentOwnerProbe.state().busy&&window.documentOwnerProbe.state().history.phase==='OPEN');
+      await page.getByRole('textbox',{name:'历史版本 V1，只读',exact:true}).waitFor();if(await page.getByRole('textbox',{name:'人工编辑草稿',exact:true}).count())throw Error('Manual editor visible during history');
+      if(await page.getByRole('button',{name:'修改需求标题',exact:true}).isEnabled())throw Error('Historical header remains writable');await page.evaluate(()=>window.documentOwnerProbe.parked());await page.screenshot({path:'output/playwright/document-owner-history.png'});
+      await page.getByRole('button',{name:'退出历史',exact:true}).click();await page.waitForFunction(()=>window.documentOwnerProbe.state().history.phase==='ERROR'&&!window.documentOwnerProbe.state().busy);const failed=await page.evaluate(()=>window.documentOwnerProbe.state());
+      if(failed.mode!=='HISTORY'||!failed.same_session||!failed.manual.readonly||!failed.manual.local.includes('历史停放保留😀'))throw Error('Failed exit lost parked manual');
+      await page.getByRole('button',{name:'退出历史',exact:true}).click();await page.waitForFunction(()=>window.documentOwnerProbe.state().mode==='MANUAL'&&!window.documentOwnerProbe.state().busy);return true;
+    }`.replace(/\r?\n/g,' '));
+    report.document_restore=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.documentOwnerProbe.restored())'));assert.equal(report.document_restore.passed,true);await cli('snapshot');
+    await cli('run-code',`async(page)=>{
+      await page.getByRole('button',{name:'完成编辑',exact:true}).click();await page.waitForFunction(()=>window.documentOwnerProbe.state().mode==='CURRENT'&&!window.documentOwnerProbe.state().busy);
+      await page.getByRole('textbox',{name:'当前需求正文，只读',exact:true}).getByText('历史停放保留😀',{exact:false}).waitFor();await page.screenshot({path:'output/playwright/document-owner-current.png'});return true;
+    }`.replace(/\r?\n/g,' '));
+    await cli('run-code',`async(page)=>{
+      await page.getByRole('button',{name:'人工编辑',exact:true}).click();await page.getByRole('button',{name:'继续后端草稿',exact:true}).click();await page.waitForFunction(()=>!window.documentOwnerProbe.state().busy&&!window.documentOwnerProbe.state().manual.readonly);
+      const input=page.getByRole('textbox',{name:'人工编辑草稿',exact:true});await input.click();await input.press('Control+End');await input.pressSequentially('冲突保留本地😀');await page.getByRole('button',{name:'查看 V1',exact:true}).click();await page.waitForFunction(()=>window.documentOwnerProbe.state().history.phase==='OPEN'&&!window.documentOwnerProbe.state().busy);
+      await page.evaluate(()=>window.documentOwnerProbe.externalUpdate());await page.getByRole('button',{name:'退出历史',exact:true}).click();await page.waitForFunction(()=>window.documentOwnerProbe.state().history.phase==='RESTORING'&&!window.documentOwnerProbe.state().busy);
+      await page.evaluate(()=>window.documentOwnerProbe.captureConflict());const conflict=page.getByRole('region',{name:'历史退出草稿冲突',exact:true});await conflict.getByText('后端草稿 · v3',{exact:true}).waitFor();await page.screenshot({path:'output/playwright/document-owner-conflict.png'});
+      await conflict.getByRole('button',{name:'放弃冲突人工草稿',exact:true}).click();const dialog=page.getByRole('dialog',{name:'放弃冲突人工草稿？',exact:true});await dialog.getByRole('button',{name:'保留草稿',exact:true}).click();if((await page.evaluate(()=>window.documentOwnerProbe.state())).manual.ending!=='EDITING')throw Error('Dismissal cancelled actual draft');return true;
+    }`.replace(/\r?\n/g,' '));await cli('snapshot');
+    report.document_owner=result(await cli('run-code',`async(page)=>{
+      await page.getByRole('button',{name:'放弃冲突人工草稿',exact:true}).click();await page.getByRole('dialog',{name:'放弃冲突人工草稿？',exact:true}).getByRole('button',{name:'确认放弃',exact:true}).click();await page.waitForFunction(()=>window.documentOwnerProbe.state().mode==='CURRENT'&&!window.documentOwnerProbe.state().busy);
+      const native=await page.evaluate(()=>window.documentOwnerProbe.inspect()),retirement=await page.evaluate(()=>window.documentOwnerProbe.destroy());if(!retirement.passed)throw Error('Document owner retirement failed');return {...native,retirement};
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.document_owner.passed,true);
   }
   if(navigationOnly){
     await cli('run-code','async(page)=>{await page.evaluate(()=>window.apiProbe.mountNavigation());await page.getByRole("navigation",{name:"文档章节",exact:true}).waitFor();return true;}');
@@ -444,7 +477,7 @@ try {
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),property:window.propertyProbe?.state(),header:window.headerProbe?.state(),revisions:window.revisionsProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),property:window.propertyProbe?.state(),header:window.headerProbe?.state(),revisions:window.revisionsProbe?.state(),document:window.documentOwnerProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }
@@ -471,6 +504,6 @@ finally {
   report.inputs_after = await hashes();
   report.changed_inputs = [...new Set([...Object.keys(report.inputs_before), ...Object.keys(report.inputs_after)])].filter(key => report.inputs_before[key] !== report.inputs_after[key]);
   if (report.changed_inputs.length) { report.passed = false; report.error ??= 'Inputs changed during verification'; globalThis.process.exitCode = 1; }
-  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
+  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':documentOnly?'document':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ passed: report.passed, evidence: path, error: report.error }));
 }

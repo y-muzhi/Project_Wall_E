@@ -9,7 +9,7 @@ import {ManualDraftRecovery} from './manual-recovery.ts';
 import {ManualDraftEnd} from './manual-end.ts';
 import type {SelectionEvent} from './selection.ts';
 
-type BlockReason='VIEWPORT'|'LEAVING'|'READ_CONFLICT';
+type BlockReason='VIEWPORT'|'LEAVING'|'HISTORY'|'READ_CONFLICT';
 export type ManualSessionState=Readonly<{active:boolean;valid:boolean;readonly:boolean;blocked:boolean;block_reason:BlockReason|null;error:string|null;selection:SelectionEvent|null}>;
 export type ManualLeaveResult=Readonly<{saved:boolean;local_protected:boolean}>;
 function canonical(value:unknown):string {
@@ -59,7 +59,7 @@ export class ManualDraftSession {
   }
   /** Synchronous input lock precedes the first await. Only the actual latest
    * complete editor snapshot is submitted; an unfinished composition fails. */
-  blockAndSave(reason:'VIEWPORT'|'LEAVING'='VIEWPORT'):Promise<boolean>{
+  blockAndSave(reason:'VIEWPORT'|'LEAVING'|'HISTORY'='VIEWPORT'):Promise<boolean>{
     if(this.closed)return Promise.resolve(false);
     const conflicted=this.value.block_reason==='READ_CONFLICT',valid=this.editor.flushLocal();this.editor.setReadonly(true);this.publish({blocked:true,block_reason:conflicted?'READ_CONFLICT':reason,readonly:true,valid:this.editor.valid});
     if(conflicted)return Promise.resolve(false);

@@ -23,6 +23,7 @@ import {mountPropertyProbe} from './property-probe.tsx';
 import {mountHeaderProbe} from './header-probe.tsx';
 import {mountRevisionsProbe} from './revisions-probe.tsx';
 import {mountNavigationProbe} from './navigation-probe.tsx';
+import {mountDocumentOwnerProbe} from './document-owner-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -152,6 +153,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountHeader:async()=>{Object.assign(window,{headerProbe:await mountHeaderProbe(api)});},
  mountRevisions:async()=>{Object.assign(window,{revisionsProbe:await mountRevisionsProbe(api)});},
  mountNavigation:async()=>{Object.assign(window,{navigationProbe:await mountNavigationProbe(api)});},
+ mountDocumentOwner:async()=>{Object.assign(window,{documentOwnerProbe:await mountDocumentOwnerProbe(api)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
