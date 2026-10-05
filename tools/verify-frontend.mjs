@@ -17,7 +17,8 @@ function inputHashes() {
   }
   for (const directory of ['frontend', 'shared']) walk(resolve(root, directory));
   for (const module of ['requirements', 'documents', 'revisions', 'comments', 'suggestions', 'guide', 'messages']) files.push(resolve(root, `backend/app/${module}/api.py`));
-  files.push(resolve(root, 'backend/resources/v2/schemas/ASK_OUTPUT.v1.json'), resolve(root, 'tools/verify-frontend.mjs'));
+  files.push(resolve(root, 'backend/resources/v2/schemas/ASK_OUTPUT.v1.json'), resolve(root, 'backend/resources/v2/templates/catalog.v1.json'),
+    resolve(root, 'backend/app/shared/validation.py'), resolve(root, 'tools/verify-frontend.mjs'));
   return Object.fromEntries(files.sort().map(path => [path.slice(root.length + 1).replaceAll('\\', '/'), createHash('sha256').update(readFileSync(path)).digest('hex')]));
 }
 const before = inputHashes();

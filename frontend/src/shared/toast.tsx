@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { ToastStore } from './toast-store.ts';
-import { activeConfirmation, subscribeConfirmation } from './confirmation.tsx';
+import { activeModal, subscribeModal } from './modal.ts';
 
 export function ToastViewport({ store }: { store: ToastStore }) {
   const entries = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const modal = useSyncExternalStore(subscribeConfirmation, activeConfirmation, () => null);
+  const modal = useSyncExternalStore(subscribeModal, activeModal, () => null);
   return createPortal(<div className="toast-viewport" aria-label="操作结果提示">{entries.map(entry => <article key={entry.id}
     className={'toast toast-' + entry.type} role={entry.type === 'error' ? 'alert' : 'status'}
     onMouseEnter={() => store.pause(entry.id, 'hover')} onMouseLeave={() => store.resume(entry.id, 'hover')}

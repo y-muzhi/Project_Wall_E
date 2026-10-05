@@ -94,10 +94,50 @@ try {
   report.read_limits = result(await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.readLimits())'));
   assert.equal(report.read_limits.passed, true); assert.equal(report.read_limits.revision_codepoints, 1000);
   assert.equal(report.read_limits.prefix_codepoints, 100); assert.equal(report.read_limits.suffix_codepoints, 100);
+  await cli('run-code', 'async (page) => { await page.evaluate(() => window.apiProbe.mountCreate()); await page.waitForFunction(() => !!window.createProbe?.state().state); return true; }');
+  await cli('snapshot');
+  report.create_drawer = result(await cli('run-code', `async (page) => {
+    const trigger=page.getByRole('button',{name:'打开新建诊断'}); await trigger.click();await page.evaluate(()=>window.createStage='initial');
+    const drawer=page.locator('.create-drawer'), title=drawer.getByLabel('需求标题'), type=drawer.getByLabel('需求类型'), template=drawer.getByLabel('需求模板'), mode=drawer.getByLabel('初始化模式');
+    if(!await title.evaluate(element=>element===document.activeElement)||!await template.isDisabled()||await mode.inputValue()!=='')throw new Error('Initial controlled fields');
+    await drawer.getByRole('button',{name:'创建需求',exact:true}).click();
+    if(await drawer.locator('[aria-invalid=true]').count()!==5||!await title.evaluate(element=>element===document.activeElement))throw new Error('Five errors or first focus missing');
+    await page.evaluate(()=>window.createStage='discard');await page.mouse.click(5,5);if(!await drawer.isVisible())throw new Error('Mask closed create');
+    await title.fill('未提交输入');await drawer.getByRole('button',{name:'取消',exact:true}).click();
+    const confirm=page.locator('.confirmation');await confirm.waitFor();
+    if(await page.locator('dialog').count()!==2||await page.evaluate(()=>document.body.style.overflow)!=='hidden')throw new Error('Nested modal/scroll lock');
+    await page.keyboard.press('Escape');if(await confirm.count()||!await drawer.isVisible()||await page.evaluate(()=>document.body.style.overflow)!=='hidden')throw new Error('Nested Escape released drawer');
+    await drawer.getByRole('button',{name:'取消',exact:true}).click();await confirm.getByRole('button',{name:'放弃输入'}).click();
+    if(await page.locator('dialog').count()||await page.evaluate(()=>document.body.style.overflow)!=='')throw new Error('Discard modal cleanup');
+    await page.evaluate(()=>window.createStage='linked-fields');await trigger.click();await type.selectOption('NEW');if(await template.inputValue()!=='0'||!await template.getByRole('option',{name:'需求新增规格'}).count())throw new Error('NEW linked template');
+    await type.selectOption('CHANGE');if(!await template.getByRole('option',{name:'需求改造规格'}).count())throw new Error('CHANGE linked template');await type.selectOption('NEW');
+    await title.fill('😀'.repeat(21));await drawer.getByLabel('初始想法').fill('  正式初始想法\\n保留第二行  ');await mode.selectOption('DESIGN');
+    await drawer.getByRole('button',{name:'创建需求',exact:true}).click();if(await title.inputValue()!=='😀'.repeat(21)||!await title.evaluate(element=>element===document.activeElement))throw new Error('Long title truncated/focus lost');
+    if((await page.evaluate(()=>window.createProbe.state())).prepared!==0)throw new Error('Invalid form submitted');
+    await page.evaluate(()=>window.createStage='composition');await title.fill('真实抽屉😀');await title.evaluate(element=>element.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true})));await title.press('Enter');
+    await title.evaluate(element=>element.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'😀'})));if((await page.evaluate(()=>window.createProbe.state())).prepared!==0)throw new Error('Composition submitted');
+    await page.evaluate(()=>window.createStage='submit');await drawer.getByRole('button',{name:'创建需求',exact:true}).click();await page.waitForFunction(()=>window.createProbe.state().state.unknown);
+    if(await drawer.locator('[data-field]:disabled').count()!==5||!await drawer.getByRole('button',{name:'取消',exact:true}).isDisabled())throw new Error('Unknown original inputs unlocked');
+    const feedback=await drawer.getByRole('alert').boundingBox(); if(!feedback||feedback.y<0||feedback.y+feedback.height>await page.evaluate(()=>window.innerHeight))throw new Error('Unknown feedback outside viewport');
+    await page.keyboard.press('Escape');if(!await drawer.isVisible())throw new Error('Unknown dismissed');await page.screenshot({path:'output/playwright/create-unknown.png'});
+    await drawer.getByRole('button',{name:'核实创建结果'}).click();await page.waitForFunction(()=>!!window.createProbe.state().state.result&&!document.querySelector('.create-drawer'));
+    if(await page.evaluate(()=>document.body.style.overflow)!=='')throw new Error('Successful create retained lock');
+    const native=await page.evaluate(()=>window.createProbe.inspect()),wires=await page.evaluate(()=>window.apiProbe.creationWires());
+    if(wires.length!==2||wires[0].key!==wires[1].key||wires[0].body!==wires[1].body||wires.some(wire=>wire.status!==201))throw new Error('Original action not replayed');
+    await page.evaluate(()=>window.createProbe.destroy());return {...native,wires,ordered_five_errors:true,nested_modal_cleanup:true,synthetic_composition_guard:true};
+  }`.replace(/\r?\n/g,' ')));
+  assert.equal(report.create_drawer.passed, true); assert.equal(report.create_drawer.actual_list_count, 1);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.passed = true;
-} catch (error) { report.passed = false; report.error = String(error); globalThis.process.exitCode = 1; }
+} catch (error) { report.passed = false; report.error = String(error); globalThis.process.exitCode = 1;
+  if (opened) try {
+    report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
+    report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
+  } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
+}
 finally {
   if (opened) try { await cli('close'); } catch (error) { report.close_error = String(error); report.passed = false; globalThis.process.exitCode = 1; }
   if (vite) { await killOwned(vite); report.vite = vite.record; }
@@ -113,7 +153,7 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 6 || closed.facts.requirements !== 2 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
+      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 7 || closed.facts.requirements !== 3 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();

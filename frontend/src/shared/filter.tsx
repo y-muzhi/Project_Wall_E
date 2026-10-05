@@ -1,4 +1,5 @@
 import { useLayoutEffect, useId, useRef, useState } from 'react';
+import { normalizeOrdinary } from './text.ts';
 
 export type FilterValue = string | number;
 export type FilterOption<T extends FilterValue> = Readonly<{ value: T; label: string }>;
@@ -45,7 +46,10 @@ export function SearchInput({ value, submitted, placeholder, disabled = false, d
   value: string; submitted: string; placeholder: string; disabled?: boolean; draft(value: string): void; submit(value: string): void;
 }>) {
   const composing = useRef(false), input = useRef<HTMLInputElement>(null);
-  const search = () => { if (!disabled && !composing.current) submit(value.trim()); };
+  const search = () => { if (!disabled && !composing.current) {
+    let normalized = value; try { normalized = normalizeOrdinary(value); } catch { /* Parent reports invalid ordinary input. */ }
+    submit(normalized);
+  } };
   const clear = () => { if (disabled) return; draft(''); if (submitted !== '') submit(''); input.current?.focus(); };
   return <div className="search-input"><input ref={input} value={value} disabled={disabled} placeholder={placeholder} aria-label={placeholder}
     onChange={event => draft(event.currentTarget.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}

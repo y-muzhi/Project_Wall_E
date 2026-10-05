@@ -8,6 +8,7 @@ import { recoveryProbe } from './recovery-probe.ts';
 import { autosaveProbe } from './autosave-probe.ts';
 import { editorHostProbe } from './editor-host-probe.ts';
 import { readLimitsProbe } from './read-limits-probe.ts';
+import { mountCreateProbe } from './create-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -15,9 +16,15 @@ const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!
   [Crepe.Feature.Table]: false, [Crepe.Feature.Latex]: false, [Crepe.Feature.TopBar]: false, [Crepe.Feature.AI]: false,
 } });
 await installSourceNodes(editor); await editor.create(); editor.setReadonly(true);
-const wires: { path: string; method: string; status: number }[] = [];
+const wires: { path: string; method: string; status: number; body?: string; key?: string; error_response?: string }[] = [];
+const responses: { path: string; status: number; response: string }[] = [];
 const transport: typeof fetch = async (input, options) => {
-  const response = await fetch(input, options); wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status }); return response;
+  let response: Response;
+  try { response = await fetch(input, options); } catch (error) { wires.push({path:String(input),method:options?.method ?? 'GET',status:0,error_response:String(error)}); throw error; }
+  const received = await response.clone().text(); responses.push({path:String(input),status:response.status,response:received}); if (responses.length > 5) responses.shift();
+  wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status,
+    ...(options?.method === 'POST' && String(input) === '/api/v1/requirements' ? { body: String(options.body), key: new Headers(options.headers).get('Idempotency-Key')! } : {}),
+    ...(response.status >= 400 ? { error_response: received } : {}) }); return response;
 };
 const api = editor.editor.action(ctx => new WalleApi(new ApiClient(transport), ctx));
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -100,4 +107,6 @@ async function run() {
     scope: 'Actual same-origin Vite proxy / production API / isolated SQLite / real Crepe paired documents; failure/config cases explicit, no paid Provider, product page or whole acceptance' };
   status.textContent = JSON.stringify({ ...result, pairs: pairs.length }, null, 2); return result;
 }
-Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimitsProbe(api), destroy: () => editor.destroy() } }); status.textContent = 'READY';
+Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimitsProbe(api), mountCreate: () => {
+  const probe = mountCreateProbe(api); Object.assign(window,{createProbe:probe});
+}, wireFacts: () => wires, transportFacts: () => responses, creationWires: () => wires.filter(wire => wire.body?.includes('真实抽屉😀')), destroy: () => editor.destroy() } }); status.textContent = 'READY';
