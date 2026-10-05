@@ -78,6 +78,8 @@ try {
   const reached = new Set(report.browser.records.map(record => record.name)); assert.equal(reached.size, 37);
   assert.equal(report.browser.current_version, 2); assert.equal(report.browser.draft_version, 4);
   assert.equal(report.browser.pairs.length, 7); assert.equal(report.browser.history.source_content_version, 2);
+  assert.equal(report.browser.recovery.passed, true); assert.equal(report.browser.recovery.capacity_records, 20);
+  assert.equal(report.browser.recovery.checks.length, 7);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.passed = true;
