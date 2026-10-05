@@ -1,6 +1,7 @@
 import {Crepe} from '@milkdown/crepe';
 import {editorViewCtx} from '@milkdown/kit/core';
 import type {Node} from '@milkdown/kit/prose/model';
+import type {Ctx} from '@milkdown/kit/ctx';
 import {revisionDecoder} from '../api/models.ts';
 import {snapshotObject} from '../api/client.ts';
 import {installSourceNodes} from '../documents/source-nodes.ts';
@@ -26,6 +27,7 @@ export class RevisionViewer {
     }catch(error){await crepe.destroy();host.remove();throw error;}
   }
   get unchanged():boolean{return this.crepe.editor.action(ctx=>ctx.get(editorViewCtx).state.doc.eq(this.initial));}
+  action<T>(callback:(ctx:Ctx)=>T):T{if(this.retiring)throw Error('Revision viewer is closed');return this.crepe.editor.action(callback);}
   get blockIds():readonly number[]{return this.crepe.editor.action(ctx=>{const ids:number[]=[];ctx.get(editorViewCtx).state.doc.forEach(node=>ids.push(node.attrs.walle_block_id));return Object.freeze(ids);});}
   destroy():Promise<void>{if(this.retiring)return this.retiring;const promise=this.crepe.destroy().then(()=>{this.host.remove();});this.retiring=promise;return promise;}
 }

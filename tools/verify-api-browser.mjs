@@ -6,14 +6,15 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 
 const root = resolve(import.meta.dirname, '..'), session = `walle-api-${Date.now()}`;
-const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),focused=propertiesOnly||headerOnly||revisionsOnly;
-assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:[]);
+const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly;
+assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:[]);
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
 if(propertiesOnly)report.scope='Focused actual property controls/browser/production API/isolated SQLite with native I02/I05 bootstrap; no claim of full 37-binding rerun, Provider or product-page acceptance';
 if(headerOnly)report.scope='Focused actual requirement header command ownership/browser/production API/isolated SQLite with native I02/I05 bootstrap; no full 37-binding rerun, editor/session/page or Provider acceptance';
 if(revisionsOnly)report.scope='Focused actual revision save/list/immutable history viewer/browser/production API/isolated SQLite with native I02/I05 bootstrap; no full 37-binding rerun, product route/manual-history session, effects or Provider acceptance';
+if(navigationOnly)report.scope='Focused native actual manual save/complete/current/Revision heading identity navigation, source metadata, scroll and focus; no full 37-binding rerun, product route/comments/true IME or Provider acceptance';
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
 const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
@@ -331,7 +332,7 @@ try {
     await page.evaluate(()=>window.lifecycleProbe.destroy());return {...probe,replay_wires:wires.filter(wire=>wire.method==='POST')};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.lifecycle.passed,true);
   }else {report.property_bootstrap=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.bootstrapProperties())'));assert.equal(report.property_bootstrap.passed,true);}
-  if(!headerOnly&&!revisionsOnly){
+  if(!headerOnly&&!revisionsOnly&&!navigationOnly){
   const propertyBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountProperties());return before;}'));
   for(const [index,label,input] of [[0,'需求标题','待保存标题'],[1,'初始化模式','待保存模式']]){
     await cli('run-code',`async(page)=>{
@@ -359,7 +360,7 @@ try {
     await page.evaluate(()=>window.propertyProbe.destroy());return {...probe,patch_wires:patches};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.properties.passed,true);
   }
-  if(!propertiesOnly&&!revisionsOnly){
+  if(!propertiesOnly&&!revisionsOnly&&!navigationOnly){
     const headerBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountHeader());return before;}'));
     await cli('run-code',`async(page)=>{
       const scope=page.locator('#native-requirement-header'),title=scope.getByRole('region',{name:'需求标题',exact:true});await title.getByRole('button',{name:'修改需求标题',exact:true}).click();await title.getByLabel('待保存标题',{exact:true}).fill('  工具栏保留标题😀  ');
@@ -383,7 +384,7 @@ try {
       const patches=wires.filter(wire=>wire.method==='PATCH');if(patches.length!==1||patches[0].key!==null||Object.keys(JSON.parse(patches[0].body)).join()!=='title')throw Error('Header title PATCH contract');await page.evaluate(()=>window.headerProbe.destroy());return {...native,command_wires:wires.filter(wire=>wire.method!=='GET')};
     }`.replace(/\r?\n/g,' ')));assert.equal(report.header.passed,true);
   }
-  if(!propertiesOnly&&!headerOnly){
+  if(!propertiesOnly&&!headerOnly&&!navigationOnly){
     const revisionBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountRevisions());return before;}'));
     await cli('run-code',`async(page)=>{
       const scope=page.getByRole('region',{name:'保存手动版本',exact:true}),description=scope.getByLabel('版本说明（可选）',{exact:true});await description.fill('😀'.repeat(1001));await scope.getByRole('button',{name:'保存版本',exact:true}).click();await scope.getByText('最多允许 1000 个字符',{exact:true}).waitFor();if((await page.evaluate(()=>window.revisionsProbe.state())).prepares!==0)throw Error('Invalid description submitted');
@@ -406,6 +407,32 @@ try {
       if(posts.length!==22||posts.some(wire=>wire.status!==201||!wire.key)||posts[0].key!==posts[1].key||posts[0].body!==posts[1].body||new Set(posts.map(wire=>wire.key)).size!==21)throw Error('Revision original/new actions differ');const body=JSON.parse(posts[0].body);if(Object.keys(body).sort().join()!=='description,expected_version'||[...body.description].length!==1000||body.expected_version!==native.current_version)throw Error('Revision body/version/description contract');
       await page.evaluate(()=>window.revisionsProbe.destroy());return {...native,original_creation_wires:posts.slice(0,2),independent_pagination_creations:20};
     }`.replace(/\r?\n/g,' ')));assert.equal(report.revisions.passed,true);
+  }
+  if(navigationOnly){
+    await cli('run-code','async(page)=>{await page.evaluate(()=>window.apiProbe.mountNavigation());await page.getByRole("navigation",{name:"文档章节",exact:true}).waitFor();return true;}');
+    await cli('snapshot');
+    report.navigation_scroll=result(await cli('run-code',`async(page)=>{
+      const headings=(await page.evaluate(()=>window.navigationProbe.state())).headings,outline=page.getByRole('navigation',{name:'文档章节',exact:true});
+      if(await outline.getByRole('button',{name:'重复标题😀',exact:true}).count()!==2)throw Error('Duplicate heading lost');
+      const second=outline.locator('[data-heading-block="'+headings[2].block_id+'"]');await second.click();await page.waitForFunction(id=>window.navigationProbe.state().navigation.active_heading===id,headings[2].block_id);
+      const state=await page.evaluate(()=>window.navigationProbe.state());if(state.scroll<=0||!await second.getAttribute('aria-current')||state.navigation.error!==null)throw Error('Native scroll/current highlight failed');
+      await page.getByRole('button',{name:'来源',exact:true}).click();const popover=page.getByRole('dialog',{name:'区块来源',exact:true});await popover.waitFor();
+      if(!await popover.getByText('用户 · 人工编辑',{exact:true}).count()||await popover.getByText('模板',{exact:true}).count())throw Error('Source is stale template metadata');
+      if(!await popover.evaluate(element=>element.contains(document.activeElement)))throw Error('Source opening focus failed');await page.screenshot({path:'output/playwright/navigation-source.png'});
+      await popover.press('Escape');await popover.waitFor({state:'detached'});if(!await page.getByRole('button',{name:'来源',exact:true}).evaluate(element=>element===document.activeElement))throw Error('Source focus not returned');
+      const first=outline.locator('[data-heading-block="'+headings[0].block_id+'"]');await first.click();await page.waitForFunction(id=>window.navigationProbe.state().navigation.active_heading===id,headings[0].block_id);
+      const before=await page.evaluate(()=>window.navigationProbe.state());await page.locator('#native-navigation section').evaluate(element=>element.scrollTop+=700);await page.waitForFunction(id=>window.navigationProbe.state().navigation.active_heading!==id,headings[0].block_id);
+      const after=await page.evaluate(()=>window.navigationProbe.state());return {passed:true,clicked:state.navigation.active_heading,scroll:state.scroll,manual_scroll_from:before.navigation.active_heading,manual_scroll_to:after.navigation.active_heading,headings};
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.navigation_scroll.passed,true);
+    report.navigation_draft=result(await cli('run-code','async(page)=>{await page.evaluate(()=>window.navigationProbe.editOutline());return {passed:true,scope:"Actual manual draft heading rename retains identity, synthetic composition blocks stale outline actions and clears on completion, actual cancellation retains CURRENT"};}'));assert.equal(report.navigation_draft.passed,true);
+    await cli('run-code','async(page)=>{await page.evaluate(()=>window.navigationProbe.history());await page.getByRole("navigation",{name:"文档章节",exact:true}).waitFor();return true;}');
+    await cli('snapshot');
+    report.navigation_history=result(await cli('run-code',`async(page)=>{
+      const headings=(await page.evaluate(()=>window.navigationProbe.state())).headings;await page.getByRole('navigation',{name:'文档章节',exact:true}).locator('[data-heading-block="'+headings[3].block_id+'"]').click();await page.waitForFunction(id=>window.navigationProbe.state().navigation.active_heading===id,headings[3].block_id);
+      await page.getByRole('button',{name:'来源',exact:true}).click();await page.getByRole('dialog',{name:'区块来源',exact:true}).getByText('历史版本来源',{exact:true}).waitFor();
+      if((await page.evaluate(()=>window.navigationProbe.state())).navigation.source_block!==headings[3].block_id)throw Error('History source from a different selected block');
+      const native=await page.evaluate(()=>window.navigationProbe.inspect());await page.screenshot({path:'output/playwright/navigation-history-source.png'});await page.getByRole('button',{name:'关闭来源',exact:true}).click();await page.evaluate(()=>window.navigationProbe.destroy());return native;
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.navigation_history.passed,true);
   }
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
@@ -437,13 +464,13 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      const expected=focused?{llm_uses:0,guide_runs:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:1,comments:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
+      const expected=focused?{llm_uses:0,guide_runs:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:navigationOnly?2:1,comments:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
       if (Object.entries(expected).some(([key,value])=>closed.facts[key]!==value)|| native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
   report.changed_inputs = [...new Set([...Object.keys(report.inputs_before), ...Object.keys(report.inputs_after)])].filter(key => report.inputs_before[key] !== report.inputs_after[key]);
   if (report.changed_inputs.length) { report.passed = false; report.error ??= 'Inputs changed during verification'; globalThis.process.exitCode = 1; }
-  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
+  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ passed: report.passed, evidence: path, error: report.error }));
 }

@@ -65,6 +65,7 @@ export class RequirementEditor {
   }
   /** Parent receives this actual ledger only for MANUAL_DRAFT. */
   get ledger(): EditedSnapshotLedger | null { return this.session; }
+  get loadedDocument(): DocumentReadModel { return this.document; }
   get valid(): boolean { return !this.invalid && !this.composing; }
   get readonly(): boolean { return this.readonlyMode; }
   action<T>(callback: (ctx: Ctx) => T): T { if (this.closed) throw new Error('Editor is closed'); return this.crepe.editor.action(callback); }
