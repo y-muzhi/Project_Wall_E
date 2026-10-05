@@ -4,7 +4,8 @@ import { Fragment, type Node } from '@milkdown/kit/prose/model';
 import type { EditorState } from '@milkdown/kit/prose/state';
 import { validateBlockState, validateDocumentReadModel, type BlockMetadata, type BlockState } from './contracts.ts';
 import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
-import { bindIdentityDocument, hasRawSource, identityState, IdentityInvalid, rebindSourceContext, replaceParsedSourceDocument, sourceRevision, topBlockIds } from './identity.ts';
+import { bindIdentityDocument, hasRawSource, identityState, IdentityInvalid, rebindSourceContext, replaceParsedSourceDocument, replaceLocalRecoveryDocument, sourceRevision, topBlockIds } from './identity.ts';
+import {validateLocalDraftSnapshot} from './recovery-store.ts';
 import { normalizationProof, normalizeRawSourceBlock, type RawSourceNormalization } from './source-normalization.ts';
 
 export interface EditedSnapshot {
@@ -120,6 +121,33 @@ export class EditedSnapshotLedger {
   get currentSnapshot(): EditedSnapshot { this.live(); return this.pair; }
   get savedVersion(): number { this.live(); return this.confirmedVersion; }
   get savedAt(): string { this.live(); return this.confirmedAt; }
+
+  /** User explicitly chose the same-version cache for this actual draft key.
+   * Keep the actual server baseline/version; cache metadata remains a local
+   * intention until native I11 checks its protected origins and confirms it.
+   * Reload does not reconstruct unpersisted undo history or infer missing IDs.
+   */
+  prepareLocalRecovery(state:EditorState,input:unknown):PreparedEditorSnapshot {
+    this.live();
+    if(this.generation!==0||this.pending||this.unresolved.size)fail('本地恢复只允许尚未编辑的新载入会话');
+    const local=validateLocalDraftSnapshot(this.ctx,input),identity=identityState(state);
+    if(local.base_confirmed_version!==this.confirmedVersion||local.block_state_json.next_block_id<this.confirmedNext||
+      identity.next_block_id!==this.confirmedNext||!state.doc.eq(this.layouts[0]!.document)||JSON.stringify(topBlockIds(state.doc).filter(id=>id!==null))!==JSON.stringify(this.units.map(unit=>unit.id)))fail('本地恢复缺少实际相同草稿基线');
+    const source=new EditorSource(this.ctx,local.markdown_content);
+    for(const block of local.block_state_json.blocks){
+      const known=this.births.get(block.block_id);
+      if(known&&creationFields.some(field=>block[field]!==known[field]))fail('本地恢复改变实际已知创建事实');
+      if(block.block_id>=this.confirmedNext&&(block.created_by_type!=='USER'||block.created_source_type!=='MANUAL_EDIT'||block.created_source_id!==this.sessionId))fail('本地新身份没有当前人工会话来源');
+    }
+    const rebound=replaceLocalRecoveryDocument(state,source.document,local.block_state_json.blocks.map(block=>block.block_id),local.block_state_json.next_block_id);
+    const staged=this.fork();
+    staged.units=source.blocks.map((block,index)=>({id:local.block_state_json.blocks[index]!.block_id,node:rebound.doc.child(index),raw:block.markdown,
+      gap:source.parts[index*2]!,actualGap:source.parts[index*2]!,verbatim:true}));
+    staged.trailer=source.parts.at(-1)!;staged.pair=Object.freeze({markdown_content:local.markdown_content,block_state_json:local.block_state_json});
+    for(const block of local.block_state_json.blocks)if(!staged.births.has(block.block_id))staged.births.set(block.block_id,block);
+    staged.lastTime=[this.lastTime,local.updated_at,...local.block_state_json.blocks.map(block=>block.last_modified_at)].sort().at(-1)!;
+    staged.generation++;return this.preparation(staged,rebound,staged.pair);
+  }
 
   /** An ended browser request can remain unconfirmed at the server. Keep its
    * exact submission proof while allowing the newest local pair to compete at

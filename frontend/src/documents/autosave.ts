@@ -71,8 +71,8 @@ export class ManualDraftAutosave {
     const revision = this.value.local_revision;
     const record: LocalDraftSnapshot = Object.freeze({ schema_version: 1, base_confirmed_version: this.confirmed.content_version,
       ...this.observed, local_revision: revision, updated_at: new Date().toISOString() });
-    void this.cache.put(this.confirmed.requirement_id, this.confirmed.id, record).then(() => {
-      if (revision === this.value.local_revision) this.publish({ local_storage_error: false });
+    void this.cache.put(this.confirmed.requirement_id, this.confirmed.id, record).then(stored => {
+      if (revision === this.value.local_revision) this.publish({ local_storage_error: !stored });
     }, () => this.publish({ local_storage_error: true }));
   }
   /** Call after the exact editor preparation has been accepted/displayed. */
@@ -89,6 +89,15 @@ export class ManualDraftAutosave {
     this.publish({ status: this.dirty() || this.tickets.size ? 'DIRTY' : 'SAVED' });
     this.idle?.(); this.idle = this.clock.schedule(() => { this.idle = undefined; void this.flush(); }, 2000);
     this.maximum ??= this.clock.schedule(() => { this.maximum = undefined; void this.flush(); }, 10000);
+  }
+  /** Explicit recovery on a newly loaded real baseline. Continue the stored
+   * revision counter so later cache writes/receipts cannot erase or lose it. */
+  restoreLocal(local:LocalDraftSnapshot,apply:()=>EditedSnapshot):void {
+    if(this.closed||this.paused||this.pending||this.tickets.size||this.value.status!=='SAVED'||this.value.local_revision!==0||
+      !this.value.accepting_input||local.base_confirmed_version!==this.confirmed.content_version||!Number.isSafeInteger(local.local_revision)||local.local_revision<1||local.local_revision>=Number.MAX_SAFE_INTEGER)throw new TypeError('Fresh same-base recovery required');
+    const pair=apply();if(!same(pair,local)||!same(pair,this.ledger.currentSnapshot))throw new TypeError('Recovery pair was not accepted by actual ledger');
+    this.publish({local_revision:local.local_revision});this.changed();
+    if(!this.dirty())void this.cache.clearIfRevision(this.confirmed.requirement_id,this.confirmed.id,local.local_revision).catch(()=>this.publish({local_storage_error:true}));
   }
   /** Blur/visibility-hidden/explicit save; no write abort on hiding. */
   flush(): Promise<void> {

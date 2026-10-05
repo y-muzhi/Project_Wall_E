@@ -11,6 +11,7 @@ import type { EditedSnapshot } from './edited-snapshot.ts';
 import { selectionFromEditorState, locateEditorSelection } from './editor-selection.ts';
 import type { SelectionEvent } from './selection.ts';
 import { snapshotObject } from '../api/client.ts';
+import type {LocalDraftSnapshot} from './recovery-store.ts';
 
 export type EditorEvents = Readonly<{
   change?: (snapshot: EditedSnapshot) => void;
@@ -119,6 +120,18 @@ export class RequirementEditor {
     if (this.closed || this.composing) return false;
     if (!this.session) return true;
     return this.action(ctx => this.capture(ctx, ctx.get(editorViewCtx).state));
+  }
+  /** Parent owns explicit cache choice and fresh occupancy/version checks.
+   * The display/ledger update is synchronous; parent then adopts the local
+   * revision in Autosave before allowing input. No saved receipt is fabricated. */
+  restoreLocal(local:LocalDraftSnapshot):EditedSnapshot {
+    if(this.closed||!this.session||!this.readonlyMode||this.composing)throw new TypeError('Fresh frozen actual draft required');
+    return this.action(ctx=>{
+      const view=ctx.get(editorViewCtx),prepared=this.session!.prepareLocalRecovery(view.state,local);
+      view.updateState(prepared.state);const pair=this.session!.accept(prepared,view.state);this.accepted=view.state;this.invalid=false;
+      this.editingTime=Math.max(this.editingTime,Date.parse(local.updated_at),...pair.block_state_json.blocks.map(block=>Date.parse(block.last_modified_at)));
+      return pair;
+    });
   }
   locate(selection: SelectionEvent): void {
     this.action(ctx => locateEditorSelection(ctx.get(editorViewCtx), { document_id: this.document.id,

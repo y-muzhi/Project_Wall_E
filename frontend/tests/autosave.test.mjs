@@ -32,6 +32,19 @@ function setup(api) {
   return { controller, session, timing, writes, clears, edit };
 }
 
+test('explicit recovery continues stored local revision, preserves real confirmed version, and cannot run over an edited or mismatched session',async()=>{
+ const rig=setup({save:async ticket=>draft(ticket.markdown_content,ticket.expected_version+1),read:async()=>draft()}),local={schema_version:1,base_confirmed_version:1,local_revision:20,updated_at:at,...pair('restored')};
+ assert.throws(()=>rig.controller.restoreLocal({...local,base_confirmed_version:2},()=>local));
+ rig.controller.restoreLocal(local,()=>{rig.session.currentSnapshot=pair('restored');return rig.session.currentSnapshot;});await settle();
+ assert.equal(rig.controller.state.confirmed_version,1);assert.equal(rig.controller.state.local_revision,21);assert.equal(rig.writes.at(-1)[2].local_revision,21);assert.equal(rig.writes.at(-1)[2].base_confirmed_version,1);
+ assert.throws(()=>rig.controller.restoreLocal(local,()=>local));await rig.controller.flush();assert.equal(rig.controller.state.confirmed_version,2);assert.equal(rig.controller.state.status,'SAVED');rig.controller.dispose();
+});
+
+test('superseded local put is a visible storage failure, not falsely reported as successful local protection',async()=>{
+ const initial=draft(),session=ledger(initial),timing=clock(),controller=new ManualDraftAutosave(initial,session,{save:async()=>initial,read:async()=>initial},{put:async()=>false,clearIfRevision:async()=>false},timing);
+ session.currentSnapshot=pair('unsaved');controller.changed();await settle();assert.equal(controller.state.local_storage_error,true);assert.equal(controller.state.status,'DIRTY');assert.equal(controller.localSnapshot.markdown_content,'unsaved');controller.dispose();
+});
+
 test('idle2sec and maximum10sec send a complete pair, continuous edits keep the original maximum deadline', async () => {
   const sent = [], rig = setup({ async save(ticket) { sent.push(ticket); return draft(ticket.markdown_content, ticket.expected_version + 1); }, async read() { return draft(); } });
   rig.edit('first'); rig.edit('second'); assert.deepEqual(rig.timing.live(), [10000, 2000]);

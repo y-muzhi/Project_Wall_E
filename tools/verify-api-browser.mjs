@@ -236,6 +236,12 @@ try {
     return {...probe,replay_wires:starts};
   }`.replace(/\r?\n/g,' ')));
   assert.equal(report.manual_start.passed,true);
+  report.recovery_adoption_prepare=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.recoveryAdoptionPrepare())'));
+  assert.equal(report.recovery_adoption_prepare.passed,true);
+  await cli('run-code','async(page)=>{ await page.reload(); await page.waitForFunction(()=>document.querySelector("#status")?.textContent==="READY",null,{timeout:15000});return true;}');
+  await cli('snapshot');
+  report.recovery_adoption=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.recoveryAdoptionResume())'));
+  assert.equal(report.recovery_adoption.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);

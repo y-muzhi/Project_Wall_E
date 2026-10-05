@@ -15,6 +15,18 @@ const storeName = 'draft_snapshots';
 function bytes(value: unknown): number { return new TextEncoder().encode(JSON.stringify(snapshotObject(value))).length; }
 function key(requirement: number, draft: number): [number, number] { return [positiveInteger(requirement), positiveInteger(draft)]; }
 
+/** Local intentions, not a server DocumentReadModel or saved receipt. */
+export function validateLocalDraftSnapshot(ctx:Ctx,value:unknown):LocalDraftSnapshot {
+  try{
+    const row=exact(value,['schema_version','base_confirmed_version','markdown_content','block_state_json','local_revision','updated_at']);
+    if(row.schema_version!==1)throw new TypeError('Invalid local schema');
+    positiveInteger(row.base_confirmed_version);positiveInteger(row.local_revision);time(row.updated_at);
+    const pair=validateBlockState(ctx,row.markdown_content,row.block_state_json);
+    return Object.freeze({schema_version:1,base_confirmed_version:row.base_confirmed_version as number,
+      markdown_content:pair.source.markdown,block_state_json:pair.state,local_revision:row.local_revision as number,updated_at:row.updated_at as string});
+  }catch{throw new DraftStorageError('CORRUPT');}
+}
+
 /** The caller offers RESTORE only after it has read actual draft/occupancy.
  * Comparison never adopts content, guesses a completed request or increments
  * the confirmed server version. Revision mismatch retains both snapshots.
@@ -35,14 +47,7 @@ export class DraftRecoveryStore {
     this.ctx = ctx; this.name = diagnostic.name ?? 'walle-v1'; this.factory = diagnostic.factory ?? (() => globalThis.indexedDB);
   }
   private validate(value: unknown): LocalDraftSnapshot {
-    try {
-      const row = exact(value, ['schema_version', 'base_confirmed_version', 'markdown_content', 'block_state_json', 'local_revision', 'updated_at']);
-      if (row.schema_version !== 1) throw new TypeError('Invalid local schema');
-      positiveInteger(row.base_confirmed_version); positiveInteger(row.local_revision); time(row.updated_at);
-      const pair = validateBlockState(this.ctx, row.markdown_content, row.block_state_json);
-      return Object.freeze({ schema_version: 1, base_confirmed_version: row.base_confirmed_version as number,
-        markdown_content: pair.source.markdown, block_state_json: pair.state, local_revision: row.local_revision as number, updated_at: row.updated_at as string });
-    } catch { throw new DraftStorageError('CORRUPT'); }
+    return validateLocalDraftSnapshot(this.ctx,value);
   }
   private open(): Promise<IDBDatabase> {
     if (this.closed) return Promise.reject(new DraftStorageError('UNAVAILABLE'));

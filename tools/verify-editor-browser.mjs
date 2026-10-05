@@ -40,6 +40,7 @@ const inputFiles = ['shared/fixtures/markdown-v1.json', 'shared/fixtures/markdow
   'frontend/src/documents/selection.ts', 'frontend/src/documents/editor-source.ts', 'frontend/src/documents/source-nodes.ts',
   'frontend/src/documents/identity.ts', 'frontend/src/documents/contracts.ts', 'frontend/tests/browser/contracts.ts',
   'frontend/src/documents/edited-snapshot.ts', 'frontend/tests/browser/edited-snapshot.ts',
+  'frontend/src/documents/recovery-store.ts', 'frontend/src/api/client.ts', 'frontend/src/api/decoding.ts',
   'frontend/src/documents/autolink-lexemes.ts', 'frontend/src/documents/autolink-remark.ts',
   'frontend/src/documents/inline-marks.ts',
   'frontend/src/documents/raw-source-remark.ts', 'backend/app/documents/raw_source.py',

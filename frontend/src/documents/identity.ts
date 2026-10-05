@@ -273,6 +273,27 @@ export function replaceParsedSourceDocument(state: EditorState, parsed: Node, id
   return after.reconfigure({plugins: state.plugins});
 }
 
+/** Explicit same-base local snapshot restoration. The ledger validates the
+ * complete cache pair before this call; paste/history never use this path.
+ * Sparse IDs/high water are the persisted local mapping, never text guesses.
+ * Native save still validates persisted session/allocation/birth ownership. */
+export function replaceLocalRecoveryDocument(state:EditorState,parsed:Node,ids:readonly number[],next:number):EditorState {
+  const current=identityState(state);validateInitial(ids,next);
+  if(parsed.type.schema!==state.schema||next<current.next_block_id||!(SOURCE_REVISION in state.doc.attrs))throw new IdentityInvalid('恢复身份不属于完整同基线快照');
+  const bound=bindIdentityDocument(parsed,ids,next),revision=Math.max(sourceCounters.get(state.schema)??1,sourceRevision(state.doc)+1);
+  if(revision>MAX_SAFE)throw new IdentityInvalid('源码历史容量耗尽',true);
+  const document=state.doc.type.create({...state.doc.attrs,[SOURCE_REVISION]:revision},bound.content,state.doc.marks);
+  const known=new Set([...current.known_ids,...ids]);let applied=false;
+  const adapter=new Plugin({appendTransaction:(_transactions,_before,after)=>{
+    if(after.doc.eq(document))return;if(applied)throw new IdentityInvalid('恢复源码与编辑插件解释不一致');applied=true;
+    return after.tr.replaceWith(0,after.doc.content.size,document.content).setDocAttribute(SOURCE_REVISION,revision)
+      .setMeta(key,Object.freeze({next_block_id:next,known_ids:known})).setMeta('addToHistory',false);
+  }});
+  const staged=state.reconfigure({plugins:[...state.plugins,adapter]}),after=staged.applyTransaction(staged.tr).state;
+  if(!after.doc.eq(document)||identityState(after).next_block_id!==next)throw new IdentityInvalid('恢复解析未保持完整实际状态');
+  sourceCounters.set(state.schema,revision+1);return after.reconfigure({plugins:state.plugins});
+}
+
 export function replaceParsedRawBlock(state: EditorState, index: number, nodes: readonly Node[]): Transaction {
   if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new IdentityInvalid('原始节点位置不合法');
   const original = state.doc.child(index), current = identityState(state);
