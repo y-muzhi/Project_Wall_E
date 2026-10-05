@@ -6,13 +6,14 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 
 const root = resolve(import.meta.dirname, '..'), session = `walle-api-${Date.now()}`;
-const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),focused=propertiesOnly||headerOnly;
-assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:[]);
+const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),focused=propertiesOnly||headerOnly||revisionsOnly;
+assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:[]);
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
 if(propertiesOnly)report.scope='Focused actual property controls/browser/production API/isolated SQLite with native I02/I05 bootstrap; no claim of full 37-binding rerun, Provider or product-page acceptance';
 if(headerOnly)report.scope='Focused actual requirement header command ownership/browser/production API/isolated SQLite with native I02/I05 bootstrap; no full 37-binding rerun, editor/session/page or Provider acceptance';
+if(revisionsOnly)report.scope='Focused actual revision save/list/immutable history viewer/browser/production API/isolated SQLite with native I02/I05 bootstrap; no full 37-binding rerun, product route/manual-history session, effects or Provider acceptance';
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
 const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
@@ -330,7 +331,7 @@ try {
     await page.evaluate(()=>window.lifecycleProbe.destroy());return {...probe,replay_wires:wires.filter(wire=>wire.method==='POST')};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.lifecycle.passed,true);
   }else {report.property_bootstrap=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.bootstrapProperties())'));assert.equal(report.property_bootstrap.passed,true);}
-  if(!headerOnly){
+  if(!headerOnly&&!revisionsOnly){
   const propertyBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountProperties());return before;}'));
   for(const [index,label,input] of [[0,'需求标题','待保存标题'],[1,'初始化模式','待保存模式']]){
     await cli('run-code',`async(page)=>{
@@ -358,7 +359,7 @@ try {
     await page.evaluate(()=>window.propertyProbe.destroy());return {...probe,patch_wires:patches};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.properties.passed,true);
   }
-  if(!propertiesOnly){
+  if(!propertiesOnly&&!revisionsOnly){
     const headerBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountHeader());return before;}'));
     await cli('run-code',`async(page)=>{
       const scope=page.locator('#native-requirement-header'),title=scope.getByRole('region',{name:'需求标题',exact:true});await title.getByRole('button',{name:'修改需求标题',exact:true}).click();await title.getByLabel('待保存标题',{exact:true}).fill('  工具栏保留标题😀  ');
@@ -382,6 +383,30 @@ try {
       const patches=wires.filter(wire=>wire.method==='PATCH');if(patches.length!==1||patches[0].key!==null||Object.keys(JSON.parse(patches[0].body)).join()!=='title')throw Error('Header title PATCH contract');await page.evaluate(()=>window.headerProbe.destroy());return {...native,command_wires:wires.filter(wire=>wire.method!=='GET')};
     }`.replace(/\r?\n/g,' ')));assert.equal(report.header.passed,true);
   }
+  if(!propertiesOnly&&!headerOnly){
+    const revisionBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountRevisions());return before;}'));
+    await cli('run-code',`async(page)=>{
+      const scope=page.getByRole('region',{name:'保存手动版本',exact:true}),description=scope.getByLabel('版本说明（可选）',{exact:true});await description.fill('😀'.repeat(1001));await scope.getByRole('button',{name:'保存版本',exact:true}).click();await scope.getByText('最多允许 1000 个字符',{exact:true}).waitFor();if((await page.evaluate(()=>window.revisionsProbe.state())).prepares!==0)throw Error('Invalid description submitted');
+      await description.fill('  '+ '😀'.repeat(1000)+'  ');await scope.getByRole('button',{name:'保存版本',exact:true}).click();await page.waitForFunction(()=>window.revisionsProbe.state().save.phase==='UNKNOWN');await scope.getByRole('button',{name:'重新确认保存版本',exact:true}).click();await scope.getByRole('button',{name:'重新读取版本列表',exact:true}).waitFor();
+      const confirmed=await page.evaluate(()=>window.revisionsProbe.state());if(confirmed.save.phase!=='CONFIRMED'||confirmed.adoptions!==0||confirmed.submits!==2)throw Error('List read failure rewrote real creation');await scope.getByRole('button',{name:'重新读取版本列表',exact:true}).click();await page.waitForFunction(()=>window.revisionsProbe.state().adoptions===1);await page.evaluate(()=>window.revisionsProbe.seedPages());return true;
+    }`.replace(/\r?\n/g,' '));
+    await cli('run-code',`async(page)=>{
+      const records=page.getByRole('region',{name:'版本记录',exact:true});if(await records.getByRole('listitem').count()!==20)throw Error('Native first revision page size');await records.getByRole('button',{name:'第 2 页',exact:true}).click();await page.waitForFunction(()=>window.revisionsProbe.state().list.list.pagination.page===2);
+      const state=await page.evaluate(()=>window.revisionsProbe.state());if(await records.getByRole('listitem').count()!==state.list.list.pagination.total-20)throw Error('Native last page size');await records.getByRole('button',{name:'查看 V1',exact:true}).click();await page.waitForFunction(()=>window.revisionsProbe.state().viewer_ready);
+      const body=page.getByRole('textbox',{name:'历史版本 V1，只读',exact:true});await body.click();await page.keyboard.insertText('不得写入历史');if(await body.getAttribute('aria-readonly')!=='true'||await body.textContent().then(text=>text.includes('不得写入历史'))||await page.locator('#native-current-comments').isVisible())throw Error('History became writable or mixed current comments');
+      const evidence=await page.evaluate(()=>window.revisionsProbe.captureViewer());if(evidence.field_count!==9||!evidence.unchanged)throw Error('Revision viewer fabricated document facts');await page.screenshot({path:'output/playwright/revision-readonly.png'});await page.evaluate(()=>window.revisionsProbe.completeAndFailExit());return evidence;
+    }`.replace(/\r?\n/g,' '));
+    await cli('run-code',`async(page)=>{
+      const history=page.getByRole('region',{name:'只读历史版本',exact:true});await history.getByRole('button',{name:'退出历史',exact:true}).click();await page.waitForFunction(()=>window.revisionsProbe.state().list.history.phase==='ERROR');if(!await history.isVisible()||!await page.evaluate(()=>window.revisionsProbe.state().current_hidden))throw Error('Failed actual read revealed cached current');
+      await history.getByRole('button',{name:'退出历史',exact:true}).click();await history.getByText('实际视图暂时无法恢复，历史仍保留，请重新读取并恢复',{exact:true}).waitFor();const failed=await page.evaluate(()=>window.revisionsProbe.state());if(failed.list.history.phase!=='RESTORING'||!failed.current_hidden||failed.restorations!==0)throw Error('History closed before actual parent adoption');
+      await history.getByRole('button',{name:'退出历史',exact:true}).click();await page.waitForFunction(()=>window.revisionsProbe.state().list.history.phase==='CLOSED');if(!await page.locator('#native-current-comments').isVisible())throw Error('Current did not restore after fresh adoption');return true;
+    }`.replace(/\r?\n/g,' '));
+    report.revisions=result(await cli('run-code',`async(page)=>{
+      const native=await page.evaluate(()=>window.revisionsProbe.inspect()),wires=(await page.evaluate(()=>window.apiProbe.wireFacts())).slice(${revisionBefore}),posts=wires.filter(wire=>wire.method==='POST'&&wire.path==='/api/v1/requirements/2/revisions');
+      if(posts.length!==22||posts.some(wire=>wire.status!==201||!wire.key)||posts[0].key!==posts[1].key||posts[0].body!==posts[1].body||new Set(posts.map(wire=>wire.key)).size!==21)throw Error('Revision original/new actions differ');const body=JSON.parse(posts[0].body);if(Object.keys(body).sort().join()!=='description,expected_version'||[...body.description].length!==1000||body.expected_version!==native.current_version)throw Error('Revision body/version/description contract');
+      await page.evaluate(()=>window.revisionsProbe.destroy());return {...native,original_creation_wires:posts.slice(0,2),independent_pagination_creations:20};
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.revisions.passed,true);
+  }
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
@@ -392,7 +417,7 @@ try {
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),property:window.propertyProbe?.state(),header:window.headerProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),property:window.propertyProbe?.state(),header:window.headerProbe?.state(),revisions:window.revisionsProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }
@@ -412,13 +437,13 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      const expected=focused?{llm_uses:0,guide_runs:2,requirements:2,requirement_documents:2,revisions:1,comments:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:5,comments:2};
+      const expected=focused?{llm_uses:0,guide_runs:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:1,comments:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
       if (Object.entries(expected).some(([key,value])=>closed.facts[key]!==value)|| native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
   report.changed_inputs = [...new Set([...Object.keys(report.inputs_before), ...Object.keys(report.inputs_after)])].filter(key => report.inputs_before[key] !== report.inputs_after[key]);
   if (report.changed_inputs.length) { report.passed = false; report.error ??= 'Inputs changed during verification'; globalThis.process.exitCode = 1; }
-  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
+  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ passed: report.passed, evidence: path, error: report.error }));
 }

@@ -136,3 +136,4 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .draft-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 .draft-comparison h3 { font-size: 14px; font-weight: 500; }
 .draft-comparison pre, .draft-source { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 400px; overflow: auto; padding: 12px; border: 1px solid #e5e7eb; background: white; font-size: 14px; line-height: 22px; }
+.revision-description { white-space: pre-wrap; overflow-wrap: anywhere; }

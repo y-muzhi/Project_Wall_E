@@ -21,6 +21,7 @@ import {GuideRunPolling} from '../../src/guide/polling.ts';
 import {mountLifecycleProbe} from './lifecycle-probe.tsx';
 import {mountPropertyProbe} from './property-probe.tsx';
 import {mountHeaderProbe} from './header-probe.tsx';
+import {mountRevisionsProbe} from './revisions-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -37,7 +38,7 @@ const transport: typeof fetch = async (input, options) => {
   wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status,
     ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
       (String(input).startsWith('/api/v1/requirements/') &&
-        ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft')||String(input).endsWith('/complete-initialization')||String(input).endsWith('/complete')||String(input).endsWith('/reactivate'))) ||
+        ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft')||String(input).endsWith('/complete-initialization')||String(input).endsWith('/complete')||String(input).endsWith('/reactivate')||String(input).endsWith('/revisions'))) ||
           (options?.method === 'DELETE' && String(input).endsWith('/manual-draft')) || (options?.method==='PATCH'&&/^\/api\/v1\/requirements\/\d+$/.test(String(input)))))
       ? { ...(options?.body!==undefined?{body:String(options.body)}:{}), key: new Headers(options?.headers).get('Idempotency-Key')!,content_type:new Headers(options?.headers).get('Content-Type') } : {}),
     ...(response.status >= 400 ? { error_response: received } : {}) }); return response;
@@ -148,6 +149,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountProperties:async()=>{Object.assign(window,{propertyProbe:await mountPropertyProbe(api)});},
  bootstrapProperties,
  mountHeader:async()=>{Object.assign(window,{headerProbe:await mountHeaderProbe(api)});},
+ mountRevisions:async()=>{Object.assign(window,{revisionsProbe:await mountRevisionsProbe(api)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
