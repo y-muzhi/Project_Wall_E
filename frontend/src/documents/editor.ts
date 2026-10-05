@@ -18,6 +18,7 @@ export type EditorEvents = Readonly<{
   selection?: (selection: SelectionEvent | null) => void;
   error?: (message: string | null) => void;
   blur?: () => void;
+  validity?: (valid: boolean) => void;
 }>;
 
 /** Actual DocumentReadModel host. HTTP, autosave and occupancy belong to the
@@ -42,7 +43,7 @@ export class RequirementEditor {
         attributes: () => ({ 'aria-label': document.document_type === 'CURRENT' ? '当前需求正文，只读' : '人工编辑草稿', role: 'textbox', 'aria-multiline': 'true', 'aria-readonly': String(this.readonlyMode) }) });
     });
     const listen = (name: string, listener: EventListener) => { root.addEventListener(name, listener); this.removeListeners.push(() => root.removeEventListener(name, listener)); };
-    listen('compositionstart', () => { this.composing = true; });
+    listen('compositionstart', () => { this.composing = true; this.notifyValidity(); });
     listen('compositionend', () => { this.composing = false; queueMicrotask(() => { if (!this.closed) this.flushLocal(); }); });
     listen('focusout', event => { if (!root.contains((event as FocusEvent).relatedTarget as Node | null)) { this.flushLocal(); this.notify(() => this.events.blur?.()); } });
   }
@@ -73,6 +74,7 @@ export class RequirementEditor {
     this.readonlyMode = readonly; this.crepe.setReadonly(readonly);
   }
   private notify(operation: () => void): void { try { operation(); } catch (error) { console.error('WALL-E editor observer failed', error); } }
+  private notifyValidity(): void { this.notify(() => this.events.validity?.(this.valid)); }
   private select(ctx: Ctx): void {
     if (this.closed) return;
     let selection: SelectionEvent | null = null;
@@ -82,7 +84,7 @@ export class RequirementEditor {
   }
   private capture(ctx: Ctx, state: EditorState): boolean {
     if (!this.session || this.composing || this.closed) return false;
-    if (state.doc.eq(this.accepted.doc)) { this.invalid = false; this.notify(() => this.events.error?.(null)); return true; }
+    if (state.doc.eq(this.accepted.doc)) { this.invalid = false; this.notify(() => this.events.error?.(null)); this.notifyValidity(); return true; }
     try {
       const raw: number[] = [];
       state.doc.forEach((node, _position, index) => {
@@ -95,10 +97,10 @@ export class RequirementEditor {
       const prepared = raw.length === 1 ? this.session.prepareRawDocument(state, raw[0]!, at) : this.session.prepare(state, at);
       const view = ctx.get(editorViewCtx); view.updateState(prepared.state);
       const pair = this.session.accept(prepared, view.state); this.accepted = view.state; this.invalid = false;
-      this.notify(() => this.events.error?.(null)); this.notify(() => this.events.change?.(pair)); return true;
+      this.notify(() => this.events.error?.(null)); this.notify(() => this.events.change?.(pair)); this.notifyValidity(); return true;
     } catch {
       this.invalid = true;
-      this.notify(() => this.events.error?.('当前输入暂时无法形成有效草稿，请保留内容并修正后保存')); return false;
+      this.notify(() => this.events.error?.('当前输入暂时无法形成有效草稿，请保留内容并修正后保存')); this.notifyValidity(); return false;
     }
   }
   private dispatch(ctx: Ctx, transaction: Transaction): void {
@@ -110,7 +112,7 @@ export class RequirementEditor {
       if (transaction.docChanged && !this.composing) this.capture(ctx, state);
       this.select(ctx);
     } catch {
-      this.invalid = true; this.notify(() => this.events.error?.('这次编辑无法完成，请保留当前内容并重试'));
+      this.invalid = true; this.notify(() => this.events.error?.('这次编辑无法完成，请保留当前内容并重试')); this.notifyValidity();
     }
   }
   /** Parent checks this before completing; partial composition/invalid local
@@ -130,6 +132,7 @@ export class RequirementEditor {
       const view=ctx.get(editorViewCtx),prepared=this.session!.prepareLocalRecovery(view.state,local);
       view.updateState(prepared.state);const pair=this.session!.accept(prepared,view.state);this.accepted=view.state;this.invalid=false;
       this.editingTime=Math.max(this.editingTime,Date.parse(local.updated_at),...pair.block_state_json.blocks.map(block=>Date.parse(block.last_modified_at)));
+      this.notifyValidity();
       return pair;
     });
   }

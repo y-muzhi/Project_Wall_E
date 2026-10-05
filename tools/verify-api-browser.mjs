@@ -242,6 +242,58 @@ try {
   await cli('snapshot');
   report.recovery_adoption=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.recoveryAdoptionResume())'));
   assert.equal(report.recovery_adoption.passed,true);
+  report.manual_controls=[];
+  for(const [operation,localMode] of [['COMPLETE','AVAILABLE'],['CANCEL','COMPARE'],['CANCEL','NONE']]){
+    const before=result(await cli('run-code',`async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(args=>window.apiProbe.mountManualControls(...args),${JSON.stringify([operation,localMode])});return before;}`));
+    await cli('snapshot');
+    await cli('run-code',`async(page)=>{
+      const scope=page.locator('#native-manual-controls');await scope.getByRole('button',{name:'人工编辑',exact:true}).click();
+      await page.waitForFunction(()=>window.manualControlsProbe.state().start.phase==='UNKNOWN');await scope.getByRole('button',{name:'重新确认开始编辑',exact:true}).click();
+      await page.waitForFunction(()=>window.manualControlsProbe.state().recovery?.phase===${JSON.stringify(localMode==='NONE'?'NONE':localMode)}&&!window.manualControlsProbe.state().recovery.checking);
+      const state=await page.evaluate(()=>window.manualControlsProbe.state());if(!state.readonly||state.startPrepares!==1||state.startSubmits!==2)throw Error('Start control fabricated edit readiness');
+      if(${JSON.stringify(localMode)}==='NONE'){await scope.getByRole('button',{name:'继续后端草稿',exact:true}).click();await page.waitForFunction(()=>window.manualControlsProbe.state().serverReads===1);}
+      else{await scope.getByRole('button',{name:'对照内容',exact:true}).click();const compare=scope.getByLabel('草稿内容对照');await compare.waitFor();if(!await compare.locator('pre').first().textContent().then(value=>value.includes('实际本地待恢复内容😀'))||await compare.locator('pre').count()!==2)throw Error('Actual paired comparison missing');await page.screenshot({path:'output/playwright/manual-recovery-${localMode.toLowerCase()}.png'});}
+      return true;
+    }`.replace(/\r?\n/g,' '));
+    if(localMode==='AVAILABLE')await cli('run-code',`async(page)=>{
+      const scope=page.locator('#native-manual-controls');await scope.getByRole('button',{name:'恢复本地内容',exact:true}).click();await page.waitForFunction(()=>window.manualControlsProbe.state().recovery.phase==='RESTORED');
+      if(!await scope.getByRole('button',{name:'完成编辑',exact:true}).isDisabled())throw Error('Unsaved restored content enabled complete');await page.evaluate(()=>window.manualControlsProbe.flush());
+      await page.waitForFunction(()=>window.manualControlsProbe.state().save.status==='SAVED');await page.evaluate(()=>window.manualControlsProbe.composition(true));
+      await page.waitForFunction(()=>!window.manualControlsProbe.state().valid);if(!await scope.getByRole('button',{name:'完成编辑',exact:true}).isDisabled())throw Error('Composition left complete enabled');
+      await page.evaluate(()=>window.manualControlsProbe.composition(false));await page.waitForFunction(()=>window.manualControlsProbe.state().valid);return true;
+    }`.replace(/\r?\n/g,' '));
+    if(localMode==='COMPARE')await cli('run-code',`async(page)=>{
+      const scope=page.locator('#native-manual-controls');if(await scope.getByRole('button',{name:'恢复本地内容',exact:true}).count())throw Error('Divergent content can restore');
+      await scope.getByRole('button',{name:'使用后端草稿',exact:true}).click();const dialog=page.getByRole('dialog',{name:'放弃本地未同步内容？',exact:true});await dialog.waitFor();
+      if(!await dialog.getByRole('button',{name:'继续编辑',exact:true}).evaluate(element=>element===document.activeElement))throw Error('Discard confirmation lacks safe focus');
+      await dialog.getByRole('button',{name:'继续编辑',exact:true}).click();if((await page.evaluate(()=>window.manualControlsProbe.state())).recovery.phase!=='COMPARE')throw Error('Dismissal discarded content');
+      await scope.getByRole('button',{name:'使用后端草稿',exact:true}).click();await dialog.getByRole('button',{name:'确认放弃',exact:true}).click();await page.waitForFunction(()=>window.manualControlsProbe.state().serverReads===1);return true;
+    }`.replace(/\r?\n/g,' '));
+    await cli('run-code',`async(page)=>{
+      const scope=page.locator('#native-manual-controls'),editor=scope.getByRole('textbox',{name:'人工编辑草稿',exact:true});await editor.click();await editor.press('Control+End');await page.keyboard.press('Enter');await page.keyboard.insertText('控件真实浏览器编辑😀');
+      await page.waitForFunction(()=>window.manualControlsProbe.state().save.status==='DIRTY');if(!await scope.getByRole('button',{name:'完成编辑',exact:true}).isDisabled())throw Error('Dirty control claims saved');
+      await page.evaluate(()=>window.manualControlsProbe.flush());await page.waitForFunction(()=>window.manualControlsProbe.state().save.status==='SAVED');
+      if(await scope.getByRole('button',{name:'完成编辑',exact:true}).isDisabled()||!await scope.getByRole('status').textContent().then(value=>/^已保存 · /.test(value)))throw Error('Confirmed save not rendered');return true;
+    }`.replace(/\r?\n/g,' '));
+    if(operation==='CANCEL')await cli('run-code',`async(page)=>{
+      const scope=page.locator('#native-manual-controls');await scope.getByRole('button',{name:'取消编辑',exact:true}).click();const dialog=page.getByRole('dialog',{name:'放弃人工编辑？',exact:true});await dialog.waitFor();
+      if(!await dialog.getByRole('button',{name:'继续编辑',exact:true}).evaluate(element=>element===document.activeElement))throw Error('Cancel lacks safe focus');
+      await dialog.getByRole('button',{name:'继续编辑',exact:true}).click();if((await page.evaluate(()=>window.manualControlsProbe.state())).endPrepares!==0)throw Error('Dismissal issued I13');
+      await scope.getByRole('button',{name:'取消编辑',exact:true}).click();await dialog.getByRole('button',{name:'确认放弃',exact:true}).click();await page.waitForFunction(()=>window.manualControlsProbe.state().end.phase==='UNKNOWN');
+      await page.screenshot({path:'output/playwright/manual-cancel-unknown.png'});await dialog.getByRole('button',{name:'保留请求并关闭弹窗',exact:true}).click();return true;
+    }`.replace(/\r?\n/g,' '));
+    else await cli('run-code',`async(page)=>{await page.locator('#native-manual-controls').getByRole('button',{name:'完成编辑',exact:true}).click();await page.waitForFunction(()=>window.manualControlsProbe.state().end.phase==='UNKNOWN');return true;}`);
+    const verified=result(await cli('run-code',`async(page)=>{
+      const scope=page.locator('#native-manual-controls');if(!(await page.evaluate(()=>window.manualControlsProbe.state())).readonly)throw Error('Unknown result opened editor');
+      await page.evaluate(()=>window.manualControlsProbe.dropNextRead());await scope.getByRole('button',{name:'重新确认结束操作',exact:true}).click();
+      await scope.getByRole('button',{name:'重新读取实际详情',exact:true}).waitFor();const confirmed=await page.evaluate(()=>window.manualControlsProbe.state());if(confirmed.end.phase!=='CLOSED'||confirmed.endSubmits!==2||confirmed.endedReads!==0)throw Error('Failed detail callback lost native receipt');
+      await scope.getByRole('button',{name:'重新读取实际详情',exact:true}).click();await page.waitForFunction(()=>window.manualControlsProbe.state().endedReads===1);
+      const probe=await page.evaluate(()=>window.manualControlsProbe.inspect());const wires=(await page.evaluate(()=>window.apiProbe.wireFacts())).slice(${before});
+      const starts=wires.filter(wire=>wire.method==='POST'&&wire.path==='/api/v1/requirements/2/manual-draft'),ends=wires.filter(wire=>wire.path==='/api/v1/requirements/2/manual-draft/complete'||wire.method==='DELETE'&&wire.path==='/api/v1/requirements/2/manual-draft');
+      for(const [pair,status] of [[starts,201],[ends,200]])if(pair.length!==2||pair.some(wire=>wire.status!==status||!wire.key||typeof wire.body!=='string')||pair[0].key!==pair[1].key||pair[0].body!==pair[1].body)throw Error('UI replay or read retry mutated original command');
+      await page.evaluate(()=>window.manualControlsProbe.destroy());return {...probe,replay_wires:[...starts,...ends],scope:'Actual controls/native clicks, editor keyboard input, explicit flush/IndexedDB, native receipts deliberately lost and exact replay, real I37 loss plus read-only retry; synthetic composition events are not Windows IME acceptance'};
+    }`.replace(/\r?\n/g,' ')));report.manual_controls.push(verified);assert.equal(verified.passed,true);
+  }
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
@@ -252,7 +304,7 @@ try {
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }

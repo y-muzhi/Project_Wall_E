@@ -38,7 +38,7 @@ export class ManualDraftRecovery {
   }
   private run(operation:'INSPECT'|'RESTORE'|'DISCARD',work:()=>Promise<boolean>):Promise<boolean>{
     if(this.disposed||['RESTORED','SERVER_SELECTED'].includes(this.value.phase))return Promise.resolve(false);if(this.pending)return this.pendingOperation===operation?this.pending:Promise.resolve(false);
-    const pending=Promise.resolve().then(()=>this.disposed?false:work()).finally(()=>{if(this.pending===pending)this.pending=undefined;});this.pending=pending;this.pendingOperation=operation;return pending;
+    const pending=Promise.resolve().then(()=>this.disposed?false:work()).finally(()=>{if(this.pending===pending){this.pending=undefined;this.publish({});}});this.pending=pending;this.pendingOperation=operation;return pending;
   }
   private sameLoaded(draft:DocumentReadModel):boolean{return draft.content_version===this.draft.content_version&&pairSame(draft,this.draft);}
   private async read():Promise<boolean>{

@@ -15,6 +15,7 @@ import { detailReadProbe } from './detail-read-probe.ts';
 import { manualEndProbe } from './manual-end-probe.ts';
 import { manualStartProbe } from './manual-start-probe.ts';
 import {prepareRecoveryAdoption,resumeRecoveryAdoption} from './recovery-adoption-probe.ts';
+import {mountManualControlsProbe} from './manual-controls-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -125,4 +126,5 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  manualEnd:()=>manualEndProbe(api,2),
  manualStart:()=>manualStartProbe(api,2),
  recoveryAdoptionPrepare:()=>prepareRecoveryAdoption(api,2),recoveryAdoptionResume:()=>resumeRecoveryAdoption(api),
+ mountManualControls:async(operation:'COMPLETE'|'CANCEL',localMode:'AVAILABLE'|'COMPARE'|'NONE')=>{Object.assign(window,{manualControlsProbe:await mountManualControlsProbe(api,2,operation,localMode)});},
  wireFacts: () => wires, transportFacts: () => responses, creationWires: () => wires.filter(wire => wire.body?.includes('真实抽屉😀')), destroy: () => editor.destroy() } }); status.textContent = 'READY';

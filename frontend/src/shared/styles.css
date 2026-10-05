@@ -128,3 +128,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .detail-panel-error { color: var(--danger); }
 .detail-window-block { padding: 48px 16px; text-align: center; }
 @media (max-width: 1279px) { .requirement-detail-frame { padding: 8px; } }
+.manual-draft-controls { margin-bottom: 12px; }
+.manual-draft-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.manual-draft-toolbar > p { flex: 1 1 180px; margin: 0; color: #6b7280; font-size: 14px; }
+.draft-recovery-notice { padding: 12px; margin: 12px 0; border: 1px solid #d1d5db; border-radius: 8px; background: #fafafa; }
+.draft-recovery-notice button { margin-right: 8px; margin-bottom: 8px; }
+.draft-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.draft-comparison h3 { font-size: 14px; font-weight: 500; }
+.draft-comparison pre, .draft-source { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 400px; overflow: auto; padding: 12px; border: 1px solid #e5e7eb; background: white; font-size: 14px; line-height: 22px; }
