@@ -7,20 +7,20 @@ import type {DocumentReadModel} from './contracts.ts';
 import {Confirmation} from '../shared/confirmation.tsx';
 import {localTime} from '../shared/time.ts';
 
-export function ManualStartControl(props:Readonly<{flow:ManualDraftStart;disabled:boolean;started():void|Promise<void>}>) {
+export function ManualStartControl(props:Readonly<{flow:ManualDraftStart;disabled:boolean;writeReady?:boolean;started():void|Promise<void>}>) {
   const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),pending=useRef(false);
   const submit=async()=>{
-    if(pending.current||props.disabled&&state.phase!=='STARTED')return;pending.current=true;setBusy(true);setError(null);
+    if(pending.current||props.disabled||!['UNKNOWN','STARTED'].includes(state.phase)&&props.writeReady===false)return;pending.current=true;setBusy(true);setError(null);
     try{if(state.phase==='STARTED')await props.started();else{const started=state.phase==='UNKNOWN'?await props.flow.retryUnknown():await props.flow.start();if(started)await props.started();}}
     catch{setError('编辑请求已保留，暂时无法更新页面，请重新读取实际状态');}
     finally{pending.current=false;setBusy(false);}
   };
   return <div className="manual-start-control">
-    <button type="button" disabled={props.disabled||busy||state.phase==='CHECKING'||state.phase==='SUBMITTING'||state.phase==='STARTED'}
+    <button type="button" disabled={props.disabled||busy||state.phase==='CHECKING'||state.phase==='SUBMITTING'||state.phase==='STARTED'||state.phase!=='UNKNOWN'&&props.writeReady===false}
       aria-busy={busy} onClick={()=>void submit()}>{state.phase==='UNKNOWN'?'重新确认开始编辑':busy?'正在开始编辑…':'人工编辑'}</button>
     {(state.error||error)&&<p role="alert" className="inline-error">{error??state.error}</p>}
     {state.phase==='STARTED'&&<p role="status">已创建编辑草稿，正在读取当前实际状态。</p>}
-    {state.phase==='STARTED'&&error&&<button type="button" disabled={busy} onClick={()=>void submit()}>重新读取编辑状态</button>}
+    {state.phase==='STARTED'&&error&&<button type="button" disabled={props.disabled||busy} onClick={()=>void submit()}>重新读取编辑状态</button>}
   </div>;
 }
 

@@ -20,6 +20,7 @@ import {manualSessionProbe} from './manual-session-probe.ts';
 import {GuideRunPolling} from '../../src/guide/polling.ts';
 import {mountLifecycleProbe} from './lifecycle-probe.tsx';
 import {mountPropertyProbe} from './property-probe.tsx';
+import {mountHeaderProbe} from './header-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -146,6 +147,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountLifecycle:async()=>{Object.assign(window,{lifecycleProbe:await mountLifecycleProbe(api)});},
  mountProperties:async()=>{Object.assign(window,{propertyProbe:await mountPropertyProbe(api)});},
  bootstrapProperties,
+ mountHeader:async()=>{Object.assign(window,{headerProbe:await mountHeaderProbe(api)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
