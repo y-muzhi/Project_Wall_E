@@ -83,6 +83,14 @@ try {
   assert.equal(report.browser.autosave.passed, true); assert.equal(report.browser.autosave.writes.length, 3);
   assert.equal(report.browser.autosave.peak_inflight, 1); assert.equal(report.browser.autosave.confirmed_draft_version, 4);
   assert.equal(report.browser.autosave.native_cohort.final_version, 6); assert.equal(report.browser.autosave.native_cohort.retired_proof_refused, true);
+  report.editor_host = result(await cli('run-code', 'async (page) => { await page.evaluate(() => window.apiProbe.hostProbe.prepare()); const editor = page.locator("#native-editor-host .ProseMirror"); await editor.click(); await editor.press("Control+End"); await page.keyboard.press("Enter"); await page.keyboard.insertText("真实浏览器输入😀"); await page.waitForFunction(() => { const state = window.apiProbe.hostProbe.status(); return state.valid && state.status === "SAVED" && state.confirmed_version >= 2 && state.markdown.includes("真实浏览器输入😀"); }, null, {timeout:15000}); return await page.evaluate(() => window.apiProbe.hostProbe.inspect()); }'));
+  assert.equal(report.editor_host.passed, true);
+  report.editor_readonly = result(await cli('run-code', 'async (page) => { const before = await page.evaluate(() => window.apiProbe.hostProbe.readonly(true)); await page.keyboard.insertText("不应进入只读内容"); return await page.evaluate(before => { const state = window.apiProbe.hostProbe.status(); return {passed: state.markdown === before.markdown, state}; }, before); }'));
+  assert.equal(report.editor_readonly.passed, true);
+  report.editor_composition = result(await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.hostProbe.composition())'));
+  assert.equal(report.editor_composition.passed, true);
+  report.editor_host_closed = result(await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.hostProbe.close())'));
+  assert.equal(report.editor_host_closed.closed, true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.passed = true;

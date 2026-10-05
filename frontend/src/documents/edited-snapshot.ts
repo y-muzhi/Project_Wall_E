@@ -119,6 +119,7 @@ export class EditedSnapshotLedger {
 
   get currentSnapshot(): EditedSnapshot { this.live(); return this.pair; }
   get savedVersion(): number { this.live(); return this.confirmedVersion; }
+  get savedAt(): string { this.live(); return this.confirmedAt; }
 
   /** An ended browser request can remain unconfirmed at the server. Keep its
    * exact submission proof while allowing the newest local pair to compete at

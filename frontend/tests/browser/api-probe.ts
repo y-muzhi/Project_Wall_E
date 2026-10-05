@@ -6,6 +6,7 @@ import { installSourceNodes } from '../../src/documents/source-nodes.ts';
 import type { DocumentReadModel } from '../../src/documents/contracts.ts';
 import { recoveryProbe } from './recovery-probe.ts';
 import { autosaveProbe } from './autosave-probe.ts';
+import { editorHostProbe } from './editor-host-probe.ts';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -19,6 +20,8 @@ const transport: typeof fetch = async (input, options) => {
 };
 const api = editor.editor.action(ctx => new WalleApi(new ApiClient(transport), ctx));
 const status = document.querySelector<HTMLElement>('#status')!;
+let lastRequirement = 0;
+const hostProbe = editorHostProbe(api, () => lastRequirement);
 
 async function run() {
   const records: { name: string; status: 'SUCCESS' | 'REJECTED'; error?: string }[] = [];
@@ -40,6 +43,7 @@ async function run() {
   const created = await accept('I02', api.prepareCreateRequirement({ title: 'API联调😀', requirement_type: 'NEW', template_key: 'new-requirement',
     template_version: 'v1', initial_idea: '明确的隔离测试输入', initialization_mode: 'DESIGN' }).submit());
   const identity = created.data.requirement.id;
+  lastRequirement = identity;
   await failed(created.data.guide_run_id);
   await accept('I16', api.getGuideRun(created.data.guide_run_id));
   await accept('I01', api.listRequirements({ keyword: '联调😀', status: ['INITIALIZING'], requirement_type: ['NEW'] }));
@@ -95,4 +99,4 @@ async function run() {
     scope: 'Actual same-origin Vite proxy / production API / isolated SQLite / real Crepe paired documents; failure/config cases explicit, no paid Provider, product page or whole acceptance' };
   status.textContent = JSON.stringify({ ...result, pairs: pairs.length }, null, 2); return result;
 }
-Object.assign(window, { apiProbe: { run, destroy: () => editor.destroy() } }); status.textContent = 'READY';
+Object.assign(window, { apiProbe: { run, hostProbe, destroy: () => editor.destroy() } }); status.textContent = 'READY';

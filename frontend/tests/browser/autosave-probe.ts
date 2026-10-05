@@ -1,11 +1,8 @@
-import { Crepe } from '@milkdown/crepe';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { ApiUnknown, ApiRejected } from '../../src/api/client.ts';
 import type { WalleApi } from '../../src/api/walle.ts';
 import { require } from '../../src/api/decoding.ts';
-import { installSourceNodes } from '../../src/documents/source-nodes.ts';
-import { installIdentityAttributes, installIdentityState } from '../../src/documents/identity.ts';
-import { EditedSnapshotLedger } from '../../src/documents/edited-snapshot.ts';
+import { RequirementEditor } from '../../src/documents/editor.ts';
 import { ManualDraftAutosave } from '../../src/documents/autosave.ts';
 import { DraftRecoveryStore } from '../../src/documents/recovery-store.ts';
 
@@ -14,16 +11,10 @@ export async function autosaveProbe(api: WalleApi, requirement: number) {
   const current = (await api.getCurrentDocument(requirement)).data;
   const draft = (await api.prepareStartManualDraft(requirement, current.content_version).submit()).data.manual_draft;
   const root = document.createElement('div'); root.id = 'autosave-editor'; document.body.append(root);
-  const editor = new Crepe({ root, defaultValue: draft.markdown_content, features: {
-    [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
-    [Crepe.Feature.ImageBlock]: false, [Crepe.Feature.BlockEdit]: false, [Crepe.Feature.Toolbar]: false, [Crepe.Feature.Placeholder]: false,
-    [Crepe.Feature.Table]: false, [Crepe.Feature.Latex]: false, [Crepe.Feature.TopBar]: false, [Crepe.Feature.AI]: false,
-  } });
-  await installSourceNodes(editor); installIdentityAttributes(editor);
-  installIdentityState(editor, draft.block_state_json.blocks.map(block => block.block_id), draft.block_state_json.next_block_id);
-  await editor.create();
-  const ledger = editor.editor.action(ctx => new EditedSnapshotLedger(ctx, draft, ctx.get(editorViewCtx).state));
-  const cache = editor.editor.action(ctx => new DraftRecoveryStore(ctx, { name: 'walle-autosave-probe-' + crypto.randomUUID() }));
+  let binding: ManualDraftAutosave | undefined;
+  const editor = await RequirementEditor.create(root, draft, false, { change: () => binding?.changed() });
+  const ledger = editor.ledger!;
+  const cache = editor.action(ctx => new DraftRecoveryStore(ctx, { name: 'walle-autosave-probe-' + crypto.randomUUID() }));
   const firstCommitted = deferred<void>(), release = deferred<void>();
   const sent: { version: number; markdown: string }[] = []; let active = 0, peak = 0, loseResponse = false;
   const controller = new ManualDraftAutosave(draft, ledger, {
@@ -39,15 +30,13 @@ export async function autosaveProbe(api: WalleApi, requirement: number) {
       } finally { active--; }
     },
   }, cache);
+  binding = controller;
   const states: string[] = []; controller.subscribe(state => states.push(state.status));
-  let editingClock = Math.max(Date.now(), Date.parse(draft.updated_at) + 1);
-  function edit(text: string, notify = true) {
-    editor.editor.action(ctx => {
+  function edit(text: string) {
+    editor.action(ctx => {
       const view = ctx.get(editorViewCtx);
       view.dispatch(view.state.tr.insert(view.state.doc.content.size, view.state.schema.nodes.paragraph!.create(null, view.state.schema.text(text))));
-      const prepared = ledger.prepare(view.state, new Date(editingClock = Math.max(editingClock + 1, Date.now(), Date.parse(controller.state.saved_at) + 1)).toISOString());
-      view.updateState(prepared.state); ledger.accept(prepared, view.state);
-    }); if (notify) controller.changed();
+    }); require(editor.valid);
   }
   try {
     edit('第一份真实编辑'); const pending = controller.flush(); await firstCommitted.promise;
@@ -64,12 +53,12 @@ export async function autosaveProbe(api: WalleApi, requirement: number) {
     const unchanged = (await api.getCurrentDocument(requirement)).data;
     require(unchanged.content_version === current.content_version && unchanged.markdown_content === current.markdown_content);
     require(await controller.freezeAndFlush());
-    await controller.pauseAndWait(); controller.dispose();
+    await controller.pauseAndWait(); controller.dispose(); binding = undefined;
     // Native version guard plus two exact ledger proofs: the older suspended
     // submission wins, the newer actual request is rejected, and its prepared
     // proof must be retired rather than later accepted as a receipt.
-    edit('旧请求尚待确认', false); const older = ledger.beginSave(); ledger.suspendSave(older);
-    edit('新输入保留等待接续', false); const newer = ledger.beginSave();
+    edit('旧请求尚待确认'); const older = ledger.beginSave(); ledger.suspendSave(older);
+    edit('新输入保留等待接续'); const newer = ledger.beginSave();
     const olderReceipt = (await api.prepareSaveManualDraft(requirement, { expected_version: older.expected_version,
       markdown_content: older.markdown_content, block_state_json: older.block_state_json }).submit()).data;
     try { await api.prepareSaveManualDraft(requirement, { expected_version: newer.expected_version,
@@ -89,5 +78,5 @@ export async function autosaveProbe(api: WalleApi, requirement: number) {
     return { passed: true, writes: sent, peak_inflight: peak, confirmed_draft_version: actual.content_version, states,
       native_cohort: { older_version: olderReceipt.content_version, final_version: lastReceipt.content_version, newer_request: 'CONTENT_VERSION_CONFLICT', retired_proof_refused: retired },
       scope: 'Real Crepe edits/ledger, production API and native SQLite, real IndexedDB. Receipt deliberately held and third actual committed response dropped locally; no Provider/product-page acceptance' };
-  } finally { controller.dispose(); ledger.dispose(); cache.close(); await editor.destroy(); root.remove(); }
+  } finally { binding = undefined; controller.dispose(); cache.close(); await editor.destroy(); root.remove(); }
 }
