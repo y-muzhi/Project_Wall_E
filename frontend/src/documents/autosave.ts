@@ -1,4 +1,4 @@
-import { ApiRejected } from '../api/client.ts';
+import { ApiRejected, snapshotObject } from '../api/client.ts';
 import type { DocumentReadModel } from './contracts.ts';
 import type { EditedSnapshot, ManualDraftSubmission } from './edited-snapshot.ts';
 import type { LocalDraftSnapshot } from './recovery-store.ts';
@@ -54,6 +54,7 @@ export class ManualDraftAutosave {
   }
   get state(): SaveState { return this.value; }
   get localSnapshot(): EditedSnapshot { return this.observed; }
+  get confirmedDocument():DocumentReadModel { return snapshotObject(this.confirmed) as unknown as DocumentReadModel; }
   subscribe(listener: (state: SaveState) => void): () => void { this.listeners.add(listener); listener(this.value); return () => this.listeners.delete(listener); }
   private publish(changes: Partial<SaveState>): void {
     if (this.closed) return;

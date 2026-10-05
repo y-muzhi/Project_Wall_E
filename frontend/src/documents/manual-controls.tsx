@@ -46,7 +46,7 @@ export function ManualDraftControls(props:ManualDraftControlsProps) {
   const execute=async(work:()=>Promise<boolean>|boolean,after?:(confirmed:boolean)=>void|Promise<void>)=>{
     if(pending.current||props.blocked)return;pending.current=true;setBusy(true);setError(null);
     try{const confirmed=await work();await after?.(confirmed);}
-    catch{setError('暂时无法更新页面，当前草稿和请求状态仍保留，请重新读取实际资源');}
+    catch{setError('实际详情暂时无法读取，已确认的操作结果保持不变，请重试读取');}
     finally{pending.current=false;setBusy(false);}
   };
   const afterEnd=async(confirmed:boolean)=>{
@@ -75,6 +75,7 @@ export function ManualDraftControls(props:ManualDraftControlsProps) {
       <button type="button" disabled={locked||error!==null||endingUnknown||ending.phase==='CLOSED'} onClick={()=>setDialog('CANCEL')}>取消编辑</button>
     </div>
     {save.local_storage_error&&<p role="alert" className="inline-error">本地暂存未成功保护最新内容，请保持页面；后端保存状态以实际回执为准。</p>}
+    {recovery.storage_error&&['RESTORED','SERVER_SELECTED'].includes(recovery.phase)&&<p role="alert" className="inline-error">本地暂存不可读取，跨刷新保护可能不足，请保持页面；后端保存状态以实际回执为准。</p>}
     {save.error&&<p role="alert" className="inline-error">{save.error}</p>}
     {save.server_conflict&&<details><summary>查看后端最新草稿 · 版本 {save.server_conflict.content_version}</summary><pre className="draft-source">{save.server_conflict.markdown_content}</pre></details>}
     {endingBusy&&<p role="status">{ending.operation==='CANCEL'?'正在确认并放弃编辑草稿…':'正在保存最新草稿并完成编辑…'}</p>}

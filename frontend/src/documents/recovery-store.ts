@@ -43,6 +43,7 @@ export function recoveryChoice(local: LocalDraftSnapshot, draft: DocumentReadMod
 export class DraftRecoveryStore {
   private readonly ctx: Ctx; private readonly name: string; private readonly factory: () => IDBFactory;
   private opening: Promise<IDBDatabase> | undefined; private database: IDBDatabase | undefined; private closed = false;
+  private readonly pending = new Set<Promise<unknown>>();
   constructor(ctx: Ctx, diagnostic: { name?: string; factory?: () => IDBFactory } = {}) {
     this.ctx = ctx; this.name = diagnostic.name ?? 'walle-v1'; this.factory = diagnostic.factory ?? (() => globalThis.indexedDB);
   }
@@ -69,7 +70,11 @@ export class DraftRecoveryStore {
     });
     return this.opening;
   }
-  private async transaction<T>(mode: IDBTransactionMode, perform: (store: IDBObjectStore, complete: (value: T) => void, fail: (error: DraftStorageError) => void) => void): Promise<T> {
+  private transaction<T>(mode: IDBTransactionMode, perform: (store: IDBObjectStore, complete: (value: T) => void, fail: (error: DraftStorageError) => void) => void): Promise<T> {
+    const task=this.performTransaction(mode,perform);this.pending.add(task);
+    void task.then(()=>this.pending.delete(task),()=>this.pending.delete(task));return task;
+  }
+  private async performTransaction<T>(mode: IDBTransactionMode, perform: (store: IDBObjectStore, complete: (value: T) => void, fail: (error: DraftStorageError) => void) => void): Promise<T> {
     const database = await this.open();
     return new Promise((resolve, reject) => {
       let transaction: IDBTransaction;
@@ -83,6 +88,10 @@ export class DraftRecoveryStore {
       catch { fail(new DraftStorageError('UNAVAILABLE')); }
     });
   }
+  /** Owner stops new work first, then keeps the parser context and opening
+   * connection alive until all actual transactions settle. No deletion or
+   * claim of protection when a transaction was refused. */
+  async settle():Promise<void>{while(this.pending.size)await Promise.allSettled([...this.pending]);}
   async get(requirement: number, draft: number): Promise<LocalDraftSnapshot | null> {
     const identity = key(requirement, draft);
     const value = await this.transaction<unknown>('readonly', (store, complete) => {

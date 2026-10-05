@@ -294,6 +294,8 @@ try {
       await page.evaluate(()=>window.manualControlsProbe.destroy());return {...probe,replay_wires:[...starts,...ends],scope:'Actual controls/native clicks, editor keyboard input, explicit flush/IndexedDB, native receipts deliberately lost and exact replay, real I37 loss plus read-only retry; synthetic composition events are not Windows IME acceptance'};
     }`.replace(/\r?\n/g,' ')));report.manual_controls.push(verified);assert.equal(verified.passed,true);
   }
+  report.manual_session=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.manualSession())'));
+  assert.equal(report.manual_session.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
