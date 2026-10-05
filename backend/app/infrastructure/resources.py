@@ -116,6 +116,14 @@ class FrozenFunction:
         schema = {'$schema': 'https://json-schema.org/draft/2020-12/schema', '$ref': '#/$defs/patch', '$defs': definitions}
         return _validate(json.dumps(schema), value)
 
+    def validate_cards(self, value: dict) -> dict:
+        definitions = json.loads(self.output_schema_json)['$defs']
+        return _validate(json.dumps({'$schema': 'https://json-schema.org/draft/2020-12/schema', '$ref': '#/$defs/cards', '$defs': definitions}), value)
+
+    def validate_responses(self, value: dict) -> dict:
+        definitions = json.loads(self.input_schema_json)['$defs']
+        return _validate(json.dumps({'$schema': 'https://json-schema.org/draft/2020-12/schema', '$ref': '#/$defs/responses', '$defs': definitions}), value)
+
     def validate_allowed_targets(self, value: dict) -> dict:
         root = json.loads(self.input_schema_json)
         schema = {'$schema': 'https://json-schema.org/draft/2020-12/schema', 'type': 'object', 'properties': {'schema_version': {'type': 'integer', 'const': 1}, 'targets': root['properties']['allowed_targets']}, 'required': ['schema_version', 'targets'], 'additionalProperties': False, '$defs': root['$defs']}
