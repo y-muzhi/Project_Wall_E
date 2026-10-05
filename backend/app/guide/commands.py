@@ -26,6 +26,14 @@ from backend.app.shared.validation import strict_json_object
 from .contracts import submit_card_responses_input, submit_card_responses_result
 from backend.app.messages.cards import CardsInvalid, decode_cards, validate_responses
 from backend.app.messages.queries import card_state, project_message
+from .contracts import modify_from_comment_input, modify_from_comment_result
+from backend.app.infrastructure.comment_repository import CommentRepository
+from backend.app.infrastructure.idempotency import CommentAnchorRejected
+from backend.app.comments.contracts import get_comment_result
+from backend.app.documents.anchors import locate
+from backend.app.infrastructure.document_repository import DocumentRepository
+from .contracts import retry_guide_run_input, retry_guide_run_result
+from types import SimpleNamespace
 
 RECOVERY_ERRORS = {'INTERRUPTED': '运行因进程中断而结束', 'EXECUTION_TIMEOUT': '运行连续15分钟没有进展'}
 TERMINAL_RUNS = frozenset({'COMPLETED', 'FAILED', 'CANCELLED'})
@@ -206,6 +214,120 @@ def submit_card_responses(executor: Idempotency, payload: object, *, catalog=Non
         return Success(submit_card_responses_result(run, projected), 202)
     return execute_idempotent(executor, 'APP-GUIDE-CMD-C06', request, operation, target_identity=f'Message:{request.message_id}',
         allowed_failures=frozenset({'INVALID_INPUT', 'NOT_FOUND', 'SOURCE_INVALID', 'CARD_ALREADY_ANSWERED', 'CARD_EXPIRED', 'WORK_STATE_INCONSISTENT', 'CONFIG_INVALID'}))
+
+
+def modify_from_comment(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    """C05 derives all authority from the actual OPEN comment and CURRENT."""
+    try: request = modify_from_comment_input(payload)
+    except InvalidInput as error: return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection):
+        comments, requirements = CommentRepository(connection), RequirementRepository(connection)
+        row = comments.get(request.comment_id)
+        if row is None: raise Rejected('NOT_FOUND')
+        comment = get_comment_result(row)
+        root = requirements.get(comment['requirement_id'])
+        if root is None: raise Rejected('NOT_FOUND')
+        if root['status'] != 'ACTIVE' or comment['status'] != 'OPEN' or comment['deleted_at'] is not None: raise Rejected('STATE_CONFLICT')
+        assert_idle(connection, root, remaining_conflicts=frozenset())
+        current = current_at_version(connection, root['id'], request.expected_content_version)
+        at = operation_time(clock)
+        if root['updated_at'] > at or current['updated_at'] > at or comment['updated_at'] > at: raise ValueError('Comment acceptance cannot precede actual activity')
+        if comment['anchor_status'] == 'ORPHANED': raise Rejected('COMMENT_ORPHANED')
+        try:
+            resources = catalog if catalog is not None else ResourceCatalog()
+            sources = DocumentSources(connection, root['id'], resources)
+            model = get_current_document_result(current, sources)
+            snapshot = validate_snapshot(model['markdown_content'], model['block_state_json'], sources)
+        except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
+        except ValueError: raise Rejected('WORK_STATE_INCONSISTENT') from None
+        location = locate(snapshot, comment['anchor_type'], comment['block_id'], comment['anchor_ref'])
+        if not location.attached:
+            comments.set_anchor_status(root['id'], comment['id'], 'ORPHANED')
+            return CommentAnchorRejected(comment['id'])
+        kind = 'BLOCK' if comment['anchor_type'] == 'BLOCK' else 'SELECTION'
+        reference = {'block_id': comment['block_id']} | ({} if kind == 'BLOCK' else comment['anchor_ref'])
+        scope = resolve_scope(snapshot, 'MODIFY', kind, reference)
+        try:
+            function = resources.freeze('MODIFY', 'COMMENT')
+            template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
+        except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
+        guide_id, message_id = entity_id(connection, EntityKind.GUIDE_RUN), entity_id(connection, EntityKind.MESSAGE)
+        message = MessageRepository(connection).create_user_text(message_id, root['id'], guide_id, comment['content'], request.idempotency_key, at)
+        context_key, context_version = function.context_template.split('@'); prompt_key, prompt_version = function.prompt_reference.split('@')
+        manifest = {'document_id': current['id'], 'content_version': current['content_version'], 'block_ids': list(scope.read_ids), 'message_ids': [message_id],
+            'template': {'key': template.key, 'version': template.version}, 'source': {'source_type': 'COMMENT', 'source_id': comment['id']},
+            'context_template': {'key': context_key, 'version': context_version}, 'prompt': {'key': prompt_key, 'version': prompt_version}, 'function_type': function.function_type}
+        function.validate_allowed_targets({'schema_version': 1, 'targets': scope.targets_json})
+        run = GuideRepository(connection).accept(guide_id, root, message, function, scope, function.validate_read_manifest(manifest), at, trigger_type='MODIFY_FROM_COMMENT')
+        requirements.occupy_guide(root['id'], guide_id, at)
+        return Success(modify_from_comment_result(connection, GuideRepository(connection).get_status(guide_id), resources), 202)
+    return execute_idempotent(executor, 'APP-GUIDE-CMD-C05', request, operation, target_identity=f'Comment:{request.comment_id}',
+        allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'COMMENT_ORPHANED', 'CONFIG_INVALID'}))
+
+
+def retry_guide_run(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    """C04 new frozen run on latest CURRENT; existing user messages are reused."""
+    try: request = retry_guide_run_input(payload)
+    except InvalidInput as error: return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection):
+        guides, requirements, messages = GuideRepository(connection), RequirementRepository(connection), MessageRepository(connection)
+        previous = guides.get(request.guide_run_id)
+        if previous is None: raise Rejected('NOT_FOUND')
+        if previous['status'] != 'FAILED': raise Rejected('STATE_CONFLICT')
+        root = requirements.get(previous['requirement_id'])
+        if root is None: raise Rejected('WORK_STATE_INCONSISTENT')
+        allowed = {'INITIALIZING': ('INITIALIZE',), 'ACTIVE': ('ASK', 'REVIEW', 'MODIFY'), 'COMPLETED': ('ASK',)}
+        if previous['action_type'] not in allowed[root['status']]: raise Rejected('STATE_CONFLICT')
+        assert_idle(connection, root, remaining_conflicts=frozenset())
+        currents = DocumentRepository(connection).by_requirement(root['id'], 'CURRENT')
+        if len(currents) != 1: raise Rejected('WORK_STATE_INCONSISTENT')
+        current = currents[0]
+        message = messages.get(previous['trigger_message_id']) if previous['trigger_message_id'] is not None else None
+        if message is None or message['requirement_id'] != root['id'] or message['role'] != 'USER' or message['message_type'] not in ('TEXT', 'CARD_RESPONSE'): raise Rejected('SOURCE_INVALID')
+        try:
+            resources = catalog if catalog is not None else ResourceCatalog()
+            function = resources.freeze(previous['action_type'], previous['source_type'])
+            template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
+            projected = project_message(messages, root, message, function, resources)
+            if message['message_type'] == 'CARD_RESPONSE' and projected['structured_content'] is None: raise Rejected('SOURCE_INVALID')
+            if previous['source_type'] == 'REVIEW_RESULT':
+                _review_source(connection, resources, SimpleNamespace(action_type=previous['action_type'], source_type=previous['source_type'], source_id=previous['source_id'], requirement_id=root['id']))
+        except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
+        except ValueError: raise Rejected('SOURCE_INVALID') from None
+        if function.function_type != previous['function_type']: raise Rejected('SOURCE_INVALID')
+        try:
+            sources = DocumentSources(connection, root['id'], resources)
+            model = get_current_document_result(current, sources)
+            snapshot = validate_snapshot(model['markdown_content'], model['block_state_json'], sources)
+        except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
+        except ValueError: raise Rejected('WORK_STATE_INCONSISTENT') from None
+        if previous['source_type'] == 'COMMENT':
+            source_row = CommentRepository(connection).get(previous['source_id'])
+            if source_row is None or source_row['requirement_id'] != root['id']: raise Rejected('SOURCE_INVALID')
+            comment = get_comment_result(source_row)
+            if comment['status'] != 'OPEN' or comment['deleted_at'] is not None or comment['anchor_status'] != 'ATTACHED' or not locate(snapshot, comment['anchor_type'], comment['block_id'], comment['anchor_ref']).attached:
+                raise Rejected('SOURCE_INVALID')
+        try:
+            reference = None if previous['scope_ref_json'] is None else strict_json_object(previous['scope_ref_json'])
+            if previous['source_type'] == 'COMMENT':
+                derived_kind = 'BLOCK' if comment['anchor_type'] == 'BLOCK' else 'SELECTION'
+                derived_ref = {'block_id': comment['block_id']} | ({} if derived_kind == 'BLOCK' else comment['anchor_ref'])
+                if previous['scope_type'] != derived_kind or reference != derived_ref: raise ScopeInvalid('Comment retry scope must remain the actual comment anchor')
+            scope = resolve_scope(snapshot, previous['action_type'], previous['scope_type'], reference)
+        except (ValueError, InvalidInput): raise Rejected('SCOPE_INVALID') from None
+        at = operation_time(clock)
+        if root['updated_at'] > at or current['updated_at'] > at or previous['updated_at'] > at or message['created_at'] > at: raise ValueError('Retry cannot precede actual activity')
+        identity = entity_id(connection, EntityKind.GUIDE_RUN)
+        context_key, context_version = function.context_template.split('@'); prompt_key, prompt_version = function.prompt_reference.split('@')
+        manifest = {'document_id': current['id'], 'content_version': current['content_version'], 'block_ids': list(scope.read_ids), 'message_ids': [message['id']],
+            'template': {'key': template.key, 'version': template.version}, 'source': {'source_type': previous['source_type'], 'source_id': previous['source_id']},
+            'context_template': {'key': context_key, 'version': context_version}, 'prompt': {'key': prompt_key, 'version': prompt_version}, 'function_type': function.function_type}
+        function.validate_allowed_targets({'schema_version': 1, 'targets': scope.targets_json})
+        guides.accept(identity, root, message, function, scope, function.validate_read_manifest(manifest), at, trigger_type='RETRY', retry_of=previous['id'], key=request.idempotency_key)
+        requirements.occupy_guide(root['id'], identity, at)
+        return Success(retry_guide_run_result(connection, guides.get_status(identity), resources), 202)
+    return execute_idempotent(executor, 'APP-GUIDE-CMD-C04', request, operation, target_identity=f'GuideRun:{request.guide_run_id}',
+        allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'CONFIG_INVALID'}))
 
 
 def _pending_batches(connection, requirement_id):

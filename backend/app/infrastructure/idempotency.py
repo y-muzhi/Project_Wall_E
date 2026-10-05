@@ -107,6 +107,16 @@ class Success:
 
 
 @dataclass(frozen=True)
+class CommentAnchorRejected:
+    """C05's explicit committed anchor correction, never a stored success."""
+    comment_id: int
+
+    @property
+    def result(self):
+        return {'code': 'COMMENT_ORPHANED', 'data': None, 'details': None}
+
+
+@dataclass(frozen=True)
 class Replay:
     success: Success
 
@@ -182,7 +192,7 @@ class Idempotency:
             cursor = connection.execute("DELETE FROM idempotency_records WHERE status='PROCESSING' AND owner_epoch<>?", (self.owner_epoch,))
             return cursor.rowcount
 
-    def execute(self, scope: Scope, business_input: dict, operation: Callable[[sqlite3.Connection], Success]) -> Success:
+    def execute(self, scope: Scope, business_input: dict, operation: Callable[[sqlite3.Connection], Success | CommentAnchorRejected]) -> Success | CommentAnchorRejected:
         claimed = self.claim(scope, business_input)
         if isinstance(claimed, Replay):
             return claimed.success
@@ -190,9 +200,19 @@ class Idempotency:
             with self.database.transaction(write=True) as connection:
                 self.assert_claim(connection, claimed)
                 success = operation(connection)
-                if not isinstance(success, Success):
+                if isinstance(success, CommentAnchorRejected):
+                    if type(success.comment_id) is not int or not 1 <= success.comment_id <= MAX_SAFE_INTEGER or scope.capability_id != 'APP-GUIDE-CMD-C05' or scope.target_identity != f'Comment:{success.comment_id}':
+                        raise ValueError('Committed rejection is restricted to the actual C05 comment target')
+                    row = connection.execute('SELECT anchor_status FROM comments WHERE id=?', (success.comment_id,)).fetchone()
+                    if row is None or row['anchor_status'] != 'ORPHANED':
+                        raise ValueError('Committed rejection requires the actual corrected comment')
+                    self.assert_claim(connection, claimed)
+                    removed = connection.execute("DELETE FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=? AND business_input_json=? AND status='PROCESSING' AND owner_epoch=?", (*scope.identity, claimed.input_json, claimed.owner_epoch))
+                    if removed.rowcount != 1: raise ClaimLost('Correction must release its own processing claim atomically')
+                elif not isinstance(success, Success):
                     raise ValueError('Operation must explicitly produce a successful application result')
-                self.succeed(connection, claimed, success)
+                else:
+                    self.succeed(connection, claimed, success)
         except CommitOutcomeUnknown:
             # A future call first observes SUCCEEDED/PROCESSING. Never run twice
             # merely because a commit acknowledgment was lost.

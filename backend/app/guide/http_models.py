@@ -11,6 +11,8 @@ from backend.app.shared.http_commands import CommandRequest
 from backend.app.shared.validation import object_fields
 from backend.app.messages.contracts import message_read_model
 from .contracts import create_guide_run_input, continue_guide_run_input
+from .contracts import modify_from_comment_input
+from .contracts import retry_guide_run_input
 
 
 @dataclass(frozen=True)
@@ -130,4 +132,54 @@ class ContinueGuideRunResponse:
         value = guide_run_accepted(data)
         if value['id'] != request.payload['guide_run_id'] or value['status'] != 'RUNNING' or value['current_step'] != 'PREPARING':
             raise ValueError('Continuation must reference the accepted original run')
+        return value, None
+
+
+class ModifyFromCommentRequest(CommandRequest):
+    body_fields = ('expected_content_version',)
+    mandatory = body_fields
+    uses_requirement_path = False
+
+    @classmethod
+    def parse(cls, request, body):
+        request_query(request)
+        value = object_fields(body, 'body', cls.body_fields, cls.mandatory)
+        parsed = modify_from_comment_input({**value, 'comment_id': decimal_integer(request.path_params['comment_id'], 'comment_id'), 'idempotency_key': idempotency_header(request)})
+        return cls(parsed.business_input() | {'idempotency_key': parsed.idempotency_key})
+
+
+class ModifyFromCommentResponse:
+    success_code = 'GUIDE_ACCEPTED'
+    status = 202
+    errors = CreateGuideRunResponse.errors - {'SOURCE_INVALID', 'SCOPE_INVALID'} | {'COMMENT_ORPHANED'}
+
+    @staticmethod
+    def project(data, request):
+        value = guide_run_read_model(data)
+        if value['status'] != 'RUNNING' or value['current_step'] != 'PREPARING' or value['action_type'] != 'MODIFY' or value['function_type'] != 'MODIFY_FROM_COMMENT' or value['source_type'] != 'COMMENT' or value['source_id'] != request.payload['comment_id'] or value['scope']['scope_type'] not in ('BLOCK', 'SELECTION'):
+            raise ValueError('Accepted comment run must preserve its source and derived authority')
+        return value, None
+
+
+@dataclass(frozen=True)
+class RetryGuideRunRequest:
+    payload: dict
+
+    @classmethod
+    def parse(cls, request):
+        request_query(request)
+        value = retry_guide_run_input({'guide_run_id': decimal_integer(request.path_params['guide_run_id'], 'guide_run_id'), 'idempotency_key': idempotency_header(request)})
+        return cls(value.business_input() | {'idempotency_key': value.idempotency_key})
+
+
+class RetryGuideRunResponse:
+    success_code = 'GUIDE_RETRY_ACCEPTED'
+    status = 202
+    errors = CreateGuideRunResponse.errors - {'CONTENT_VERSION_CONFLICT'}
+
+    @staticmethod
+    def project(data, request):
+        value = guide_run_read_model(data)
+        if value['id'] == request.payload['guide_run_id'] or value['retry_of_guide_run_id'] != request.payload['guide_run_id'] or value['status'] != 'RUNNING' or value['current_step'] != 'PREPARING':
+            raise ValueError('Retry response must reference a new accepted run and actual predecessor')
         return value, None

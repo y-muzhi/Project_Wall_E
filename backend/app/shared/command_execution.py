@@ -6,6 +6,7 @@ from typing import Callable, Protocol
 
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.idempotency import Idempotency, IdempotencyConflict, RequestInProgress, Scope, Success, request_key
+from backend.app.infrastructure.idempotency import CommentAnchorRejected
 from backend.app.infrastructure.identifiers import CapacityExhausted
 from .time import utc_milliseconds
 from .validation import strict_integer
@@ -77,7 +78,7 @@ class IdempotentInput(Protocol):
 
 
 def execute_idempotent(executor: Idempotency, capability: str, request: IdempotentInput,
-                       operation: Callable[[sqlite3.Connection], Success], *, allowed_failures: frozenset[str],
+                       operation: Callable[[sqlite3.Connection], Success | CommentAnchorRejected], *, allowed_failures: frozenset[str],
                        business_input: dict | None = None, target_identity: str | None = None) -> dict:
     try:
         scope = Scope(capability, f'Requirement:{request.requirement_id}' if target_identity is None else target_identity, request.idempotency_key)

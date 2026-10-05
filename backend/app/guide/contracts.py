@@ -149,6 +149,49 @@ def submit_card_responses_result(run, message):
     return {'code': 'CARDS_ACCEPTED', 'data': {'response_message': value, 'guide_run': accepted, 'card_state': 'ANSWERED'}, 'details': None}
 
 
+@dataclass(frozen=True)
+class ModifyFromCommentInput:
+    comment_id: int
+    expected_content_version: int
+    idempotency_key: str
+
+    def business_input(self):
+        return {'comment_id': self.comment_id, 'expected_content_version': self.expected_content_version}
+
+
+def modify_from_comment_input(payload):
+    fields = ('comment_id', 'expected_content_version', 'idempotency_key')
+    value = object_fields(payload, 'body', fields, fields)
+    return ModifyFromCommentInput(strict_integer(value['comment_id'], 'comment_id'), strict_integer(value['expected_content_version'], 'expected_content_version'), request_key(value['idempotency_key'], 'idempotency_key'))
+
+
+def modify_from_comment_result(connection, run, catalog):
+    from backend.app.infrastructure.guide_repository import GuideRepository
+    message, batches = GuideRepository(connection).status_references(run)
+    return {'code': 'GUIDE_ACCEPTED', 'data': get_guide_run_result(connection, run, message, batches, catalog=catalog), 'details': None}
+
+
+@dataclass(frozen=True)
+class RetryGuideRunInput:
+    guide_run_id: int
+    idempotency_key: str
+
+    def business_input(self):
+        return {'guide_run_id': self.guide_run_id}
+
+
+def retry_guide_run_input(payload):
+    fields = ('guide_run_id', 'idempotency_key')
+    value = object_fields(payload, 'body', fields, fields)
+    return RetryGuideRunInput(strict_integer(value['guide_run_id'], 'guide_run_id'), request_key(value['idempotency_key'], 'idempotency_key'))
+
+
+def retry_guide_run_result(connection, run, catalog):
+    from backend.app.infrastructure.guide_repository import GuideRepository
+    message, batches = GuideRepository(connection).status_references(run)
+    return {'code': 'GUIDE_RETRY_ACCEPTED', 'data': get_guide_run_result(connection, run, message, batches, catalog=catalog), 'details': None}
+
+
 def get_guide_run_input(value: object = MISSING) -> int:
     return strict_integer(value, 'guide_run_id')
 

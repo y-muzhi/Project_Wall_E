@@ -8,6 +8,8 @@ from .http_models import CancelGuideRunRequest, CancelGuideRunResponse
 from . import commands
 from .http_models import ListGuideRunsRequest, ListGuideRunsResponse
 from .http_models import CreateGuideRunRequest, CreateGuideRunResponse, ContinueGuideRunRequest, ContinueGuideRunResponse
+from .http_models import ModifyFromCommentRequest, ModifyFromCommentResponse
+from .http_models import RetryGuideRunRequest, RetryGuideRunResponse
 
 guide_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 
@@ -40,3 +42,15 @@ async def create_guide_run_http(request: Request):
 async def continue_guide_run_http(request: Request):
     return await handle_http(request, ContinueGuideRunRequest, ContinueGuideRunResponse,
         lambda runtime, parsed: commands.continue_guide_run(runtime.commands(), parsed.payload, catalog=runtime.catalog))
+
+
+@guide_router.post('/comments/{comment_id}/guide-runs')
+async def modify_from_comment_http(request: Request):
+    return await handle_http(request, ModifyFromCommentRequest, ModifyFromCommentResponse,
+        lambda runtime, parsed: commands.modify_from_comment(runtime.commands(), parsed.payload, catalog=runtime.catalog))
+
+
+@guide_router.post('/guide-runs/{guide_run_id}/retry')
+async def retry_guide_run_http(request: Request):
+    return await handle_http(request, RetryGuideRunRequest, RetryGuideRunResponse,
+        lambda runtime, parsed: commands.retry_guide_run(runtime.commands(), parsed.payload, catalog=runtime.catalog))

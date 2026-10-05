@@ -32,20 +32,26 @@ class GuideRepository:
     def get(self, identity: int):
         return self.connection.execute('SELECT * FROM guide_runs WHERE id=?', (identity,)).fetchone()
 
-    def accept(self, identity, root, message, function, scope, manifest, at, *, trigger_type='CREATE_GUIDE_RUN'):
+    def accept(self, identity, root, message, function, scope, manifest, at, *, trigger_type='CREATE_GUIDE_RUN', retry_of=None, key=None):
         require_write_transaction(self.connection)
-        if message['requirement_id'] != root['id'] or message['guide_run_id'] != identity or message['role'] != 'USER' or message['message_type'] not in ('TEXT', 'CARD_RESPONSE'):
+        if message['requirement_id'] != root['id'] or message['role'] != 'USER' or message['message_type'] not in ('TEXT', 'CARD_RESPONSE'):
             raise ValueError('Accepted run must bind its real USER instruction')
+        if retry_of is None:
+            if message['guide_run_id'] != identity or key is not None: raise ValueError('New instruction must bind its newly accepted run')
+        else:
+            previous = self.get(retry_of)
+            if previous is None or previous['requirement_id'] != root['id'] or previous['status'] != 'FAILED' or previous['trigger_message_id'] != message['id'] or trigger_type != 'RETRY' or key is None:
+                raise ValueError('Retry must bind the actual failed predecessor and its existing user trigger')
         context_key, context_version = function.context_template.split('@')
         _, prompt_version = function.prompt_reference.split('@')
-        values = {'id': identity, 'requirement_id': root['id'], 'idempotency_key': message['idempotency_key'], 'trigger_message_id': message['id'], 'trigger_type': trigger_type,
+        values = {'id': identity, 'requirement_id': root['id'], 'idempotency_key': message['idempotency_key'] if retry_of is None else key, 'trigger_message_id': message['id'], 'trigger_type': trigger_type,
             'source_type': function.source_type, 'source_id': manifest['source']['source_id'], 'function_type': function.function_type, 'context_template_key': context_key,
             'context_template_version': context_version, 'prompt_version': prompt_version, 'action_type': function.action_type,
             'mode_snapshot': root['initialization_mode'] if function.action_type == 'INITIALIZE' else None, 'instruction_summary': message['content'],
             'scope_type': scope.scope_type, 'scope_ref_json': None if scope.input_ref is None else canonical_input(scope.input_ref),
             'read_scope_manifest_json': canonical_input(manifest), 'allowed_targets_json': scope.authority_json, 'status': 'RUNNING', 'current_step': 'PREPARING',
             'final_result_json': None, 'created_at': at, 'started_at': None, 'waiting_user_at': None, 'ended_at': None, 'updated_at': at,
-            'error_code': None, 'error_message': None, 'cancel_reason': None, 'retry_of_guide_run_id': None}
+            'error_code': None, 'error_message': None, 'cancel_reason': None, 'retry_of_guide_run_id': retry_of}
         self.connection.execute('INSERT INTO guide_runs('+','.join(values)+') VALUES ('+','.join('?' for _ in values)+')', tuple(values.values()))
         return self.get(identity)
 
