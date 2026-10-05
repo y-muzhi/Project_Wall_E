@@ -23,6 +23,9 @@ from backend.app.infrastructure.identifiers import EntityKind, entity_id
 from backend.app.infrastructure.message_repository import MessageRepository
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, TemplateInvalid, ProtocolInvalid
 from backend.app.shared.validation import strict_json_object
+from .contracts import submit_card_responses_input, submit_card_responses_result
+from backend.app.messages.cards import CardsInvalid, decode_cards, validate_responses
+from backend.app.messages.queries import card_state, project_message
 
 RECOVERY_ERRORS = {'INTERRUPTED': '运行因进程中断而结束', 'EXECUTION_TIMEOUT': '运行连续15分钟没有进展'}
 TERMINAL_RUNS = frozenset({'COMPLETED', 'FAILED', 'CANCELLED'})
@@ -123,6 +126,86 @@ def continue_guide_run(executor: Idempotency, payload: object, *, catalog=None, 
         return Success(continue_guide_run_result(resumed), 202)
     return execute_idempotent(executor, 'APP-GUIDE-CMD-C02', request, operation, target_identity=f'GuideRun:{request.guide_run_id}',
         allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONFIG_INVALID'}))
+
+
+def _answer_summary(cards, answers):
+    by_key = {answer['card_key']: answer for answer in answers['responses']}
+    lines = []
+    for card in cards['cards']:
+        answer = by_key[card['card_key']]
+        lines.append(card['question'])
+        if answer['skipped']: lines.append('已跳过')
+        else:
+            options = {option['option_key']: option for option in card['options']}
+            lines.extend(options[key]['label'] for key in answer['selected_option_keys'])
+            if answer['custom_answer'] is not None: lines.append(answer['custom_answer'])
+    return '\n'.join(lines)
+
+
+def submit_card_responses(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    """C06 one formal whole-group answer and exactly one accepted run transition."""
+    try: request = submit_card_responses_input(payload)
+    except InvalidInput as error: return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection):
+        messages, guides, requirements = MessageRepository(connection), GuideRepository(connection), RequirementRepository(connection)
+        original = messages.get(request.message_id)
+        if original is None: raise Rejected('NOT_FOUND')
+        if original['role'] != 'ASSISTANT' or original['message_type'] != 'INTERACTION_CARDS': raise Rejected('SOURCE_INVALID')
+        source = guides.get(original['guide_run_id']) if original['guide_run_id'] is not None else None
+        if source is None: raise Rejected('NOT_FOUND')
+        root = requirements.get(original['requirement_id'])
+        if root is None or source['requirement_id'] != root['id']: raise Rejected('WORK_STATE_INCONSISTENT')
+        try:
+            resources = catalog if catalog is not None else ResourceCatalog()
+            protocol = resources.restore(source['function_type'], source['prompt_version'], prompt_version=source['prompt_version'], context_template=source['context_template_key']+'@'+source['context_template_version'])
+        except ConfigInvalid: raise Rejected('CONFIG_INVALID') from None
+        if protocol.action_type != source['action_type'] or protocol.source_type != source['source_type']: raise Rejected('WORK_STATE_INCONSISTENT')
+        try: cards = decode_cards(original['structured_content_json'], protocol)
+        except (CardsInvalid, InvalidInput, ProtocolInvalid): raise Rejected('SOURCE_INVALID') from None
+        try: state = card_state(messages, root, original, protocol, resources)
+        except ConfigInvalid: raise Rejected('CONFIG_INVALID') from None
+        except (ValueError, InvalidInput, ProtocolInvalid): raise Rejected('WORK_STATE_INCONSISTENT') from None
+        if state == 'ANSWERED':
+            raise Rejected('CARD_ALREADY_ANSWERED', details={'response_message_id': messages.formal_responses(original['id'])[0]['id']})
+        if state != 'AVAILABLE': raise Rejected('CARD_EXPIRED')
+        try: answers = validate_responses(request.answers, cards, protocol)
+        except (CardsInvalid, InvalidInput, ProtocolInvalid):
+            raise Rejected('INVALID_INPUT', details={'field_errors': [{'field': 'responses', 'reason': 'INVALID_FORMAT', 'message': '回答必须满足原卡片的完整组、选项、必答及数量约束'}]}) from None
+        at = operation_time(clock)
+        if original['created_at'] > at or source['updated_at'] > at or root['updated_at'] > at: raise ValueError('Answer cannot precede persisted activity')
+        initialize = source['action_type'] == 'INITIALIZE'
+        guide_id = entity_id(connection, EntityKind.GUIDE_RUN) if initialize else source['id']
+        response = messages.create_card_response(entity_id(connection, EntityKind.MESSAGE), root['id'], guide_id, original, _answer_summary(cards, answers), answers, request.idempotency_key, at)
+        if initialize:
+            # Availability already proves an idle initialization and matching
+            # CURRENT identity/version. Recheck and derive actual authority.
+            current = current_at_version(connection, root['id'], messages.current_identity(root['id'])[0]['content_version'])
+            if current['updated_at'] > at: raise ValueError('Answer cannot precede actual document activity')
+            try:
+                function = resources.freeze('INITIALIZE', 'USER_INSTRUCTION')
+                template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
+            except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
+            sources = DocumentSources(connection, root['id'], resources)
+            try:
+                model = get_current_document_result(current, sources)
+                snapshot = validate_snapshot(model['markdown_content'], model['block_state_json'], sources)
+                reference = None if source['scope_ref_json'] is None else strict_json_object(source['scope_ref_json'])
+                scope = resolve_scope(snapshot, 'INITIALIZE', source['scope_type'], reference)
+            except (ValueError, InvalidInput): raise Rejected('WORK_STATE_INCONSISTENT') from None
+            context_key, context_version = function.context_template.split('@'); prompt_key, prompt_version = function.prompt_reference.split('@')
+            manifest = {'document_id': current['id'], 'content_version': current['content_version'], 'block_ids': list(scope.read_ids), 'message_ids': [original['id'], response['id']],
+                'template': {'key': template.key, 'version': template.version}, 'source': {'source_type': 'USER_INSTRUCTION', 'source_id': None},
+                'context_template': {'key': context_key, 'version': context_version}, 'prompt': {'key': prompt_key, 'version': prompt_version}, 'function_type': function.function_type}
+            function.validate_allowed_targets({'schema_version': 1, 'targets': scope.targets_json})
+            run = guides.accept(guide_id, root, response, function, scope, function.validate_read_manifest(manifest), at, trigger_type='CARD_RESPONSE')
+            root = requirements.occupy_guide(root['id'], guide_id, at)
+        else:
+            _owned_guide(connection, root, source)
+            run = guides.continue_run(guide_id, response, at, trigger_type='CARD_RESPONSE')
+        projected = project_message(messages, root, response, protocol, resources)
+        return Success(submit_card_responses_result(run, projected), 202)
+    return execute_idempotent(executor, 'APP-GUIDE-CMD-C06', request, operation, target_identity=f'Message:{request.message_id}',
+        allowed_failures=frozenset({'INVALID_INPUT', 'NOT_FOUND', 'SOURCE_INVALID', 'CARD_ALREADY_ANSWERED', 'CARD_EXPIRED', 'WORK_STATE_INCONSISTENT', 'CONFIG_INVALID'}))
 
 
 def _pending_batches(connection, requirement_id):

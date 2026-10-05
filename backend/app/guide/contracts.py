@@ -11,6 +11,7 @@ from backend.app.infrastructure.idempotency import request_key
 from backend.app.shared.pagination import page_number, page_metadata
 from backend.app.shared.validation import raw_text
 from backend.app.shared.validation import instruction
+from backend.app.shared.validation import strict_boolean, ordinary_text
 from backend.app.messages.contracts import message_read_model
 
 GUIDE_STATUSES = ('RUNNING', 'WAITING_USER', 'COMPLETED', 'FAILED', 'CANCELLED')
@@ -97,6 +98,55 @@ def create_guide_run_result(run, message):
 
 def continue_guide_run_result(run):
     return {'code': 'GUIDE_CONTINUED', 'data': guide_run_accepted({key: run[key] for key in ('id', 'requirement_id', 'status', 'current_step')}), 'details': None}
+
+
+@dataclass(frozen=True)
+class SubmitCardResponsesInput:
+    message_id: int
+    answers_json: str
+    idempotency_key: str
+
+    @property
+    def answers(self):
+        import json
+        return json.loads(self.answers_json)
+
+    def business_input(self):
+        return {'message_id': self.message_id, **self.answers}
+
+
+def submit_card_responses_input(payload):
+    fields = ('message_id', 'schema_version', 'responses', 'idempotency_key')
+    data = object_fields(payload, 'body', fields, fields)
+    version = strict_integer(data['schema_version'], 'schema_version', 1, 1)
+    answers = data['responses']
+    if type(answers) is not list: reject('responses', 'INVALID_TYPE', '必须为完整回答数组')
+    if not 1 <= len(answers) <= 5: reject('responses', 'OUT_OF_RANGE', '整组回答必须为1～5项')
+    normalized = []
+    for index, answer in enumerate(answers):
+        field = f'responses[{index}]'
+        item = object_fields(answer, field, ('card_key', 'selected_option_keys', 'custom_answer', 'skipped'), ('card_key', 'selected_option_keys', 'custom_answer', 'skipped'))
+        key = raw_text(item['card_key'], field+'.card_key', 1, 100)
+        selected = item['selected_option_keys']
+        if type(selected) is not list: reject(field+'.selected_option_keys', 'INVALID_TYPE', '必须为选项键数组')
+        if len(selected) > 8: reject(field+'.selected_option_keys', 'TOO_LONG', '最多8个选项键')
+        selected = [raw_text(value, field+'.selected_option_keys', 1, 100) for value in selected]
+        if len(set(selected)) != len(selected): reject(field+'.selected_option_keys', 'INVALID_FORMAT', '选项键不能重复')
+        custom = item['custom_answer']
+        custom = None if custom is None else ordinary_text(custom, field+'.custom_answer', 1, 2000)
+        normalized.append({'card_key': key, 'selected_option_keys': selected, 'custom_answer': custom, 'skipped': strict_boolean(item['skipped'], field+'.skipped')})
+    if len({item['card_key'] for item in normalized}) != len(normalized): reject('responses', 'INVALID_FORMAT', '卡片键不能重复')
+    try: encoded = canonical_input({'schema_version': version, 'responses': normalized})
+    except (ValueError, UnicodeError): reject('responses', 'INVALID_FORMAT', '回答必须使用有效Unicode码点')
+    return SubmitCardResponsesInput(strict_integer(data['message_id'], 'message_id'), encoded, request_key(data['idempotency_key'], 'idempotency_key'))
+
+
+def submit_card_responses_result(run, message):
+    accepted = guide_run_accepted({key: run[key] for key in ('id', 'requirement_id', 'status', 'current_step')})
+    value = message_read_model(message)
+    if value['role'] != 'USER' or value['message_type'] != 'CARD_RESPONSE' or value['guide_run_id'] != accepted['id'] or value['requirement_id'] != accepted['requirement_id'] or value['structured_content'] is None:
+        raise ValueError('Formal response must belong to its accepted run')
+    return {'code': 'CARDS_ACCEPTED', 'data': {'response_message': value, 'guide_run': accepted, 'card_state': 'ANSWERED'}, 'details': None}
 
 
 def get_guide_run_input(value: object = MISSING) -> int:

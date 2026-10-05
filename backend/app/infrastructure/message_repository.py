@@ -1,6 +1,7 @@
 """INF-MSG-REP accepted initial USER TEXT, immutable with actual run binding."""
 import sqlite3
 from .identifiers import message_sequence, require_write_transaction
+from .idempotency import canonical_input
 
 
 class MessageRepository:
@@ -55,4 +56,14 @@ class MessageRepository:
         row = self.connection.execute('SELECT * FROM conversation_messages WHERE id=?', (identity,)).fetchone()
         if row is None:
             raise ValueError('Accepted user message is missing')
+        return row
+
+    def create_card_response(self, identity, requirement_id, guide_run_id, original, content, answers, key, at):
+        require_write_transaction(self.connection)
+        if original['requirement_id'] != requirement_id or original['role'] != 'ASSISTANT' or original['message_type'] != 'INTERACTION_CARDS':
+            raise ValueError('Formal response requires the actual assistant card of this requirement')
+        self.connection.execute("INSERT INTO conversation_messages VALUES (?,?,?,?,'USER',?,'CARD_RESPONSE',?,?,?,?)",
+            (identity, requirement_id, guide_run_id, message_sequence(self.connection, requirement_id), content, canonical_input(answers), original['id'], key, at))
+        row = self.get(identity)
+        if row is None: raise ValueError('Formal response was not saved')
         return row

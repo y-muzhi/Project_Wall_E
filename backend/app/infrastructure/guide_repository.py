@@ -34,7 +34,7 @@ class GuideRepository:
 
     def accept(self, identity, root, message, function, scope, manifest, at, *, trigger_type='CREATE_GUIDE_RUN'):
         require_write_transaction(self.connection)
-        if message['requirement_id'] != root['id'] or message['guide_run_id'] != identity or message['role'] != 'USER' or message['message_type'] != 'TEXT':
+        if message['requirement_id'] != root['id'] or message['guide_run_id'] != identity or message['role'] != 'USER' or message['message_type'] not in ('TEXT', 'CARD_RESPONSE'):
             raise ValueError('Accepted run must bind its real USER instruction')
         context_key, context_version = function.context_template.split('@')
         _, prompt_version = function.prompt_reference.split('@')
@@ -52,7 +52,7 @@ class GuideRepository:
     def continue_run(self, identity, message, at, *, trigger_type='CONTINUE_GUIDE_RUN'):
         require_write_transaction(self.connection)
         run = self.get(identity)
-        if run is None or message['requirement_id'] != run['requirement_id'] or message['guide_run_id'] != identity or message['role'] != 'USER' or message['message_type'] != 'TEXT':
+        if run is None or message['requirement_id'] != run['requirement_id'] or message['guide_run_id'] != identity or message['role'] != 'USER' or message['message_type'] not in ('TEXT', 'CARD_RESPONSE'):
             raise ValueError('Continuation must bind its real USER instruction')
         result = self.connection.execute("UPDATE guide_runs SET trigger_message_id=?,trigger_type=?,instruction_summary=?,status='RUNNING',current_step='PREPARING',updated_at=? WHERE id=? AND status='WAITING_USER' AND action_type IN ('ASK','REVIEW','MODIFY')", (message['id'], trigger_type, message['content'], at, identity))
         if result.rowcount != 1: raise ValueError('Continuation lost its shared state gate')
