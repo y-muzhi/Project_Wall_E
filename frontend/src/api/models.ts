@@ -37,7 +37,7 @@ export type Requirement = Model<typeof requirement>;
 export type RequirementSummary = Model<typeof requirementSummary>;
 
 export const revisionSummaryFields = { id, requirement_id: id, version_no: id, revision_type: choices(['BASELINE', 'MANUAL']),
-  description: nullable(checked(nonempty, value => require([...value].length <= 200))), source_content_version: id, created_at: time };
+  description: nullable(checked(nonempty, value => require([...value].length <= 1000))), source_content_version: id, created_at: time };
 export const revisionSummary = checked(shape(revisionSummaryFields), row => require(row.revision_type === 'BASELINE' ? row.version_no === 1 : row.version_no > 1));
 export type RevisionSummary = Model<typeof revisionSummary>;
 export function documentDecoder(ctx: Ctx, kind: 'CURRENT' | 'MANUAL_DRAFT') {
@@ -53,7 +53,7 @@ export function revisionDecoder(ctx: Ctx) {
 }
 
 const selection = shape({ selected_text: checked(nonempty, value => require([...value].length <= 2000)),
-  prefix_text: checked(text, value => require([...value].length <= 50)), suffix_text: checked(text, value => require([...value].length <= 50)) });
+  prefix_text: checked(text, value => require([...value].length <= 100)), suffix_text: checked(text, value => require([...value].length <= 100)) });
 export const scope = (value: unknown) => {
   const row = exact(value, ['scope_type', 'scope_ref']);
   const kind = choices(['DOCUMENT', 'SECTION', 'BLOCK', 'SELECTION'])(row.scope_type);
@@ -63,7 +63,7 @@ export const scope = (value: unknown) => {
   return Object.freeze({ scope_type: kind, scope_ref: shape({ block_id: id })(row.scope_ref) });
 };
 function selectionText(key: 'selected_text' | 'prefix_text' | 'suffix_text') {
-  return (value: unknown) => { const result = text(value), size = [...result].length; require(size <= (key === 'selected_text' ? 2000 : 50) && (key !== 'selected_text' || size > 0)); return result; };
+  return (value: unknown) => { const result = text(value), size = [...result].length; require(size <= (key === 'selected_text' ? 2000 : 100) && (key !== 'selected_text' || size > 0)); return result; };
 }
 const runFields = { id, requirement_id: id, action_type: choices(runActions),
   function_type: choices(['INITIALIZE_REQUIREMENT', 'ANSWER_REQUIREMENT', 'REVIEW_REQUIREMENT', 'MODIFY_REQUIREMENT', 'MODIFY_FROM_REVIEW', 'MODIFY_FROM_COMMENT']),

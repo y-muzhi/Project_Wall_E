@@ -7,6 +7,7 @@ import type { DocumentReadModel } from '../../src/documents/contracts.ts';
 import { recoveryProbe } from './recovery-probe.ts';
 import { autosaveProbe } from './autosave-probe.ts';
 import { editorHostProbe } from './editor-host-probe.ts';
+import { readLimitsProbe } from './read-limits-probe.ts';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -99,4 +100,4 @@ async function run() {
     scope: 'Actual same-origin Vite proxy / production API / isolated SQLite / real Crepe paired documents; failure/config cases explicit, no paid Provider, product page or whole acceptance' };
   status.textContent = JSON.stringify({ ...result, pairs: pairs.length }, null, 2); return result;
 }
-Object.assign(window, { apiProbe: { run, hostProbe, destroy: () => editor.destroy() } }); status.textContent = 'READY';
+Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimitsProbe(api), destroy: () => editor.destroy() } }); status.textContent = 'READY';

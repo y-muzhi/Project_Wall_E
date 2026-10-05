@@ -20,6 +20,21 @@ const comment = () => ({ id: 4, requirement_id: 1, content: '评论', anchor_typ
   anchor_ref: { selected_text: '甲😀', prefix_text: '', suffix_text: '' }, anchor_status: 'ATTACHED', status: 'OPEN',
   resolved_at: null, deleted_at: null, created_at: at, updated_at: at });
 const location = () => ({ status: 'ATTACHED', block_id: 3, start_offset: 2, end_offset: 4 });
+
+test('SHR-TEXT exactly accepts1000 revision codepoints and100 selection context, refusing1001/101 without truncation', () => {
+  const revision = { id: 3, requirement_id: 1, version_no: 2, revision_type: 'MANUAL', description: '😀'.repeat(1000), source_content_version: 2, created_at: at };
+  assert.equal(models.revisionSummary(revision).description, revision.description);
+  assert.throws(() => models.revisionSummary({ ...revision, description: revision.description + 'x' }));
+  const reference = { block_id: 3, selected_text: '选😀', prefix_text: '😀'.repeat(100), suffix_text: '后'.repeat(100) };
+  const scoped = { scope_type: 'SELECTION', scope_ref: reference };
+  assert.deepEqual(models.scope(scoped), scoped);
+  for (const field of ['prefix_text','suffix_text']) {
+    assert.throws(() => models.scope({ ...scoped, scope_ref: { ...reference, [field]: reference[field] + 'x' } }));
+    const anchored = { ...comment(), anchor_ref: { selected_text: reference.selected_text, prefix_text: reference.prefix_text, suffix_text: reference.suffix_text } };
+    assert.deepEqual(models.comment(anchored).anchor_ref, anchored.anchor_ref);
+    assert.throws(() => models.comment({ ...anchored, anchor_ref: { ...anchored.anchor_ref, [field]: reference[field] + 'x' } }));
+  }
+});
 const batch = () => ({ id: 8, requirement_id: 1, guide_run_id: 2, source_type: 'USER_INSTRUCTION', source_id: null, title: '修改', summary: '说明',
   status: 'PENDING', completion_result: null, error_message: null, base_content_version: 7, applied_content_version: null,
   created_at: at, completed_at: null, updated_at: at, counts: { total: 1, pending: 1, accepted: 0, rejected: 0, edited: 0 },

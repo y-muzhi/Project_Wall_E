@@ -91,6 +91,9 @@ try {
   assert.equal(report.editor_composition.passed, true);
   report.editor_host_closed = result(await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.hostProbe.close())'));
   assert.equal(report.editor_host_closed.closed, true);
+  report.read_limits = result(await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.readLimits())'));
+  assert.equal(report.read_limits.passed, true); assert.equal(report.read_limits.revision_codepoints, 1000);
+  assert.equal(report.read_limits.prefix_codepoints, 100); assert.equal(report.read_limits.suffix_codepoints, 100);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.passed = true;
@@ -110,7 +113,7 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 4 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
+      if (closed.facts.llm_uses !== 0 || closed.facts.guide_runs !== 6 || closed.facts.requirements !== 2 || closed.facts.revisions !== 4 || closed.facts.comments !== 2 || native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
