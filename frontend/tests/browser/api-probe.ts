@@ -13,6 +13,7 @@ import { mountWorkbenchProbe } from './workbench-probe.tsx';
 import { mountDetailFrameProbe } from './detail-frame-probe.tsx';
 import { detailReadProbe } from './detail-read-probe.ts';
 import { manualEndProbe } from './manual-end-probe.ts';
+import { manualStartProbe } from './manual-start-probe.ts';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -29,7 +30,7 @@ const transport: typeof fetch = async (input, options) => {
   wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status,
     ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
       (String(input).startsWith('/api/v1/requirements/') &&
-        ((options?.method === 'POST' && String(input).endsWith('/manual-draft/complete')) ||
+        ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft'))) ||
           (options?.method === 'DELETE' && String(input).endsWith('/manual-draft'))))
       ? { body: String(options?.body), key: new Headers(options?.headers).get('Idempotency-Key')! } : {}),
     ...(response.status >= 400 ? { error_response: received } : {}) }); return response;
@@ -121,4 +122,5 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountDetailFrame:async()=>{Object.assign(window,{detailFrameProbe:await mountDetailFrameProbe(api,2)});},
  detailRead:()=>detailReadProbe(api,2),
  manualEnd:()=>manualEndProbe(api,2),
+ manualStart:()=>manualStartProbe(api,2),
  wireFacts: () => wires, transportFacts: () => responses, creationWires: () => wires.filter(wire => wire.body?.includes('真实抽屉😀')), destroy: () => editor.destroy() } }); status.textContent = 'READY';

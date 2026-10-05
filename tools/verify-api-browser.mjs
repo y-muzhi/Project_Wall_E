@@ -229,6 +229,13 @@ try {
     return {...probe,replay_wires:[...complete,...cancel]};
   }`.replace(/\r?\n/g,' ')));
   assert.equal(report.manual_end.passed,true);
+  report.manual_start=result(await cli('run-code',`async(page)=>{
+    const before=await page.evaluate(()=>window.apiProbe.wireFacts().length),probe=await page.evaluate(()=>window.apiProbe.manualStart());
+    const wires=(await page.evaluate(()=>window.apiProbe.wireFacts())).slice(before),starts=wires.filter(wire=>wire.method==='POST'&&wire.path==='/api/v1/requirements/2/manual-draft');
+    if(starts.length!==2||starts.some(wire=>wire.status!==201||typeof wire.body!=='string'||typeof wire.key!=='string'||!wire.key)||starts[0].key!==starts[1].key||starts[0].body!==starts[1].body||JSON.parse(starts[0].body).expected_version!==3)throw Error('Draft start replay differs from original native intention');
+    return {...probe,replay_wires:starts};
+  }`.replace(/\r?\n/g,' ')));
+  assert.equal(report.manual_start.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
