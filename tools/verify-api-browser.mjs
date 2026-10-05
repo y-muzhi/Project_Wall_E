@@ -220,6 +220,15 @@ try {
   }`.replace(/\r?\n/g,' ')));
   report.detail_read=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.detailRead())'));
   assert.equal(report.detail_read.passed,true);
+  report.manual_end=result(await cli('run-code',`async(page)=>{
+    const before=await page.evaluate(()=>window.apiProbe.wireFacts().length),probe=await page.evaluate(()=>window.apiProbe.manualEnd());
+    const wires=(await page.evaluate(()=>window.apiProbe.wireFacts())).slice(before);
+    const complete=wires.filter(wire=>wire.path==='/api/v1/requirements/2/manual-draft/complete'),cancel=wires.filter(wire=>wire.path==='/api/v1/requirements/2/manual-draft'&&wire.method==='DELETE');
+    for(const pair of [complete,cancel])if(pair.length!==2||pair.some(wire=>wire.status!==200||typeof wire.body!=='string'||typeof wire.key!=='string'||!wire.key)||pair[0].key!==pair[1].key||pair[0].body!==pair[1].body)throw Error('Ending replay differs from original native action');
+    if(JSON.parse(complete[0].body).expected_version!==3||JSON.parse(cancel[0].body).expected_version!==2)throw Error('Ending used wrong independent draft version');
+    return {...probe,replay_wires:[...complete,...cancel]};
+  }`.replace(/\r?\n/g,' ')));
+  assert.equal(report.manual_end.passed,true);
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);

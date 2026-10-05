@@ -33,7 +33,7 @@ export async function detailReadProbe(api:WalleApi,identity:number){
     const missing=new RequirementDetailRead(9999,api);try{require(!await missing.refresh()&&missing.phase==='DETAIL_MISSING'&&missing.getSnapshot().confirmed===null);}finally{missing.dispose();}
     return {passed:true,requirement_id:identity,current_version:initial.current.content_version,draft_version:1,index_count:initial.comment_index.total_count,
       native_title:title.title,phases:['IDLE_VIEW','CONTENT_VERSION_CONFLICT','MANUAL_EDITING','DETAIL_ERROR','DETAIL_MISSING'],
-      scope:'Actual I03/I08/I10/I37, I04 update and I09/I12 cancel on isolated SQLite; index hold/discard is explicit local injection. No native RUNNING/WAITING_USER/successful batch or full detail product claim'};
+      scope:'Actual I03/I08/I10/I37, I04 update and I09/I13 cancel on isolated SQLite; index hold/discard is explicit local injection. No native RUNNING/WAITING_USER/successful batch or full detail product claim'};
   }finally{
     waiting.resolve();reader.dispose();
     if(draftId!==null){const current=(await api.getManualDraft(identity)).data;await api.prepareCancelManualDraft(identity,current.content_version).submit();}

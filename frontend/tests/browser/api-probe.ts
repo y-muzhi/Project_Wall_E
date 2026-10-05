@@ -12,6 +12,7 @@ import { mountCreateProbe } from './create-probe.tsx';
 import { mountWorkbenchProbe } from './workbench-probe.tsx';
 import { mountDetailFrameProbe } from './detail-frame-probe.tsx';
 import { detailReadProbe } from './detail-read-probe.ts';
+import { manualEndProbe } from './manual-end-probe.ts';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -26,7 +27,11 @@ const transport: typeof fetch = async (input, options) => {
   try { response = await fetch(input, options); } catch (error) { wires.push({path:String(input),method:options?.method ?? 'GET',status:0,error_response:String(error)}); throw error; }
   const received = await response.clone().text(); responses.push({path:String(input),status:response.status,response:received}); if (responses.length > 5) responses.shift();
   wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status,
-    ...(options?.method === 'POST' && String(input) === '/api/v1/requirements' ? { body: String(options.body), key: new Headers(options.headers).get('Idempotency-Key')! } : {}),
+    ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
+      (String(input).startsWith('/api/v1/requirements/') &&
+        ((options?.method === 'POST' && String(input).endsWith('/manual-draft/complete')) ||
+          (options?.method === 'DELETE' && String(input).endsWith('/manual-draft'))))
+      ? { body: String(options?.body), key: new Headers(options?.headers).get('Idempotency-Key')! } : {}),
     ...(response.status >= 400 ? { error_response: received } : {}) }); return response;
 };
 const api = editor.editor.action(ctx => new WalleApi(new ApiClient(transport), ctx));
@@ -63,14 +68,14 @@ async function run() {
   let current = (await accept('I08', api.getCurrentDocument(identity))).data; pairs.push(current);
   let draft = (await accept('I09', api.prepareStartManualDraft(identity, current.content_version).submit())).data.manual_draft; pairs.push(draft);
   draft = (await accept('I10', api.getManualDraft(identity))).data; pairs.push(draft);
-  await accept('I12', api.prepareCancelManualDraft(identity, draft.content_version).submit());
+  await accept('I13', api.prepareCancelManualDraft(identity, draft.content_version).submit());
   draft = (await api.prepareStartManualDraft(identity, current.content_version).submit()).data.manual_draft;
   for (let index = 0; index < 3; index++) {
     draft = (await accept('I11', api.prepareSaveManualDraft(identity, { expected_version: draft.content_version,
       markdown_content: draft.markdown_content, block_state_json: draft.block_state_json }).submit())).data; pairs.push(draft);
   }
   const draftVersion = draft.content_version;
-  current = (await accept('I13', api.prepareCompleteManualDraft(identity, draftVersion).submit())).data; pairs.push(current);
+  current = (await accept('I12', api.prepareCompleteManualDraft(identity, draftVersion).submit())).data; pairs.push(current);
   require(current.document_type === 'CURRENT' && current.content_version !== draftVersion);
   const baseline = await accept('I05', api.prepareCompleteInitialization(identity, current.content_version).submit());
   require(baseline.data.baseline_revision.source_content_version === current.content_version);
@@ -115,4 +120,5 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
 }, mountWorkbench:async(seed:boolean)=>{Object.assign(window,{workbenchProbe:await mountWorkbenchProbe(api,seed)});},
  mountDetailFrame:async()=>{Object.assign(window,{detailFrameProbe:await mountDetailFrameProbe(api,2)});},
  detailRead:()=>detailReadProbe(api,2),
+ manualEnd:()=>manualEndProbe(api,2),
  wireFacts: () => wires, transportFacts: () => responses, creationWires: () => wires.filter(wire => wire.body?.includes('真实抽屉😀')), destroy: () => editor.destroy() } }); status.textContent = 'READY';
