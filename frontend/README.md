@@ -1,6 +1,6 @@
 # 前端实施边界
 
-已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。当前包含选区辅助函数、真实Crepe源码/身份适配、本地编辑快照输出、API原请求保护传输层和37个强类型业务绑定及全部公共读取模型。业务页面、路由与构建入口仍在实施。
+已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。实际根入口 `index.html` / `src/main.tsx` / `application` 已连接工作台、新建需求和完整详情，所有业务读取及写入使用正式 API。`npm run build` 进行 TypeScript 检查及实际 Vite 生产构建；正式运行及开发模式见 [运行说明](../docs/运行说明.md)。根页面浏览器验证使用 `node tools/verify-product-browser.mjs`，与下述各历史诊断探针分开记录。
 
 在项目根运行：
 

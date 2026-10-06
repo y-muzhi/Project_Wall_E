@@ -155,6 +155,7 @@ class SuggestionFixtureWorker(GuideWorker):
 
 async def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--database', required=True)
+    parser.add_argument('--frontend-dist', type=Path)
     fixture = parser.add_mutually_exclusive_group()
     fixture.add_argument('--hold-review-dispatch', action='store_true')
     fixture.add_argument('--seed-waiting-ask-fixture', action='store_true')
@@ -172,7 +173,7 @@ async def main():
     if args.seed_waiting_ask_fixture: factory = lambda db, catalog: WaitingAskFixtureWorker(db, catalog=catalog)
     if args.seed_cards_fixture: factory = lambda db, catalog: CardsFixtureWorker(db, catalog=catalog)
     if args.seed_suggestion_fixture: factory = lambda db, catalog: SuggestionFixtureWorker(db, catalog=catalog)
-    server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory), host='127.0.0.1', port=0, workers=1,
+    server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory, frontend_directory=args.frontend_dist), host='127.0.0.1', port=0, workers=1,
         timeout_graceful_shutdown=10, log_level='warning'))
     task = asyncio.create_task(server.serve())
     while not server.started and not task.done(): await asyncio.sleep(0.01)

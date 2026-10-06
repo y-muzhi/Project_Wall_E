@@ -26,7 +26,7 @@ from backend.app.guide.api import guide_router
 from backend.app.messages.api import message_router
 
 
-def create_app(*, database=None, catalog=None, worker_factory=None):
+def create_app(*, database=None, catalog=None, worker_factory=None, frontend_directory=None):
     """Dependencies are private native test injection, never request arguments."""
     @asynccontextmanager
     async def lifespan(app):
@@ -65,6 +65,9 @@ def create_app(*, database=None, catalog=None, worker_factory=None):
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None, redirect_slashes=False)
     for router in (req_router, doc_router, rev_router, comment_router, batch_router, guide_router, message_router):
         app.include_router(router)
+    if frontend_directory is not None:
+        from .frontend import install_frontend
+        install_frontend(app, frontend_directory)
 
     @app.middleware('http')
     async def admission(request, call_next):
