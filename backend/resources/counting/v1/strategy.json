@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "strategy": "ark_exact_text_counts_local_defs_v1",
+  "status": "candidate_pending_real_chat_framing_proof",
+  "model": "doubao-seed-2-1-pro-260915",
+  "schema_derivation": "root_reachable_local_defs_v1",
+  "count_endpoint": "https://ark.cn-beijing.volces.com/api/v3/tokenization",
+  "chat_roles": ["system", "user"],
+  "stream": false,
+  "tool_calling": false,
+  "framing_reserve_candidate": 256,
+  "counted_texts": ["system", "input", "user_input", "source", "template", "history"],
+  "serialization": "json_utf8_ensure_ascii_false_compact_no_nan_frozen_field_order",
+  "budget": {
+    "total_tokens": 32768,
+    "input_tokens": 24576,
+    "output_tokens": 8192,
+    "prompt_tokens": 4096,
+    "current_user_tokens": 4096,
+    "source_tokens": 4096,
+    "history_tokens": 2048,
+    "template_tokens": 4096,
+    "counting": "conservative_utf8_bytes_pending_provider_proof"
+  },
+  "trim_order": ["oldest_history_whole_message", "optional_neighbor_whole_block"],
+  "production_enabled": false
+}

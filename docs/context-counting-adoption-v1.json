@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "decision": "D-011",
+  "scope": "Frozen compiler candidate only; production compatibility and paid authorization are absent. Original v1/v2 resources unchanged.",
+  "approved": [
+    {
+      "path": "docs/proposals/context-budget-compatibility-v1.md",
+      "sha256": "6749050f322f4e9ace8080bf8bf4985aa8bfbac81072fe30de6f65e5ef995e28"
+    },
+    {
+      "path": "docs/proposals/context-budget-approval-v1.json",
+      "sha256": "c25ed3be16d245170d6fe63ebecd5c5a099b9c8077dab43e64e5d1c558bdabe5"
+    }
+  ],
+  "files": [
+    {
+      "path": "backend/resources/counting/v1/strategy.json",
+      "sha256": "fbfc01bf6411111f3012e5362218ca1ae76ce6676be5089370f3a3607980b908"
+    }
+  ],
+  "production_enabled": false,
+  "production_compatibility_proved": false,
+  "paid_calls_authorized": false
+}
