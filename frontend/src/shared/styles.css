@@ -148,3 +148,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .draft-comparison h3 { font-size: 14px; font-weight: 500; }
 .draft-comparison pre, .draft-source { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 400px; overflow: auto; padding: 12px; border: 1px solid #e5e7eb; background: white; font-size: 14px; line-height: 22px; }
 .revision-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Comment text and quotes remain plain text; markers are owned sibling UI. */
+.comment-panel { min-width:0; }
+.comment-card { margin:12px 0; padding:16px; border:1px solid #cbd5e1; border-radius:8px; background:white; }
+.comment-card.is-selected { outline:2px solid #2563eb; outline-offset:2px; }
+.comment-card.is-resolved { background:#f8fafc; border-color:#e2e8f0; }
+.comment-card.is-resolved .comment-status { color:#64748b; }
+.comment-status { display:flex; flex-wrap:wrap; gap:12px; font-size:13px; }
+.comment-quote,.comment-content { white-space:pre-wrap; overflow-wrap:anywhere; }
+.comment-quote { margin:12px 0; border-left:3px solid #94a3b8; padding:8px 12px; background:#f8fafc; max-height:180px; overflow:auto; }
+.comment-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.comment-marker-layer { position:absolute; inset:0; pointer-events:none; }
+.comment-marker-layer>div { position:absolute; right:0; pointer-events:auto; }
+.comment-marker { background:#eff6ff; color:#1d4ed8; border:1px solid #93c5fd; border-radius:12px; padding:4px 8px; }

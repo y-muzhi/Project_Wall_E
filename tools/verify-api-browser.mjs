@@ -6,8 +6,8 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 
 const root = resolve(import.meta.dirname, '..'), session = `walle-api-${Date.now()}`;
-const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),documentOnly=process.argv.includes('--document'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly||documentOnly;
-assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:documentOnly?['--document']:[]);
+const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),documentOnly=process.argv.includes('--document'),commentsOnly=process.argv.includes('--comments'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly||documentOnly||commentsOnly;
+assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:documentOnly?['--document']:commentsOnly?['--comments']:[]);
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
@@ -16,6 +16,7 @@ if(headerOnly)report.scope='Focused actual requirement header command ownership/
 if(revisionsOnly)report.scope='Focused actual revision save/list/immutable history viewer/browser/production API/isolated SQLite with native I02/I05 bootstrap; no full 37-binding rerun, product route/manual-history session, effects or Provider acceptance';
 if(navigationOnly)report.scope='Focused native actual manual save/complete/current/Revision heading identity navigation, source metadata, scroll and focus; no full 37-binding rerun, product route/comments/true IME or Provider acceptance';
 if(documentOnly)report.scope='Focused native detail document/header/manual session/Revision lifetime integration, actual save before history, retained editor and failed/fresh restoration; no full bindings, route/AI/comments/true IME or Provider acceptance';
+if(commentsOnly)report.scope='Focused compiled actual comment reads/index/page/location with native CURRENT and API/SQLite, concurrency/read recovery; no production mutation controls, full bindings/product route/Provider acceptance';
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
 const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
@@ -72,8 +73,8 @@ try {
   }
   assert.equal(ready?.ready, true); assert.match(ready.url, /^http:\/\/127\.0\.0\.1:[0-9]+$/);
   const compiledFixture=resolve(directory,`compiled-${session}`);
-  if(documentOnly){const build=subprocess(globalThis.process.execPath,['node_modules/vite/bin/vite.js','build','--config','tests/browser/api-vite.config.ts','--outDir',compiledFixture],{cwd:resolve(root,'frontend'),env:{...env,WALLE_PROBE_API_URL:ready.url}});await build.exited;report.fixture_build=build.record;assert.equal(build.record.code,0,'Actual compiled diagnostic fixture required');}
-  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js',...(documentOnly?['preview','--outDir',compiledFixture]:[]), '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
+  if(documentOnly||commentsOnly){const build=subprocess(globalThis.process.execPath,['node_modules/vite/bin/vite.js','build','--config','tests/browser/api-vite.config.ts','--outDir',compiledFixture],{cwd:resolve(root,'frontend'),env:{...env,WALLE_PROBE_API_URL:ready.url}});await build.exited;report.fixture_build=build.record;assert.equal(build.record.code,0,'Actual compiled diagnostic fixture required');}
+  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js',...((documentOnly||commentsOnly)?['preview','--outDir',compiledFixture]:[]), '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
     { cwd: resolve(root, 'frontend'), env: { ...env, WALLE_PROBE_API_URL: ready.url } });
   let live = false;
   for (let index = 0; index < 100; index++) {
@@ -335,7 +336,7 @@ try {
     await page.evaluate(()=>window.lifecycleProbe.destroy());return {...probe,replay_wires:wires.filter(wire=>wire.method==='POST')};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.lifecycle.passed,true);
   }else {report.property_bootstrap=result(await cli('run-code','async(page)=>await page.evaluate(()=>window.apiProbe.bootstrapProperties())'));assert.equal(report.property_bootstrap.passed,true);}
-  if(!headerOnly&&!revisionsOnly&&!navigationOnly&&!documentOnly){
+  if(propertiesOnly||!focused){
   const propertyBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountProperties());return before;}'));
   for(const [index,label,input] of [[0,'需求标题','待保存标题'],[1,'初始化模式','待保存模式']]){
     await cli('run-code',`async(page)=>{
@@ -363,7 +364,7 @@ try {
     await page.evaluate(()=>window.propertyProbe.destroy());return {...probe,patch_wires:patches};
   }`.replace(/\r?\n/g,' ')));assert.equal(report.properties.passed,true);
   }
-  if(!propertiesOnly&&!revisionsOnly&&!navigationOnly&&!documentOnly){
+  if(headerOnly||!focused){
     const headerBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountHeader());return before;}'));
     await cli('run-code',`async(page)=>{
       const scope=page.locator('#native-requirement-header'),title=scope.getByRole('region',{name:'需求标题',exact:true});await title.getByRole('button',{name:'修改需求标题',exact:true}).click();await title.getByLabel('待保存标题',{exact:true}).fill('  工具栏保留标题😀  ');
@@ -387,7 +388,7 @@ try {
       const patches=wires.filter(wire=>wire.method==='PATCH');if(patches.length!==1||patches[0].key!==null||Object.keys(JSON.parse(patches[0].body)).join()!=='title')throw Error('Header title PATCH contract');await page.evaluate(()=>window.headerProbe.destroy());return {...native,command_wires:wires.filter(wire=>wire.method!=='GET')};
     }`.replace(/\r?\n/g,' ')));assert.equal(report.header.passed,true);
   }
-  if(!propertiesOnly&&!headerOnly&&!navigationOnly&&!documentOnly){
+  if(revisionsOnly||!focused){
     const revisionBefore=result(await cli('run-code','async(page)=>{const before=await page.evaluate(()=>window.apiProbe.wireFacts().length);await page.evaluate(()=>window.apiProbe.mountRevisions());return before;}'));
     await cli('run-code',`async(page)=>{
       const scope=page.getByRole('region',{name:'保存手动版本',exact:true}),description=scope.getByLabel('版本说明（可选）',{exact:true});await description.fill('😀'.repeat(1001));await scope.getByRole('button',{name:'保存版本',exact:true}).click();await scope.getByText('最多允许 1000 个字符',{exact:true}).waitFor();if((await page.evaluate(()=>window.revisionsProbe.state())).prepares!==0)throw Error('Invalid description submitted');
@@ -467,6 +468,31 @@ try {
       const native=await page.evaluate(()=>window.navigationProbe.inspect());await page.screenshot({path:'output/playwright/navigation-history-source.png'});await page.getByRole('button',{name:'关闭来源',exact:true}).click();await page.evaluate(()=>window.navigationProbe.destroy());return native;
     }`.replace(/\r?\n/g,' ')));assert.equal(report.navigation_history.passed,true);
   }
+  if(commentsOnly){
+    await cli('run-code','async(page)=>{await page.evaluate(()=>window.apiProbe.mountComments());await page.getByRole("region",{name:"评论列表",exact:true}).waitFor();return true;}');await cli('snapshot');
+    report.comments_initial=result(await cli('run-code',`async(page)=>{
+      const state=await page.evaluate(()=>window.commentsProbe.state());if(state.comments.confirmed.items.length!==20||state.comments.confirmed.index.total_count!==26||state.comments.confirmed.index.blocks[0].open_count!==25)throw Error('Whole index incorrectly derived from page');
+      const marker=page.getByRole('button',{name:'25条未解决评论',exact:true});await marker.click();await page.waitForFunction(()=>window.commentsProbe.state().comments.selected===1&&!window.commentsProbe.state().comments.loading);const card=page.locator('[data-comment-id="1"]');await card.getByRole('button',{name:'定位正文',exact:true}).click();
+      const located=await page.evaluate(()=>window.commentsProbe.state());if(located.scroll<=0||located.locates!==1)throw Error('Native block scroll failed');await page.screenshot({path:'output/playwright/comments-current.png'});return {passed:true,total:26,visible:20,marker:25,scroll:located.scroll};
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.comments_initial.passed,true);
+    await cli('run-code','async(page)=>{await page.evaluate(()=>window.commentsProbe.concurrent());await page.waitForFunction(()=>window.commentsProbe.state().comments.selected===21&&!window.commentsProbe.state().comments.loading);return true;}');await cli('snapshot');
+    report.comments_concurrent=result(await cli('run-code',`async(page)=>{
+      const state=await page.evaluate(()=>window.commentsProbe.state());if(state.comments.confirmed.pagination.page!==1||state.comments.confirmed.items.at(-1).id!==21||state.comments.confirmed.index.blocks[0].open_count!==24)throw Error('Concurrent deletion caused wrong target page');
+      if(await page.locator('[data-comment-id="1"]').count()!==0||!await page.locator('[data-comment-id="21"]').evaluate(element=>element===document.activeElement))throw Error('Selected card focus/order differs');await page.evaluate(()=>window.commentsProbe.fail());return {passed:true,target:21,page:1,deleted:1,retained_ids:state.comments.confirmed.items.map(row=>row.id)};
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.comments_concurrent.passed,true);await cli('snapshot');
+    await cli('run-code',`async(page)=>{
+      await page.getByText('评论读取失败，已显示的实际列表仍保留，请重试',{exact:false}).waitFor();if(await page.getByRole('button',{name:'24条未解决评论',exact:true}).isEnabled())throw Error('Unconfirmed index remained interactive');
+      await page.getByRole('button',{name:'重试读取评论',exact:true}).click();await page.waitForFunction(()=>window.commentsProbe.state().ready&&window.commentsProbe.state().comments.confirmed.pagination.page===2);await page.evaluate(()=>window.commentsProbe.selection());return true;
+    }`.replace(/\r?\n/g,' '));await cli('snapshot');
+    report.comments_selection=result(await cli('run-code',`async(page)=>{
+      const card=page.locator('[data-comment-id="25"]');await card.getByRole('button',{name:'定位正文',exact:true}).click();const state=await page.evaluate(()=>window.commentsProbe.state());if(state.editor_selection.text!=='😀'||state.locates!==2)throw Error('Native code-point selection lost emoji');return {passed:true,comment:25,selection:state.editor_selection};
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.comments_selection.passed,true);
+    await cli('run-code','async(page)=>{await page.evaluate(()=>window.commentsProbe.orphan());await page.getByText("以下是创建评论时的历史引用，当前正文位置已失效。",{exact:true}).waitFor();return true;}');await cli('snapshot');
+    report.comments=result(await cli('run-code',`async(page)=>{
+      const card=page.locator('[data-comment-id="26"]');if(await card.getByRole('button',{name:'定位正文',exact:true}).isEnabled())throw Error('Orphan remains locatable');await card.getByText('会失效的选区😀',{exact:true}).waitFor();await page.screenshot({path:'output/playwright/comments-orphan.png'});
+      await page.evaluate(()=>window.commentsProbe.deleted());await page.getByText('该评论已删除，请刷新列表',{exact:false}).waitFor();await page.evaluate(()=>window.commentsProbe.statuses());const evidence=await page.evaluate(()=>window.commentsProbe.inspect());await page.evaluate(()=>window.commentsProbe.destroy());return evidence;
+    }`.replace(/\r?\n/g,' ')));assert.equal(report.comments.passed,true);
+  }
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
@@ -497,13 +523,13 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      const expected=focused?{llm_uses:0,guide_runs:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:navigationOnly?2:1,comments:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
+      const expected=focused?{llm_uses:0,guide_runs:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:navigationOnly?2:1,comments:commentsOnly?26:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
       if (Object.entries(expected).some(([key,value])=>closed.facts[key]!==value)|| native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
   report.changed_inputs = [...new Set([...Object.keys(report.inputs_before), ...Object.keys(report.inputs_after)])].filter(key => report.inputs_before[key] !== report.inputs_after[key]);
   if (report.changed_inputs.length) { report.passed = false; report.error ??= 'Inputs changed during verification'; globalThis.process.exitCode = 1; }
-  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':documentOnly?'document':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
+  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':documentOnly?'document':commentsOnly?'comments':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ passed: report.passed, evidence: path, error: report.error }));
 }
