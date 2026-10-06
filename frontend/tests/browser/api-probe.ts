@@ -32,6 +32,7 @@ import {mountRunActionsProbe} from './run-actions-probe.tsx';
 import {mountGuideComposerProbe} from './guide-composer-probe.tsx';
 import {mountCardsProbe} from './cards-probe.tsx';
 import {suggestionProbe} from './suggestion-probe.ts';
+import {mountSuggestionPanelProbe} from './suggestion-panel-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -162,6 +163,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountProperties:async()=>{Object.assign(window,{propertyProbe:await mountPropertyProbe(api)});},
  bootstrapProperties,
  prepareSuggestions:async()=>{Object.assign(window,{suggestionProbe:await suggestionProbe(api)});return true;},
+ prepareSuggestionPanel:async()=>{Object.assign(window,{suggestionPanelProbe:await mountSuggestionPanelProbe(api)});return true;},
  mountHeader:async()=>{Object.assign(window,{headerProbe:await mountHeaderProbe(api)});},
  mountRevisions:async()=>{Object.assign(window,{revisionsProbe:await mountRevisionsProbe(api)});},
  mountNavigation:async()=>{Object.assign(window,{navigationProbe:await mountNavigationProbe(api)});},

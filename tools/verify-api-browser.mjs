@@ -6,10 +6,11 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import {verifyCardsBrowser} from './verify-cards-browser.mjs';
 import {verifySuggestionsBrowser} from './verify-suggestions-browser.mjs';
+import {verifySuggestionPanelBrowser} from './verify-suggestion-panel-browser.mjs';
 
 const root = resolve(import.meta.dirname, '..'), session = `walle-api-${Date.now()}`;
-const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),documentOnly=process.argv.includes('--document'),commentsOnly=process.argv.includes('--comments'),commentPanelOnly=process.argv.includes('--comment-panel'),aiReadOnly=process.argv.includes('--ai-read'),runActionsOnly=process.argv.includes('--run-actions'),composerOnly=process.argv.includes('--composer'),cardsOnly=process.argv.includes('--cards'),suggestionsOnly=process.argv.includes('--suggestions-owner'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly||documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly||suggestionsOnly;
-assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:documentOnly?['--document']:commentsOnly?['--comments']:commentPanelOnly?['--comment-panel']:aiReadOnly?['--ai-read']:runActionsOnly?['--run-actions']:composerOnly?['--composer']:cardsOnly?['--cards']:suggestionsOnly?['--suggestions-owner']:[]);
+const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),documentOnly=process.argv.includes('--document'),commentsOnly=process.argv.includes('--comments'),commentPanelOnly=process.argv.includes('--comment-panel'),aiReadOnly=process.argv.includes('--ai-read'),runActionsOnly=process.argv.includes('--run-actions'),composerOnly=process.argv.includes('--composer'),cardsOnly=process.argv.includes('--cards'),suggestionsOnly=process.argv.includes('--suggestions-owner'),suggestionPanelOnly=process.argv.includes('--suggestions-panel'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly||documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly||suggestionsOnly||suggestionPanelOnly;
+assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:documentOnly?['--document']:commentsOnly?['--comments']:commentPanelOnly?['--comment-panel']:aiReadOnly?['--ai-read']:runActionsOnly?['--run-actions']:composerOnly?['--composer']:cardsOnly?['--cards']:suggestionsOnly?['--suggestions-owner']:suggestionPanelOnly?['--suggestions-panel']:[]);
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
@@ -25,6 +26,7 @@ if(runActionsOnly)report.scope='Focused compiled native actual I18 retry/new Run
 if(composerOnly)report.scope='Focused compiled native I14 sends/current document scopes/INITIALIZE subsequent round and I15 original Run/unknown recovery; I15 starts from an explicit private persisted WAITING fixture, no model WAITING/question/output or whole product acceptance';
 if(cardsOnly)report.scope='Focused compiled card input/storage/native I36/new initialization Run or same waiting Run/unknown recovery and real ordinary-text expiry. Only card availability is an explicit isolated persisted fixture; no model card production/trusted output/effects/Provider/root acceptance';
 if(suggestionsOnly)report.scope='Focused compiled batch controller/real I20-I23 and five validated isolated persisted suggestions; no product suggestion panel/confirmation/target UI, C07/model generation or effects acceptance';
+if(suggestionPanelOnly)report.scope='Focused compiled actual SuggestionPanel/Confirmation/preview/target/DocOwner controls and real I20-I23 over validated storage fixtures; no C07/model generation/effects/root route or whole acceptance';
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
 const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
@@ -39,7 +41,7 @@ async function hashes() {
     }
   }
   for (const name of ['backend', 'frontend', 'shared']) await walk(resolve(root, name));
-  files.push(resolve(root, 'tools/api-browser-service.py'), resolve(root, 'tools/verify-api-browser.mjs'),resolve(root,'tools/verify-cards-browser.mjs'),resolve(root,'tools/verify-suggestions-browser.mjs'));
+  files.push(resolve(root, 'tools/api-browser-service.py'), resolve(root, 'tools/verify-api-browser.mjs'),resolve(root,'tools/verify-cards-browser.mjs'),resolve(root,'tools/verify-suggestions-browser.mjs'),resolve(root,'tools/verify-suggestion-panel-browser.mjs'));
   return Object.fromEntries(await Promise.all(files.sort().map(async file => [file.slice(root.length + 1).replaceAll('\\', '/'), createHash('sha256').update(await readFile(file)).digest('hex')])));
 }
 report.inputs_before = await hashes();
@@ -71,7 +73,7 @@ try {
   await npx.exited; report.npx = npx.record; assert.equal(npx.record.code, 0);
   const source = subprocess(globalThis.process.execPath, ['tools/spec-audit.mjs', 'check']); await source.exited; report.source = source.record; assert.equal(source.record.code, 0);
   const env = Object.fromEntries(Object.entries(globalThis.process.env).filter(([key]) => !key.startsWith('WALLE_MODEL_')));
-  native = subprocess(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/api-browser-service.py', '--database', database,...(runActionsOnly?['--hold-review-dispatch']:composerOnly?['--seed-waiting-ask-fixture']:cardsOnly?['--seed-cards-fixture']:suggestionsOnly?['--seed-suggestion-fixture']:[])], { env });
+  native = subprocess(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/api-browser-service.py', '--database', database,...(runActionsOnly?['--hold-review-dispatch']:composerOnly?['--seed-waiting-ask-fixture']:cardsOnly?['--seed-cards-fixture']:suggestionsOnly||suggestionPanelOnly?['--seed-suggestion-fixture']:[])], { env });
   let ready;
   for (let index = 0; index < 100; index++) {
     const line = native.record.stdout.split('\n').find(line => line.startsWith('{'));
@@ -81,8 +83,8 @@ try {
   }
   assert.equal(ready?.ready, true); assert.match(ready.url, /^http:\/\/127\.0\.0\.1:[0-9]+$/);
   const compiledFixture=resolve(directory,`compiled-${session}`);
-  if(documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly||suggestionsOnly){const build=subprocess(globalThis.process.execPath,['node_modules/vite/bin/vite.js','build','--config','tests/browser/api-vite.config.ts','--outDir',compiledFixture],{cwd:resolve(root,'frontend'),env:{...env,WALLE_PROBE_API_URL:ready.url}});await build.exited;report.fixture_build=build.record;assert.equal(build.record.code,0,'Actual compiled diagnostic fixture required');}
-  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js',...((documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly||suggestionsOnly)?['preview','--outDir',compiledFixture]:[]), '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
+  if(documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly||suggestionsOnly||suggestionPanelOnly){const build=subprocess(globalThis.process.execPath,['node_modules/vite/bin/vite.js','build','--config','tests/browser/api-vite.config.ts','--outDir',compiledFixture],{cwd:resolve(root,'frontend'),env:{...env,WALLE_PROBE_API_URL:ready.url}});await build.exited;report.fixture_build=build.record;assert.equal(build.record.code,0,'Actual compiled diagnostic fixture required');}
+  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js',...((documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly||suggestionsOnly||suggestionPanelOnly)?['preview','--outDir',compiledFixture]:[]), '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
     { cwd: resolve(root, 'frontend'), env: { ...env, WALLE_PROBE_API_URL: ready.url } });
   let live = false;
   for (let index = 0; index < 100; index++) {
@@ -601,6 +603,7 @@ try {
   }
   if(cardsOnly){report.cards=await verifyCardsBrowser(cli,result);assert.equal(report.cards.passed,true);}
   if(suggestionsOnly){report.suggestions=await verifySuggestionsBrowser(cli,result);assert.equal(report.suggestions.passed,true);}
+  if(suggestionPanelOnly){report.suggestion_panel=await verifySuggestionPanelBrowser(cli,result);assert.equal(report.suggestion_panel.passed,true);}
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
@@ -611,7 +614,7 @@ try {
   if (opened) try {
     report.failure_wires = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.wireFacts() ?? [])'));
     report.failure_transport = result(await cli('run-code','async (page) => await page.evaluate(() => window.apiProbe?.transportFacts() ?? [])'));
-    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),property:window.propertyProbe?.state(),header:window.headerProbe?.state(),revisions:window.revisionsProbe?.state(),document:window.documentOwnerProbe?.state(),commentPanel:window.commentPanelProbe?.state(),aiRead:window.aiReadProbe?.state(),runActions:window.runActionsProbe?.state(),composer:window.guideComposerProbe?.state(),suggestions:window.suggestionProbe?.state(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
+    report.failure_ui = result(await cli('run-code','async (page) => await page.evaluate(() => ({stage:window.createStage,state:window.createProbe?.state(),workbench:window.workbenchProbe?.state(),detail:window.detailFrameProbe?.state(),manual:window.manualControlsProbe?.state(),lifecycle:window.lifecycleProbe?.state(),property:window.propertyProbe?.state(),header:window.headerProbe?.state(),revisions:window.revisionsProbe?.state(),document:window.documentOwnerProbe?.state(),commentPanel:window.commentPanelProbe?.state(),aiRead:window.aiReadProbe?.state(),runActions:window.runActionsProbe?.state(),composer:window.guideComposerProbe?.state(),suggestions:window.suggestionProbe?.state(),suggestionPanel:window.suggestionPanelProbe?.inspect(),dialogs:[...document.querySelectorAll("dialog")].map(element=>element.outerHTML)}))'));
     await cli('snapshot'); await cli('screenshot','--filename=output/playwright/api-failure.png');
   } catch (diagnostic) { report.diagnostic_error = String(diagnostic); }
 }
@@ -631,14 +634,14 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      const expected=focused?{llm_uses:0,guide_runs:suggestionsOnly?5:cardsOnly?6:composerOnly?8:runActionsOnly?5:aiReadOnly?26:commentsOnly||commentPanelOnly?3:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:navigationOnly?2:1,comments:aiReadOnly?1:commentPanelOnly?23:commentsOnly?27:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
-      if(suggestionsOnly)Object.assign(expected,{suggestion_batches:3,suggestions:15});
+      const expected=focused?{llm_uses:0,guide_runs:suggestionsOnly||suggestionPanelOnly?5:cardsOnly?6:composerOnly?8:runActionsOnly?5:aiReadOnly?26:commentsOnly||commentPanelOnly?3:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:navigationOnly?2:1,comments:aiReadOnly?1:commentPanelOnly?23:commentsOnly?27:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
+      if(suggestionsOnly||suggestionPanelOnly)Object.assign(expected,{suggestion_batches:3,suggestions:15});
       if (Object.entries(expected).some(([key,value])=>closed.facts[key]!==value)|| native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
   report.changed_inputs = [...new Set([...Object.keys(report.inputs_before), ...Object.keys(report.inputs_after)])].filter(key => report.inputs_before[key] !== report.inputs_after[key]);
   if (report.changed_inputs.length) { report.passed = false; report.error ??= 'Inputs changed during verification'; globalThis.process.exitCode = 1; }
-  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':documentOnly?'document':cardsOnly?'cards':suggestionsOnly?'suggestions-owner':composerOnly?'composer':runActionsOnly?'run-actions':aiReadOnly?'ai-read':commentPanelOnly?'comment-panel':commentsOnly?'comments':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
+  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':documentOnly?'document':cardsOnly?'cards':suggestionsOnly?'suggestions-owner':suggestionPanelOnly?'suggestions-panel':composerOnly?'composer':runActionsOnly?'run-actions':aiReadOnly?'ai-read':commentPanelOnly?'comment-panel':commentsOnly?'comments':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ passed: report.passed, evidence: path, error: report.error }));
 }

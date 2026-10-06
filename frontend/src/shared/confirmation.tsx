@@ -4,7 +4,7 @@ import { registerModal, trapModalTab } from './modal.ts';
 
 let active: HTMLDialogElement | null = null;
 export type ConfirmationProps = Readonly<{ open: boolean; title: string; description: string; busy: boolean; error?: string | null;
-  confirmLabel?: string; cancelLabel?: string; dangerous?: boolean; confirm(): void; cancel(): void }>;
+  confirmLabel?: string; cancelLabel?: string; dangerous?: boolean; confirmDisabled?:boolean; confirm(): void; cancel(): void }>;
 
 /** The parent owns the action, request, inline error and successful closure. */
 export function Confirmation(props: ConfirmationProps) {
@@ -29,7 +29,7 @@ export function Confirmation(props: ConfirmationProps) {
     <header><h2 id={title}>{props.title}</h2><button type="button" className="icon-button" aria-label="关闭确认弹窗" disabled={props.busy} onClick={props.cancel}>×</button></header>
     <div className="confirmation-content"><p id={description}>{props.description}</p>{props.error && <p role="alert" className="inline-error">! {props.error}</p>}</div>
     <footer><button type="button" ref={cancel} disabled={props.busy} onClick={props.cancel}>{props.cancelLabel ?? '取消'}</button>
-      <button type="button" className={props.dangerous ? 'danger' : 'primary'} disabled={props.busy} onClick={props.confirm}
+      <button type="button" className={props.dangerous ? 'danger' : 'primary'} disabled={props.busy||props.confirmDisabled} onClick={props.confirm}
         aria-busy={props.busy}><span className="busy-slot" aria-hidden="true">{props.busy ? '◌' : ''}</span>{props.confirmLabel ?? '确认'}</button></footer>
   </dialog>, document.body);
 }
