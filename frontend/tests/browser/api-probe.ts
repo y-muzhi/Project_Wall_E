@@ -34,6 +34,7 @@ import {mountCardsProbe} from './cards-probe.tsx';
 import {suggestionProbe} from './suggestion-probe.ts';
 import {mountSuggestionPanelProbe} from './suggestion-panel-probe.tsx';
 import {mountConversationProbe} from './conversation-probe.tsx';
+import {mountDetailProductProbe} from './detail-product-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -163,6 +164,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountLifecycle:async()=>{Object.assign(window,{lifecycleProbe:await mountLifecycleProbe(api)});},
  mountProperties:async()=>{Object.assign(window,{propertyProbe:await mountPropertyProbe(api)});},
  bootstrapProperties,
+ mountDetailProduct:async()=>{Object.assign(window,{detailProductProbe:await mountDetailProductProbe(api)});return true;},
  prepareSuggestions:async()=>{Object.assign(window,{suggestionProbe:await suggestionProbe(api)});return true;},
  mountConversation:async(identity:number,kind:'INITIALIZE'|'EXPIRE'|'WAITING')=>{Object.assign(window,{conversationProbe:await mountConversationProbe(api,identity,kind)});return true;},
  prepareSuggestionPanel:async(unified=false)=>{Object.assign(window,{suggestionPanelProbe:await mountSuggestionPanelProbe(api,unified)});return true;},

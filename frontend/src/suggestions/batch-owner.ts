@@ -23,6 +23,7 @@ const fixedSuggestion=(value:Suggestion)=>JSON.stringify(Object.fromEntries(Obje
  * final command, so no earlier counts or pending write can race completion.
  * Read observations never stand in for the original successful receipt. */
 export class RequirementSuggestionBatch{
+ get batchId():number{return this.identity;}
  private readonly identity:number;private readonly api:Api;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;
  private value:SuggestionBatchState;private readonly listeners=new Set<()=>void>();private action:ApiAction<Receipt>|undefined;private pending:Promise<boolean>|undefined;private work:string|undefined;private closed=false;private visibility=0;private controller:AbortController|undefined;
  constructor(identity:number,detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>){

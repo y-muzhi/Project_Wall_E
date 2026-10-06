@@ -12,6 +12,7 @@ import type {DocumentReadModel} from '../documents/contracts.ts';
 import type {SelectionEvent} from '../documents/selection.ts';
 import {selectionFromEditorState} from '../documents/editor-selection.ts';
 import {editorViewCtx} from '@milkdown/kit/core';
+import {suggestionMarkdown} from '../suggestions/preview.ts';
 
 export type DocumentOwnerState=Readonly<{mode:'LOADING'|'CURRENT'|'MANUAL'|'HISTORY';busy:boolean;detail:DetailSnapshot|null;
   manual:ManualDraftSession|null;navigation:DocumentNavigation|null;revision:Revision|null;error:string|null;save_warning:boolean;restoration_conflict:DetailSnapshot|null;active:boolean;selection:SelectionEvent|null}>;
@@ -38,6 +39,7 @@ export class RequirementDocumentOwner{
   get historical():boolean{return this.revisions.getSnapshot().history.phase!=='CLOSED';}
   get writeReady():boolean{return !this.closed&&!this.value.busy&&!this.value.error&&!this.historical&&this.live!==undefined&&!this.live.session?.getSnapshot().blocked;}
   get currentBinding():CurrentDocumentBinding|null{return this.writeReady&&this.value.mode==='CURRENT'&&this.live?.document.document_type==='CURRENT'?this.live.binding:null;}
+  previewMarkdown(markdown:string,columns?:number):DocumentFragment{if(this.closed||!this.live)throw Error('Actual parser is unavailable');return this.live.editor.action(ctx=>suggestionMarkdown(ctx,markdown,columns));}
   private publish(changes:Partial<DocumentOwnerState>):void{if(this.closed)return;this.value=Object.freeze({...this.value,...changes});for(const listener of this.listeners)try{listener();}catch(error){console.error('WALL-E document owner observer failed',error);}}
   private enqueue<T>(operation:()=>Promise<T>):Promise<T>{
     if(this.closed)return Promise.reject(Error('Document owner is closed'));this.jobs++;this.publish({busy:true});

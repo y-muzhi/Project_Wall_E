@@ -30,7 +30,7 @@ function HistoricalDraftConflict({owner,session,actual,blocked}:{owner:Requireme
 export function OwnedDocumentOutline({owner}:{owner:RequirementDocumentOwner}){
   const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot);return state.navigation?<DocumentOutline navigation={state.navigation}/>:<p>正在读取文档大纲…</p>;
 }
-export function OwnedDocumentControls({owner,blocked=false}:{owner:RequirementDocumentOwner;blocked?:boolean}){
+export function OwnedDocumentControls({owner,blocked=false,auxiliary=true}:{owner:RequirementDocumentOwner;blocked?:boolean;auxiliary?:boolean}){
   const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),session=state.manual;
   return <section aria-label="正文视图操作">
     {state.mode==='HISTORY'&&<><p role="status">{state.revision?`历史版本 V${state.revision.version_no} · 只读 · 来源正文 v${state.revision.source_content_version}`:'正在读取历史版本…'}</p>
@@ -40,6 +40,6 @@ export function OwnedDocumentControls({owner,blocked=false}:{owner:RequirementDo
     {session&&state.mode==='HISTORY'&&state.restoration_conflict&&<HistoricalDraftConflict owner={owner} session={session} actual={state.restoration_conflict} blocked={blocked||state.busy}/>}
     {session&&state.mode!=='HISTORY'&&<ManualDraftControls autosave={session.autosave} ending={session.ending} recovery={session.recovery} valid={session.editor.valid}
       blocked={blocked||state.busy||session.getSnapshot().blocked} ended={async()=>{await owner.refresh();}} serverSelected={async()=>{await owner.refresh();}}/>}
-    {state.navigation&&<BlockAuxiliary navigation={state.navigation}/>}
+    {auxiliary&&state.navigation&&<BlockAuxiliary navigation={state.navigation}/>}
   </section>;
 }

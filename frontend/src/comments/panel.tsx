@@ -51,17 +51,17 @@ export function CommentPanel({panel,documents}:Readonly<{panel:RequirementCommen
   </section>;
 }
 
-function CreationEntries({panel,documents,binding}:Readonly<{panel:RequirementCommentPanel;documents:RequirementDocumentOwner;binding:CurrentDocumentBinding}>){
+function CreationEntries({panel,documents,binding,openPanel}:Readonly<{panel:RequirementCommentPanel;documents:RequirementDocumentOwner;binding:CurrentDocumentBinding;openPanel?:()=>void}>){
   const navigation=useSyncExternalStore(binding.navigation.subscribe,binding.navigation.getSnapshot),documentState=useSyncExternalStore(documents.subscribe,documents.getSnapshot),selection=documentState.selection;
-  const create=(range:boolean)=>{try{const block=range?selection?.block_id:navigation.selected_block;if(block!==null&&block!==undefined)panel.create(commentTarget(binding.editor,block,range?selection:null));else panel.rejectTarget();}catch{panel.rejectTarget();}};
+  const create=(range:boolean)=>{try{const block=range?selection?.block_id:navigation.selected_block;if(block!==null&&block!==undefined){if(panel.create(commentTarget(binding.editor,block,range?selection:null)))openPanel?.();}else panel.rejectTarget();}catch{panel.rejectTarget();}};
   return <BlockAuxiliary navigation={binding.navigation} extra={<>
     <button type="button" disabled={!panel.writeReady||navigation.selected_block===null} onMouseDown={event=>event.preventDefault()} onClick={()=>create(false)}>评论区块</button>
     <button type="button" disabled={!panel.writeReady||selection===null} onMouseDown={event=>event.preventDefault()} onClick={()=>create(true)}>评论选区</button>
   </>}/>;
 }
-export function CommentDocumentTools({panel,documents}:Readonly<{panel:RequirementCommentPanel;documents:RequirementDocumentOwner}>){
+export function CommentDocumentTools({panel,documents,openPanel}:Readonly<{panel:RequirementCommentPanel;documents:RequirementDocumentOwner;openPanel?:()=>void}>){
   const state=useSyncExternalStore(panel.subscribe,panel.getSnapshot);useSyncExternalStore(documents.subscribe,documents.getSnapshot);
   const binding=documents.currentBinding;if(panel.blocked||state.view!=='CURRENT'||binding===null)return null;
-  return <><CreationEntries panel={panel} documents={documents} binding={binding}/>{createPortal(<CommentMarkerLayer comments={panel.comments} editor={binding.editor} documentRoot={binding.root}
-    blocked={state.refreshing} select={identity=>void panel.select(identity)}/>,binding.root.parentElement!)}</>;
+  return <><CreationEntries panel={panel} documents={documents} binding={binding} {...(openPanel?{openPanel}:{})}/>{createPortal(<CommentMarkerLayer comments={panel.comments} editor={binding.editor} documentRoot={binding.root}
+    blocked={state.refreshing} select={identity=>{openPanel?.();void panel.select(identity);}}/>,binding.root.parentElement!)}</>;
 }
