@@ -17,20 +17,24 @@ const signature=(actual:Actual)=>JSON.stringify([actual.detail.requirement,actua
 export class RequirementCardGroups{
  private value:CardGroupsState=Object.freeze({slots:[],available:false,active:true,syncing:false,error:null,revision:0});private readonly ai:RequirementAiRead;private readonly api:Api;private readonly drafts:CardDrafts;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private readonly receive:RequirementAiRead['receive'];private readonly refreshMessages:()=>Promise<void>;
  private readonly owners=new Map<number,InteractionCards>();private readonly releases=new Map<number,()=>void>();private readonly listeners=new Set<()=>void>();private readonly releaseAi:()=>void;private readonly releaseMessages:()=>void;
- private wanted:Actual|null=null;private completed:string|null=null;private pending:Promise<boolean>|undefined;private generation=0;private controller:AbortController|undefined;private closed=false;
- constructor(ai:RequirementAiRead,api:Api,drafts:CardDrafts,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:RequirementAiRead['receive']=ai.receive,refreshMessages:()=>Promise<void>=async()=>{if(!await ai.messages.refresh())throw Error('实际消息读取失败');}){this.ai=ai;this.api=api;this.drafts=drafts;this.readActual=readActual;this.adoptActual=adoptActual;this.receive=receive;this.refreshMessages=refreshMessages;this.releaseAi=ai.subscribe(()=>this.parentChanged());this.releaseMessages=ai.messages.subscribe(()=>this.parentChanged());this.parentChanged();}
+ private readonly commandAllowed:(owner:InteractionCards)=>boolean;private wanted:Actual|null=null;private completed:string|null=null;private pending:Promise<boolean>|undefined;private generation=0;private controller:AbortController|undefined;private closed=false;
+ constructor(ai:RequirementAiRead,api:Api,drafts:CardDrafts,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:RequirementAiRead['receive']=ai.receive,refreshMessages:()=>Promise<void>=async()=>{if(!await ai.messages.refresh())throw Error('实际消息读取失败');},commandAllowed:(owner:InteractionCards)=>boolean=()=>true){this.commandAllowed=commandAllowed;this.ai=ai;this.api=api;this.drafts=drafts;this.readActual=readActual;this.adoptActual=adoptActual;this.receive=receive;this.refreshMessages=refreshMessages;this.releaseAi=ai.subscribe(()=>this.parentChanged());this.releaseMessages=ai.messages.subscribe(()=>this.parentChanged());this.parentChanged();}
  getSnapshot=():CardGroupsState=>this.value;subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
  private publish(changes:Partial<CardGroupsState>):void{if(this.closed)return;this.value=Object.freeze({...this.value,...changes,revision:this.value.revision+1});for(const listener of this.listeners)try{listener();}catch(error){console.error('WALL-E card group observer failed',error);}}
  private get enabled():boolean{return !this.closed&&this.value.available&&this.ai.getSnapshot().active&&this.ai.getSnapshot().visible;}
  private parentChanged():void{
-  if(this.closed)return;const parent=this.ai.getSnapshot(),messages=this.ai.messages.getSnapshot();for(const [id,owner] of this.owners){owner.adoptDetail(parent.detail);owner.setAvailable(this.enabled&&Boolean(messages.items?.some(message=>message.id===id&&eligible(message)))&&!this.value.slots.find(slot=>slot.owner===owner)?.error);}
+  if(this.closed)return;const parent=this.ai.getSnapshot();for(const owner of this.owners.values())owner.adoptDetail(parent.detail);this.reconcilePermissions();const messages=this.ai.messages.getSnapshot();
   if(!this.enabled){this.generation++;this.controller?.abort();return;}
   if(messages.loading||messages.error||messages.items===null)return;
   const actual={detail:parent.detail,items:messages.items};if(actual.items.some(message=>message.requirement_id!==parent.detail.requirement.id)){this.publish({error:'卡片消息所属需求异常，保留现有输入'});for(const owner of this.owners.values())owner.setAvailable(false);return;}
   this.wanted=actual;if(signature(actual)!==this.completed)void this.sync();
  }
  setAvailable(available:boolean):void{if(this.closed||available===this.value.available)return;this.publish({available});this.parentChanged();}
+ /** A sibling command may hold the original request. Reconcile only input
+  * permissions, without adopting detail, fetching sources or changing drafts. */
+ reconcilePermissions():void{if(this.closed)return;const messages=this.ai.messages.getSnapshot();for(const [id,owner] of this.owners)owner.setAvailable(this.enabled&&this.commandAllowed(owner)&&Boolean(messages.items?.some(message=>message.id===id&&eligible(message)))&&!this.value.slots.find(slot=>slot.owner===owner)?.error);}
  get(message:number):CardSlot|null{return this.value.slots.find(slot=>slot.message_id===message)??null;}
+ retainedOwners():readonly InteractionCards[]{return Object.freeze([...this.owners.values()]);}
  retry():Promise<boolean>{if(!this.enabled)return Promise.resolve(false);this.completed=null;return this.sync();}
  ready():Promise<boolean>{return this.pending??Promise.resolve(this.enabled&&this.value.error===null);}
  private sync():Promise<boolean>{
@@ -50,7 +54,7 @@ export class RequirementCardGroups{
       if(this.wanted!==actual&&signature(this.wanted!)!==key)break;
       if(run.id!==message.guide_run_id||run.requirement_id!==message.requirement_id)throw Error('Card source ownership');const replies=actual.items.filter(row=>row.message_type==='CARD_RESPONSE'&&row.reply_to_message_id===message.id);if(replies.length>1)throw Error('Duplicate actual card response');
       if(!owner){owner=new InteractionCards(message,run,actual.detail,this.api,this.drafts,this.readActual,this.adoptActual,this.receive,this.refreshMessages);this.owners.set(message.id,owner);this.releases.set(message.id,owner.subscribe(()=>this.publish({})));}
-      owner.adopt(message,run,actual.detail,replies[0]??null);owner.setAvailable(this.enabled);slots[index]=Object.freeze({message_id:message.id,owner,loading:false,error:null});
+      owner.adopt(message,run,actual.detail,replies[0]??null);owner.setAvailable(this.enabled&&this.commandAllowed(owner));slots[index]=Object.freeze({message_id:message.id,owner,loading:false,error:null});
      }catch{if(!alive())return false;success=false;owner?.setAvailable(false);slots[index]=Object.freeze({message_id:message.id,owner,loading:false,error:'原卡片运行或正式回答读取失败，现有输入仍保留'});}
      if(alive())this.publish({slots:Object.freeze([...slots])});
     }

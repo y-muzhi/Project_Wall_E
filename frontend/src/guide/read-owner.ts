@@ -24,6 +24,7 @@ export class RequirementAiRead{
   this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.openPanel=openPanel;this.timing=timing;this.messages=new RequirementMessages(detail.requirement.id,api);this.history=new RequirementRunHistory(detail.requirement.id,api);
   this.value=Object.freeze({detail:capture(detail),selected:null,selection:null,run:null,querying:false,connection_error:false,polling:false,visible:false,refreshing:false,error:null,active:true});
   if(detail.activity.kind==='GUIDE')this.select(detail.activity.run,'ACTIVITY',detail.activity.run);
+  else if(detail.activity.kind==='BATCH')this.select({id:detail.activity.batch.guide_run_id,requirement_id:detail.requirement.id},'ACTIVITY');
  }
  getSnapshot=():AiReadState=>this.value;subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
  private publish(changes:Partial<AiReadState>):void{if(this.closed)return;this.value=Object.freeze({...this.value,...changes});for(const listener of this.listeners)try{listener();}catch(error){console.error('WALL-E AI read observer failed',error);}}
@@ -31,6 +32,7 @@ export class RequirementAiRead{
  adopt(actual:DetailSnapshot):void{
   if(this.closed)return;if(actual.requirement.id!==this.value.detail.requirement.id||actual.current.requirement_id!==actual.requirement.id||actual.current.document_type!=='CURRENT')throw TypeError('Owned actual detail required');
   this.publish({detail:capture(actual)});if(actual.activity.kind==='GUIDE'&&this.value.selection!=='HISTORY')this.select(actual.activity.run,'ACTIVITY',actual.activity.run);
+  else if(actual.activity.kind==='BATCH'&&this.value.selection!=='HISTORY')this.select({id:actual.activity.batch.guide_run_id,requirement_id:actual.requirement.id},'ACTIVITY');
  }
  private select(run:RunIdentity,kind:NonNullable<AiReadState['selection']>,actual?:GuideRun):void{
   this.owned(run);if(this.closed)return;
