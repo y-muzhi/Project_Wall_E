@@ -4,10 +4,11 @@ import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
+import {verifyCardsBrowser} from './verify-cards-browser.mjs';
 
 const root = resolve(import.meta.dirname, '..'), session = `walle-api-${Date.now()}`;
-const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),documentOnly=process.argv.includes('--document'),commentsOnly=process.argv.includes('--comments'),commentPanelOnly=process.argv.includes('--comment-panel'),aiReadOnly=process.argv.includes('--ai-read'),runActionsOnly=process.argv.includes('--run-actions'),composerOnly=process.argv.includes('--composer'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly||documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly;
-assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:documentOnly?['--document']:commentsOnly?['--comments']:commentPanelOnly?['--comment-panel']:aiReadOnly?['--ai-read']:runActionsOnly?['--run-actions']:composerOnly?['--composer']:[]);
+const propertiesOnly=process.argv.includes('--properties'),headerOnly=process.argv.includes('--header'),revisionsOnly=process.argv.includes('--revisions'),navigationOnly=process.argv.includes('--navigation'),documentOnly=process.argv.includes('--document'),commentsOnly=process.argv.includes('--comments'),commentPanelOnly=process.argv.includes('--comment-panel'),aiReadOnly=process.argv.includes('--ai-read'),runActionsOnly=process.argv.includes('--run-actions'),composerOnly=process.argv.includes('--composer'),cardsOnly=process.argv.includes('--cards'),focused=propertiesOnly||headerOnly||revisionsOnly||navigationOnly||documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly;
+assert.deepEqual(process.argv.slice(2),propertiesOnly?['--properties']:headerOnly?['--header']:revisionsOnly?['--revisions']:navigationOnly?['--navigation']:documentOnly?['--document']:commentsOnly?['--comments']:commentPanelOnly?['--comment-panel']:aiReadOnly?['--ai-read']:runActionsOnly?['--run-actions']:composerOnly?['--composer']:cardsOnly?['--cards']:[]);
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
 const report = { timestamp: new Date().toISOString(), scope: 'Actual browser same-origin proxy, production API/isolated SQLite, all 37 bindings reached with explicit positive/failure cases and real Crepe documents; no Provider/paid request/effects/product-page or whole acceptance', commands: [] };
@@ -21,6 +22,7 @@ if(commentPanelOnly)report.scope='Focused compiled actual comment/document paren
 if(aiReadOnly)report.scope='Focused compiled actual AI messages/cursor/scroll, run history/status/connection recovery and actual comment-to-AI receipt adoption; no full bindings/send/cards/batch/root/Provider acceptance';
 if(runActionsOnly)report.scope='Focused compiled native actual I18 retry/new Run and I17 logical cancellation with original request recovery; REVIEW orchestration is explicitly held by a private dispatch barrier, no model or WAITING/PERSISTING race/root-page acceptance';
 if(composerOnly)report.scope='Focused compiled native I14 sends/current document scopes/INITIALIZE subsequent round and I15 original Run/unknown recovery; I15 starts from an explicit private persisted WAITING fixture, no model WAITING/question/output or whole product acceptance';
+if(cardsOnly)report.scope='Focused compiled card input/storage/native I36/new initialization Run or same waiting Run/unknown recovery and real ordinary-text expiry. Only card availability is an explicit isolated persisted fixture; no model card production/trusted output/effects/Provider/root acceptance';
 const directory = resolve(root, 'output/playwright'); await mkdir(directory, { recursive: true });
 const database = resolve(directory, `api-${session}.sqlite`);
 const nativeDiagnostics=resolve(directory,`vite-native-${session}`);await mkdir(nativeDiagnostics,{recursive:true});
@@ -35,7 +37,7 @@ async function hashes() {
     }
   }
   for (const name of ['backend', 'frontend', 'shared']) await walk(resolve(root, name));
-  files.push(resolve(root, 'tools/api-browser-service.py'), resolve(root, 'tools/verify-api-browser.mjs'));
+  files.push(resolve(root, 'tools/api-browser-service.py'), resolve(root, 'tools/verify-api-browser.mjs'),resolve(root,'tools/verify-cards-browser.mjs'));
   return Object.fromEntries(await Promise.all(files.sort().map(async file => [file.slice(root.length + 1).replaceAll('\\', '/'), createHash('sha256').update(await readFile(file)).digest('hex')])));
 }
 report.inputs_before = await hashes();
@@ -67,7 +69,7 @@ try {
   await npx.exited; report.npx = npx.record; assert.equal(npx.record.code, 0);
   const source = subprocess(globalThis.process.execPath, ['tools/spec-audit.mjs', 'check']); await source.exited; report.source = source.record; assert.equal(source.record.code, 0);
   const env = Object.fromEntries(Object.entries(globalThis.process.env).filter(([key]) => !key.startsWith('WALLE_MODEL_')));
-  native = subprocess(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/api-browser-service.py', '--database', database,...(runActionsOnly?['--hold-review-dispatch']:composerOnly?['--seed-waiting-ask-fixture']:[])], { env });
+  native = subprocess(resolve(root, '.venv/Scripts/python.exe'), ['-X', 'utf8', 'tools/api-browser-service.py', '--database', database,...(runActionsOnly?['--hold-review-dispatch']:composerOnly?['--seed-waiting-ask-fixture']:cardsOnly?['--seed-cards-fixture']:[])], { env });
   let ready;
   for (let index = 0; index < 100; index++) {
     const line = native.record.stdout.split('\n').find(line => line.startsWith('{'));
@@ -77,8 +79,8 @@ try {
   }
   assert.equal(ready?.ready, true); assert.match(ready.url, /^http:\/\/127\.0\.0\.1:[0-9]+$/);
   const compiledFixture=resolve(directory,`compiled-${session}`);
-  if(documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly){const build=subprocess(globalThis.process.execPath,['node_modules/vite/bin/vite.js','build','--config','tests/browser/api-vite.config.ts','--outDir',compiledFixture],{cwd:resolve(root,'frontend'),env:{...env,WALLE_PROBE_API_URL:ready.url}});await build.exited;report.fixture_build=build.record;assert.equal(build.record.code,0,'Actual compiled diagnostic fixture required');}
-  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js',...((documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly)?['preview','--outDir',compiledFixture]:[]), '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
+  if(documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly){const build=subprocess(globalThis.process.execPath,['node_modules/vite/bin/vite.js','build','--config','tests/browser/api-vite.config.ts','--outDir',compiledFixture],{cwd:resolve(root,'frontend'),env:{...env,WALLE_PROBE_API_URL:ready.url}});await build.exited;report.fixture_build=build.record;assert.equal(build.record.code,0,'Actual compiled diagnostic fixture required');}
+  vite = subprocess(globalThis.process.execPath, ['--report-on-fatalerror','--report-exclude-env',`--report-directory=${nativeDiagnostics}`,'node_modules/vite/bin/vite.js',...((documentOnly||commentsOnly||commentPanelOnly||aiReadOnly||runActionsOnly||composerOnly||cardsOnly)?['preview','--outDir',compiledFixture]:[]), '--config', 'tests/browser/api-vite.config.ts', '--host', '127.0.0.1', '--port', '5175', '--strictPort'],
     { cwd: resolve(root, 'frontend'), env: { ...env, WALLE_PROBE_API_URL: ready.url } });
   let live = false;
   for (let index = 0; index < 100; index++) {
@@ -595,6 +597,7 @@ try {
       await page.evaluate(()=>window.apiProbe.mountGuideComposer(1));await page.waitForFunction(()=>!window.guideComposerProbe.state().ai.refreshing);const pane=page.getByRole('region',{name:'AI 消息输入',exact:true});if(await pane.getByLabel('AI 操作',{exact:true}).inputValue()!=='INITIALIZE')throw Error('Initialization action not exposed');await pane.getByLabel('给 AI 的消息').fill('继续初始化😀');await pane.getByRole('button',{name:'发送消息',exact:true}).click();await page.waitForFunction(()=>window.guideComposerProbe.state().composer.phase==='UNKNOWN');await pane.getByRole('button',{name:'重新确认消息发送结果',exact:true}).click();await page.waitForFunction(()=>window.guideComposerProbe.state().composer.phase==='READY'&&window.guideComposerProbe.state().ai.run?.status==='FAILED'&&!window.guideComposerProbe.state().ai.refreshing);const native=await page.evaluate(()=>window.guideComposerProbe.inspect()),wires=(await page.evaluate(()=>window.apiProbe.wireFacts())).slice(${report.composer_scopes.wire_start}).filter(row=>row.method==='POST'&&(/guide-runs$/.test(row.path)||/continue$/.test(row.path)));if(wires.length!==14)throw Error('Unexpected send wires');for(let index=0;index<wires.length;index+=2){const pair=wires.slice(index,index+2);if(!pair[0].key||pair[0].key!==pair[1].key||pair[0].body!==pair[1].body||pair[0].path!==pair[1].path)throw Error('Original send key/body changed');const body=JSON.parse(pair[0].body);if(pair[0].path.endsWith('/continue')){if(Object.keys(body).join()!=='instruction'||body.instruction!=='明确😀\\n边界')throw Error('Continue leaked other fields');}else if(body.expected_version!==(body.action_type==='INITIALIZE'?1:2))throw Error('Wrong current version');}if(native.counts.prepares!==1||native.counts.sends!==2||native.counts.receives!==1||native.actual_runs.length!==2||native.messages.length!==2||native.actual_runs[0].action_type!=='INITIALIZE')throw Error('Actual subsequent initialize not unique');await page.evaluate(()=>window.guideComposerProbe.destroy());return {...native,replay_wires:wires};
     }`.replace(/\r?\n/g,' ')));assert.equal(report.composer_initialize.passed,true);await cli('snapshot');
   }
+  if(cardsOnly){report.cards=await verifyCardsBrowser(cli,result);assert.equal(report.cards.passed,true);}
   await cli('screenshot', '--filename=output/playwright/api-native-probe.png');
   await cli('run-code', 'async (page) => await page.evaluate(() => window.apiProbe.destroy())');
   report.development_alive_before_close=vite.child.exitCode===null&&vite.child.signalCode===null;assert.equal(report.development_alive_before_close,true);
@@ -625,13 +628,13 @@ finally {
     const lines = native.record.stdout.trim().split('\n').filter(line => line.startsWith('{'));
     const closed = lines.length > 1 ? JSON.parse(lines.at(-1)) : null;
     if (closed?.closed === true) { report.native_facts = closed.facts; report.database = { path: database, sha256: createHash('sha256').update(await readFile(database)).digest('hex') };
-      const expected=focused?{llm_uses:0,guide_runs:composerOnly?8:runActionsOnly?5:aiReadOnly?26:commentsOnly||commentPanelOnly?3:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:navigationOnly?2:1,comments:aiReadOnly?1:commentPanelOnly?23:commentsOnly?27:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
+      const expected=focused?{llm_uses:0,guide_runs:cardsOnly?6:composerOnly?8:runActionsOnly?5:aiReadOnly?26:commentsOnly||commentPanelOnly?3:2,requirements:2,requirement_documents:2,revisions:revisionsOnly?22:navigationOnly?2:1,comments:aiReadOnly?1:commentPanelOnly?23:commentsOnly?27:revisionsOnly?1:0}:{llm_uses:0,guide_runs:28,requirements:24,requirement_documents:24,revisions:26,comments:3};
       if (Object.entries(expected).some(([key,value])=>closed.facts[key]!==value)|| native.record.code !== 0) { report.passed = false; report.error ??= 'Native persisted facts/closure differ'; globalThis.process.exitCode = 1; }
     } else { report.passed = false; report.error ??= 'Native closure/facts missing'; globalThis.process.exitCode = 1; }
   }
   report.inputs_after = await hashes();
   report.changed_inputs = [...new Set([...Object.keys(report.inputs_before), ...Object.keys(report.inputs_after)])].filter(key => report.inputs_before[key] !== report.inputs_after[key]);
   if (report.changed_inputs.length) { report.passed = false; report.error ??= 'Inputs changed during verification'; globalThis.process.exitCode = 1; }
-  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':documentOnly?'document':composerOnly?'composer':runActionsOnly?'run-actions':aiReadOnly?'ai-read':commentPanelOnly?'comment-panel':commentsOnly?'comments':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
+  const path = resolve(root, 'docs/verification', `${propertiesOnly?'properties':headerOnly?'header':revisionsOnly?'revisions':navigationOnly?'navigation':documentOnly?'document':cardsOnly?'cards':composerOnly?'composer':runActionsOnly?'run-actions':aiReadOnly?'ai-read':commentPanelOnly?'comment-panel':commentsOnly?'comments':'api'}-browser-${report.timestamp.replace(/[:.]/g, '-')}.json`);
   await writeFile(path, JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ passed: report.passed, evidence: path, error: report.error }));
 }

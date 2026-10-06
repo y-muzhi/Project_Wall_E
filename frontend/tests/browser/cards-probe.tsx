@@ -1,0 +1,30 @@
+import {createRoot} from 'react-dom/client';
+import {useSyncExternalStore} from 'react';
+import {ApiUnknown,ApiRejected} from '../../src/api/client.ts';
+import type {WalleApi} from '../../src/api/walle.ts';
+import {require} from '../../src/api/decoding.ts';
+import {RequirementDetailRead} from '../../src/requirements/detail-read.ts';
+import {RequirementAiRead} from '../../src/guide/read-owner.ts';
+import {AiReadPanel} from '../../src/guide/read-view.tsx';
+import {InteractionCards} from '../../src/guide/cards.ts';
+import {InteractionCardsView} from '../../src/guide/cards-view.tsx';
+import {CardDrafts} from '../../src/guide/card-drafts.ts';
+import '../../src/shared/styles.css';
+
+export async function mountCardsProbe(api:WalleApi,identity:number,kind:'INITIALIZE'|'WAITING'|'EXPIRE',originalId?:number){
+ if(!originalId){const current=(await api.getCurrentDocument(identity)).data,created=(await api.prepareCreateGuide(identity,{action_type:kind==='INITIALIZE'?'INITIALIZE':'ASK',expected_version:current.content_version,scope_type:'DOCUMENT',scope_ref:null,source_type:'USER_INSTRUCTION',source_id:null,instruction:kind==='INITIALIZE'?'初始化卡片前置夹具':kind==='WAITING'?'等待卡片前置夹具':'文本替代卡片前置夹具'}).submit()).data.guide_run;
+  let seeded=false;for(let attempt=0;attempt<200;attempt++){const actual=(await api.getGuideRun(created.id)).data;if(actual.status===(kind==='INITIALIZE'?'COMPLETED':'WAITING_USER')){seeded=true;break;}await new Promise(resolve=>setTimeout(resolve,25));}require(seeded);}
+ const current=(await api.getCurrentDocument(identity)).data,messages=(await api.listMessages(identity)).data.items,message=originalId?messages.find(row=>row.id===originalId):messages.findLast(row=>row.message_type==='INTERACTION_CARDS');require(message!==undefined&&message.guide_run_id!==null);const source=(await api.getGuideRun(message.guide_run_id)).data,counts={prepares:0,sends:0,receives:0,reads:0,refreshes:0};let dropRead=false,dropRefresh=false,shown=true,denyStorage=false;
+ const reader=new RequirementDetailRead(identity,api),read=async()=>{counts.reads++;if(dropRead){dropRead=false;throw new ApiUnknown(false);}require(await reader.refresh());return reader.getSnapshot().confirmed!;},detail=await read(),drafts=new CardDrafts(()=>{if(denyStorage)throw Error('Explicit unavailable storage diagnostic');return sessionStorage;});
+ const wrapped=new Proxy(api,{get(target,key){const value=Reflect.get(target,key);if(key==='prepareCardResponses')return (...args:unknown[])=>{counts.prepares++;const action=value.apply(target,args);let sent=0,receipt:string|null=null;return {submit:async()=>{counts.sends++;const response=await action.submit();sent++;if(sent===1){receipt=JSON.stringify(response.data);throw new ApiUnknown(true);}require(JSON.stringify(response.data)===receipt);return response;}};};return typeof value==='function'?value.bind(target):value;}});
+ let owner:InteractionCards,ai:RequirementAiRead;const adopt=async(actual:typeof detail)=>{owner.adoptDetail(actual);ai.adopt(actual);};ai=new RequirementAiRead(detail,api,read,adopt,()=>{shown=true;owner.setAvailable(true);});owner=new InteractionCards(message,source,detail,wrapped,drafts,read,adopt,async run=>{counts.receives++;await ai.receive(run);},async()=>{counts.refreshes++;if(dropRefresh){dropRefresh=false;throw new ApiUnknown(false);}require(await ai.messages.refresh());});owner.setAvailable(true);ai.setVisible(true);await ai.refresh();
+ const main=document.createElement('main');main.style.cssText='padding:24px;max-width:680px;margin:auto';document.body.append(main);const root=createRoot(main);
+ function View(){useSyncExternalStore(owner.subscribe,owner.getSnapshot);return <><button type="button" onClick={()=>{shown=!shown;owner.setAvailable(shown);ai.setVisible(shown);main.querySelector<HTMLElement>('[data-cards-body]')!.hidden=!shown;}}>切换卡片面板显示</button><div data-cards-body><InteractionCardsView owner={owner}/><AiReadPanel owner={ai}/></div></>;}
+ root.render(<View/>);
+ return {state(){return {cards:owner.getSnapshot(),ai:ai.getSnapshot(),counts,shown,local:sessionStorage.getItem(`walle:v1:cards:${identity}:${message.id}`)};},failRead(){dropRead=true;},failRefresh(){dropRefresh=true;},storage(unavailable:boolean){denyStorage=unavailable;},
+  async duplicate(){const submitted=owner.getSnapshot().submitted!;try{await api.prepareCardResponses(message.id,submitted).submit();throw Error('Duplicate accepted');}catch(error){require(error instanceof ApiRejected&&error.code==='CARD_ALREADY_ANSWERED'&&error.details?.response_message_id===owner.getSnapshot().formal?.id);return {passed:true,code:error.code,reference:error.details!.response_message_id};}},
+  async replaceByText(){require(kind==='EXPIRE');await api.prepareContinueGuide(source.id,'普通文本替代，不能猜成任何卡片答案😀').submit();let final=false;for(let attempt=0;attempt<200;attempt++){const run=(await api.getGuideRun(source.id)).data;if(run.status==='FAILED'){require(run.error_code==='CONFIG_INVALID');final=true;break;}await new Promise(resolve=>setTimeout(resolve,25));}require(final);return {local_preserved:sessionStorage.getItem(`walle:v1:cards:${identity}:${message.id}`)!==null,read_state:owner.getSnapshot().message.card_state};},
+  refresh:()=>owner.refresh(),
+  async inspect(){const actual=(await api.getCurrentDocument(identity)).data;require(JSON.stringify(actual)===JSON.stringify(current));const rows=(await api.listMessages(identity)).data.items,runs=(await api.listGuideRuns(identity)).data.items;return {passed:true,identity,kind,counts,current_unchanged:true,message_id:message.id,source_id:source.id,formal:owner.getSnapshot().formal,messages:rows,runs,scope:'Explicit persisted card-state fixtures followed by actual I36/transactions/ordinary-text expiry/UI/storage/unknown recovery; no real Provider card production, trusted effects or root acceptance'};},
+  async destroy(){root.unmount();owner.dispose();ai.dispose();reader.dispose();main.remove();return {passed:true};}};
+}
