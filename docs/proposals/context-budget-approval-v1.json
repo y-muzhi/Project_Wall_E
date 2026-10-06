@@ -1,0 +1,11 @@
+{
+  "production_compatibility_proved": false,
+  "proposal": "docs/proposals/context-budget-compatibility-v1.md",
+  "paid_calls_authorized": false,
+  "approved_at": "2026-10-06",
+  "user_confirmation": "确认该补充方案，按稿实施",
+  "proposal_sha256": "6749050f322f4e9ace8080bf8bf4985aa8bfbac81072fe30de6f65e5ef995e28",
+  "decision": "D-011",
+  "scope": "Reachable local schema derivation, exact Ark tokenization adapter and compatibility-gated counting; preserve frozen resources and approved budgets",
+  "schema_version": 1
+}

@@ -21,7 +21,7 @@ export function GuideComposer({owner,documents,review}:Readonly<{owner:Requireme
    {state.review&&<p>根据已完成的检查运行 {state.review.id} 修改，提交时重新读取当前正文。</p>}
    {review?.action_type==='REVIEW'&&review.status==='COMPLETED'&&state.detail.requirement.status==='ACTIVE'&&<button type="button" disabled={disabled||!binding} onClick={()=>{try{owner.useReview(review,reviewTarget(binding!.editor,review.scope));}catch{owner.rejectScope();}}}>根据这次检查修改</button>}
   </>}
-  <label>给 AI 的消息<textarea value={state.instruction} disabled={disabled} rows={4} aria-describedby={help} onChange={event=>owner.change(event.target.value)} onCompositionStart={()=>setComposing(true)} onCompositionEnd={event=>{setComposing(false);owner.change(event.currentTarget.value);}}/></label>
+  <label>给 AI 的消息<textarea aria-label="给 AI 的消息" value={state.instruction} disabled={disabled} rows={4} aria-describedby={help} onChange={event=>owner.change(event.target.value)} onCompositionStart={()=>setComposing(true)} onCompositionEnd={event=>{setComposing(false);owner.change(event.currentTarget.value);}}/></label>
   <p id={help} className="field-help">允许换行，最多 10000 个字符。发送前请核对本次范围；未发送文字仅保留在输入区。</p>
   <button type="button" disabled={disabled||composing||!owner.allowed} onClick={()=>{if(!composing)void owner.submit();}}>{waiting?'发送补充说明':'发送消息'}</button>
   {state.phase==='SUBMITTING'&&<p role="status">正在发送消息…</p>}{state.phase==='READING'&&<p role="status">正在核实实际资源，保留原请求…</p>}
