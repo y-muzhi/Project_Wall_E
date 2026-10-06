@@ -169,7 +169,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountAiRead:async()=>{Object.assign(window,{aiReadProbe:await mountAiReadProbe(api)});},
  mountRunActions:async()=>{Object.assign(window,{runActionsProbe:await mountRunActionsProbe(api)});},
  mountGuideComposer:async(identity=2)=>{Object.assign(window,{guideComposerProbe:await mountGuideComposerProbe(api,identity)});},
- mountCards:async(identity:number,kind:'INITIALIZE'|'WAITING'|'EXPIRE',original?:number)=>{Object.assign(window,{cardsProbe:await mountCardsProbe(api,identity,kind,original)});},
+ mountCards:async(identity:number,kind:'INITIALIZE'|'WAITING'|'EXPIRE',original?:number,deferSources=false)=>{Object.assign(window,{cardsProbe:await mountCardsProbe(api,identity,kind,original,deferSources)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
