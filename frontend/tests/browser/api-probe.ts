@@ -31,6 +31,7 @@ import {mountAiReadProbe} from './ai-read-probe.tsx';
 import {mountRunActionsProbe} from './run-actions-probe.tsx';
 import {mountGuideComposerProbe} from './guide-composer-probe.tsx';
 import {mountCardsProbe} from './cards-probe.tsx';
+import {suggestionProbe} from './suggestion-probe.ts';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -48,6 +49,7 @@ const transport: typeof fetch = async (input, options) => {
     ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
       (options?.method!==undefined&&options.method!=='GET'&&(/^\/api\/v1\/requirements\/\d+\/comments$/.test(String(input))||/^\/api\/v1\/comments\/\d+(?:\/resolve|\/reopen|\/guide-runs)?$/.test(String(input))))||
       (options?.method==='POST'&&(/^\/api\/v1\/guide-runs\/\d+\/(?:cancel|retry|continue)$/.test(String(input))||/^\/api\/v1\/requirements\/\d+\/guide-runs$/.test(String(input))||/^\/api\/v1\/conversation-messages\/\d+\/responses$/.test(String(input))))||
+      (/^\/api\/v1\/(?:suggestions\/\d+\/decision|suggestion-batches\/\d+\/(?:complete|discard))$/.test(String(input))&&options?.method!=='GET')||
       (String(input).startsWith('/api/v1/requirements/') &&
         ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft')||String(input).endsWith('/complete-initialization')||String(input).endsWith('/complete')||String(input).endsWith('/reactivate')||String(input).endsWith('/revisions'))) ||
           (options?.method === 'DELETE' && String(input).endsWith('/manual-draft')) || (options?.method==='PATCH'&&/^\/api\/v1\/requirements\/\d+$/.test(String(input)))))
@@ -159,6 +161,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountLifecycle:async()=>{Object.assign(window,{lifecycleProbe:await mountLifecycleProbe(api)});},
  mountProperties:async()=>{Object.assign(window,{propertyProbe:await mountPropertyProbe(api)});},
  bootstrapProperties,
+ prepareSuggestions:async()=>{Object.assign(window,{suggestionProbe:await suggestionProbe(api)});return true;},
  mountHeader:async()=>{Object.assign(window,{headerProbe:await mountHeaderProbe(api)});},
  mountRevisions:async()=>{Object.assign(window,{revisionsProbe:await mountRevisionsProbe(api)});},
  mountNavigation:async()=>{Object.assign(window,{navigationProbe:await mountNavigationProbe(api)});},

@@ -108,12 +108,58 @@ class CardsFixtureWorker(GuideWorker):
         await super()._drive(identity,lease)
 
 
+class SuggestionFixtureWorker(GuideWorker):
+    """Named isolated persisted batch precondition, not C07/model evidence.
+
+    All five patches are validated against the real manually saved CURRENT
+    and the actual I14 frozen authority. Only generation is a fixture; I20,
+    decisions, completion/discard and document adoption remain production.
+    """
+    async def _drive(self, identity, lease):
+        from backend.app.documents.sources import DocumentSources
+        from backend.app.documents.snapshot import validate_snapshot
+        from backend.app.documents.scopes import restore_authority
+        from backend.app.documents.tables import table_model
+        from backend.app.documents.patch_validation import validate_patch, validate_combination
+        with self.database.transaction(write=True) as connection:
+            row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
+                'ON m.id=r.trigger_message_id WHERE r.id=?', (identity,)).fetchone()
+            if row is not None and row['status']=='RUNNING' and row['current_step']=='PREPARING' and row['action_type']=='MODIFY' and row['source_type']=='USER_INSTRUCTION' and row['content']=='建议批次前置夹具':
+                current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'", (row['requirement_id'],)).fetchone()
+                snapshot = validate_snapshot(current['markdown_content'],json.loads(current['block_state_json']),DocumentSources(connection,row['requirement_id'],self.catalog))
+                authority = restore_authority(snapshot,'MODIFY',row['scope_type'],None,json.loads(row['allowed_targets_json']))
+                paragraphs = [(block,metadata) for block,metadata in zip(snapshot.parsed.blocks,snapshot.state['blocks']) if block.block_type=='paragraph']
+                table,metadata = next((block,metadata) for block,metadata in zip(snapshot.parsed.blocks,snapshot.state['blocks']) if block.block_type=='table')
+                original_row = table_model(table).rows[0]
+                def patch(operation,target,original,markdown=None,selector=None,data=None):
+                    return {'title':'显式前置 '+operation,'explanation':'隔离原生事务验收，非模型效果','impact':None,
+                        'patch_operation':operation,'target_ref':{'block_id':target},'selector_json':selector,
+                        'original_content':original,'proposed_markdown':markdown,'proposed_data_json':data}
+                patches = [patch('REPLACE_BLOCK',paragraphs[0][1]['block_id'],paragraphs[0][0].markdown,'明确后的规则😀\n'),
+                    patch('INSERT_BEFORE',paragraphs[1][1]['block_id'],paragraphs[1][0].markdown,'新增前置规则\n'),
+                    patch('INSERT_AFTER',paragraphs[1][1]['block_id'],paragraphs[1][0].markdown,'新增后置规则\n'),
+                    patch('DELETE_BLOCK',paragraphs[2][1]['block_id'],paragraphs[2][0].markdown),
+                    patch('REPLACE_TABLE_ROW',metadata['block_id'],original_row.markdown,selector={'key_column_index':0,'key_value':original_row.cells[0]},data={'cells':[original_row.cells[0],'建议值😀']})]
+                validate_combination(tuple(validate_patch(snapshot,patch,authority) for patch in patches))
+                batch = entity_id(connection,EntityKind.BATCH); at = operation_time(self.clock)
+                connection.execute("INSERT INTO suggestion_batches VALUES (?,?,?,'USER_INSTRUCTION',NULL,'显式建议前置','五种补丁隔离验证','PENDING',NULL,NULL,?,NULL,?,NULL,?)",(batch,row['requirement_id'],identity,current['content_version'],at,at))
+                for order,patch in enumerate(patches,1):
+                    suggestion = entity_id(connection,EntityKind.SUGGESTION)
+                    connection.execute("INSERT INTO suggestions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,'PENDING','VALID',NULL,?,NULL,?)",(suggestion,batch,order,patch['title'],patch['explanation'],patch['impact'],patch['patch_operation'],json.dumps(patch['target_ref']),None if patch['selector_json'] is None else json.dumps(patch['selector_json']),patch['original_content'],patch['proposed_markdown'],None if patch['proposed_data_json'] is None else json.dumps(patch['proposed_data_json'],ensure_ascii=False),at,at))
+                final={'guide_run_id':identity,'status':'COMPLETED','assistant_message_id':None,'current_document':None,'suggestion_batch_id':batch}
+                connection.execute("UPDATE guide_runs SET status='COMPLETED',current_step='FINISHED',final_result_json=?,ended_at=?,updated_at=? WHERE id=?",(json.dumps(final),at,at,identity))
+                connection.execute("UPDATE requirements SET document_work_state='SUGGESTION_REVIEWING',active_operation_type='SUGGESTION_BATCH',active_operation_id=?,state_started_at=?,updated_at=? WHERE id=? AND active_operation_id=?",(batch,at,at,row['requirement_id'],identity))
+                return
+        await super()._drive(identity,lease)
+
+
 async def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--database', required=True)
     fixture = parser.add_mutually_exclusive_group()
     fixture.add_argument('--hold-review-dispatch', action='store_true')
     fixture.add_argument('--seed-waiting-ask-fixture', action='store_true')
     fixture.add_argument('--seed-cards-fixture', action='store_true')
+    fixture.add_argument('--seed-suggestion-fixture', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -125,6 +171,7 @@ async def main():
     factory = (lambda db, catalog: HeldReviewWorker(db, catalog=catalog)) if args.hold_review_dispatch else None
     if args.seed_waiting_ask_fixture: factory = lambda db, catalog: WaitingAskFixtureWorker(db, catalog=catalog)
     if args.seed_cards_fixture: factory = lambda db, catalog: CardsFixtureWorker(db, catalog=catalog)
+    if args.seed_suggestion_fixture: factory = lambda db, catalog: SuggestionFixtureWorker(db, catalog=catalog)
     server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory), host='127.0.0.1', port=0, workers=1,
         timeout_graceful_shutdown=10, log_level='warning'))
     task = asyncio.create_task(server.serve())
@@ -138,6 +185,8 @@ async def main():
     with database.transaction() as connection:
         facts = {name: connection.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
             for name in ('requirements', 'requirement_documents', 'revisions', 'comments', 'guide_runs', 'llm_uses')}
+        if args.seed_suggestion_fixture:
+            facts.update({name: connection.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('suggestion_batches','suggestions')})
     print(json.dumps({'closed': True, 'facts': facts}), flush=True)
 
 
