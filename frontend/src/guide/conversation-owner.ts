@@ -46,7 +46,9 @@ export class RequirementConversation{
    const active=this.value.detail.activity,previous=this.value.batch?.getSnapshot().batch,selected=lease?.startsWith('BATCH:')?Number(lease.slice(6)):active.kind==='BATCH'?active.batch.id:parent.run?.suggestion_batch_id??(parent.run===null&&parent.selected===previous?.guide_run_id?previous.id:null);
    const batch=selected===null?null:this.batchOwner(selected);if(batch!==this.value.batch)this.publish({batch});
    const view=this.value.visible&&this.value.enabled;this.read.setVisible(view);this.composer.setAvailable(this.permitted('COMPOSER'));this.runs.setAvailable(this.permitted('RUN'));this.cards.setAvailable(view);this.cards.reconcilePermissions();for(const [id,entry] of this.batches)entry.owner.setAvailable(entry.owner===batch&&this.permitted('BATCH:'+id));
-   const key=selected===null?'':selected+':'+this.visibility;if(view&&batch&&key!==this.batchRead){this.batchRead=key;if(['READY','ERROR'].includes(batch.getSnapshot().phase))void batch.refresh();}
+   // A newly arrived batch may still be excluded by the original send lease.
+   // Do not consume its first read until that actual owner can perform it.
+   const key=selected===null?'':selected+':'+this.visibility;if(view&&batch&&batch.getSnapshot().available&&key!==this.batchRead){this.batchRead=key;if(['READY','ERROR'].includes(batch.getSnapshot().phase))void batch.refresh();}
   }while(this.again);this.publish({});}finally{this.reconciling=false;}
  }
  /** Transient document-adoption busy does not invalidate a command's own

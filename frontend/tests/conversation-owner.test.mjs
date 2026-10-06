@@ -17,7 +17,7 @@ function fixture(){
  }if(f.drop){f.drop=false;throw new ApiUnknown(true);}return {data:copy(receipt)};}};};
  const api={getGuideRun:async id=>{f.queries++;return {data:copy(f.runs.find(row=>row.id===id))};},listMessages:async()=>({data:{items:copy(f.messages)},meta:{pagination:{page_size:20,has_more:false,next_cursor:null}}}),listGuideRuns:async()=>({data:{items:copy([...f.runs].sort((a,b)=>b.id-a.id))},meta:{pagination:{page:1,page_size:20,total:f.runs.length,total_pages:1}}}),getBatch:async id=>{f.batchQueries++;assert.equal(id,8);return {data:copy(f.batch)};},prepareCreateGuide:(_id,body)=>prepare('TEXT',body),prepareCardResponses:(_id,body)=>prepare('CARD',body),prepareDecideSuggestion:(_id,body)=>prepare('DECIDE',body)};
  const owner=new RequirementConversation(f.detail,api,actual,async()=>{f.adopts++;if(f.adoptFail){f.adoptFail=false;throw Error('Adoption failed');}},()=>{f.opens++;owner.setView(true);},new CardDrafts(()=>({getItem:key=>memory.get(key)??null,setItem:(key,value)=>memory.set(key,value),removeItem:key=>memory.delete(key)})));
- return {f,owner,actual,memory};
+ return {f,owner,actual,memory,api};
 }
 const ready=async owner=>{owner.setView(true);await owner.refresh();await owner.cards.ready();};
 test('ordinary text shares receiver/messages and only actual EXPIRED clears that card draft; UNKNOWN excludes sibling writes across hide',async()=>{
@@ -38,4 +38,13 @@ test('actual history selection remains separate from ordinary current scope and 
 });
 test('retirement closes all owners, observers and pending unstarted operations without mutations',async()=>{
  const {f,owner}=fixture();await ready(owner);const card=owner.cards.get(8).owner;owner.composer.change('末尾输入');owner.dispose();assert.equal(owner.getSnapshot().active,false);assert.equal(card.getSnapshot().active,false);assert(!await owner.composer.submit());assert(!await card.submit());assert.equal(f.prepares,0);assert.equal(f.sends,0);assert.equal(owner.read.getSnapshot().visible,false);
+});
+test('batch arriving during original composer receipt loads automatically after that command releases ownership',async()=>{
+ const {f,owner,api}=fixture();f.detail={...f.detail,requirement:{...f.detail.requirement,status:'ACTIVE'}};owner.adopt(f.detail);await ready(owner);
+ const gate=Promise.withResolvers();api.prepareCreateGuide=()=>({submit:async()=>{f.sends++;return gate.promise;}});
+ owner.composer.choose('MODIFY');owner.composer.change('明确修改规则');const submitted=owner.composer.submit();await new Promise(resolve=>setImmediate(resolve));assert.equal(owner.getSnapshot().lease,'COMPOSER');
+ f.batch={id:8,requirement_id:1,guide_run_id:7,source_type:'USER_INSTRUCTION',source_id:null,title:'真实到达批次',summary:'确认消息期间完成',status:'PENDING',completion_result:null,error_message:null,base_content_version:1,applied_content_version:null,created_at:at,completed_at:null,updated_at:at,suggestions:[{id:10,batch_id:8,order_no:1,title:'规则',explanation:'明确',impact:null,patch_operation:'REPLACE_BLOCK',target_ref:{block_id:1},selector:null,original_content:'原正文\n',proposed_markdown:'新正文\n',proposed_data:null,user_edited_content:null,status:'PENDING',validation_status:'VALID',validation_error:null,created_at:at,decided_at:null,updated_at:at}],counts:{total:1,pending:1,accepted:0,rejected:0,edited:0}};
+ f.detail={...f.detail,requirement:{...f.detail.requirement,document_work_state:'SUGGESTION_REVIEWING',active_operation_type:'SUGGESTION_BATCH',active_operation_id:8},activity:{kind:'BATCH',batch:copy(f.batch)}};f.runs.unshift({...run(7),action_type:'MODIFY',function_type:'MODIFY',suggestion_batch_id:8});owner.adopt(f.detail);assert.equal(owner.getSnapshot().batch.batchId,8);assert.equal(f.batchQueries,0);
+ gate.resolve({data:{guide_run:{id:7,requirement_id:1,status:'RUNNING',current_step:'PREPARING'},user_message:{id:9,requirement_id:1,guide_run_id:7,role:'USER',message_type:'TEXT',content:'明确修改规则'}}});assert(await submitted);
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(owner.getSnapshot().lease,null);assert(f.batchQueries>0,'Actual arriving batch must load without tab switching or manual refresh');assert.equal(owner.getSnapshot().batch.getSnapshot().batch.suggestions[0].id,10);owner.dispose();
 });
