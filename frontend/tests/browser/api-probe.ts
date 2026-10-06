@@ -27,6 +27,7 @@ import {mountDocumentOwnerProbe} from './document-owner-probe.tsx';
 import {mountCommentsProbe} from './comments-probe.tsx';
 import {mountCommentCommandsProbe} from './comment-commands-probe.tsx';
 import {mountCommentPanelProbe} from './comment-panel-probe.tsx';
+import {mountAiReadProbe} from './ai-read-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -161,6 +162,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountComments:async()=>{Object.assign(window,{commentsProbe:await mountCommentsProbe(api)});},
  mountCommentCommands:async()=>{Object.assign(window,{commentCommandsProbe:await mountCommentCommandsProbe(api)});},
  mountCommentPanel:async()=>{Object.assign(window,{commentPanelProbe:await mountCommentPanelProbe(api)});},
+ mountAiRead:async()=>{Object.assign(window,{aiReadProbe:await mountAiReadProbe(api)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
