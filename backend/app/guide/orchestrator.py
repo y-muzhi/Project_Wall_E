@@ -6,19 +6,26 @@ No HTTP input may select these dependencies or a model endpoint.
 """
 import asyncio
 from functools import partial
+from dataclasses import replace
 import sqlite3
 
 from backend.app.infrastructure.audit_repository import AuditRepository, _owned
+from backend.app.infrastructure.counting_journal import CountingJournal
+from backend.app.infrastructure.execution_lease import ExecutionRetired
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.model_gateway import ModelGateway
 from backend.app.infrastructure.model_profile import ModelProfile
+from backend.app.infrastructure.tokenization import TokenCounts, restore_measurement
+from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.shared.command_execution import Rejected, operation_time
 from backend.app.shared.http_errors import ERRORS
 from backend.app.shared.validation import InvalidInput
 from .context_builder import build_context, ContextLimitExceeded
+from .context_builder import assemble_input
+from .counted_context import compile_counted_candidate, counting_release
 from .model_context import read_context
 from .trusted_output import produce_trusted_output
 from .commands import persist_ai_result, fail_guide_run
@@ -101,8 +108,51 @@ def _retry_context(database, identity, resources, original, profile, compiler):
     return compiler(actual, function)
 
 
+def _retry_actual(database, identity, resources, original):
+    with database.transaction() as connection:
+        _owned(connection,GuideRepository(connection).get(identity))
+    actual,function=_context(database,identity,resources)
+    if function!=original:raise Rejected('CONFIG_INVALID')
+    return actual,function
+
+
+def _count_state(database, actual, function, resources):
+    current,restored=_retry_actual(database,actual['run']['id'],resources,function)
+    if canonical_input(assemble_input(current,restored))!=canonical_input(assemble_input(actual,function)):
+        raise Rejected('SOURCE_INVALID')
+
+
+class _AuditedCounter:
+    def __init__(self,database,process_lock,actual,function,resources,counter,clock):
+        self.database,self.actual,self.function,self.resources,self.counter,self.clock=database,actual,function,resources,counter,clock
+        self.journal=CountingJournal(database,process_lock)
+
+    async def count(self,profile,texts):
+        await _native(_count_state,self.database,self.actual,self.function,self.resources)
+        identity=await _native(self.journal.prepare,self.actual,self.function,profile,texts,operation_time(self.clock))
+        # A cancellation/source change during audit fsync does not permit count
+        # I/O. PREPARED alone remains an explicitly unknown request outcome.
+        try:
+            await _native(_count_state,self.database,self.actual,self.function,self.resources)
+            receipt=await self.counter.count(profile,texts)
+            if type(receipt) is not TokenCounts:raise ConfigInvalid('Exact count receipt required')
+            restore_measurement(receipt.evidence,texts)
+        except asyncio.CancelledError:
+            try:await _native(self.journal.finish,identity,profile,operation_time(self.clock),status='INTERRUPTED')
+            except (ExecutionRetired,StorageUnavailable):pass
+            raise
+        except ExecutionRetired:raise
+        except Exception:
+            await _native(self.journal.finish,identity,profile,operation_time(self.clock),status='FAILED')
+            raise
+        receipt=replace(receipt,journal_id=identity)
+        await _native(self.journal.finish,identity,profile,operation_time(self.clock),status='SUCCEEDED',measurement=receipt.evidence)
+        return receipt
+
+
 async def execute_guide_run(database, payload, *, process_lock, catalog=None, profile=None,
                       gateway=None, context_compiler=build_context, compatibility_check=None,
+                      counting_counter=None, counting_compatibility_check=None,
                       clock=None, sleep=asyncio.sleep):
     """One logical input; WAITING_USER resumes only via its real accepting command.
 
@@ -147,7 +197,18 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
         actual, function = await _native(_context, database, identity, resources)
         frozen_profile = ModelProfile.from_environment() if profile is None else profile
         if type(frozen_profile) is not ModelProfile: raise ConfigInvalid('Frozen profile is required')
-        context = await _native(context_compiler, actual, function)
+        async def compile_context(actual,function):
+            if counting_counter is None:return await _native(context_compiler,actual,function)
+            # Private diagnostic injection only. No HTTP/environment selector
+            # bypasses either the before-count proof gate or final send gate.
+            if context_compiler is not build_context or compatibility_check is None or counting_compatibility_check is None:
+                raise ConfigInvalid('Counted execution requires both compatibility gates')
+            release=await _native(counting_release)
+            if await _native(counting_compatibility_check,frozen_profile,function,release) is not True:
+                raise ConfigInvalid('Same-model Chat framing compatibility is unavailable')
+            counter=_AuditedCounter(database,process_lock,actual,function,resources,counting_counter,clock)
+            return await compile_counted_candidate(actual,function,frozen_profile,counter=counter)
+        context = await compile_context(actual, function)
         if compatibility_check is None: raise ConfigInvalid('Approved same-model tokenizer/framing proof is unavailable')
         if await _native(compatibility_check, frozen_profile, context, function) is not True:
             raise ConfigInvalid('Counting compatibility was not proved')
@@ -185,11 +246,20 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
                         # never authorize an additional model request.
                         return await fail(outcome['code'])
             if not retryable or attempt == 3: return await fail(error_code)
-            context = await _native(_retry_context, database, identity, resources, function, frozen_profile, context_compiler)
+            if counting_counter is None:
+                context = await _native(_retry_context, database, identity, resources, function, frozen_profile, context_compiler)
+            else:
+                # Read-only pre-backoff check, never a paid count that will be
+                # thrown away. Each next Chat attempt gets its own fresh count.
+                await _native(_retry_actual,database,identity,resources,function)
             await sleep(2 if attempt == 1 else 5)
             # A cancellation/version/source change during the backoff is
             # caught before the next persisted request or external send.
-            context = await _native(_retry_context, database, identity, resources, function, frozen_profile, context_compiler)
+            if counting_counter is None:
+                context = await _native(_retry_context, database, identity, resources, function, frozen_profile, context_compiler)
+            else:
+                actual,restored=await _native(_retry_actual,database,identity,resources,function)
+                context=await compile_context(actual,restored)
             if await _native(compatibility_check, frozen_profile, context, function) is not True:
                 raise ConfigInvalid('Counting compatibility was not proved')
     except asyncio.CancelledError:

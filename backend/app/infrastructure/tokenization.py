@@ -34,6 +34,7 @@ class TokenCounts:
     text_sha256: tuple[str, ...]
     request_sha256: str
     response_json: str = field(repr=False)
+    journal_id: str | None = None
 
     @property
     def evidence(self):
@@ -41,7 +42,55 @@ class TokenCounts:
                 'request_id': self.request_id, 'created': self.created,
                 'counts': list(self.counts), 'text_sha256': list(self.text_sha256),
                 'request_sha256': self.request_sha256,
-                'response': strict_json_object(self.response_json)}
+                'response': strict_json_object(self.response_json)} | ({} if self.journal_id is None else {'journal_id':self.journal_id})
+
+
+def restore_measurement(value, texts, *, raw_required=True):
+    """Recheck persisted count ownership; summaries never assert raw retention."""
+    from .idempotency import canonical_input
+    try:
+        fields = {'strategy','endpoint','model','request_id','created','counts','text_sha256','request_sha256'}
+        optional={'journal_id'} if type(value) is dict and 'journal_id' in value else set()
+        if type(value) is not dict or set(value) != fields | ({'response'} if raw_required else {'response_sha256'}) | optional:
+            raise ValueError('Count evidence fields')
+        hashes = [hashlib.sha256(text.encode('utf-8')).hexdigest() for text in texts]
+        request = json.dumps({'model':MODEL_ID,'text':list(texts)},ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
+        if value['strategy'] != STRATEGY or value['endpoint'] != ENDPOINT or value['model'] != MODEL_ID or value['text_sha256'] != hashes or value['request_sha256'] != hashlib.sha256(request).hexdigest():
+            raise ValueError('Count evidence ownership')
+        identity = value['request_id']
+        if type(identity) is not str or not identity or len(identity)>1024 or any(ord(char)<32 or ord(char)==127 for char in identity):raise ValueError('Count identity')
+        created = integer(value['created'])
+        if type(value['counts']) is not list or len(value['counts']) != len(texts):raise ValueError('Count dimensions')
+        counts = tuple(integer(count) for count in value['counts'])
+        journal_id=value.get('journal_id')
+        if optional and (type(journal_id) is not str or len(journal_id)!=32 or any(char not in '0123456789abcdef' for char in journal_id)):raise ValueError('Counting journal identity')
+        if raw_required:
+            raw = value['response']
+            if type(raw) is not dict or raw.get('object')!='list' or raw.get('model')!=MODEL_ID or raw.get('id')!=identity or type(raw.get('created')) is not int or raw['created']!=created:raise ValueError('Count response')
+            rows=raw.get('data')
+            if type(rows) is not list or len(rows)!=len(texts):raise ValueError('Count response rows')
+            for index,(row,count) in enumerate(zip(rows,counts)):
+                if type(row) is not dict or row.get('object')!='tokenization' or type(row.get('index')) is not int or row['index']!=index or integer(row.get('total_tokens'))!=count:raise ValueError('Count row')
+                ids,offsets=row.get('token_ids'),row.get('offset_mapping')
+                if type(ids) is not list or type(offsets) is not list or len(ids)!=count or len(offsets)!=count:raise ValueError('Count arrays')
+                for token in ids:integer(token)
+                for offset in offsets:
+                    if type(offset) is not list or len(offset)!=2 or integer(offset[0])>integer(offset[1]):raise ValueError('Count offsets')
+            response_json = canonical_input(raw)
+        else:
+            digest=value['response_sha256']
+            if type(digest) is not str or len(digest)!=64 or any(char not in '0123456789abcdef' for char in digest):raise ValueError('Count response digest')
+            response_json = '{}'
+        return TokenCounts(MODEL_ID,identity,created,counts,tuple(hashes),value['request_sha256'],response_json,journal_id)
+    except (ValueError,TypeError,KeyError,UnicodeError) as error:
+        raise ConfigInvalid('Persisted exact count evidence is invalid') from error
+
+
+def measurement_summary(value):
+    """Keep returned counts/identity; raw token arrays have separate retention."""
+    from .idempotency import canonical_input
+    return {key:child for key,child in value.items() if key!='response'} | {
+        'response_sha256':hashlib.sha256(canonical_input(value['response']).encode('utf-8')).hexdigest()}
 
 
 class TokenizationGateway:

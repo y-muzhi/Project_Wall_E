@@ -15,6 +15,7 @@ from .model_profile import ModelProfile, MODEL_ID, MODEL_VERSION
 from .requirement_repository import RequirementRepository
 from backend.app.documents.snapshot import _time
 from backend.app.guide.context_builder import assemble_input
+from backend.app.guide.counted_context import CountedContext, verify_counting_evidence, counting_snapshot
 from backend.app.guide.model_context import read_context
 from backend.app.shared.command_execution import Rejected
 from backend.app.shared.validation import MAX_SAFE_INTEGER, strict_integer, strict_json_object
@@ -29,7 +30,7 @@ def _owned(connection, run):
     return root
 
 
-def verify_actual_context(connection, run_id, function, supplied_input, system_text, manifest_json, catalog):
+def verify_actual_context(connection, run_id, function, supplied_input, system_text, manifest_json, catalog, *, counting=None, input_json=None, counting_summary=False):
     """Recheck exactly the real C03 facts and permitted whole-field trimming."""
     actual = read_context(connection,run_id,catalog)['data']
     expected = assemble_input(actual,function);supplied = function.validate_input(supplied_input)
@@ -50,8 +51,11 @@ def verify_actual_context(connection, run_id, function, supplied_input, system_t
     manifest = {**expected['read_manifest'],'block_ids':block_ids,'message_ids':[identity for identity in expected['read_manifest']['message_ids'] if identity in message_ids]}
     if supplied['read_manifest'] != manifest or strict_json_object(manifest_json) != manifest:
         raise Rejected('SOURCE_INVALID')
-    system = function.prompt+'\n'+json.dumps(json.loads(function.output_schema_json),ensure_ascii=False,separators=(',',':'))
-    if system_text != system: raise Rejected('CONFIG_INVALID')
+    if counting is None:
+        system = function.prompt+'\n'+json.dumps(json.loads(function.output_schema_json),ensure_ascii=False,separators=(',',':'))
+        if system_text != system: raise Rejected('CONFIG_INVALID')
+    else:
+        verify_counting_evidence(actual,function,system=system_text,input_json=input_json,manifest_json=manifest_json,evidence=counting,summary=counting_summary)
     return actual, supplied
 
 
@@ -72,7 +76,8 @@ class AuditRepository:
         frozen = catalog.restore(run['function_type'],run['prompt_version'],prompt_version=run['prompt_version'],context_template=run['context_template_key']+'@'+run['context_template_version'])
         if function != frozen or type(profile) is not ModelProfile: raise Rejected('CONFIG_INVALID')
         if run['updated_at'] > at or root['updated_at'] > at: raise ValueError('Attempt cannot precede persisted activity')
-        actual, supplied = verify_actual_context(self.connection,run_id,function,context.input,context.system,context.manifest_json,catalog)
+        counted=context.counting_evidence if type(context) is CountedContext else None
+        actual, supplied = verify_actual_context(self.connection,run_id,function,context.input,context.system,context.manifest_json,catalog,counting=counted,input_json=context.input_json)
         manifest = supplied['read_manifest']
         last = self.connection.execute('SELECT * FROM llm_uses WHERE guide_run_id=? ORDER BY call_no DESC,attempt_no DESC LIMIT 1',(run_id,)).fetchone()
         if call_no is None:
@@ -90,6 +95,7 @@ class AuditRepository:
         snapshot = {'profile':profile.snapshot,'request':profile.request(context),
             'protocol':{'function_type':function.function_type,'input_schema':function.input_schema,'output_schema':function.output_schema,
                 'context_template':function.context_template,'prompt':function.prompt_reference,'manifest_sha256':function.manifest_sha256}}
+        if counted is not None:snapshot['counting']=counting_snapshot(counted)
         fields = {'id':entity_id(self.connection,EntityKind.LLM_USE),'guide_run_id':run_id,'call_no':call_no,'attempt_no':attempt_no,
             'provider':'volcengine','model_name':MODEL_ID,'model_version':MODEL_VERSION,'function_type':function.function_type,'prompt_config':function.prompt_reference,
             'request_snapshot_json':audit_json(snapshot,credentials=(profile.api_key,)),'parsed_output_json':None,'trusted_output_json':None,

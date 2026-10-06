@@ -12,6 +12,7 @@ from backend.app.infrastructure.execution_lease import ExecutionLease, Execution
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.idempotency import Idempotency
 from backend.app.infrastructure.audit_repository import AuditRepository
+from backend.app.infrastructure.counting_journal import CountingJournal
 from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.shared.command_execution import operation_time
 from backend.app.shared.validation import strict_integer
@@ -37,7 +38,7 @@ class GuideWorker:
         self.process_lock = ProcessLock.for_database(database.path)
         self.executor = None
         self._options = {} if orchestrator_options is None else dict(orchestrator_options)
-        if set(self._options) - {'profile', 'gateway', 'context_compiler', 'compatibility_check', 'sleep'}:
+        if set(self._options) - {'profile', 'gateway', 'context_compiler', 'compatibility_check', 'sleep','counting_counter','counting_compatibility_check'}:
             raise ValueError('Only private diagnostic ORCH dependencies are injectable')
         self._tasks = {}; self._leases = {}; self._resubmit = set()
         self._loop = None; self._monitor = None; self._scan_lock = asyncio.Lock()
@@ -142,6 +143,8 @@ class GuideWorker:
                 try:
                     count = await _native(prune)
                     self.events.append({'event': 'AUDIT_PRUNED', 'count': count})
+                    count_records=await _native(CountingJournal(self.database,self.process_lock).prune_raw,operation_time(self.clock))
+                    if count_records:self.events.append({'event':'COUNT_RAW_PRUNED','count':count_records})
                 except Exception:
                     self.events.append({'event': 'AUDIT_PRUNE_FAILED'})
             return result

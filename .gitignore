@@ -10,6 +10,7 @@ dist/
 *.sqlite-shm
 *.sqlite-wal
 *.sqlite.lock
+*.count-audit/
 .playwright-cli/
 output/playwright/
 

@@ -75,9 +75,10 @@ def audited_context(connection, row, catalog, profile):
     if type(profile) is not ModelProfile or (row['provider'],row['model_name'],row['model_version'],row['function_type'],row['prompt_config']) != ('volcengine',MODEL_ID,MODEL_VERSION,function.function_type,function.prompt_reference):
         raise Rejected('CONFIG_INVALID')
     request_snapshot=strict_json_object(row['request_snapshot_json'])
+    if 'counting' in request_snapshot and type(request_snapshot['counting']) is not dict:raise Rejected('CONFIG_INVALID')
     protocol={'function_type':function.function_type,'input_schema':function.input_schema,'output_schema':function.output_schema,
         'context_template':function.context_template,'prompt':function.prompt_reference,'manifest_sha256':function.manifest_sha256}
-    if set(request_snapshot) != {'profile','request','protocol'} or request_snapshot['profile'] != profile.snapshot or request_snapshot['protocol'] != protocol:
+    if set(request_snapshot) not in ({'profile','request','protocol'},{'profile','request','protocol','counting'}) or request_snapshot['profile'] != profile.snapshot or request_snapshot['protocol'] != protocol:
         raise Rejected('CONFIG_INVALID')
     request=request_snapshot['request']
     if type(request) is not dict:raise Rejected('SOURCE_INVALID')
@@ -88,7 +89,7 @@ def audited_context(connection, row, catalog, profile):
     supplied=strict_json_object(content)
     context=BuiltContext(system,content,row['context_manifest_json'],len(content.encode('utf-8')),(),())
     if request != profile.request(context):raise Rejected('CONFIG_INVALID')
-    actual,supplied=verify_actual_context(connection,run['id'],function,supplied,system,row['context_manifest_json'],catalog)
+    actual,supplied=verify_actual_context(connection,run['id'],function,supplied,system,row['context_manifest_json'],catalog,counting=request_snapshot.get('counting'),input_json=content,counting_summary=True)
     return run,root,function,actual,supplied
 
 
