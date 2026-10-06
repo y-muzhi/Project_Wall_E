@@ -15,7 +15,7 @@ export type RequirementFilters = Readonly<{ keyword?: string; status?: readonly 
 export type GuideFilters = Readonly<{ status?: readonly (typeof models.runStatuses[number])[]; action_type?: readonly (typeof models.runActions[number])[]; page?: number }>;
 export type CreateRequirement = Readonly<{ title: string; requirement_type: 'NEW' | 'CHANGE'; template_key: string; template_version: string;
   initial_idea: string; initialization_mode: 'IDEATION' | 'DESIGN' }>;
-export type CreateGuide = Readonly<{ expected_version: number; action_type: 'ASK' | 'REVIEW' | 'MODIFY'; instruction: string;
+export type CreateGuide = Readonly<{ expected_version: number; action_type: 'INITIALIZE' | 'ASK' | 'REVIEW' | 'MODIFY'; instruction: string;
   scope_type: 'DOCUMENT' | 'SECTION' | 'BLOCK' | 'SELECTION'; scope_ref?: ReturnType<typeof models.scope>['scope_ref'];
   source_type: 'USER_INSTRUCTION' | 'REVIEW_RESULT'; source_id?: number | null }>;
 export type CreateComment = Readonly<{ expected_content_version: number; content: string; anchor_type: 'BLOCK' | 'SELECTION'; block_id: number;

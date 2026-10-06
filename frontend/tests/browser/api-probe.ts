@@ -29,6 +29,7 @@ import {mountCommentCommandsProbe} from './comment-commands-probe.tsx';
 import {mountCommentPanelProbe} from './comment-panel-probe.tsx';
 import {mountAiReadProbe} from './ai-read-probe.tsx';
 import {mountRunActionsProbe} from './run-actions-probe.tsx';
+import {mountGuideComposerProbe} from './guide-composer-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -45,7 +46,7 @@ const transport: typeof fetch = async (input, options) => {
   wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status,
     ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
       (options?.method!==undefined&&options.method!=='GET'&&(/^\/api\/v1\/requirements\/\d+\/comments$/.test(String(input))||/^\/api\/v1\/comments\/\d+(?:\/resolve|\/reopen|\/guide-runs)?$/.test(String(input))))||
-      (options?.method==='POST'&&/^\/api\/v1\/guide-runs\/\d+\/(?:cancel|retry)$/.test(String(input)))||
+      (options?.method==='POST'&&(/^\/api\/v1\/guide-runs\/\d+\/(?:cancel|retry|continue)$/.test(String(input))||/^\/api\/v1\/requirements\/\d+\/guide-runs$/.test(String(input))))||
       (String(input).startsWith('/api/v1/requirements/') &&
         ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft')||String(input).endsWith('/complete-initialization')||String(input).endsWith('/complete')||String(input).endsWith('/reactivate')||String(input).endsWith('/revisions'))) ||
           (options?.method === 'DELETE' && String(input).endsWith('/manual-draft')) || (options?.method==='PATCH'&&/^\/api\/v1\/requirements\/\d+$/.test(String(input)))))
@@ -166,6 +167,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountCommentPanel:async()=>{Object.assign(window,{commentPanelProbe:await mountCommentPanelProbe(api)});},
  mountAiRead:async()=>{Object.assign(window,{aiReadProbe:await mountAiReadProbe(api)});},
  mountRunActions:async()=>{Object.assign(window,{runActionsProbe:await mountRunActionsProbe(api)});},
+ mountGuideComposer:async(identity=2)=>{Object.assign(window,{guideComposerProbe:await mountGuideComposerProbe(api,identity)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');
