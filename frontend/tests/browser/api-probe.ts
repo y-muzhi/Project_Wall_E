@@ -25,6 +25,7 @@ import {mountRevisionsProbe} from './revisions-probe.tsx';
 import {mountNavigationProbe} from './navigation-probe.tsx';
 import {mountDocumentOwnerProbe} from './document-owner-probe.tsx';
 import {mountCommentsProbe} from './comments-probe.tsx';
+import {mountCommentCommandsProbe} from './comment-commands-probe.tsx';
 
 const editor = new Crepe({ root: document.querySelector<HTMLElement>('#editor')!, defaultValue: '', features: {
   [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -40,6 +41,7 @@ const transport: typeof fetch = async (input, options) => {
   const received = await response.clone().text(); responses.push({path:String(input),status:response.status,response:received}); if (responses.length > 5) responses.shift();
   wires.push({ path: String(input), method: options?.method ?? 'GET', status: response.status,
     ...((options?.method === 'POST' && String(input) === '/api/v1/requirements') ||
+      (options?.method!==undefined&&options.method!=='GET'&&(/^\/api\/v1\/requirements\/\d+\/comments$/.test(String(input))||/^\/api\/v1\/comments\/\d+(?:\/resolve|\/reopen|\/guide-runs)?$/.test(String(input))))||
       (String(input).startsWith('/api/v1/requirements/') &&
         ((options?.method === 'POST' && (String(input).endsWith('/manual-draft/complete') || String(input).endsWith('/manual-draft')||String(input).endsWith('/complete-initialization')||String(input).endsWith('/complete')||String(input).endsWith('/reactivate')||String(input).endsWith('/revisions'))) ||
           (options?.method === 'DELETE' && String(input).endsWith('/manual-draft')) || (options?.method==='PATCH'&&/^\/api\/v1\/requirements\/\d+$/.test(String(input)))))
@@ -156,6 +158,7 @@ Object.assign(window, { apiProbe: { run, hostProbe, readLimits: () => readLimits
  mountNavigation:async()=>{Object.assign(window,{navigationProbe:await mountNavigationProbe(api)});},
  mountDocumentOwner:async()=>{Object.assign(window,{documentOwnerProbe:await mountDocumentOwnerProbe(api)});},
  mountComments:async()=>{Object.assign(window,{commentsProbe:await mountCommentsProbe(api)});},
+ mountCommentCommands:async()=>{Object.assign(window,{commentCommandsProbe:await mountCommentCommandsProbe(api)});},
  pollingObserver:async()=>{
   const runs=await api.listGuideRuns(2,{status:['FAILED']}),native=runs.data.items[0]!;require(native!==undefined);let reads=0,healthy=0;
   const fault=new Error('Explicit private observer diagnostic');

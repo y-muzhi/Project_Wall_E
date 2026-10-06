@@ -161,3 +161,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .comment-marker-layer { position:absolute; inset:0; pointer-events:none; }
 .comment-marker-layer>div { position:absolute; right:0; pointer-events:auto; }
 .comment-marker { background:#eff6ff; color:#1d4ed8; border:1px solid #93c5fd; border-radius:12px; padding:4px 8px; }
+.comment-command { min-width:0; }
+.comment-command label { display:grid; gap:8px; margin:12px 0; }
+.comment-command textarea { display:block; width:100%; min-height:120px; resize:vertical; border:1px solid var(--border); border-radius:8px; padding:8px 12px; background:white; color:inherit; }
+.comment-command textarea:disabled { background:#f8fafc; }
