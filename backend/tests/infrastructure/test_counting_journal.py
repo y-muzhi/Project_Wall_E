@@ -50,13 +50,13 @@ class CountingJournalTests(unittest.TestCase):
         self.journal.finish(identity,self.profile,AT,status='SUCCEEDED',measurement=receipt(self.texts).evidence)
         self.assertEqual(self.load(identity,'finished')['measurement'],receipt(self.texts).evidence)
         self.assertEqual(self.h.facts(),before)
-        for file in self.journal.root.iterdir():self.assertNotIn(self.profile.api_key,file.read_text())
+        for file in self.journal.root.iterdir():self.assertNotIn(self.profile.api_key,file.read_text(encoding='utf-8'))
 
     def test_capacity_rejects_before_file_and_credentials_in_private_text_are_redacted(self):
         with patch('backend.app.infrastructure.audit_data.MAX_AUDIT_BYTES',10),self.assertRaises(ValueError):self.prepare()
         self.assertFalse(self.journal.root.exists())
         identity=self.journal.prepare(self.actual,self.function,self.profile,(*self.texts,self.profile.api_key),AT)
-        self.assertNotIn(self.profile.api_key,self.journal._file(identity,'prepared').read_text())
+        self.assertNotIn(self.profile.api_key,self.journal._file(identity,'prepared').read_text(encoding='utf-8'))
 
     def test_repeated_finish_cannot_overwrite_observed_success(self):
         identity=self.prepare();self.journal.finish(identity,self.profile,AT,status='SUCCEEDED',measurement=receipt(self.texts).evidence)

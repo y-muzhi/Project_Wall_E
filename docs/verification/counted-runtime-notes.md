@@ -24,6 +24,8 @@ ORCH 的准确计数是私有依赖分支，计数前和 Chat 前均要求兼容
 - `counted-runtime-2026-10-06T13-25-43-233Z.json`：23 项，新增 journal 夹具缺 ProcessLock 导入，1 ERROR；补导入后继续，未降低断言。
 - `counted-runtime-2026-10-06T13-27-52-725Z.json`：99 项，原 worker 无计数的保留测试失败；新增零条 COUNT_RAW_PRUNED 事件挤占既有 AUDIT_PRUNED 末条事件。只在确有计数清理时发新事件，原断言不变。
 - `counted-runtime-2026-10-06T13-31-25-025Z.json`：101 项 / 134.802 秒通过，输入哈希保持、diagnostic_errors=[]；包含 27 项新增实际编排/journal/worker测试和既有基础/计数/审计/可信结果/ORCH/worker 回归，不与完整后端总数相加。
+- `P2-2026-10-06T13-44-12-087Z.json`：完整785项/530.407秒，3 ERROR；新增测试的3处 Path.read_text 未指定UTF-8，普通Windows默认GBK解码含emoji的审计文本失败。生产文件一直明确使用UTF-8，未改生产行为；专项使用-X utf8掩盖了该夹具缺口。明确3处编码，不给完整回归加UTF-8模式绕过默认环境。
+- `counted-windows-text-2026-10-06T13-46-41-378Z.json`：原3个失败在不启用UTF-8模式下直接重跑全部通过，输入保持、无traceback。完整最终源码再次运行另行保存，不把此3项称完整回归。
 
 新增范围包括计数→原请求审计→Chat→完整签名校验→C07；准确请求逐字相同；同 call_no 三次 Chat 与三次独立计数、单轮计数错误不重试；实际版本变化和逻辑取消不迟到采用；真实计数 socket 被后台取消关闭；退休后保留未知 prepared、重新启动不重发；fsync/容量/替换故障；30 天边界；计数、模型、Schema、请求文本、Manifest、摘要篡改拒绝；真实历史及非必要邻块裁剪逐步重放。
 

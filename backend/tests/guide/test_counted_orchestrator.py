@@ -64,7 +64,7 @@ class CountedOrchestratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('response',measure);self.assertIn('response_sha256',measure)
         self.assertEqual(measure['journal_id'],self.records('prepared')[0]['id'])
         self.assertEqual(audit['validation_status'],'SUCCEEDED');self.assertEqual(f.row('requirement_documents',current['id']),current)
-        for path in self.journal.root.glob('*.json'):self.assertNotIn(f.profile.api_key,path.read_text())
+        for path in self.journal.root.glob('*.json'):self.assertNotIn(f.profile.api_key,path.read_text(encoding='utf-8'))
         self.assertTrue(all(item.closed for item in self.w.transports))
 
     async def test_missing_pre_count_gate_prevents_count_and_chat(self):
