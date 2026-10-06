@@ -52,6 +52,11 @@ export class InteractionCards{
   * even after another read observes ANSWERED or EXPIRED. */
  adopt(message:Message,source:GuideRun,detail:DetailSnapshot,formal:Message|null=null):void{
   if(this.closed)return;if(identity(message)!==this.origin||source.id!==message.guide_run_id||source.requirement_id!==message.requirement_id)throw TypeError('Immutable card source changed');this.assertDetail(detail);if(formal)this.assertFormal(formal);if(formal&&message.card_state!=='ANSWERED')throw TypeError('Formal response requires actual ANSWERED');
+  if(this.value.outcome){if(formal&&formal.id!==this.value.outcome.response_message.id)throw TypeError('Confirmed formal response identity changed');if(message.card_state!=='ANSWERED'){
+   // I35 started before the accepted transaction may finish afterwards. Its
+   // old AVAILABLE observation cannot undo our actual positive receipt.
+   this.publish({source:capture(source),detail:capture(detail)});return;
+  }}
   const settled=message.card_state!=='AVAILABLE',protectedRequest=['SUBMITTING','UNKNOWN','READING','CONFIRMED'].includes(this.value.phase);
   this.publish({message:capture(message),source:capture(source),detail:capture(detail),formal:formal?capture(formal):settled?this.value.formal:null,answers:!protectedRequest&&(message.card_state==='EXPIRED'||!settled&&this.value.message.card_state!=='AVAILABLE')?blankAnswers(this.value.cards):this.value.answers,phase:protectedRequest?this.value.phase:settled?'RESOLVED':this.value.phase==='RESOLVED'?'READY':this.value.phase,storage_error:settled?this.drafts.clear(message.requirement_id,message.id):this.value.storage_error});
  }
