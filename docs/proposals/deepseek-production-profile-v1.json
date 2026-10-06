@@ -1,0 +1,39 @@
+{
+  "status": "PROPOSED_NOT_ADOPTED",
+  "provider": "volcengine",
+  "model_name": "deepseek-v4-1-flash-260910",
+  "model_version": "260910",
+  "endpoint": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+  "temperature": 0,
+  "max_tokens": 8192,
+  "stream": false,
+  "thinking": {
+    "type": "disabled"
+  },
+  "timeouts": {
+    "connect": 10,
+    "read": 180,
+    "write": 10,
+    "pool": 10
+  },
+  "transport_retries": 0,
+  "orch_attempts_per_call": 3,
+  "orch_backoff_seconds": [
+    2,
+    5
+  ],
+  "budget": {
+    "total_tokens": 32768,
+    "input_tokens": 24576,
+    "output_tokens": 8192,
+    "prompt_tokens": 4096,
+    "current_user_tokens": 4096,
+    "source_tokens": 4096,
+    "template_tokens": 4096,
+    "history_tokens": 2048
+  },
+  "production_counting_enabled": false,
+  "provider_compatibility_proved": false,
+  "paid_execution_authorized": false,
+  "business_resources": "Preserve approved v1/v2 immutable bytes; new profile/counting strategy version only"
+}

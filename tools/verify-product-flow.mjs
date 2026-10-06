@@ -6,13 +6,13 @@ const root=resolve(import.meta.dirname,'..');
 function hashes(){
  const files=readdirSync(resolve(root,'backend'),{recursive:true,withFileTypes:true})
   .filter(e=>e.isFile()&&/\.(py|sql|json|md|lock)$/.test(e.name)).map(e=>resolve(e.parentPath,e.name));
- files.push(resolve(root,'tools/verify-product-flow.py'),resolve(root,'tools/product-suggestions-flow.py'),resolve(root,'tools/verify-product-flow.mjs'));
+ files.push(resolve(root,'tools/verify-product-flow.py'),resolve(root,'tools/product-suggestions-flow.py'),resolve(root,'tools/product-comments-flow.py'),resolve(root,'tools/product-query-flow.py'),resolve(root,'tools/product-gates-flow.py'),resolve(root,'tools/verify-product-flow.mjs'));
  return Object.fromEntries(files.sort().map(p=>[p.slice(root.length+1).replaceAll('\\','/'),createHash('sha256').update(readFileSync(p)).digest('hex')]));
 }
-const record={scope:'Independent actual TC-E2E-01/02/03/04 HTTP/worker/local count and Chat TCP/native C07/baseline/manual save-complete-cancel/six SQL rollback barriers and independently referenced suggestion application/no-change/table/failure/discard branches, plus both card continuation paths with native concurrency barrier/committed response loss. Fresh SQLite per case, explicit private offline compatibility fixtures. No paid Provider or full project acceptance.',recorded_at:new Date().toISOString(),before:hashes(),commands:[]};
+const record={scope:'Independent actual TC-E2E-01/02/03/04/05/06/10 HTTP/worker/local count and Chat TCP/native C07/baseline/manual save-complete-cancel/six SQL rollback barriers and independently referenced suggestion application/no-change/table/failure/discard branches, plus both card continuation paths with native concurrency barrier/committed response loss. Four comment dual-status cases include explicitly labeled historical snapshot fixtures for old-ID restoration and stale legacy source, actual C06/public completion and anchor-only refusal. Fresh SQLite per case, explicit private offline compatibility fixtures. No paid Provider or full project acceptance.',recorded_at:new Date().toISOString(),before:hashes(),commands:[]};
 for(const [command,args] of [
  [process.execPath,['tools/spec-audit.mjs','check']],
- [resolve(root,'.venv/Scripts/python.exe'),['-X','utf8','tools/verify-product-flow.py']]]){
+ [resolve(root,'.venv/Scripts/python.exe'),['-X','utf8','tools/verify-product-flow.py',...process.argv.slice(2)]]]){
  const result=spawnSync(command,args,{cwd:root,windowsHide:true,encoding:'utf8',maxBuffer:4*1024*1024,env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  record.commands.push({command,args,exit_code:result.status,error:result.error?.message??null,stdout:result.stdout,stderr:result.stderr});
 }

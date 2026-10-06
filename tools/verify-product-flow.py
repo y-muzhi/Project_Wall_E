@@ -1,4 +1,4 @@
-"""TC-E2E-01/02/03/04: independent actual HTTP and native SQLite scenarios.
+"""TC-E2E-01/02/03/04/05/06/10: independent actual HTTP and native SQLite scenarios.
 
 No paid Provider calls. Private diagnostic compatibility callbacks and synthetic
 token counts do not prove tokenizer/framing accuracy. No normal DB or secrets.
@@ -45,6 +45,9 @@ def hashes():
                    if p.is_file() and p.suffix in ('.py', '.sql', '.json', '.md', '.lock'))
     files.append(Path(__file__).resolve())
     files.append(ROOT / 'tools/product-suggestions-flow.py')
+    files.append(ROOT / 'tools/product-comments-flow.py')
+    files.append(ROOT / 'tools/product-query-flow.py')
+    files.append(ROOT / 'tools/product-gates-flow.py')
     return {str(p.relative_to(ROOT)).replace('\\', '/'): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in files}
 
@@ -512,6 +515,18 @@ class Verification:
                 if scenario == 'TC-E2E-02':
                     await self.manual_flow(client, database, req, final_current)
                     self.record['tc_e2e_02_passed'] = True
+                elif scenario.startswith('TC-E2E-06-'):
+                    spec = importlib.util.spec_from_file_location('product_gates_flow', ROOT / 'tools/product-gates-flow.py')
+                    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                    await module.run(self, client, database, req, final_current, chat, counter, app, scenario.removeprefix('TC-E2E-06-'))
+                elif scenario.startswith('TC-E2E-10-'):
+                    spec = importlib.util.spec_from_file_location('product_query_flow', ROOT / 'tools/product-query-flow.py')
+                    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                    await module.run(self, client, database, req, final_current, chat, counter, scenario.removeprefix('TC-E2E-10-'))
+                elif scenario.startswith('TC-E2E-05-'):
+                    spec = importlib.util.spec_from_file_location('product_comments_flow', ROOT / 'tools/product-comments-flow.py')
+                    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                    await module.run(self, client, database, req, final_current, chat, counter, scenario.removeprefix('TC-E2E-05-'))
                 elif scenario.startswith('TC-E2E-03-'):
                     spec = importlib.util.spec_from_file_location('product_suggestions_flow', ROOT / 'tools/product-suggestions-flow.py')
                     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -531,9 +546,18 @@ class Verification:
 
 def main():
     outcomes = []
-    for scenario in ('TC-E2E-01', 'TC-E2E-02', 'TC-E2E-04', 'TC-E2E-03-APPLY', 'TC-E2E-03-NOCHANGE',
+    scenarios = ('TC-E2E-01', 'TC-E2E-02', 'TC-E2E-04', 'TC-E2E-03-APPLY', 'TC-E2E-03-NOCHANGE',
                      'TC-E2E-03-PENDING', 'TC-E2E-03-VERSIONS', 'TC-E2E-03-STALE', 'TC-E2E-03-TARGET', 'TC-E2E-03-COMBINATION',
-                     'TC-E2E-03-TABLE_ROW', 'TC-E2E-03-TABLE_APPEND'):
+                     'TC-E2E-03-TABLE_ROW', 'TC-E2E-03-TABLE_APPEND',
+                     'TC-E2E-05-OPEN-ATTACHED', 'TC-E2E-05-OPEN-ORPHANED',
+                     'TC-E2E-05-RESOLVED-ATTACHED', 'TC-E2E-05-RESOLVED-ORPHANED',
+                     'TC-E2E-10-LIST', 'TC-E2E-10-READS',
+                     'TC-E2E-06-CANCEL_FIRST', 'TC-E2E-06-PERSIST_FIRST', 'TC-E2E-06-LATE_TCP')
+    if len(sys.argv) > 1:
+        if len(sys.argv) < 3 or sys.argv[1] != '--scenarios' or any(s not in scenarios for s in sys.argv[2:]):
+            raise SystemExit('Use --scenarios followed by registered local verification scenarios')
+        scenarios = tuple(sys.argv[2:])
+    for scenario in scenarios:
         verification = Verification()
         try:
             asyncio.run(verification.run(scenario))

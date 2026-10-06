@@ -1,0 +1,7 @@
+{
+  "scope": "Staging guard only; credential bytes never printed or stored",
+  "staged_files": 103,
+  "private_runtime_files_staged": false,
+  "actual_credential_staged": false,
+  "passed": true
+}
