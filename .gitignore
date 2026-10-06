@@ -11,3 +11,7 @@ dist/
 *.sqlite-wal
 .playwright-cli/
 output/playwright/
+
+# Local editor settings and generated runtime/browser artifacts
+/.vscode/
+/output/

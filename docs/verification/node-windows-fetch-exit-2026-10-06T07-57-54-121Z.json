@@ -1,0 +1,1914 @@
+{
+  "timestamp": "2026-10-06T07-57-54-121Z",
+  "scope": "Isolated runtime/HTTP cancellation/actual Vite config dev or preview; no DB/business/Provider. Fetch-exit deliberately reproduces upstream teardown and is separate from live Vite evidence.",
+  "runtime": "C:\\Program Files\\nodejs\\node.exe",
+  "mode": "fetch-exit",
+  "rounds": 100,
+  "exe_sha256": "3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5",
+  "records": [
+    {
+      "i": 0,
+      "pid": 17956,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 1,
+      "pid": 43760,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 2,
+      "pid": 16568,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 3,
+      "pid": 38000,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 4,
+      "pid": 36440,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 5,
+      "pid": 20968,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 6,
+      "pid": 22752,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 7,
+      "pid": 17260,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 8,
+      "pid": 27708,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 9,
+      "pid": 44020,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 10,
+      "pid": 36260,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 11,
+      "pid": 44324,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 12,
+      "pid": 44696,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 13,
+      "pid": 41912,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 14,
+      "pid": 20548,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 15,
+      "pid": 38312,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 16,
+      "pid": 45436,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 17,
+      "pid": 27504,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 18,
+      "pid": 2704,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 19,
+      "pid": 31260,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 20,
+      "pid": 45320,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 21,
+      "pid": 29828,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 22,
+      "pid": 45516,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 23,
+      "pid": 10396,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 24,
+      "pid": 30588,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 25,
+      "pid": 16156,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 26,
+      "pid": 29404,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 27,
+      "pid": 34684,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 28,
+      "pid": 20672,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 29,
+      "pid": 36084,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 30,
+      "pid": 36032,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 31,
+      "pid": 44656,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 32,
+      "pid": 41648,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 33,
+      "pid": 44828,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 34,
+      "pid": 45564,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 35,
+      "pid": 24620,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 36,
+      "pid": 44316,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 37,
+      "pid": 45680,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 38,
+      "pid": 43700,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 39,
+      "pid": 34420,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 40,
+      "pid": 45816,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 41,
+      "pid": 11636,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 42,
+      "pid": 42016,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 43,
+      "pid": 36060,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 44,
+      "pid": 44944,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 45,
+      "pid": 37024,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 46,
+      "pid": 38376,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 47,
+      "pid": 45780,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 48,
+      "pid": 45636,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 49,
+      "pid": 30092,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 50,
+      "pid": 44992,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 51,
+      "pid": 43080,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 52,
+      "pid": 41284,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 53,
+      "pid": 43768,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 54,
+      "pid": 43912,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 55,
+      "pid": 15692,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 56,
+      "pid": 34956,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 57,
+      "pid": 36736,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 58,
+      "pid": 42372,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 59,
+      "pid": 45540,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 60,
+      "pid": 5484,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 61,
+      "pid": 44016,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 62,
+      "pid": 42876,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 63,
+      "pid": 18736,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 64,
+      "pid": 4384,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 65,
+      "pid": 10320,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 66,
+      "pid": 37612,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 67,
+      "pid": 34996,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 68,
+      "pid": 32232,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 69,
+      "pid": 22532,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 70,
+      "pid": 35980,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 71,
+      "pid": 44236,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 72,
+      "pid": 42440,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 73,
+      "pid": 44348,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 74,
+      "pid": 3264,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 75,
+      "pid": 33948,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 76,
+      "pid": 33128,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 77,
+      "pid": 38564,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 78,
+      "pid": 36880,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 79,
+      "pid": 40120,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 80,
+      "pid": 37976,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 81,
+      "pid": 27504,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 82,
+      "pid": 34148,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 83,
+      "pid": 12660,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 84,
+      "pid": 17952,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 85,
+      "pid": 38036,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 86,
+      "pid": 12208,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 87,
+      "pid": 29236,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 88,
+      "pid": 9960,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 89,
+      "pid": 32520,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 90,
+      "pid": 19104,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 91,
+      "pid": 44800,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 92,
+      "pid": 18820,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 93,
+      "pid": 36184,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 94,
+      "pid": 45072,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 95,
+      "pid": 32104,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 96,
+      "pid": 28148,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 97,
+      "pid": 26724,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 98,
+      "pid": 45544,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    },
+    {
+      "i": 99,
+      "pid": 38604,
+      "args": [
+        "--report-on-fatalerror",
+        "--report-exclude-env",
+        "--report-directory=C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\diagnostics\\node-windows-child.mjs",
+        "fetch-exit",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2",
+        "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\output\\runtime-diagnostics\\2026-10-06T07-57-54-121Z\\static"
+      ],
+      "stdout": "{\"completed\":true,\"node\":\"v24.15.0\"}\n",
+      "stderr": "",
+      "code": 0,
+      "signal": null,
+      "timeout": false,
+      "requests": 0
+    }
+  ],
+  "passed": true,
+  "native_reports": [
+    "static"
+  ]
+}

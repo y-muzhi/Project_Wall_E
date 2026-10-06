@@ -1,0 +1,512 @@
+{
+  "scope": "Exception context and symbolized raw stack candidates, not an unwound call stack. Isolated no-credential HTTP reproduction.",
+  "dump_sha256": "e3dc8ce8055aac1085c3c2547f625e6c529df29d9e0c9328852145968b06c702",
+  "thread": 34516,
+  "exception_code": "0xc0000409",
+  "exception_parameters": [
+    2
+  ],
+  "exception": {
+    "address": "0x7ff790a52189",
+    "module": "node.exe",
+    "rva": "0x21f2189",
+    "symbol": "__report_gsfailure",
+    "displacement": 29
+  },
+  "rip": {
+    "address": "0x7ff790a52189",
+    "module": "node.exe",
+    "rva": "0x21f2189",
+    "symbol": "__report_gsfailure",
+    "displacement": 29
+  },
+  "rsp": "0x33fe9fcf70",
+  "raw_stack_candidates": [
+    {
+      "address": "0x7ff79414de48",
+      "module": "node.exe",
+      "rva": "0x58ede48",
+      "symbol": "default_loop_struct",
+      "displacement": 0,
+      "stack_offset": "0x18"
+    },
+    {
+      "address": "0x7ff79414de48",
+      "module": "node.exe",
+      "rva": "0x58ede48",
+      "symbol": "default_loop_struct",
+      "displacement": 0,
+      "stack_offset": "0x28"
+    },
+    {
+      "address": "0x7ff78f7ff67f",
+      "module": "node.exe",
+      "rva": "0xf9f67f",
+      "symbol": "uv__tcp_connect",
+      "displacement": 943,
+      "stack_offset": "0x38"
+    },
+    {
+      "address": "0x7ff78f61d9fd",
+      "module": "node.exe",
+      "rva": "0xdbd9fd",
+      "symbol": "v8::internal::GlobalHandles::Create",
+      "displacement": 13,
+      "stack_offset": "0xf8"
+    },
+    {
+      "address": "0x7ff78ec68b00",
+      "module": "node.exe",
+      "rva": "0x408b00",
+      "symbol": "node::AsyncWrap::AsyncReset",
+      "displacement": 528,
+      "stack_offset": "0x178"
+    },
+    {
+      "address": "0x7ff78ec708d3",
+      "module": "node.exe",
+      "rva": "0x4108d3",
+      "symbol": "node::async_context_frame::current",
+      "displacement": 19,
+      "stack_offset": "0x188"
+    },
+    {
+      "address": "0x7ff78ec6de1f",
+      "module": "node.exe",
+      "rva": "0x40de1f",
+      "symbol": "node::AsyncWrap::AsyncWrap",
+      "displacement": 223,
+      "stack_offset": "0x1b8"
+    },
+    {
+      "address": "0x7ff78ec6dd0d",
+      "module": "node.exe",
+      "rva": "0x40dd0d",
+      "symbol": "node::AsyncWrap::AsyncWrap",
+      "displacement": 45,
+      "stack_offset": "0x208"
+    },
+    {
+      "address": "0x7ff78f818e4b",
+      "module": "node.exe",
+      "rva": "0xfb8e4b",
+      "symbol": "uv_tcp_connect",
+      "displacement": 59,
+      "stack_offset": "0x258"
+    },
+    {
+      "address": "0x7ff78e98a0d0",
+      "module": "node.exe",
+      "rva": "0x12a0d0",
+      "symbol": "node::MakeLibuvRequestCallback<uv_connect_s,void (*)(uv_connect_s *, int)>::Wrapper",
+      "displacement": 0,
+      "stack_offset": "0x280"
+    },
+    {
+      "address": "0x7ff78e9890f8",
+      "module": "node.exe",
+      "rva": "0x1290f8",
+      "symbol": "node::TCPWrap::Connect<sockaddr_in>",
+      "displacement": 584,
+      "stack_offset": "0x288"
+    },
+    {
+      "address": "0x7ff78f5ec367",
+      "module": "node.exe",
+      "rva": "0xd8c367",
+      "symbol": "v8::internal::FactoryBase<v8::internal::Factory>::AllocateRawFixedArray",
+      "displacement": 55,
+      "stack_offset": "0x2f8"
+    },
+    {
+      "address": "0x7ff78f5e1411",
+      "module": "node.exe",
+      "rva": "0xd81411",
+      "symbol": "v8::internal::Factory::CopyArrayAndGrow<v8::internal::PropertyArray>",
+      "displacement": 81,
+      "stack_offset": "0x358"
+    },
+    {
+      "address": "0x7ff78f2d94da",
+      "module": "node.exe",
+      "rva": "0xa794da",
+      "symbol": "v8::internal::Object::TransitionAndWriteDataProperty",
+      "displacement": 218,
+      "stack_offset": "0x368"
+    },
+    {
+      "address": "0x7ff78f5e13b2",
+      "module": "node.exe",
+      "rva": "0xd813b2",
+      "symbol": "v8::internal::Factory::CopyPropertyArrayAndGrow",
+      "displacement": 18,
+      "stack_offset": "0x3d8"
+    },
+    {
+      "address": "0x7ff78f35e360",
+      "module": "node.exe",
+      "rva": "0xafe360",
+      "symbol": "v8::internal::JSObject::MigrateToMap",
+      "displacement": 5136,
+      "stack_offset": "0x418"
+    },
+    {
+      "address": "0x7ff78f5d448e",
+      "module": "node.exe",
+      "rva": "0xd7448e",
+      "symbol": "v8::internal::Factory::AllocateRaw",
+      "displacement": 78,
+      "stack_offset": "0x448"
+    },
+    {
+      "address": "0x7ff78f5dfdae",
+      "module": "node.exe",
+      "rva": "0xd7fdae",
+      "symbol": "v8::internal::Factory::CopyJSObjectWithAllocationSite",
+      "displacement": 222,
+      "stack_offset": "0x4a8"
+    },
+    {
+      "address": "0x7ff78f5ec03c",
+      "module": "node.exe",
+      "rva": "0xd8c03c",
+      "symbol": "v8::internal::FactoryBase<v8::internal::Factory>::NewFixedArrayWithFiller",
+      "displacement": 92,
+      "stack_offset": "0x4c8"
+    },
+    {
+      "address": "0x7ff78f5dfcc0",
+      "module": "node.exe",
+      "rva": "0xd7fcc0",
+      "symbol": "v8::internal::Factory::CopyJSObject",
+      "displacement": 16,
+      "stack_offset": "0x558"
+    },
+    {
+      "address": "0x7ff78f7cca5e",
+      "module": "node.exe",
+      "rva": "0xf6ca5e",
+      "symbol": "v8::Object::SetAlignedPointerInInternalField",
+      "displacement": 158,
+      "stack_offset": "0x578"
+    },
+    {
+      "address": "0x7ff78f7af5a6",
+      "module": "node.exe",
+      "rva": "0xf4f5a6",
+      "symbol": "v8::Object::InternalFieldCount",
+      "displacement": 70,
+      "stack_offset": "0x588"
+    },
+    {
+      "address": "0x7ff78ec634d0",
+      "module": "node.exe",
+      "rva": "0x4034d0",
+      "symbol": "node::BaseObject::LazilyInitializedJSTemplateConstructor",
+      "displacement": 0,
+      "stack_offset": "0x5c0"
+    },
+    {
+      "address": "0x7ff78ec6355a",
+      "module": "node.exe",
+      "rva": "0x40355a",
+      "symbol": "node::BaseObject::LazilyInitializedJSTemplateConstructor",
+      "displacement": 138,
+      "stack_offset": "0x5c8"
+    },
+    {
+      "address": "0x7ff78f2d94da",
+      "module": "node.exe",
+      "rva": "0xa794da",
+      "symbol": "v8::internal::Object::TransitionAndWriteDataProperty",
+      "displacement": 218,
+      "stack_offset": "0x5e8"
+    },
+    {
+      "address": "0x7ff78f78eb69",
+      "module": "node.exe",
+      "rva": "0xf2eb69",
+      "symbol": "v8::internal::FunctionCallbackArguments::CallOrConstruct",
+      "displacement": 425,
+      "stack_offset": "0x618"
+    },
+    {
+      "address": "0x7ff78ec634d0",
+      "module": "node.exe",
+      "rva": "0x4034d0",
+      "symbol": "node::BaseObject::LazilyInitializedJSTemplateConstructor",
+      "displacement": 0,
+      "stack_offset": "0x648"
+    },
+    {
+      "address": "0x7ff78f7e0000",
+      "module": "node.exe",
+      "rva": "0xf80000",
+      "symbol": "v8::internal::`anonymous namespace'::InvokeFunctionCallback",
+      "displacement": 96,
+      "stack_offset": "0x668"
+    },
+    {
+      "address": "0x7ff78f78e558",
+      "module": "node.exe",
+      "rva": "0xf2e558",
+      "symbol": "v8::internal::`anonymous namespace'::HandleApiCallHelper<1>",
+      "displacement": 504,
+      "stack_offset": "0x6e8"
+    },
+    {
+      "address": "0x7ff79142a250",
+      "module": "node.exe",
+      "rva": "0x2bca250",
+      "symbol": "v8::internal::FunctionCallbackArguments::`vftable'",
+      "displacement": 0,
+      "stack_offset": "0x728"
+    },
+    {
+      "address": "0x7ff78e9879af",
+      "module": "node.exe",
+      "rva": "0x1279af",
+      "symbol": "node::TCPWrap::Connect",
+      "displacement": 127,
+      "stack_offset": "0x7b8"
+    },
+    {
+      "address": "0x7ff78f78dd9a",
+      "module": "node.exe",
+      "rva": "0xf2dd9a",
+      "symbol": "v8::internal::Builtin_HandleApiConstruct",
+      "displacement": 138,
+      "stack_offset": "0x7c8"
+    },
+    {
+      "address": "0x7ff7913794c0",
+      "module": "node.exe",
+      "rva": "0x2b194c0",
+      "symbol": "error_and_abort_args",
+      "displacement": 32,
+      "stack_offset": "0x7e8"
+    }
+  ],
+  "modules": [
+    {
+      "name": "node.exe",
+      "base": "0x7ff78e860000",
+      "size": 94580736
+    },
+    {
+      "name": "ntdll.dll",
+      "base": "0x7ffd23320000",
+      "size": 2519040
+    },
+    {
+      "name": "kernel32.dll",
+      "base": "0x7ffd22c70000",
+      "size": 831488
+    },
+    {
+      "name": "KERNELBASE.dll",
+      "base": "0x7ffd207d0000",
+      "size": 4202496
+    },
+    {
+      "name": "crypt32.dll",
+      "base": "0x7ffd20c90000",
+      "size": 1564672
+    },
+    {
+      "name": "ucrtbase.dll",
+      "base": "0x7ffd205e0000",
+      "size": 1359872
+    },
+    {
+      "name": "ws2_32.dll",
+      "base": "0x7ffd21040000",
+      "size": 524288
+    },
+    {
+      "name": "rpcrt4.dll",
+      "base": "0x7ffd22590000",
+      "size": 1146880
+    },
+    {
+      "name": "user32.dll",
+      "base": "0x7ffd210d0000",
+      "size": 1896448
+    },
+    {
+      "name": "win32u.dll",
+      "base": "0x7ffd20e20000",
+      "size": 159744
+    },
+    {
+      "name": "gdi32.dll",
+      "base": "0x7ffd22c40000",
+      "size": 176128
+    },
+    {
+      "name": "gdi32full.dll",
+      "base": "0x7ffd20f10000",
+      "size": 1216512
+    },
+    {
+      "name": "msvcp_win.dll",
+      "base": "0x7ffd20be0000",
+      "size": 667648
+    },
+    {
+      "name": "advapi32.dll",
+      "base": "0x7ffd22b40000",
+      "size": 770048
+    },
+    {
+      "name": "msvcrt.dll",
+      "base": "0x7ffd22a90000",
+      "size": 692224
+    },
+    {
+      "name": "sechost.dll",
+      "base": "0x7ffd22860000",
+      "size": 692224
+    },
+    {
+      "name": "shell32.dll",
+      "base": "0x7ffd21c50000",
+      "size": 7962624
+    },
+    {
+      "name": "dbghelp.dll",
+      "base": "0x7ffd11180000",
+      "size": 2408448
+    },
+    {
+      "name": "ole32.dll",
+      "base": "0x7ffd223f0000",
+      "size": 1679360
+    },
+    {
+      "name": "IPHLPAPI.DLL",
+      "base": "0x7ffd1eca0000",
+      "size": 208896
+    },
+    {
+      "name": "combase.dll",
+      "base": "0x7ffd212b0000",
+      "size": 3690496
+    },
+    {
+      "name": "userenv.dll",
+      "base": "0x7ffd1f920000",
+      "size": 212992
+    },
+    {
+      "name": "oleaut32.dll",
+      "base": "0x7ffd21640000",
+      "size": 888832
+    },
+    {
+      "name": "winmm.dll",
+      "base": "0x7ffd0bfd0000",
+      "size": 221184
+    },
+    {
+      "name": "dbgcore.dll",
+      "base": "0x7ffcfac80000",
+      "size": 241664
+    },
+    {
+      "name": "CRYPTBASE.DLL",
+      "base": "0x7ffd1fad0000",
+      "size": 49152
+    },
+    {
+      "name": "imm32.dll",
+      "base": "0x7ffd22720000",
+      "size": 200704
+    },
+    {
+      "name": "powrprof.dll",
+      "base": "0x7ffd1ef70000",
+      "size": 385024
+    },
+    {
+      "name": "umpdc.dll",
+      "base": "0x7ffd1ef50000",
+      "size": 86016
+    },
+    {
+      "name": "uxtheme.dll",
+      "base": "0x7ffd1d5a0000",
+      "size": 688128
+    },
+    {
+      "name": "mswsock.dll",
+      "base": "0x7ffd1f870000",
+      "size": 442368
+    },
+    {
+      "name": "cryptsp.dll",
+      "base": "0x7ffd1fc90000",
+      "size": 110592
+    },
+    {
+      "name": "rsaenh.dll",
+      "base": "0x7ffd1f230000",
+      "size": 233472
+    },
+    {
+      "name": "bcryptPrimitives.dll",
+      "base": "0x7ffd20e50000",
+      "size": 704512
+    },
+    {
+      "name": "kernel.appcore.dll",
+      "base": "0x7ffd1f2d0000",
+      "size": 110592
+    },
+    {
+      "name": "nsi.dll",
+      "base": "0x7ffd217b0000",
+      "size": 40960
+    },
+    {
+      "name": "dhcpcsvc6.DLL",
+      "base": "0x7ffd19330000",
+      "size": 118784
+    },
+    {
+      "name": "dhcpcsvc.dll",
+      "base": "0x7ffd19300000",
+      "size": 151552
+    },
+    {
+      "name": "dnsapi.dll",
+      "base": "0x7ffd1ece0000",
+      "size": 1409024
+    },
+    {
+      "name": "dsparse.dll",
+      "base": "0x7ffd1f690000",
+      "size": 53248
+    },
+    {
+      "name": "NapiNSP.dll",
+      "base": "0x7ffcef1a0000",
+      "size": 98304
+    },
+    {
+      "name": "winrnr.dll",
+      "base": "0x7ffcef180000",
+      "size": 77824
+    },
+    {
+      "name": "nlansp_c.dll",
+      "base": "0x7ffcef100000",
+      "size": 159744
+    },
+    {
+      "name": "wshbth.dll",
+      "base": "0x7ffd11820000",
+      "size": 90112
+    }
+  ]
+}
