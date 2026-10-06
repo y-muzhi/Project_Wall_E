@@ -42,6 +42,12 @@ if counting_path.exists():
     expected.update({entry['path']: entry['sha256'] for entry in counting['approved']})
     expected.update({entry['path']: entry['sha256'] for entry in counting['files']})
     expected['docs/context-counting-adoption-v1.json'] = digest(counting_path.read_bytes())
+framing_path = ROOT / 'docs/proposals/framing-observation-approval-v1.json'
+if framing_path.exists():
+    framing = json.loads(framing_path.read_text(encoding='utf-8'))
+    expected[framing['proposal_path']] = framing['proposal_sha256']
+    expected[framing['plan_path']] = framing['plan_file_sha256']
+    expected['docs/proposals/framing-observation-approval-v1.json'] = digest(framing_path.read_bytes())
 for path in ('backend/resources/v1/manifest.json', 'backend/app/infrastructure/migrations/002_idempotency_guards.sql', 'docs/resource-adoption-v1.json', 'docs/verification/proposals-v1.json'):
     expected[path] = digest((ROOT / path).read_bytes())
 actual = []

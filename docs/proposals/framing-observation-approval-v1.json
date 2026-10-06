@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "decision": "D-012",
+  "confirmed_date": "2026-10-07",
+  "timezone": "Asia/Hong_Kong",
+  "user_statement": "授权本轮至多6＋6次真实观测",
+  "proposal_path": "docs/proposals/framing-observation-execution-v1.md",
+  "proposal_sha256": "beb957b64a9161e48ffde3c61019d2fbdeaf8a91ca2b166854311d4a221b31d2",
+  "plan_path": "docs/proposals/framing-observation-plan-v1.json",
+  "plan_file_sha256": "4f69a20994d9e9eb1f3b5184d7e41b0b905591c33392f252468c5c81e3e61a1f",
+  "plan_canonical_sha256": "01be318a5a3197c009b924588e6aada8064d7d7a45185afb1d3daf81999b3d41",
+  "allowed_batches": 1,
+  "maximum_count_requests": 6,
+  "maximum_chat_requests": 6,
+  "retries": 0,
+  "stop_on_first_failure": true,
+  "maximum_requested_completion_tokens": 49152,
+  "normal_business_database_access": false,
+  "production_activation_authorized": false,
+  "real_effect_evaluation_authorized": false,
+  "real_compatibility_proved": false,
+  "scope": "Only the exact reviewed diagnostic plan, one paid observation batch. No later batch or automatic resend; no production proof from finite observations. Credential never belongs in this record. Actual execution state is recorded separately."
+}

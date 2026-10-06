@@ -33,6 +33,7 @@ const record = { batch: runtimeCheck ? 'Actual private ORCH S01-S06 plus native 
 record.diagnosticErrors = diagnosticErrors;
 record.passed = passed;
 record.countedRuntimeScope = 'D-011 private actual counted ORCH/worker, native prepared/outcome file audit and 30-day raw retention, same exact texts into local Chat TCP and full signed output validation/C07; explicit offline compatibility injections only, production default stays closed pending real framing proof.';
+record.framingProbeScope = 'Standalone bounded six-function observation planner/collector, exact-plan paid gate tested only with actual local TCP, offline default CLI, native exclusive/fsync audit and manual 30-day raw maintenance; finite observations always remain not proved, no production enablement or actual paid calls.';
 mkdirSync(resolve(root, 'docs/verification'), { recursive: true });
 const stamp = record.recordedAt.replaceAll(':', '-').replaceAll('.', '-');
 const path = resolve(root, `docs/verification/P2-${stamp}.json`);
