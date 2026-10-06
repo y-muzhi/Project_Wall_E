@@ -6,8 +6,8 @@ const labels={CREATE:'添加评论',EDIT:'保存评论',RESOLVE:'解决评论',R
 
 /** The parent owns one flow per comment across page/historical/actual refresh.
  * Positive refresh failure is a GET retry, not a second user operation. */
-export function CommentCommandControl(props:Readonly<{flow:CommentCommand;blocked:boolean;writeReady:boolean;readActual():Promise<DetailSnapshot>;changed(outcome:CommentOutcome):void|Promise<void>;cancel?():void}>){
-  const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),[open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),pending=useRef(false);
+export function CommentCommandControl(props:Readonly<{flow:CommentCommand;blocked:boolean;writeReady:boolean;readActual():Promise<DetailSnapshot>;changed(outcome:CommentOutcome):void|Promise<void>;cancel?():void;confirmOnMount?:boolean}>){
+  const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),[open,setOpen]=useState(()=>props.confirmOnMount===true&&props.flow.intent.kind==='DELETE'&&state.phase==='READY'),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),pending=useRef(false);
   const intent=props.flow.intent,text=intent.kind==='CREATE'||intent.kind==='EDIT',active=busy||['SUBMITTING','READING'].includes(state.phase),unknown=state.phase==='UNKNOWN';
   const execute=async(readOnly=false)=>{
     if(pending.current||props.blocked||!readOnly&&!unknown&&(!props.writeReady||!props.flow.allowed))return;pending.current=true;setBusy(true);setError(null);
@@ -24,6 +24,6 @@ export function CommentCommandControl(props:Readonly<{flow:CommentCommand;blocke
       <button type="button" disabled={props.blocked||active||!unknown&&(!props.writeReady||!props.flow.allowed)} onClick={()=>intent.kind==='DELETE'?setOpen(true):void execute()}>{unknown?'重新确认评论操作结果':labels[intent.kind]}</button>}
     {props.cancel&&state.phase!=='CONFIRMED'&&<button type="button" disabled={active} onClick={props.cancel}>{unknown?'保留请求并关闭编辑区':'取消编辑'}</button>}
     <Confirmation open={open} dangerous title="删除评论？" description="确认后评论将从默认列表移除，历史来源会保留。" busy={props.blocked||active||!unknown&&!props.writeReady} error={state.error}
-      confirmLabel={unknown?'重新确认删除结果':'确认删除'} cancelLabel={unknown?'保留请求并关闭弹窗':'保留评论'} cancel={()=>setOpen(false)} confirm={()=>void execute()}/>
+      confirmLabel={unknown?'重新确认删除结果':'确认删除'} cancelLabel={unknown?'保留请求并关闭弹窗':'保留评论'} cancel={()=>{setOpen(false);if(!unknown)props.cancel?.();}} confirm={()=>void execute()}/>
   </div>;
 }

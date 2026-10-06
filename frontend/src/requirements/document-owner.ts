@@ -9,10 +9,14 @@ import {RequirementRevisions} from '../revisions/read.ts';
 import {RevisionViewer} from '../revisions/viewer.ts';
 import type {Revision} from '../revisions/read.ts';
 import type {DocumentReadModel} from '../documents/contracts.ts';
+import type {SelectionEvent} from '../documents/selection.ts';
+import {selectionFromEditorState} from '../documents/editor-selection.ts';
+import {editorViewCtx} from '@milkdown/kit/core';
 
 export type DocumentOwnerState=Readonly<{mode:'LOADING'|'CURRENT'|'MANUAL'|'HISTORY';busy:boolean;detail:DetailSnapshot|null;
-  manual:ManualDraftSession|null;navigation:DocumentNavigation|null;revision:Revision|null;error:string|null;save_warning:boolean;restoration_conflict:DetailSnapshot|null;active:boolean}>;
-type LiveDocument={host:HTMLElement;editor:RequirementEditor;session:ManualDraftSession|null;navigation:DocumentNavigation;document:DocumentReadModel;release:()=>void};
+  manual:ManualDraftSession|null;navigation:DocumentNavigation|null;revision:Revision|null;error:string|null;save_warning:boolean;restoration_conflict:DetailSnapshot|null;active:boolean;selection:SelectionEvent|null}>;
+export type CurrentDocumentBinding=Readonly<{root:HTMLElement;editor:RequirementEditor;navigation:DocumentNavigation}>;
+type LiveDocument={host:HTMLElement;editor:RequirementEditor;session:ManualDraftSession|null;navigation:DocumentNavigation;document:DocumentReadModel;release:()=>void;binding:CurrentDocumentBinding};
 type HistoryDocument={host:HTMLElement;viewer:RevisionViewer;navigation:DocumentNavigation};
 const same=(left:unknown,right:unknown)=>JSON.stringify(left,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value)===
   JSON.stringify(right,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value);
@@ -25,7 +29,7 @@ export class RequirementDocumentOwner{
   readonly revisions:RequirementRevisions;private readonly identity:number;private readonly api:WalleApi;private readonly root:HTMLElement;
   private readonly scrollport:HTMLElement|null;private readonly readActual:()=>Promise<DetailSnapshot>;private live:LiveDocument|undefined;private history:HistoryDocument|undefined;
   private readonly listeners=new Set<()=>void>();private tail:Promise<unknown>=Promise.resolve();private jobs=0;private closed=false;private retiring:Promise<void>|undefined;private refreshing:Promise<DetailSnapshot>|undefined;
-  private value:DocumentOwnerState=Object.freeze({mode:'LOADING',busy:false,detail:null,manual:null,navigation:null,revision:null,error:null,save_warning:false,restoration_conflict:null,active:true});
+  private value:DocumentOwnerState=Object.freeze({mode:'LOADING',busy:false,detail:null,manual:null,navigation:null,revision:null,error:null,save_warning:false,restoration_conflict:null,active:true,selection:null});
   constructor(root:HTMLElement,identity:number,api:WalleApi,readActual:()=>Promise<DetailSnapshot>,scrollport:HTMLElement|null=null){
     this.root=root;this.identity=positiveInteger(identity);this.api=api;this.readActual=readActual;this.scrollport=scrollport;this.revisions=new RequirementRevisions(identity,api);
   }
@@ -33,6 +37,7 @@ export class RequirementDocumentOwner{
   subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
   get historical():boolean{return this.revisions.getSnapshot().history.phase!=='CLOSED';}
   get writeReady():boolean{return !this.closed&&!this.value.busy&&!this.value.error&&!this.historical&&this.live!==undefined&&!this.live.session?.getSnapshot().blocked;}
+  get currentBinding():CurrentDocumentBinding|null{return this.writeReady&&this.value.mode==='CURRENT'&&this.live?.document.document_type==='CURRENT'?this.live.binding:null;}
   private publish(changes:Partial<DocumentOwnerState>):void{if(this.closed)return;this.value=Object.freeze({...this.value,...changes});for(const listener of this.listeners)try{listener();}catch(error){console.error('WALL-E document owner observer failed',error);}}
   private enqueue<T>(operation:()=>Promise<T>):Promise<T>{
     if(this.closed)return Promise.reject(Error('Document owner is closed'));this.jobs++;this.publish({busy:true});
@@ -46,8 +51,8 @@ export class RequirementDocumentOwner{
   private async makeLive(actual:DetailSnapshot):Promise<LiveDocument>{
     const host=this.container();let editor:RequirementEditor|undefined,session:ManualDraftSession|undefined,navigation:DocumentNavigation|undefined;
     try{const document=actual.activity.kind==='MANUAL'?actual.activity.draft:actual.current;
-      if(actual.activity.kind==='MANUAL'){session=await ManualDraftSession.create(host,actual,this.api);editor=session.editor;}else editor=await RequirementEditor.create(host,document,true);
-      navigation=DocumentNavigation.forEditor(host,editor,this.scrollport);const result:LiveDocument={host,editor,session:session??null,navigation,document,release:()=>undefined};
+      if(actual.activity.kind==='MANUAL'){session=await ManualDraftSession.create(host,actual,this.api);editor=session.editor;}else editor=await RequirementEditor.create(host,document,true,{selection:selected=>{if(!this.closed&&this.live?.host===host&&this.value.mode==='CURRENT')this.publish({selection:selected});}});
+      navigation=DocumentNavigation.forEditor(host,editor,this.scrollport);const result:LiveDocument={host,editor,session:session??null,navigation,document,release:()=>undefined,binding:Object.freeze({root:host,editor,navigation})};
       if(session){const owned=session;result.release=owned.subscribe(()=>{if(this.closed||this.live!==result)return;navigation?.refresh();this.publish({manual:owned});});await owned.recovery.inspect();}
       if(this.closed)throw Error('Retired creation');return result;
     }catch(error){navigation?.dispose();if(session)await session.retire();else await editor?.destroy();host.remove();throw error;}
@@ -67,7 +72,8 @@ export class RequirementDocumentOwner{
     this.live=created;if(previous)await this.retireLive(previous);this.publish({detail:actual,manual:created.session,error:null});
   }
   private revealLive():void{if(!this.live)return;this.live.host.hidden=false;this.live.host.inert=false;this.live.navigation.setVisible(true);this.live.navigation.refresh();
-    this.publish({mode:this.live.session?'MANUAL':'CURRENT',navigation:this.live.navigation,revision:null,save_warning:false,restoration_conflict:null});}
+    let selection:SelectionEvent|null=null;if(!this.live.session)try{const input=this.live.document;selection=this.live.editor.action(ctx=>selectionFromEditorState(ctx.get(editorViewCtx).state,{document_id:input.id,content_version:input.content_version}));}catch{}
+    this.publish({mode:this.live.session?'MANUAL':'CURRENT',navigation:this.live.navigation,revision:null,save_warning:false,restoration_conflict:null,selection});}
   adopt(actual:DetailSnapshot):Promise<void>{return this.enqueue(async()=>{
     if(this.historical)throw Error('History must be restored with a fresh exit read');
     try{await this.adoptLive(actual);this.revealLive();}catch(error){this.publish({error:error instanceof Error?error.message:'实际正文暂时无法展示，现有内容仍保留'});throw error;}
@@ -82,7 +88,7 @@ export class RequirementDocumentOwner{
     const live=this.live;if(!live)throw Error('Actual document must be loaded first');
     let saved=true;if(live.session)saved=await live.session.blockAndSave('HISTORY');
     if(this.closed)return false;live.navigation.setVisible(false);live.host.hidden=true;live.host.inert=true;
-    this.publish({mode:'HISTORY',navigation:this.history?.navigation??null,error:null,save_warning:!saved});
+    this.publish({mode:'HISTORY',navigation:this.history?.navigation??null,error:null,save_warning:!saved,selection:null});
     if(!await this.revisions.open(summary)){this.publish({error:'历史读取失败，草稿和原正文仍保留'});return false;}
     const snapshot=this.revisions.getSnapshot().history.snapshot!;
     if(this.history?.viewer.snapshot.id===snapshot.id){this.publish({revision:snapshot,navigation:this.history.navigation});return true;}

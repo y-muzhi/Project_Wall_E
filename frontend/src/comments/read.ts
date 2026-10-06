@@ -7,7 +7,7 @@ import type {DocumentReadModel} from '../documents/contracts.ts';
 export type CommentIndex=Awaited<ReturnType<WalleApi['getCommentIndex']>>['data'];
 type Api=Pick<WalleApi,'listComments'|'getComment'|'getCommentIndex'>;
 export type CommentBundle=Readonly<{current:DocumentReadModel;index:CommentIndex;items:readonly CommentItem[];pagination:PagePagination}>;
-export type CommentReadState=Readonly<{confirmed:CommentBundle|null;page:number;selected:number|null;loading:boolean;active:boolean;error:string|null}>;
+export type CommentReadState=Readonly<{confirmed:CommentBundle|null;page:number;selected:number|null;selection_revision:number;loading:boolean;active:boolean;error:string|null}>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 class Changed extends Error{}
 const same=(left:unknown,right:unknown)=>JSON.stringify(left)===JSON.stringify(right);
@@ -18,7 +18,7 @@ const same=(left:unknown,right:unknown)=>JSON.stringify(left)===JSON.stringify(r
  * the last successful page. No synthetic insertion or status filtering. */
 export class RequirementComments{
   private current:DocumentReadModel;private readonly api:Api;private readonly listeners=new Set<()=>void>();
-  private value:CommentReadState=Object.freeze({confirmed:null,page:1,selected:null,loading:false,active:true,error:null});
+  private value:CommentReadState=Object.freeze({confirmed:null,page:1,selected:null,selection_revision:0,loading:false,active:true,error:null});
   private generation=0;private closed=false;private controller:AbortController|undefined;private pending:Promise<boolean>|undefined;
   constructor(current:DocumentReadModel,api:Api){this.current=this.ownedCurrent(current);this.api=api;}
   private ownedCurrent(current:DocumentReadModel):DocumentReadModel{positiveInteger(current.id);positiveInteger(current.requirement_id);positiveInteger(current.content_version);if(current.document_type!=='CURRENT')throw TypeError('Actual CURRENT required');return capture(current);}
@@ -70,7 +70,7 @@ export class RequirementComments{
               const previous=items[i-1];if(previous&&(previous.created_at>item.created_at||previous.created_at===item.created_at&&previous.id>=item.id))throw Error('Unconfirmed comment ordering');
             }
             const confirmed=capture({current,index:latest,items,pagination});
-            this.publish({confirmed,page:desired,selected:target??(items.some(row=>row.id===this.value.selected)?this.value.selected:null),loading:false,error:null});return true;
+            this.publish({confirmed,page:desired,selected:target??(items.some(row=>row.id===this.value.selected)?this.value.selected:null),selection_revision:this.value.selection_revision+(target===null?0:1),loading:false,error:null});return true;
           }catch(error){if(error instanceof Changed&&attempt===0&&alive())continue;throw error;}
         }
         return false;

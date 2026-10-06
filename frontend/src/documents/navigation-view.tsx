@@ -3,6 +3,7 @@ import {createPortal} from 'react-dom';
 import {DocumentNavigation} from './navigation.ts';
 import {localTime} from '../shared/time.ts';
 import type {Actor,SourceType} from './contracts.ts';
+import type {ReactNode} from 'react';
 
 const actors:Record<Actor,string>={SYSTEM:'系统',AI:'AI',USER:'用户'};
 const sources:Record<SourceType,string>={TEMPLATE:'模板',GUIDE_RUN:'AI 运行',SUGGESTION_BATCH:'建议批次',MANUAL_EDIT:'人工编辑'};
@@ -18,7 +19,7 @@ export function DocumentOutline({navigation}:{navigation:DocumentNavigation}){
 }
 /** Source IDs remain internal; labels state the type and actor, never invent an
  * object title or dereference a deleted editing session as a live draft. */
-export function BlockAuxiliary({navigation}:{navigation:DocumentNavigation}){
+export function BlockAuxiliary({navigation,extra}:{navigation:DocumentNavigation;extra?:ReactNode}){
   const state=useSyncExternalStore(navigation.subscribe,navigation.getSnapshot),trigger=useRef<HTMLButtonElement>(null),popover=useRef<HTMLDivElement>(null);
   const block=state.content?.blocks.find(item=>item.block_id===state.source_block);
   useEffect(()=>{if(!block)return;const previous=document.activeElement;popover.current?.focus();
@@ -30,6 +31,7 @@ export function BlockAuxiliary({navigation}:{navigation:DocumentNavigation}){
   return createPortal(<>
     {state.toolbar&&state.selected_block!==null&&!state.error&&<div className="block-auxiliary" aria-label="区块辅助栏" style={state.toolbar}>
       <button type="button" ref={trigger} aria-expanded={block!==undefined} onClick={()=>navigation.source(block?null:state.selected_block)}>来源</button>
+      {extra}
     </div>}
     {block&&<div ref={popover} className="block-source-popover" role="dialog" aria-label="区块来源" tabIndex={-1} style={{left:Math.max(8,Math.min(window.innerWidth-336,state.toolbar?.left??16)),top:Math.max(8,Math.min(window.innerHeight-300,(state.toolbar?.top??16)+40))}}>
       <header><strong>区块来源</strong><button type="button" aria-label="关闭来源" onClick={()=>navigation.source(null)}>×</button></header>
