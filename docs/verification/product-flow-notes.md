@@ -172,3 +172,6 @@ TC-E2E-09八分支：创建需求、创建草稿、整组卡片提交、批次�
 | [product-flow-command-2026-10-07T01-49-51-421Z.json](product-flow-command-2026-10-07T01-49-51-421Z.json) | 通过 |
 | [product-flow-command-2026-10-07T01-55-11-871Z.json](product-flow-command-2026-10-07T01-55-11-871Z.json) | 通过 |
 | [product-flow-command-2026-10-07T01-56-27-420Z.json](product-flow-command-2026-10-07T01-56-27-420Z.json) | 通过 |
+
+
+提交后冻结检查保留一次失败：151项中仅新deepseek-production-adoption-v1.json采用元数据的工作区CRLF与首次入索引自动LF不同；两份已批准原提议字节没有改变。元数据统一为已提交LF，并新增明确-text保护；其他148项未改。原失败JSON保留，重新检查另存结果，不把失败覆盖为成功。
