@@ -1,0 +1,601 @@
+{
+  "recorded_at": "2026-10-07T15:55:27.277002+00:00",
+  "scope": "Original bytes including failed matrix and interrupted partial probe; not all accepted results",
+  "images": [
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-51-24-779Z-7c57076e40e7.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-normal-completed.png",
+      "file": "walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-normal-completed.png",
+      "bytes": 100491,
+      "sha256": "5c99082c58257a3c781621b9a3f6d8856085ab1c4adb876dbdc2e8dedf2d0b64"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-51-24-779Z-7c57076e40e7.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-normal-waiting.png",
+      "bytes": 105590,
+      "sha256": "60ddad3c8baffd418a476175e5c21eeed929077f883f62034d28a5ddfae53020"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-51-24-779Z-7c57076e40e7.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-unknown-completed.png",
+      "file": "walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-unknown-completed.png",
+      "bytes": 100918,
+      "sha256": "6fc7dab1dbc665423ab1c0b34f036d9ef67b1297148d180c718f37047bd4b2d3"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-51-24-779Z-7c57076e40e7.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-unknown-unknown.png",
+      "file": "walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-unknown-unknown.png",
+      "bytes": 106554,
+      "sha256": "b4cabdc6a711fc62d84df0f601528e0ea11721c4728b496a6e95b4ef3f86976e"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-51-24-779Z-7c57076e40e7.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-unknown-waiting.png",
+      "file": "walle-card-answers-root-1791384684778-7c57076e40e7-ANSWERS-unknown-waiting.png",
+      "bytes": 105917,
+      "sha256": "65085a93da9516916c0f363561da12cf6db5f8811e9cd1da8ecbb44095e46f4b"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-normal-completed.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-normal-completed.png",
+      "bytes": 100996,
+      "sha256": "dc4c3eb6636cb012433ded2ec3ac62849ea856d42e48564d5a5177c3bd51d6bd"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-normal-waiting.png",
+      "bytes": 106084,
+      "sha256": "bc3e0858c3a2254a33fd9392ed3afef0111a7e823c7d62186c30c49eb68d801d"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-unknown-completed.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-unknown-completed.png",
+      "bytes": 100796,
+      "sha256": "c6790c47cdb4c69ebe878478a35f6dda4423c4ca2fb67469f50e46e3b2f52924"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-unknown-unknown.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-unknown-unknown.png",
+      "bytes": 106500,
+      "sha256": "40eb97286e5a9e40ab16a1152687b226ed9f521ed74dc8d76bd1e33ef16f7a33"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-unknown-waiting.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-ANSWERS-unknown-waiting.png",
+      "bytes": 105861,
+      "sha256": "040042eb36d8b69c997dbd6682e009d14f86928c28f19cd7a60901095d1a2af3"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-CARDS-normal-completed.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-CARDS-normal-completed.png",
+      "bytes": 105365,
+      "sha256": "c8f16b72813560bb2d9f4615cab089bb25254d39a477b62a932183103497e85c"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-CARDS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-CARDS-normal-waiting.png",
+      "bytes": 105917,
+      "sha256": "65085a93da9516916c0f363561da12cf6db5f8811e9cd1da8ecbb44095e46f4b"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-failure.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-failure.png",
+      "bytes": 101891,
+      "sha256": "9d5557e0fc624f27089a31a96e6295d59eed304c0d3a978f5fc3937960faf736"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-TEXT-normal-completed.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-TEXT-normal-completed.png",
+      "bytes": 105049,
+      "sha256": "0f01187d067e6daf67784d6e32486518f9e7cd92a9f6367fac996da9ad13e50e"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T14-56-08-582Z-d700ad5aa47d.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791384968581-d700ad5aa47d-TEXT-normal-waiting.png",
+      "file": "walle-card-answers-root-1791384968581-d700ad5aa47d-TEXT-normal-waiting.png",
+      "bytes": 105722,
+      "sha256": "9cf73e491347fdc87ab0aa52ee069168e91bdca416f06b7fff061243f31762f5"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-14-45-205Z-82df0c2513b3.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386085204-82df0c2513b3-ANSWERS-five-completed.png",
+      "file": "walle-card-answers-root-1791386085204-82df0c2513b3-ANSWERS-five-completed.png",
+      "bytes": 104812,
+      "sha256": "f6882df2c8520c7b11158ba0aa85869fedc573e9f7589001a378f5791f517e20"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-14-45-205Z-82df0c2513b3.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386085204-82df0c2513b3-ANSWERS-five-invalid.png",
+      "file": "walle-card-answers-root-1791386085204-82df0c2513b3-ANSWERS-five-invalid.png",
+      "bytes": 105923,
+      "sha256": "81f6cfb6475c768a07206561cdcfd2094a750d8301846c8b137d3efc9c71e447"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-14-45-205Z-82df0c2513b3.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386085204-82df0c2513b3-ANSWERS-five-waiting.png",
+      "file": "walle-card-answers-root-1791386085204-82df0c2513b3-ANSWERS-five-waiting.png",
+      "bytes": 102005,
+      "sha256": "4d3a813022f8f618c33a782680d1c173c3338872d438c326ac63c91d8a386c2a"
+    },
+    {
+      "source_evidence": "card-answers-root-command-interruption-2026-10-07T15-13-43.352726+00-00.json",
+      "case_set_passed": false,
+      "partial_without_final_report": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791385748635-7d7e7fb141ad-ANSWERS-five-completed.png",
+      "file": "walle-card-answers-root-1791385748635-7d7e7fb141ad-ANSWERS-five-completed.png",
+      "bytes": 104812,
+      "sha256": "f6882df2c8520c7b11158ba0aa85869fedc573e9f7589001a378f5791f517e20"
+    },
+    {
+      "source_evidence": "card-answers-root-command-interruption-2026-10-07T15-13-43.352726+00-00.json",
+      "case_set_passed": false,
+      "partial_without_final_report": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791385748635-7d7e7fb141ad-ANSWERS-five-invalid.png",
+      "file": "walle-card-answers-root-1791385748635-7d7e7fb141ad-ANSWERS-five-invalid.png",
+      "bytes": 106050,
+      "sha256": "7abbbf0fe5379e7dab2891988038e9d53f2698a7106f2f4d208808f5ad3e82c7"
+    },
+    {
+      "source_evidence": "card-answers-root-command-interruption-2026-10-07T15-13-43.352726+00-00.json",
+      "case_set_passed": false,
+      "partial_without_final_report": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791385748635-7d7e7fb141ad-ANSWERS-five-waiting.png",
+      "file": "walle-card-answers-root-1791385748635-7d7e7fb141ad-ANSWERS-five-waiting.png",
+      "bytes": 102005,
+      "sha256": "4d3a813022f8f618c33a782680d1c173c3338872d438c326ac63c91d8a386c2a"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-normal-completed.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-normal-completed.png",
+      "bytes": 101022,
+      "sha256": "ba0f12470172f10425c065509509ddc3309c3522a2af31d1609cbed12ae96fbc"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-normal-waiting.png",
+      "bytes": 106084,
+      "sha256": "bc3e0858c3a2254a33fd9392ed3afef0111a7e823c7d62186c30c49eb68d801d"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-unknown-completed.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-unknown-completed.png",
+      "bytes": 100747,
+      "sha256": "3219340f50770f6a1f86d8a899c25c8c9b09c5f700e04bd4de24986bd725bf3a"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-unknown-unknown.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-unknown-unknown.png",
+      "bytes": 106500,
+      "sha256": "40eb97286e5a9e40ab16a1152687b226ed9f521ed74dc8d76bd1e33ef16f7a33"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-unknown-waiting.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-ANSWERS-unknown-waiting.png",
+      "bytes": 105861,
+      "sha256": "040042eb36d8b69c997dbd6682e009d14f86928c28f19cd7a60901095d1a2af3"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-CARDS-normal-completed.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-CARDS-normal-completed.png",
+      "bytes": 105279,
+      "sha256": "b954b6c86092182a48b78572ec448a50668810c5f977270237abb87abe7309d3"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-CARDS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-CARDS-normal-waiting.png",
+      "bytes": 105917,
+      "sha256": "65085a93da9516916c0f363561da12cf6db5f8811e9cd1da8ecbb44095e46f4b"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-TEXT-normal-completed.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-TEXT-normal-completed.png",
+      "bytes": 104914,
+      "sha256": "daa1b8fd8f5907c201b24ff57790e7fdf47fc7b39123a46d4002466bf39b5645"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-15-56-077Z-6c12b7163388.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791386156076-6c12b7163388-TEXT-normal-waiting.png",
+      "file": "walle-card-answers-root-1791386156076-6c12b7163388-TEXT-normal-waiting.png",
+      "bytes": 105614,
+      "sha256": "cff4b8e65c2addf63224d63d80d1fa41efe909310e506f5475aed2fe0570b8c7"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-27-07-523Z-54638bec2b29.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791386827522-54638bec2b29-failure.png",
+      "file": "walle-card-answers-root-1791386827522-54638bec2b29-failure.png",
+      "bytes": 105947,
+      "sha256": "8834b959686ebe68565ce4ea1e0949f5f941055296a7547af35ce56b273e916e"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-31-29-253Z-551a257175f2.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387089252-551a257175f2-ANSWERS-five-completed.png",
+      "file": "walle-card-answers-root-1791387089252-551a257175f2-ANSWERS-five-completed.png",
+      "bytes": 104812,
+      "sha256": "f6882df2c8520c7b11158ba0aa85869fedc573e9f7589001a378f5791f517e20"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-31-29-253Z-551a257175f2.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387089252-551a257175f2-ANSWERS-five-invalid.png",
+      "file": "walle-card-answers-root-1791387089252-551a257175f2-ANSWERS-five-invalid.png",
+      "bytes": 102229,
+      "sha256": "f4c6c04fb8907ed1bfe4da150e4eb0116f88ab1ddf4d9f5206a9714a68dfa197"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-31-29-253Z-551a257175f2.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387089252-551a257175f2-ANSWERS-five-waiting.png",
+      "file": "walle-card-answers-root-1791387089252-551a257175f2-ANSWERS-five-waiting.png",
+      "bytes": 102005,
+      "sha256": "4d3a813022f8f618c33a782680d1c173c3338872d438c326ac63c91d8a386c2a"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-normal-completed.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-normal-completed.png",
+      "bytes": 101151,
+      "sha256": "d0f82638cc460bede148d878baf4bd92a79b80178dddf715b18fc0d11bde2f9b"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-normal-waiting.png",
+      "bytes": 106084,
+      "sha256": "bc3e0858c3a2254a33fd9392ed3afef0111a7e823c7d62186c30c49eb68d801d"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-unknown-unknown.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-unknown-unknown.png",
+      "bytes": 106500,
+      "sha256": "40eb97286e5a9e40ab16a1152687b226ed9f521ed74dc8d76bd1e33ef16f7a33"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-unknown-waiting.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-ANSWERS-unknown-waiting.png",
+      "bytes": 105861,
+      "sha256": "040042eb36d8b69c997dbd6682e009d14f86928c28f19cd7a60901095d1a2af3"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-CARDS-normal-completed.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-CARDS-normal-completed.png",
+      "bytes": 105282,
+      "sha256": "ce79ca5a337120e7c53a6cc599c415f9c6408b035efe59802021b9bfa96fb40d"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-CARDS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-CARDS-normal-waiting.png",
+      "bytes": 105917,
+      "sha256": "65085a93da9516916c0f363561da12cf6db5f8811e9cd1da8ecbb44095e46f4b"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-failure.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-failure.png",
+      "bytes": 108090,
+      "sha256": "6d0fc17894ea98a964d6320dc2f1e281dc9e7e2c4eb1fe2d2dd67816b8c3b353"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-TEXT-normal-completed.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-TEXT-normal-completed.png",
+      "bytes": 105000,
+      "sha256": "82974da308794a5b0baffe11e99875e12c5d6c44e9757e0ab8a2dfc68292ee86"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791387241321-0a072c2074f7-TEXT-normal-waiting.png",
+      "file": "walle-card-answers-root-1791387241321-0a072c2074f7-TEXT-normal-waiting.png",
+      "bytes": 105692,
+      "sha256": "aa9804c1b5c22701ab6a98ff06df84a530e17a619f2c2cfccaedd1ce0f1ce066"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-43-579Z-a3a57bbaf96b.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388003577-a3a57bbaf96b-ANSWERS-five-completed.png",
+      "file": "walle-card-answers-root-1791388003577-a3a57bbaf96b-ANSWERS-five-completed.png",
+      "bytes": 104027,
+      "sha256": "843c42727213307936466502bb86392e4574329c96493b9281118256b8365a22"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-43-579Z-a3a57bbaf96b.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388003577-a3a57bbaf96b-ANSWERS-five-invalid.png",
+      "file": "walle-card-answers-root-1791388003577-a3a57bbaf96b-ANSWERS-five-invalid.png",
+      "bytes": 102243,
+      "sha256": "acaf7b43d861da6e2adf066edcce725fa3af10c627cc5d124fbb161ba1ce6067"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-43-579Z-a3a57bbaf96b.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388003577-a3a57bbaf96b-ANSWERS-five-waiting.png",
+      "file": "walle-card-answers-root-1791388003577-a3a57bbaf96b-ANSWERS-five-waiting.png",
+      "bytes": 102005,
+      "sha256": "4d3a813022f8f618c33a782680d1c173c3338872d438c326ac63c91d8a386c2a"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T15-34-01-380Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-expired.png",
+      "file": "final-regression-15-34-cards-expired.png",
+      "bytes": 35158,
+      "sha256": "1284a23ab73dbd1affd5c47da1e11dfbce67b4688619c4ed56da3804e0d20352"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T15-34-01-380Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-initialize.png",
+      "file": "final-regression-15-34-cards-initialize.png",
+      "bytes": 32656,
+      "sha256": "69a885ee2684eb936115defc43b32b4ca0f24cc078fb31a815342d7da1e77409"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T15-34-01-380Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-reading-anchor.png",
+      "file": "final-regression-15-34-cards-reading-anchor.png",
+      "bytes": 35777,
+      "sha256": "4ab9d5ab30bdc328048efe25a5c0c77641851ececb5161fda9011a02330ba783"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T15-34-01-380Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-waiting.png",
+      "file": "final-regression-15-34-cards-waiting.png",
+      "bytes": 30882,
+      "sha256": "f125192a3e19147163c0809ce93025d1fa771ddf23a0f4d6a4c55370d5e975bd"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-normal-completed.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-normal-completed.png",
+      "bytes": 101274,
+      "sha256": "57296fdd541fdaa0a7caf1dc39c32ceffff74f5cd47f930565e21dec8bd6292f"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-normal-waiting.png",
+      "bytes": 106084,
+      "sha256": "bc3e0858c3a2254a33fd9392ed3afef0111a7e823c7d62186c30c49eb68d801d"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-unknown-completed.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-unknown-completed.png",
+      "bytes": 101052,
+      "sha256": "e099224faac9a1b4f2baf17425b2dc72b47a8f4f5aba9bd60edb6ed2ec6904fc"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-unknown-unknown.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-unknown-unknown.png",
+      "bytes": 106500,
+      "sha256": "40eb97286e5a9e40ab16a1152687b226ed9f521ed74dc8d76bd1e33ef16f7a33"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-unknown-waiting.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-ANSWERS-unknown-waiting.png",
+      "bytes": 105861,
+      "sha256": "040042eb36d8b69c997dbd6682e009d14f86928c28f19cd7a60901095d1a2af3"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-CARDS-normal-completed.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-CARDS-normal-completed.png",
+      "bytes": 105293,
+      "sha256": "e7f4c50c1cad265ba185a016cc1a551358b8523bc9f79e1a3b07910982ff66b6"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-CARDS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-CARDS-normal-waiting.png",
+      "bytes": 105917,
+      "sha256": "65085a93da9516916c0f363561da12cf6db5f8811e9cd1da8ecbb44095e46f4b"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-TEXT-normal-completed.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-TEXT-normal-completed.png",
+      "bytes": 105044,
+      "sha256": "0d5097ccb082bde92fdd9ff9ea8016f4ed145939545abeaee286f2fd05675fd0"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-46-22-758Z-cb681fd18c27.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791387982757-cb681fd18c27-TEXT-normal-waiting.png",
+      "file": "walle-card-answers-root-1791387982757-cb681fd18c27-TEXT-normal-waiting.png",
+      "bytes": 105739,
+      "sha256": "851d1525af4c35e88ac90981b69f496ac3f8aa51439a9a4fc2c41317c4445032"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-50-55-326Z-342aa6fb58fc.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791388255325-342aa6fb58fc-failure.png",
+      "file": "walle-card-answers-root-1791388255325-342aa6fb58fc-failure.png",
+      "bytes": 22941,
+      "sha256": "1002fdf83b77fe7090ce9451189e6279409fb62ab9e8a3a1a50b72e16299baa6"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-05-521Z-2af3f08d0262.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-answers-root-1791388265520-2af3f08d0262-failure.png",
+      "file": "walle-card-answers-root-1791388265520-2af3f08d0262-failure.png",
+      "bytes": 22941,
+      "sha256": "1002fdf83b77fe7090ce9451189e6279409fb62ab9e8a3a1a50b72e16299baa6"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-normal-completed.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-normal-completed.png",
+      "bytes": 101106,
+      "sha256": "bf9fe440ed511c269b7b1b326227c744ad4ff3ba37d7f1cd5d337ef54dbd2801"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-normal-waiting.png",
+      "bytes": 106084,
+      "sha256": "bc3e0858c3a2254a33fd9392ed3afef0111a7e823c7d62186c30c49eb68d801d"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-completed.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-completed.png",
+      "bytes": 100990,
+      "sha256": "374208b8f6a0dd3d5b14c0f8a77536ad7c263ee9ea6ba356b69519b01bdfd210"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-recovery-read-failed.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-recovery-read-failed.png",
+      "bytes": 107034,
+      "sha256": "46459897dd98de4fc7a18cf78a1426625598268ce7a246b85ca801d59e52995e"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-unknown.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-unknown.png",
+      "bytes": 106500,
+      "sha256": "40eb97286e5a9e40ab16a1152687b226ed9f521ed74dc8d76bd1e33ef16f7a33"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-waiting.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-ANSWERS-unknown-waiting.png",
+      "bytes": 105861,
+      "sha256": "040042eb36d8b69c997dbd6682e009d14f86928c28f19cd7a60901095d1a2af3"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-CARDS-normal-completed.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-CARDS-normal-completed.png",
+      "bytes": 105215,
+      "sha256": "a5be40817f0591990e835374b0ab79a8da418c88bcaa5ccbbb043f801067f0db"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-CARDS-normal-waiting.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-CARDS-normal-waiting.png",
+      "bytes": 105917,
+      "sha256": "65085a93da9516916c0f363561da12cf6db5f8811e9cd1da8ecbb44095e46f4b"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-TEXT-normal-completed.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-TEXT-normal-completed.png",
+      "bytes": 104893,
+      "sha256": "77b2f9951c890dfca06e2db6b3dd5b0878f57b279b61830f99ad0cc0e6d35596"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388309837-a47b72a5d9db-TEXT-normal-waiting.png",
+      "file": "walle-card-answers-root-1791388309837-a47b72a5d9db-TEXT-normal-waiting.png",
+      "bytes": 105582,
+      "sha256": "023bd501310553a793b64d74b0abd88607636fb4b9d9993514976538c951e914"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-59-988Z-45b5f3f55b3f.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388319987-45b5f3f55b3f-ANSWERS-five-completed.png",
+      "file": "walle-card-answers-root-1791388319987-45b5f3f55b3f-ANSWERS-five-completed.png",
+      "bytes": 104027,
+      "sha256": "843c42727213307936466502bb86392e4574329c96493b9281118256b8365a22"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-59-988Z-45b5f3f55b3f.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388319987-45b5f3f55b3f-ANSWERS-five-invalid.png",
+      "file": "walle-card-answers-root-1791388319987-45b5f3f55b3f-ANSWERS-five-invalid.png",
+      "bytes": 102201,
+      "sha256": "62937e0895031df34c17604696fd5b8fb62644acde17755a8ad244f0c5d5b051"
+    },
+    {
+      "source_evidence": "card-answers-root-browser-2026-10-07T15-51-59-988Z-45b5f3f55b3f.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-answers-root-1791388319987-45b5f3f55b3f-ANSWERS-five-waiting.png",
+      "file": "walle-card-answers-root-1791388319987-45b5f3f55b3f-ANSWERS-five-waiting.png",
+      "bytes": 102005,
+      "sha256": "4d3a813022f8f618c33a782680d1c173c3338872d438c326ac63c91d8a386c2a"
+    }
+  ]
+}

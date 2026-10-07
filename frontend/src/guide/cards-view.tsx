@@ -9,7 +9,17 @@ export function InteractionCardsView({owner,busy=false}:Readonly<{owner:Interact
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),name=useId(),root=useRef<HTMLElement>(null),[composing,setComposing]=useState(false);
  const disabled=!state.available||!owner.editable||!owner.allowed||busy,answered=state.message.card_state==='ANSWERED';
  let formal:Responses|null=null;if(state.formal?.structured_content!==null&&state.formal?.structured_content!==undefined)formal=decodeResponses(state.formal.structured_content);
- useEffect(()=>{if(state.card_error&&!disabled){const card=[...root.current?.querySelectorAll<HTMLElement>('[data-card-key]')??[]].find(row=>row.dataset.cardKey===state.card_error);card?.querySelector<HTMLElement>('input:not(:disabled),textarea:not(:disabled)')?.focus();}},[state.card_error,state.error,disabled]);
+ useEffect(()=>{
+  if(!state.card_error||disabled)return;
+  const card=[...root.current?.querySelectorAll<HTMLElement>('[data-card-key]')??[]].find(row=>row.dataset.cardKey===state.card_error),field=card?.querySelector<HTMLElement>('input:not(:disabled),textarea:not(:disabled)');
+  if(!field)return;let following=0;
+  // Let the added error and the message reader's ResizeObserver settle before
+  // this deliberate focus move; restoring the old anchor must not hide it.
+  const frame=requestAnimationFrame(()=>{following=requestAnimationFrame(()=>{
+   if(field.isConnected&&root.current?.contains(field)&&!field.matches(':disabled')&&field.getClientRects().length){field.focus({preventScroll:true});field.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});}
+  });});
+  return()=>{cancelAnimationFrame(frame);cancelAnimationFrame(following);};
+ },[state.card_error,state.error,disabled]);
  return <section ref={root} className="interaction-cards" aria-label="决策卡片组" aria-busy={state.refreshing||['SUBMITTING','READING'].includes(state.phase)}>
   <p>{state.cards.intro}</p><p role="status">{answered?'已回答 · 正式答案已保存':state.message.card_state==='EXPIRED'?'已失效 · 保留原问题供阅读':'待确认 · 未提交的选择仅保存在本地'}</p>
   {state.cards.cards.map((card,index)=>{const local=state.answers.responses.find(answer=>answer.card_key===card.card_key)!,answer=answered?formal?.responses.find(answer=>answer.card_key===card.card_key):state.message.card_state==='AVAILABLE'?local:null;

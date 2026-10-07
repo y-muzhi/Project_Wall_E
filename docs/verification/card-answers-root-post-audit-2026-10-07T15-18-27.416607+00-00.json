@@ -1,0 +1,38 @@
+{
+  "recorded_at": "2026-10-07T15:18:27.416607+00:00",
+  "audit_source_sha256": "d0381ee982e71f0b82df15c93893510eefc62c30dc949e8b60c078ac08100f84",
+  "scope": "Actual C07 card production/C06 formal answers and same-run second-call context; real raw canonical card content remains stored, original local draft retained and same Run audited; no paid/Provider proof",
+  "passed": true,
+  "audit": {
+    "source_evidence": "card-answers-root-browser-2026-10-07T15-14-45-205Z-82df0c2513b3.json",
+    "source_inputs": 452,
+    "native_counts": {
+      "requirements": 1,
+      "requirement_documents": 1,
+      "revisions": 1,
+      "comments": 0,
+      "guide_runs": 2,
+      "llm_uses": 2,
+      "suggestion_batches": 0,
+      "suggestions": 0
+    },
+    "database_sha256": "b11e7d74cc1e3d6031f878ca722da75a40d5fc3cccdc5df026421098e4401cce",
+    "database_bytes_unchanged": true,
+    "cases": [
+      {
+        "name": "ANSWERS-five",
+        "requirement_id": 1,
+        "continued_run": 2,
+        "calls": [
+          1,
+          2
+        ],
+        "messages": 5,
+        "formal_response_id": 4,
+        "card_state": "ANSWERED",
+        "passed": true
+      }
+    ],
+    "passed": true
+  }
+}

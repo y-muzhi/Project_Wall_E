@@ -1,0 +1,38 @@
+{
+  "recorded_at": "2026-10-07T15:55:27.277551+00:00",
+  "scope": "Final fixed five actual roots, finite explicit recovery read-loss and original-key replay; isolated loopback model, no paid production proof",
+  "final_root_evidence": [
+    "card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json",
+    "card-answers-root-browser-2026-10-07T15-51-59-988Z-45b5f3f55b3f.json"
+  ],
+  "source_inputs": 452,
+  "identical_sources": true,
+  "final_cases": [
+    "TEXT-normal",
+    "CARDS-normal",
+    "ANSWERS-normal",
+    "ANSWERS-unknown",
+    "ANSWERS-five"
+  ],
+  "native_counts": {
+    "requirements": 5,
+    "requirement_documents": 5,
+    "revisions": 5,
+    "comments": 0,
+    "guide_runs": 10,
+    "llm_uses": 10,
+    "suggestion_batches": 0,
+    "suggestions": 0
+  },
+  "loopback_chat_requests": 10,
+  "paid_requests": 0,
+  "cards_regression_common_inputs": 451,
+  "cards_regression_common_unchanged": true,
+  "previous_common_inputs": 451,
+  "previous_changed_inputs": [
+    "frontend/src/guide/cards-view.tsx",
+    "tools/api-browser-service.py"
+  ],
+  "raw_images": 74,
+  "passed": true
+}

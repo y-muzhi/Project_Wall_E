@@ -1,0 +1,34 @@
+{
+  "recorded_at": "2026-10-07T15:51:49.766534+00:00",
+  "scope": "Fixed finite selected cases, isolated native service and external command capture; not runtime/crash investigation",
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "tools/verify-card-answers-root-browser.mjs",
+    "--cases",
+    "TEXT-normal",
+    "CARDS-normal",
+    "ANSWERS-normal",
+    "ANSWERS-unknown"
+  ],
+  "selected_cases": [
+    "TEXT-normal",
+    "CARDS-normal",
+    "ANSWERS-normal",
+    "ANSWERS-unknown"
+  ],
+  "exit_code": 0,
+  "stdout": "{\"case\":\"TEXT-normal\",\"passed\":true}\n{\"case\":\"CARDS-normal\",\"passed\":true}\n{\"case\":\"ANSWERS-normal\",\"passed\":true}\n{\"case\":\"ANSWERS-unknown\",\"passed\":true}\n{\"passed\":true,\"evidence\":\"C:\\\\Users\\\\羊牧之\\\\Documents\\\\ChatGPT\\\\Project_Wall_E 2\\\\docs\\\\verification\\\\card-answers-root-browser-2026-10-07T15-51-49-838Z-a47b72a5d9db.json\"}\n",
+  "stderr": "",
+  "inputs_before": {
+    "tools/run-card-answers-root-check.py": "8228ea828e29a0c6463931928a4e93532f87f674d0bfe7c7e3b81566bf97cb1a",
+    "tools/verify-card-answers-root-browser.mjs": "9f41f7765df113c143e057c96d64c6783fdded0c4e7815ada00ea85ef4202ece",
+    "tools/api-browser-service.py": "6a37021af967704300b55522dfd54b1134a188567365b021266bfcee41340567"
+  },
+  "inputs_after": {
+    "tools/run-card-answers-root-check.py": "8228ea828e29a0c6463931928a4e93532f87f674d0bfe7c7e3b81566bf97cb1a",
+    "tools/verify-card-answers-root-browser.mjs": "9f41f7765df113c143e057c96d64c6783fdded0c4e7815ada00ea85ef4202ece",
+    "tools/api-browser-service.py": "6a37021af967704300b55522dfd54b1134a188567365b021266bfcee41340567"
+  },
+  "model_environment_filtered": true,
+  "passed": true
+}

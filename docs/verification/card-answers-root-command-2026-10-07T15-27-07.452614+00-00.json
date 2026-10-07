@@ -1,0 +1,28 @@
+{
+  "recorded_at": "2026-10-07T15:27:07.452614+00:00",
+  "scope": "Fixed finite selected cases, isolated native service and external command capture; not runtime/crash investigation",
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "tools/verify-card-answers-root-browser.mjs",
+    "--cases",
+    "ANSWERS-five"
+  ],
+  "selected_cases": [
+    "ANSWERS-five"
+  ],
+  "exit_code": 1,
+  "stdout": "{\"passed\":false,\"evidence\":\"C:\\\\Users\\\\羊牧之\\\\Documents\\\\ChatGPT\\\\Project_Wall_E 2\\\\docs\\\\verification\\\\card-answers-root-browser-2026-10-07T15-27-07-523Z-54638bec2b29.json\",\"error\":\"AssertionError [ERR_ASSERTION]: ### Error\\nError: Incomplete multi card focus is not visibly reachable {\\\"focused\\\":true,\\\"visible\\\":false,\\\"field\\\":{\\\"top\\\":960.65625,\\\"bottom\\\":973.65625},\\\"area\\\":{\\\"top\\\":478.875,\\\"bottom\\\":838.875},\\\"viewport_height\\\":1000}\\n\\n\\n\\n1 !== 0\\n\"}\n",
+  "stderr": "",
+  "inputs_before": {
+    "tools/run-card-answers-root-check.py": "8228ea828e29a0c6463931928a4e93532f87f674d0bfe7c7e3b81566bf97cb1a",
+    "tools/verify-card-answers-root-browser.mjs": "197f80753dd20cbf6ef229e4811136a75b8c947cd37cc9842fd5800579ec80f3",
+    "tools/api-browser-service.py": "6a37021af967704300b55522dfd54b1134a188567365b021266bfcee41340567"
+  },
+  "inputs_after": {
+    "tools/run-card-answers-root-check.py": "8228ea828e29a0c6463931928a4e93532f87f674d0bfe7c7e3b81566bf97cb1a",
+    "tools/verify-card-answers-root-browser.mjs": "197f80753dd20cbf6ef229e4811136a75b8c947cd37cc9842fd5800579ec80f3",
+    "tools/api-browser-service.py": "6a37021af967704300b55522dfd54b1134a188567365b021266bfcee41340567"
+  },
+  "model_environment_filtered": true,
+  "passed": false
+}

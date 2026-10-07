@@ -1,0 +1,21 @@
+{
+  "recorded_at": "2026-10-07T15:13:43.352726+00:00",
+  "scope": "Unexpected command termination retained; five case stdout success is partial, no final report so matrix not accepted. No Windows crash diagnosis or changes.",
+  "command": [
+    "node",
+    "tools/verify-card-answers-root-browser.mjs"
+  ],
+  "tool_command_exit_code": 1,
+  "stdout_retained_from_tool": "{\"case\":\"ANSWERS-five\",\"passed\":true}\n",
+  "session": "walle-card-answers-root-1791385748635-7d7e7fb141ad",
+  "final_report_present": false,
+  "sqlite_file": "output/playwright/api-walle-card-answers-root-1791385748635-7d7e7fb141ad.sqlite",
+  "owned_api_process_count_after_termination": 0,
+  "browser_close": {
+    "code": 0,
+    "stdout": "Browser 'walle-card-answers-root-1791385748635-7d7e7fb141ad' closed\n\n",
+    "stderr": ""
+  },
+  "passed": false,
+  "next": "Bounded normal execution of independent five-card case then four other cases with same fixed source inputs and external command capture; no runtime fix."
+}

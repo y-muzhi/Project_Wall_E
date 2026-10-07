@@ -262,14 +262,17 @@ class ControlledCommentModelWorker(GuideWorker):
 
 class ControlledScopeModelWorker(ControlledCommentModelWorker):
     """Explicit private ordinary-action boundary; no SQL-manufactured outputs."""
+    def _controlled_trigger(self, row, connection):
+        return row['status']=='RUNNING' and row['content'].startswith('操作范围验收 ')
+
     async def _drive(self, identity, lease):
         from backend.app.infrastructure.execution_lease import LeasedDatabase
         from backend.app.guide.orchestrator import execute_guide_run
         from backend.app.documents.markdown import parse_markdown
         with self.database.transaction() as connection:
-            row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
+            row = connection.execute('SELECT r.*,m.content,m.message_type AS trigger_message_type,m.reply_to_message_id FROM guide_runs r JOIN conversation_messages m '
                 'ON m.id=r.trigger_message_id WHERE r.id=?',(identity,)).fetchone()
-            controlled = row is not None and row['status']=='RUNNING' and row['content'].startswith('操作范围验收 ')
+            controlled = row is not None and self._controlled_trigger(row,connection)
             if controlled:
                 current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'",(row['requirement_id'],)).fetchone()
                 scope = None if row['scope_ref_json'] is None else json.loads(row['scope_ref_json'])
@@ -308,6 +311,19 @@ class ControlledScopeModelWorker(ControlledCommentModelWorker):
 
 class ControlledWaitingModelWorker(ControlledScopeModelWorker):
     """Private clarification response; actual C07 creates WAITING/cards."""
+    def _controlled_trigger(self, row, connection):
+        if super()._controlled_trigger(row,connection): return True
+        if row['status']!='RUNNING' or row['action_type']!='ASK' or row['trigger_message_type']!='CARD_RESPONSE': return False
+        original=connection.execute("SELECT * FROM conversation_messages WHERE id=? AND requirement_id=? AND guide_run_id=? AND role='ASSISTANT' AND message_type='INTERACTION_CARDS'",
+            (row['reply_to_message_id'],row['requirement_id'],row['id'])).fetchone()
+        if original is None: return False
+        initiating=connection.execute("SELECT 1 FROM conversation_messages WHERE requirement_id=? AND guide_run_id=? AND sequence_no<? AND role='USER' AND message_type='TEXT' AND content IN ('操作范围验收 WAIT_CARDS','操作范围验收 WAIT_CARDS5')",
+            (row['requirement_id'],row['id'],original['sequence_no'])).fetchone()
+        usage=connection.execute("SELECT * FROM llm_uses WHERE guide_run_id=? AND call_no=1 AND call_status='SUCCEEDED' AND parse_status='SUCCEEDED' AND validation_status='SUCCEEDED' ORDER BY attempt_no DESC LIMIT 1",(row['id'],)).fetchone()
+        if initiating is None or usage is None: return False
+        trusted=json.loads(usage['trusted_output_json'])
+        return trusted['response_type']=='CLARIFY_CARDS' and trusted['message']==original['content'] and trusted['cards']==json.loads(original['structured_content_json'])
+
     async def _drive(self, identity, lease):
         from backend.app.infrastructure.execution_lease import LeasedDatabase
         from backend.app.guide.orchestrator import execute_guide_run
@@ -315,17 +331,28 @@ class ControlledWaitingModelWorker(ControlledScopeModelWorker):
         with self.database.transaction() as connection:
             row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
                 'ON m.id=r.trigger_message_id WHERE r.id=?',(identity,)).fetchone()
-            controlled = row is not None and row['status']=='RUNNING' and row['action_type']=='ASK' and row['content'] in ('操作范围验收 WAIT_TEXT','操作范围验收 WAIT_CARDS')
+            controlled = row is not None and row['status']=='RUNNING' and row['action_type']=='ASK' and row['content'] in ('操作范围验收 WAIT_TEXT','操作范围验收 WAIT_CARDS','操作范围验收 WAIT_CARDS5')
             if controlled:
                 current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'",(row['requirement_id'],)).fetchone()
                 block,meta = list(zip(parse_markdown(current['markdown_content']).blocks,json.loads(current['block_state_json'])['blocks']))[-1]
         if not controlled:
             await super()._drive(identity,lease); return
-        if row['content'].endswith('WAIT_CARDS'):
+        if row['content'] in ('操作范围验收 WAIT_CARDS','操作范围验收 WAIT_CARDS5'):
             from backend.tests.messages.test_queries import cards_fixture
             from backend.app.guide.output_evidence import card_text
             cards = cards_fixture();cards['intro']='本机受控追问😀'
-            cards['cards'][0]['related_spec_context']=[{'block_id':meta['block_id'],'content_snapshot':block.markdown}]
+            if row['content'].endswith('WAIT_CARDS5'):
+                from copy import deepcopy
+                base=cards['cards'][0]
+                cards['cards']=[deepcopy(base) for _ in range(5)]
+                for card,key,question in zip(cards['cards'],('first','multi','confirm','optional','last'),('选择方案','多选问题','确认问题','可选问题','末项问题')):
+                    card.update(card_key=key,question=question)
+                cards['cards'][1].update(card_type='MULTI_SELECT',selection_rule={'min':1,'max':2})
+                cards['cards'][2].update(card_type='CONFIRM',custom_answer={'enabled':False,'max_length':0})
+                cards['cards'][3].update(required=False,custom_answer={'enabled':False,'max_length':0})
+                cards['cards'][4]['custom_answer']={'enabled':False,'max_length':0}
+            for card in cards['cards']:
+                card['related_spec_context']=[{'block_id':meta['block_id'],'content_snapshot':block.markdown}]
             output={'schema_version':1,'response_type':'CLARIFY_CARDS','message':card_text(cards),'cards':cards}
         else:
             output={'schema_version':1,'response_type':'CLARIFY_TEXT','message':'本机受控追问：请补充普通说明😀'}

@@ -1,0 +1,34 @@
+{
+  "recorded_at": "2026-10-07T15:34:01.257980+00:00",
+  "scope": "Fixed finite selected cases, isolated native service and external command capture; not runtime/crash investigation",
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "tools/verify-card-answers-root-browser.mjs",
+    "--cases",
+    "TEXT-normal",
+    "CARDS-normal",
+    "ANSWERS-normal",
+    "ANSWERS-unknown"
+  ],
+  "selected_cases": [
+    "TEXT-normal",
+    "CARDS-normal",
+    "ANSWERS-normal",
+    "ANSWERS-unknown"
+  ],
+  "exit_code": 1,
+  "stdout": "{\"case\":\"TEXT-normal\",\"passed\":true}\n{\"case\":\"CARDS-normal\",\"passed\":true}\n{\"case\":\"ANSWERS-normal\",\"passed\":true}\n{\"passed\":false,\"evidence\":\"C:\\\\Users\\\\羊牧之\\\\Documents\\\\ChatGPT\\\\Project_Wall_E 2\\\\docs\\\\verification\\\\card-answers-root-browser-2026-10-07T15-34-01-322Z-0a072c2074f7.json\",\"error\":\"AssertionError [ERR_ASSERTION]: ### Error\\nTimeoutError: locator.waitFor: Timeout 30000ms exceeded.\\nCall log:\\n\\u001b[2m  - waiting for getByRole('region', { name: '决策卡片组', exact: true }).getByText('已回答 · 正式答案已保存', { exact: true }) to be visible\\u001b[22m\\n\\n\\n\\n\\n1 !== 0\\n\"}\n",
+  "stderr": "",
+  "inputs_before": {
+    "tools/run-card-answers-root-check.py": "8228ea828e29a0c6463931928a4e93532f87f674d0bfe7c7e3b81566bf97cb1a",
+    "tools/verify-card-answers-root-browser.mjs": "967f46f6f1674cffc4c571972318420078af7c4627e8c0637be20b9ffbcc1d2f",
+    "tools/api-browser-service.py": "6a37021af967704300b55522dfd54b1134a188567365b021266bfcee41340567"
+  },
+  "inputs_after": {
+    "tools/run-card-answers-root-check.py": "8228ea828e29a0c6463931928a4e93532f87f674d0bfe7c7e3b81566bf97cb1a",
+    "tools/verify-card-answers-root-browser.mjs": "967f46f6f1674cffc4c571972318420078af7c4627e8c0637be20b9ffbcc1d2f",
+    "tools/api-browser-service.py": "6a37021af967704300b55522dfd54b1134a188567365b021266bfcee41340567"
+  },
+  "model_environment_filtered": true,
+  "passed": false
+}
