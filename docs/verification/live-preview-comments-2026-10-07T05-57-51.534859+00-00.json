@@ -1,0 +1,9 @@
+{
+  "scope": "Read-only existing preview after comment cancellation fix; no stop/restart/business mutation; local proxy bypass",
+  "recorded_at": "2026-10-07T05:57:51.534859+00:00",
+  "page_status": 200,
+  "api_status": 200,
+  "page_matches_current_dist": true,
+  "dist_sha256": "c3a7e0493e44b0ecb0f4fb44efb609c420233f396a731c547ae9a1236ef69d44",
+  "passed": true
+}

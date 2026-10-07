@@ -1,0 +1,7 @@
+{
+  "scope": "Private byte scan of staged files; credential is neither output nor hashed, no paid requests",
+  "timestamp": "2026-10-07T06:15:12.545197+00:00",
+  "passed": true,
+  "files_checked": 33,
+  "runtime_or_env_files_staged": false
+}

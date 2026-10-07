@@ -1,0 +1,7 @@
+{
+  "recorded_at": "2026-10-07T06:10:44.027979+00:00",
+  "audit_source_sha256": "6ceadc2b37e5e62c2175b3661bcfdb7b970dea43ceff9f3fbe578b83ba74ff4b",
+  "passed": false,
+  "error": "TypeError: 'dict' object is not callable",
+  "source_evidence": "comments-browser-2026-10-07T06-03-36-324Z-e4b0a3221b5a.json"
+}

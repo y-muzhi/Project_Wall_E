@@ -18,7 +18,7 @@ export function CommentList({comments,locate,actions,blocked=false,locateReady=t
       const orphan=comment.location.status==='ORPHANED',quote='selected_text' in comment.anchor_ref?comment.anchor_ref.selected_text:comment.anchor_ref.block_markdown_snapshot;
       return <article tabIndex={-1} data-comment-id={comment.id} key={comment.id} aria-label={'评论 '+comment.id} className={'comment-card'+(comment.status==='RESOLVED'?' is-resolved':'')+(state.selected===comment.id?' is-selected':'')}>
         <div className="comment-status"><span>{comment.status==='OPEN'?'未解决':'已解决'}</span><span>锚点：{comment.anchor_status==='ORPHANED'?'已失效':'有效'}</span><span>{orphan?'当前位置已失效':'当前可定位'}</span><time dateTime={comment.created_at}>{localTime(comment.created_at)}</time></div>
-        {orphan&&<p>以下是创建评论时的历史引用，当前正文位置已失效。</p>}
+        {orphan&&<p className="comment-orphan-warning"><span aria-hidden="true">⚠ </span><span>以下是创建评论时的历史引用，当前正文位置已失效。</span></p>}
         <blockquote className="comment-quote">{quote}</blockquote><p className="comment-content">{comment.content}</p>
         <div className="comment-actions"><button type="button" disabled={blocked||!locateReady||orphan||!comments.ready} onClick={()=>locate(comment.id)}>定位正文</button>{actions?.(comment)}</div>
       </article>;

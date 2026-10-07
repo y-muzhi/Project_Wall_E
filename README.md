@@ -45,3 +45,6 @@ node tools/verify-storage.mjs
 
 
 2026-10-07详情继续验收：修复初始完整读取与人工开始的竞争；20个实际根页/原生SQLite分支通过，涵盖布局、离开/恢复、历史及分页；260＋独立4项前端测试、TypeScript及生产构建通过。现有查看页面可刷新。[验证范围与失败](docs/verification/detail-browser-notes.md)保留完整边界；全项目验收和真实模型兼容/效果仍在推进。
+
+
+2026-10-07评论继续验收：修复删除冲突后无法关闭确认弹窗，补齐失效引用警告。24个实际根页/SQLite分支及独立关闭库审计通过，涵盖评论双状态、操作失败/取消/未知恢复/迟到、Unicode与精确分页；前端260＋另4项、TypeScript及生产构建通过。[范围与原始证据](docs/verification/comments-browser-notes.md)已保存，现有查看页面可刷新；整体验收和正式模型兼容/效果仍未完成。

@@ -23,7 +23,7 @@ export function CommentCommandControl(props:Readonly<{flow:CommentCommand;blocke
     {state.phase==='CONFIRMED'?<><p role="status">{intent.kind==='MODIFY'?'修改任务已接受，评论保持未解决。':'评论操作已确认。'}</p><button type="button" disabled={props.blocked||active} onClick={()=>void execute(true)}>重新读取评论与详情</button></>:
       <button type="button" disabled={props.blocked||active||!unknown&&(!props.writeReady||!props.flow.allowed)} onClick={()=>intent.kind==='DELETE'?setOpen(true):void execute()}>{unknown?'重新确认评论操作结果':labels[intent.kind]}</button>}
     {props.cancel&&state.phase!=='CONFIRMED'&&<button type="button" disabled={active} onClick={props.cancel}>{unknown?'保留请求并关闭编辑区':'取消编辑'}</button>}
-    <Confirmation open={open} dangerous title="删除评论？" description="确认后评论将从默认列表移除，历史来源会保留。" busy={props.blocked||active||!unknown&&!props.writeReady} error={state.error}
+    <Confirmation open={open} dangerous title="删除评论？" description="确认后评论将从默认列表移除，历史来源会保留。" busy={active} confirmDisabled={props.blocked||!unknown&&(!props.writeReady||!props.flow.allowed)} error={state.error}
       confirmLabel={unknown?'重新确认删除结果':'确认删除'} cancelLabel={unknown?'保留请求并关闭弹窗':'保留评论'} cancel={()=>{setOpen(false);if(!unknown)props.cancel?.();}} confirm={()=>void execute()}/>
   </div>;
 }
