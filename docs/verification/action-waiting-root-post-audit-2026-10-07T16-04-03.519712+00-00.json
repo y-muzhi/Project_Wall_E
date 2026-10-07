@@ -1,0 +1,53 @@
+{
+  "recorded_at": "2026-10-07T16:04:03.519712+00:00",
+  "audit_source_sha256": "d356f920f81ac316daaf2082c2c17cbb7efbe4e8d8d421c9f7543e7eb02e6d6b",
+  "scope": "Actual C07 card production/C06 formal answers and same-run second-call context; real raw canonical card content remains stored, original local draft retained and same Run audited; no paid/Provider proof",
+  "passed": true,
+  "audit": {
+    "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-41-118Z-a9298a93f781.json",
+    "source_inputs": 452,
+    "native_counts": {
+      "requirements": 2,
+      "requirement_documents": 2,
+      "revisions": 2,
+      "comments": 0,
+      "guide_runs": 4,
+      "llm_uses": 4,
+      "suggestion_batches": 0,
+      "suggestions": 0
+    },
+    "database_sha256": "1bbf2c90992fd58df9bc918f40bf9decc92f86c319a27cba38dade555f799050",
+    "database_bytes_unchanged": true,
+    "cases": [
+      {
+        "name": "REVIEW-TEXT",
+        "action": "REVIEW",
+        "requirement_id": 1,
+        "continued_run": 2,
+        "calls": [
+          1,
+          2
+        ],
+        "messages": 5,
+        "formal_response_id": null,
+        "card_state": null,
+        "passed": true
+      },
+      {
+        "name": "REVIEW-ANSWERS",
+        "action": "REVIEW",
+        "requirement_id": 2,
+        "continued_run": 4,
+        "calls": [
+          1,
+          2
+        ],
+        "messages": 5,
+        "formal_response_id": 9,
+        "card_state": "ANSWERED",
+        "passed": true
+      }
+    ],
+    "passed": true
+  }
+}

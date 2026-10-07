@@ -1,0 +1,76 @@
+{
+  "recorded_at": "2026-10-07T16:05:15.802714+00:00",
+  "scope": "Original final actual waiting/answers/review/no-change root images",
+  "images": [
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-41-118Z-a9298a93f781.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-ANSWERS-completed.png",
+      "file": "walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-ANSWERS-completed.png",
+      "bytes": 101084,
+      "sha256": "52790d50f3d00d14f166db01fe6a4cb3dbe184751e4513fb2b2e1cc461fec17d"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-41-118Z-a9298a93f781.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-ANSWERS-waiting.png",
+      "file": "walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-ANSWERS-waiting.png",
+      "bytes": 106052,
+      "sha256": "f64adcc53195fba4fbe989b3b39c15d46d42262986e386fbf957d0e66caba36e"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-41-118Z-a9298a93f781.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-TEXT-completed.png",
+      "file": "walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-TEXT-completed.png",
+      "bytes": 105166,
+      "sha256": "99cad8dd7fcaf6cce1b58533c99dfd1d372320f455078301ad9dc7d94b1635cd"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-41-118Z-a9298a93f781.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-TEXT-waiting.png",
+      "file": "walle-action-waiting-root-1791388901117-a9298a93f781-REVIEW-TEXT-waiting.png",
+      "bytes": 105702,
+      "sha256": "6ba8885ecf793b2b35fea2fdb4bd875c65bae7794a11d1340b3a20378c4a84f6"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-51-469Z-3c47322c56ce.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388911468-3c47322c56ce-ASK-ANSWERS-completed.png",
+      "file": "walle-action-waiting-root-1791388911468-3c47322c56ce-ASK-ANSWERS-completed.png",
+      "bytes": 100973,
+      "sha256": "288979d4a1fee90ff006ef6e49c741b24d3dcb7b1f9c0662e4623835f46f8671"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-51-469Z-3c47322c56ce.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388911468-3c47322c56ce-ASK-ANSWERS-waiting.png",
+      "file": "walle-action-waiting-root-1791388911468-3c47322c56ce-ASK-ANSWERS-waiting.png",
+      "bytes": 106084,
+      "sha256": "bc3e0858c3a2254a33fd9392ed3afef0111a7e823c7d62186c30c49eb68d801d"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-51-469Z-3c47322c56ce.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-ANSWERS-completed.png",
+      "file": "walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-ANSWERS-completed.png",
+      "bytes": 101755,
+      "sha256": "06ff0b1c43067dd8d9b8d320bfb3a8b62a029822145578744f3acd3ef051577d"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-51-469Z-3c47322c56ce.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-ANSWERS-waiting.png",
+      "file": "walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-ANSWERS-waiting.png",
+      "bytes": 106110,
+      "sha256": "4c647615abff33e8495a86771664111b12f41ae63b31070d4d2186f652c695bd"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-51-469Z-3c47322c56ce.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-CARDS-completed.png",
+      "file": "walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-CARDS-completed.png",
+      "bytes": 105775,
+      "sha256": "aba246edd38a27e635458bf6cebbc89c24b6bd8e6fe9cf1411038028d56cb374"
+    },
+    {
+      "source_evidence": "action-waiting-root-browser-2026-10-07T16-01-51-469Z-3c47322c56ce.json",
+      "source_image": "output/playwright/walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-CARDS-waiting.png",
+      "file": "walle-action-waiting-root-1791388911468-3c47322c56ce-MODIFY-CARDS-waiting.png",
+      "bytes": 105783,
+      "sha256": "6d99c8fc7cf1e92465d23ec3c9efbe8afa6aa17a82f383f84ff9ea72185163cd"
+    }
+  ]
+}

@@ -291,7 +291,7 @@ class ControlledScopeModelWorker(ControlledCommentModelWorker):
                     'issues':[{'issue_key':'testability','severity':'WARNING','category':'UNTESTABLE',
                         'title':'需要验收标准','description':'受控检查项用于验证来源链路',
                         'block_ids':[meta['block_id']],'evidence':block.plain_text,'recommendation':'明确验收步骤'}]}}
-        elif row['content']=='操作范围验收 NO_CHANGE':
+        elif row['content']=='操作范围验收 NO_CHANGE' or row['trigger_message_type']=='CARD_RESPONSE':
             output = {'schema_version':1,'response_type':'NO_CHANGE','message':'本机受控无需修改：正文保持不变😀'}
         else:
             proposed = block.markdown.replace(scope['selected_text'],'正式规则😀',1) if row['scope_type']=='SELECTION' else '范围内的明确规则😀\n'
@@ -313,7 +313,7 @@ class ControlledWaitingModelWorker(ControlledScopeModelWorker):
     """Private clarification response; actual C07 creates WAITING/cards."""
     def _controlled_trigger(self, row, connection):
         if super()._controlled_trigger(row,connection): return True
-        if row['status']!='RUNNING' or row['action_type']!='ASK' or row['trigger_message_type']!='CARD_RESPONSE': return False
+        if row['status']!='RUNNING' or row['action_type'] not in ('ASK','REVIEW','MODIFY') or row['source_type']!='USER_INSTRUCTION' or row['trigger_message_type']!='CARD_RESPONSE': return False
         original=connection.execute("SELECT * FROM conversation_messages WHERE id=? AND requirement_id=? AND guide_run_id=? AND role='ASSISTANT' AND message_type='INTERACTION_CARDS'",
             (row['reply_to_message_id'],row['requirement_id'],row['id'])).fetchone()
         if original is None: return False
@@ -331,7 +331,7 @@ class ControlledWaitingModelWorker(ControlledScopeModelWorker):
         with self.database.transaction() as connection:
             row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
                 'ON m.id=r.trigger_message_id WHERE r.id=?',(identity,)).fetchone()
-            controlled = row is not None and row['status']=='RUNNING' and row['action_type']=='ASK' and row['content'] in ('操作范围验收 WAIT_TEXT','操作范围验收 WAIT_CARDS','操作范围验收 WAIT_CARDS5')
+            controlled = row is not None and row['status']=='RUNNING' and row['action_type'] in ('ASK','REVIEW','MODIFY') and row['source_type']=='USER_INSTRUCTION' and row['content'] in ('操作范围验收 WAIT_TEXT','操作范围验收 WAIT_CARDS','操作范围验收 WAIT_CARDS5')
             if controlled:
                 current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'",(row['requirement_id'],)).fetchone()
                 block,meta = list(zip(parse_markdown(current['markdown_content']).blocks,json.loads(current['block_state_json'])['blocks']))[-1]

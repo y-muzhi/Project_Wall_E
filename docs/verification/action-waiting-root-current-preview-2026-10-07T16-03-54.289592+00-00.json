@@ -1,0 +1,20 @@
+{
+  "recorded_at": "2026-10-07T16:03:54.289592+00:00",
+  "scope": "Existing normal preview read-only health, no restart or model call",
+  "reads": [
+    {
+      "path": "/requirements",
+      "status": 200,
+      "html_equals_dist": true
+    },
+    {
+      "path": "/api/v1/requirements",
+      "status": 200,
+      "html_equals_dist": null
+    }
+  ],
+  "database_sha256_before": "59c5e1a869e5ed0fd96e3e4c544d5a56c0741fbb97f31c50aa7e066d7202cc3d",
+  "database_sha256_after": "59c5e1a869e5ed0fd96e3e4c544d5a56c0741fbb97f31c50aa7e066d7202cc3d",
+  "database_bytes_unchanged": true,
+  "passed": true
+}
