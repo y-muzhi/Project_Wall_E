@@ -1,0 +1,35 @@
+{
+  "scope": "Actual C07 WAITING/CARDS, same-Run I15 ordinary continuation and durable unknown replay; explicit controlled boundary, no paid/Provider proof",
+  "passed": true,
+  "source_evidence": "waiting-root-browser-2026-10-07T13-52-53-796Z-513f7638ee1e.json",
+  "stable_inputs": 452,
+  "common_inputs_with_previous": 451,
+  "changed_common_inputs": [
+    "tools/api-browser-service.py"
+  ],
+  "production_inputs_unchanged": true,
+  "native_counts": {
+    "requirements": 3,
+    "requirement_documents": 3,
+    "revisions": 3,
+    "comments": 0,
+    "guide_runs": 6,
+    "llm_uses": 6,
+    "suggestion_batches": 0,
+    "suggestions": 0
+  },
+  "loopback_chat_requests": 6,
+  "paid_requests": 0,
+  "media": [
+    {
+      "session": "walle-waiting-root-1791372418600-09f8e9816fc8",
+      "images": 3,
+      "passed": false
+    },
+    {
+      "session": "walle-waiting-root-1791381173795-513f7638ee1e",
+      "images": 7,
+      "passed": true
+    }
+  ]
+}

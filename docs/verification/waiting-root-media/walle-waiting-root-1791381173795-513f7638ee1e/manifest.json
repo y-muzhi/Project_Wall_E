@@ -1,0 +1,43 @@
+{
+  "source_evidence": "waiting-root-browser-2026-10-07T13-52-53-796Z-513f7638ee1e.json",
+  "session": "walle-waiting-root-1791381173795-513f7638ee1e",
+  "scope": "Original screenshots including failures; not standalone whole acceptance",
+  "images": [
+    {
+      "path": "walle-waiting-root-1791381173795-513f7638ee1e-CARDS-normal-completed.png",
+      "source": "output/playwright/walle-waiting-root-1791381173795-513f7638ee1e-CARDS-normal-completed.png",
+      "sha256": "9baafee5a74aa5c825b7fc243af68bb1f27b7da34c9691f75d897c65fcd40ddb"
+    },
+    {
+      "path": "walle-waiting-root-1791381173795-513f7638ee1e-CARDS-normal-waiting.png",
+      "source": "output/playwright/walle-waiting-root-1791381173795-513f7638ee1e-CARDS-normal-waiting.png",
+      "sha256": "3b166d939cf1428ecf405fde6f698482fdcb02f448cfc8f79df11bb630bab8b8"
+    },
+    {
+      "path": "walle-waiting-root-1791381173795-513f7638ee1e-CARDS-unknown-completed.png",
+      "source": "output/playwright/walle-waiting-root-1791381173795-513f7638ee1e-CARDS-unknown-completed.png",
+      "sha256": "1ce9821b7125c94b34a14091610bd754bad2837d3e9f7f8c3293766886d3c94b"
+    },
+    {
+      "path": "walle-waiting-root-1791381173795-513f7638ee1e-CARDS-unknown-waiting.png",
+      "source": "output/playwright/walle-waiting-root-1791381173795-513f7638ee1e-CARDS-unknown-waiting.png",
+      "sha256": "25e873c0b39f83d5408794dc5d4bb5f1319667bc6cdf593815d4abbb60e1e9ae"
+    },
+    {
+      "path": "walle-waiting-root-1791381173795-513f7638ee1e-TEXT-normal-completed.png",
+      "source": "output/playwright/walle-waiting-root-1791381173795-513f7638ee1e-TEXT-normal-completed.png",
+      "sha256": "051a43c2c5f54882968ec0ecccaf3837dd9735b395f52230a30dd00b04c37f2e"
+    },
+    {
+      "path": "walle-waiting-root-1791381173795-513f7638ee1e-TEXT-normal-waiting.png",
+      "source": "output/playwright/walle-waiting-root-1791381173795-513f7638ee1e-TEXT-normal-waiting.png",
+      "sha256": "0d4e4a7b5d06a372054030de958cd8ae999027b98e8506b7e528e2b2b42a2e58"
+    },
+    {
+      "path": "walle-waiting-root-1791381173795-513f7638ee1e-CARDS-unknown-unknown.png",
+      "source": "output/playwright/${session}-${name}-unknown.png",
+      "sha256": "ae609583d483fc24c8e605c71cf533a7f4807b89c3be975cb49bf70925ccbcee",
+      "note": "Producer used literal diagnostic filename; original bytes copied with explicit session destination. This was the only unknown case of this run."
+    }
+  ]
+}

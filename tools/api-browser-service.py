@@ -306,6 +306,38 @@ class ControlledScopeModelWorker(ControlledCommentModelWorker):
         self.events.append({'event':'CONTROLLED_SCOPE_RETURNED','guide_run_id':identity,'code':outcome['code']})
 
 
+class ControlledWaitingModelWorker(ControlledScopeModelWorker):
+    """Private clarification response; actual C07 creates WAITING/cards."""
+    async def _drive(self, identity, lease):
+        from backend.app.infrastructure.execution_lease import LeasedDatabase
+        from backend.app.guide.orchestrator import execute_guide_run
+        from backend.app.documents.markdown import parse_markdown
+        with self.database.transaction() as connection:
+            row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
+                'ON m.id=r.trigger_message_id WHERE r.id=?',(identity,)).fetchone()
+            controlled = row is not None and row['status']=='RUNNING' and row['action_type']=='ASK' and row['content'] in ('操作范围验收 WAIT_TEXT','操作范围验收 WAIT_CARDS')
+            if controlled:
+                current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'",(row['requirement_id'],)).fetchone()
+                block,meta = list(zip(parse_markdown(current['markdown_content']).blocks,json.loads(current['block_state_json'])['blocks']))[-1]
+        if not controlled:
+            await super()._drive(identity,lease); return
+        if row['content'].endswith('WAIT_CARDS'):
+            from backend.tests.messages.test_queries import cards_fixture
+            from backend.app.guide.output_evidence import card_text
+            cards = cards_fixture();cards['intro']='本机受控追问😀'
+            cards['cards'][0]['related_spec_context']=[{'block_id':meta['block_id'],'content_snapshot':block.markdown}]
+            output={'schema_version':1,'response_type':'CLARIFY_CARDS','message':card_text(cards),'cards':cards}
+        else:
+            output={'schema_version':1,'response_type':'CLARIFY_TEXT','message':'本机受控追问：请补充普通说明😀'}
+        response=self.wire.envelope(model=self.profile.model_name)
+        response['choices'][0]['message']['content']=json.dumps(output,ensure_ascii=False)
+        self.server.responses.append((200,json.dumps(response,ensure_ascii=False).encode('utf-8'),{},None))
+        outcome=await execute_guide_run(LeasedDatabase(self.database,lease),{'guide_run_id':identity},
+            process_lock=self.process_lock,catalog=self.catalog,clock=self.clock,profile=self.profile,gateway=self.gateway,
+            context_compiler=self.compile,compatibility_check=lambda *args:True)
+        self.events.append({'event':'CONTROLLED_WAITING_RETURNED','guide_run_id':identity,'code':outcome['code']})
+
+
 async def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--database', required=True)
     parser.add_argument('--frontend-dist', type=Path)
@@ -317,6 +349,7 @@ async def main():
     fixture.add_argument('--seed-comment-suggestion-fixture', action='store_true')
     fixture.add_argument('--controlled-comment-model', action='store_true')
     fixture.add_argument('--controlled-scope-model', action='store_true')
+    fixture.add_argument('--controlled-waiting-model', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -337,6 +370,9 @@ async def main():
     if args.controlled_scope_model:
         def factory(db,catalog):
             worker = ControlledScopeModelWorker(db,catalog=catalog); controlled.append(worker); return worker
+    if args.controlled_waiting_model:
+        def factory(db,catalog):
+            worker = ControlledWaitingModelWorker(db,catalog=catalog); controlled.append(worker); return worker
     server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory, frontend_directory=args.frontend_dist), host='127.0.0.1', port=0, workers=1,
         timeout_graceful_shutdown=10, log_level='warning'))
     task = asyncio.create_task(server.serve())
@@ -350,7 +386,7 @@ async def main():
     with database.transaction() as connection:
         facts = {name: connection.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
             for name in ('requirements', 'requirement_documents', 'revisions', 'comments', 'guide_runs', 'llm_uses')}
-        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture or args.controlled_comment_model or args.controlled_scope_model:
+        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture or args.controlled_comment_model or args.controlled_scope_model or args.controlled_waiting_model:
             facts.update({name: connection.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('suggestion_batches','suggestions')})
     print(json.dumps({'closed': True, 'facts': facts, **({'controlled_model':controlled[0].diagnostic_facts()} if controlled else {})}), flush=True)
 
