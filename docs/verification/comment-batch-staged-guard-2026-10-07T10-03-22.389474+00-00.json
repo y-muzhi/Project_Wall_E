@@ -1,0 +1,7 @@
+{
+  "recorded_at": "2026-10-07T10:03:22.389474+00:00",
+  "passed": true,
+  "previous_commit_files_checked": 34,
+  "scope": "Private exact credential bytes checked in committed prior batch and current staged files; runtime paths excluded; original CRLF permitted without suppressing real trailing-space checks",
+  "whitespace_check": "git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff 2037860 --check passed"
+}

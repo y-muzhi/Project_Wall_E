@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-07T10:03:22.389474+00:00",
+  "scope": "Local save verification, no additional business/Provider acceptance",
+  "prior_local_commit": "6f95988",
+  "prior_default_whitespace_check": "failed: original raw CRLF evidence (-text) plus two blank-space lines in verifier; commit proceeded before checking result; not pushed",
+  "raw_evidence_bytes_preserved": true,
+  "verifier_change": "Only two whitespace-only lines changed to empty lines; business acceptance retained at original verification checkpoint; 451 common production/helper inputs unchanged",
+  "verifier_sha256_before": "0d563d700a48fa0f6ed9aa8a3c4a568cdb9adaa851e03dceb70b73f157ab7d24",
+  "verifier_sha256_after": "9c9ad7ca01b3d7afa3b361b6b25216528ae92ab24204e99762c3624da65757f5"
+}

@@ -79,11 +79,11 @@ try{
  for(const kind of ['block','selection','edited','invalid-edit','unknown'])await fresh('COMMENT-APPLY-'+kind,(id,{comment,before})=>`async(page)=>{
  ${openComments}const card=page.locator('[data-comment-id="${comment.id}"]');await card.getByRole('button',{name:'让 AI 修改',exact:true}).waitFor();
  await card.getByRole('button',{name:'让 AI 修改',exact:true}).click();
- 
+
  await page.waitForFunction(()=>document.querySelector('#detail-tab-AI')?.getAttribute('aria-selected')==='true');
  let wire=await page.evaluate(()=>window.detailWire),requests=wire.requests.filter(r=>r.method!=='GET'),receipt=requests.at(-1).response.data;
  if(requests.length!==1||requests.some(r=>r.status!==202||r.path!=='/api/v1/comments/${comment.id}/guide-runs'||JSON.stringify(JSON.parse(r.body))!=='{"expected_content_version":3}'))throw Error('Original I34 changed fields/source or repeated');
- 
+
  let run;for(let i=0;i<200;i++){run=(await(await page.request.get('${url}/api/v1/guide-runs/'+receipt.id)).json()).data;if(run.status==='COMPLETED')break;await page.waitForTimeout(25);}if(run.status!=='COMPLETED'||!run.suggestion_batch_id||run.source_id!==${comment.id}||run.function_type!=='MODIFY_FROM_COMMENT')throw Error('Explicit batch fixture not completed/linked');
  await page.getByRole('button',{name:'重新读取详情',exact:true}).click();const panel=page.getByRole('region',{name:'建议处理',exact:true});await panel.waitFor();await panel.locator('.suggestion-card').waitFor();
  const beforeBatch=(await(await page.request.get('${url}/api/v1/suggestion-batches/'+run.suggestion_batch_id)).json()).data;

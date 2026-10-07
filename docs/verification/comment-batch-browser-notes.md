@@ -17,3 +17,5 @@
 09-50-52-734Z-0ceffb985e39为较早三支及审计通过，未包含实际PM目标/拒绝/未知断言。扩展五支的09-53-56-811Z-a4f9a70b93aa保留：前四支通过，未知重放在JSON.stringify对象字段排列次序比较处失败；私下完整dict比较证明同key/body和data值一致。最终改为Node完整deepEqual及独立SQLite持久回执核对，仍不比较每次本来不同的meta.request_id，不改变业务/降低数据断言。
 
 三批次前置＋五应用分支共8不同根操作，451公共输入一致，各验证器452含自身；组合记录comment-batch-combined-postconditions-2026-10-07.json。8张最终截图逐一查看，原字节/SHA保存在comment-batch-media对应session。生产backend/frontend/shared没有修改；每轮正常TS/Vite构建通过。既有BE814/FE260＋4/55核心按原范围保留，本批没有冒称重跑。OP12–14局部根验收继续登记实现中，OP22仍需C07实际生成链及完整正式分支；真实DeepSeek兼容/效果及人工IME/键盘仍待，无新增付费/正常库/8000重启/崩溃调查。
+
+保存检查说明：6f95988本地提交前默认whitespace检查发现原始CRLF审计JSON（-text保留原字节）和验证器两处空白行；助手误继续本地commit，但未推送。随后只删除验证器两行空格，保留原证据及原始验证器于已提交历史（代码依Git属性规范化行尾，报告仍冻结验证时实际工作区字节）。后续CR-at-EOL明确允许的检查仍保留真实行尾空格检查，不放宽业务断言；451共同生产/夹具工作区输入不变，纯工具空白变化不冒称新业务重跑。记录comment-batch-save-check对应JSON。
