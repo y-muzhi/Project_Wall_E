@@ -153,6 +153,45 @@ class SuggestionFixtureWorker(GuideWorker):
         await super()._drive(identity,lease)
 
 
+class CommentSuggestionFixtureWorker(GuideWorker):
+    """Explicit comment batch generation precondition, never model evidence.
+
+    Only the named actual I34 comment dispatch is seeded. Validate the one
+    replacement against CURRENT and the server-frozen comment authority;
+    public reads, decisions, completion and discard remain production code.
+    """
+    async def _drive(self, identity, lease):
+        from backend.app.documents.sources import DocumentSources
+        from backend.app.documents.snapshot import validate_snapshot
+        from backend.app.documents.scopes import restore_authority
+        from backend.app.documents.patch_validation import validate_patch, validate_combination
+        with self.database.transaction(write=True) as connection:
+            row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
+                'ON m.id=r.trigger_message_id WHERE r.id=?', (identity,)).fetchone()
+            if (row is not None and row['status']=='RUNNING' and row['current_step']=='PREPARING'
+                and row['function_type']=='MODIFY_FROM_COMMENT' and row['source_type']=='COMMENT'
+                and row['content']=='评论AI建议前置夹具'):
+                current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'", (row['requirement_id'],)).fetchone()
+                snapshot = validate_snapshot(current['markdown_content'],json.loads(current['block_state_json']),DocumentSources(connection,row['requirement_id'],self.catalog))
+                scope = json.loads(row['scope_ref_json'])
+                authority = restore_authority(snapshot,'MODIFY',row['scope_type'],scope,json.loads(row['allowed_targets_json']))
+                block = next(block for block,metadata in zip(snapshot.parsed.blocks,snapshot.state['blocks']) if metadata['block_id']==scope['block_id'])
+                proposed = (block.markdown.replace(scope['selected_text'],'正式规则😀',1)
+                    if row['scope_type']=='SELECTION' else '评论要求的明确规则😀\n')
+                patch = {'title':'评论来源前置','explanation':'受控生成前置；非模型效果','impact':None,
+                    'patch_operation':'REPLACE_BLOCK','target_ref':{'block_id':scope['block_id']},
+                    'selector_json':None,'original_content':block.markdown,'proposed_markdown':proposed,'proposed_data_json':None}
+                validate_combination((validate_patch(snapshot,patch,authority),))
+                batch = entity_id(connection,EntityKind.BATCH); suggestion = entity_id(connection,EntityKind.SUGGESTION); at = operation_time(self.clock)
+                connection.execute("INSERT INTO suggestion_batches VALUES (?,?,?,'COMMENT',?,'显式评论建议前置','一项受控生成补丁','PENDING',NULL,NULL,?,NULL,?,NULL,?)",(batch,row['requirement_id'],identity,row['source_id'],current['content_version'],at,at))
+                connection.execute("INSERT INTO suggestions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,'PENDING','VALID',NULL,?,NULL,?)",(suggestion,batch,1,patch['title'],patch['explanation'],None,'REPLACE_BLOCK',json.dumps(patch['target_ref']),None,block.markdown,proposed,None,at,at))
+                final={'guide_run_id':identity,'status':'COMPLETED','assistant_message_id':None,'current_document':None,'suggestion_batch_id':batch}
+                connection.execute("UPDATE guide_runs SET status='COMPLETED',current_step='FINISHED',final_result_json=?,ended_at=?,updated_at=? WHERE id=?",(json.dumps(final),at,at,identity))
+                connection.execute("UPDATE requirements SET document_work_state='SUGGESTION_REVIEWING',active_operation_type='SUGGESTION_BATCH',active_operation_id=?,state_started_at=?,updated_at=? WHERE id=? AND active_operation_id=?",(batch,at,at,row['requirement_id'],identity))
+                return
+        await super()._drive(identity,lease)
+
+
 async def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--database', required=True)
     parser.add_argument('--frontend-dist', type=Path)
@@ -161,6 +200,7 @@ async def main():
     fixture.add_argument('--seed-waiting-ask-fixture', action='store_true')
     fixture.add_argument('--seed-cards-fixture', action='store_true')
     fixture.add_argument('--seed-suggestion-fixture', action='store_true')
+    fixture.add_argument('--seed-comment-suggestion-fixture', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -173,6 +213,7 @@ async def main():
     if args.seed_waiting_ask_fixture: factory = lambda db, catalog: WaitingAskFixtureWorker(db, catalog=catalog)
     if args.seed_cards_fixture: factory = lambda db, catalog: CardsFixtureWorker(db, catalog=catalog)
     if args.seed_suggestion_fixture: factory = lambda db, catalog: SuggestionFixtureWorker(db, catalog=catalog)
+    if args.seed_comment_suggestion_fixture: factory = lambda db, catalog: CommentSuggestionFixtureWorker(db, catalog=catalog)
     server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory, frontend_directory=args.frontend_dist), host='127.0.0.1', port=0, workers=1,
         timeout_graceful_shutdown=10, log_level='warning'))
     task = asyncio.create_task(server.serve())
@@ -186,7 +227,7 @@ async def main():
     with database.transaction() as connection:
         facts = {name: connection.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
             for name in ('requirements', 'requirement_documents', 'revisions', 'comments', 'guide_runs', 'llm_uses')}
-        if args.seed_suggestion_fixture:
+        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture:
             facts.update({name: connection.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('suggestion_batches','suggestions')})
     print(json.dumps({'closed': True, 'facts': facts}), flush=True)
 

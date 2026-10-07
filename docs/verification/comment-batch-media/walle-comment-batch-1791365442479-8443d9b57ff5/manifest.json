@@ -1,0 +1,24 @@
+{
+  "scope": "1440x1000 explicit controlled comment generation preconditions, actual root pending batch; full body checks belong to API/SQLite evidence, not screenshot only",
+  "source_evidence": "comment-batch-browser-2026-10-07T09-30-42-480Z-8443d9b57ff5.json",
+  "images": [
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-batch-1791365442479-8443d9b57ff5/walle-comment-batch-1791365442479-8443d9b57ff5-block-pending.png",
+      "source": "output/playwright/walle-comment-batch-1791365442479-8443d9b57ff5-block-pending.png",
+      "sha256": "6f2764005ec56406f65444be18baccfc3862ec2b80fd23789173137da60272f8",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-batch-1791365442479-8443d9b57ff5/walle-comment-batch-1791365442479-8443d9b57ff5-selection-pending.png",
+      "source": "output/playwright/walle-comment-batch-1791365442479-8443d9b57ff5-selection-pending.png",
+      "sha256": "a2cfe476ae5cfdb6d2419d6378b0b52ca085d3b4930f1f5c18db1371e6b7a353",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-batch-1791365442479-8443d9b57ff5/walle-comment-batch-1791365442479-8443d9b57ff5-unknown-pending.png",
+      "source": "output/playwright/walle-comment-batch-1791365442479-8443d9b57ff5-unknown-pending.png",
+      "sha256": "7c983d64cf0a0691882d7632962bc47bd75cf3e1a43dffc27444dd6e8e3d2e45",
+      "visually_inspected": true
+    }
+  ]
+}

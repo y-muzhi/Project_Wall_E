@@ -1,0 +1,36 @@
+{
+  "scope": "Actual root applied v4 and located target; controlled generation precondition, no model-effect claim",
+  "source_evidence": "comment-apply-browser-2026-10-07T09-56-31-109Z-e22c080a3c15.json",
+  "images": [
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-apply-1791366991107-e22c080a3c15/walle-comment-apply-1791366991107-e22c080a3c15-block-applied.png",
+      "source": "output/playwright/walle-comment-apply-1791366991107-e22c080a3c15-block-applied.png",
+      "sha256": "15c4591888d24ae37ead1ca943c6d5c988682efcd35a1d8ba29b7fdc8785281b",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-apply-1791366991107-e22c080a3c15/walle-comment-apply-1791366991107-e22c080a3c15-edited-applied.png",
+      "source": "output/playwright/walle-comment-apply-1791366991107-e22c080a3c15-edited-applied.png",
+      "sha256": "f3592b890e1d8dad333099ad09125f26627e61b05b5ac2a0502a8582f34a2191",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-apply-1791366991107-e22c080a3c15/walle-comment-apply-1791366991107-e22c080a3c15-invalid-edit-applied.png",
+      "source": "output/playwright/walle-comment-apply-1791366991107-e22c080a3c15-invalid-edit-applied.png",
+      "sha256": "6a2aab7b31b16e931a089d571fed45a201d15f4f9f9031c8cc2b8a004582d891",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-apply-1791366991107-e22c080a3c15/walle-comment-apply-1791366991107-e22c080a3c15-selection-applied.png",
+      "source": "output/playwright/walle-comment-apply-1791366991107-e22c080a3c15-selection-applied.png",
+      "sha256": "4af2a857ec8778721a133f2da7900891b0bdc41130a16d53731b6044426e0a77",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-batch-media/walle-comment-apply-1791366991107-e22c080a3c15/walle-comment-apply-1791366991107-e22c080a3c15-unknown-applied.png",
+      "source": "output/playwright/walle-comment-apply-1791366991107-e22c080a3c15-unknown-applied.png",
+      "sha256": "6384165e7a223407ffe449ed154155392293e51be179588dcf53bc9b594e034e",
+      "visually_inspected": true
+    }
+  ]
+}

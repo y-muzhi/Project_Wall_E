@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "scope": "Distinct root batch operations, explicit generation precondition; no C07/Provider/effect acceptance",
+  "source_evidence": [
+    "2026-10-07T09:30:42.480Z",
+    "2026-10-07T09:56:31.109Z"
+  ],
+  "common_unchanged_inputs": 451,
+  "distinct_cases": [
+    "COMMENT-BATCH-block",
+    "COMMENT-BATCH-selection",
+    "COMMENT-BATCH-unknown",
+    "COMMENT-APPLY-block",
+    "COMMENT-APPLY-selection",
+    "COMMENT-APPLY-edited",
+    "COMMENT-APPLY-invalid-edit",
+    "COMMENT-APPLY-unknown"
+  ],
+  "audits": [
+    "comment-batch-post-audit-2026-10-07T09-35-50.674884+00-00.json",
+    "comment-apply-post-audit-2026-10-07T09-58-57.602198+00-00.json"
+  ]
+}
