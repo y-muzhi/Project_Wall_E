@@ -1,0 +1,13 @@
+{
+  "scope": "Read-only restarted 8000 preview, latest normal dist, unchanged user SQLite, no model requests",
+  "recorded_at": "2026-10-07T10:59:13.601216+00:00",
+  "pid": 54756,
+  "page_status": 200,
+  "html_equals_dist": true,
+  "I01_status": 200,
+  "I01_success": true,
+  "database_sha256_before": "9d550f0a42929251a724e2bda38871ac0d87aad37a63ae2e083f901ef79fcea3",
+  "database_sha256_after": "9d550f0a42929251a724e2bda38871ac0d87aad37a63ae2e083f901ef79fcea3",
+  "database_bytes_unchanged": true,
+  "passed": true
+}

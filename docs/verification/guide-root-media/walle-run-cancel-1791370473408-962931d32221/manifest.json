@@ -1,0 +1,21 @@
+{
+  "session": "walle-run-cancel-1791370473408-962931d32221",
+  "source_evidence": "run-cancel-browser-2026-10-07T10-54-33-409Z-962931d32221.json",
+  "original_screenshots": [
+    {
+      "path": "docs/verification/guide-root-media/walle-run-cancel-1791370473408-962931d32221/walle-run-cancel-1791370473408-962931d32221-CANCEL-inflight-cancelled.png",
+      "sha256": "f95c72bbc05833726533b140c44ccd1392fd2185ffd668652292e1334b8db9dc",
+      "bytes": 100413
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-run-cancel-1791370473408-962931d32221/walle-run-cancel-1791370473408-962931d32221-CANCEL-normal-cancelled.png",
+      "sha256": "2be08294177ab00a10cef7679702123ebe55bf0aa1a210229d83e60ca0d330ab",
+      "bytes": 100079
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-run-cancel-1791370473408-962931d32221/walle-run-cancel-1791370473408-962931d32221-CANCEL-unknown-cancelled.png",
+      "sha256": "55ddab3f6abfca71ce5c3e81a37cb92a7bcdf1128a981619ab1df9f3549f6b63",
+      "bytes": 100257
+    }
+  ]
+}

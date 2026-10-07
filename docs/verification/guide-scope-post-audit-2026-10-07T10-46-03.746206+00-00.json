@@ -1,0 +1,7 @@
+{
+  "recorded_at": "2026-10-07T10:46:03.746206+00:00",
+  "audit_source_sha256": "8e03c9e6a62f7e3a55e5036ec957c53d115857ffe11d2e8353b89f19da59730e",
+  "scope": "Actual root ordinary actions under controlled loopback: read-only ASK/REVIEW/NO_CHANGE, four exact scopes, new REVIEW_RESULT modify and discard, raw v2 audited source/provenance, durable original receipt; no Provider count/effect or paid calls",
+  "passed": false,
+  "error": "AssertionError: "
+}

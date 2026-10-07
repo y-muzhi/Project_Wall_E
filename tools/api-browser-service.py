@@ -260,6 +260,52 @@ class ControlledCommentModelWorker(GuideWorker):
             'server_errors':self.server.errors,'production_compatibility_proved':False,'paid_requests':0,
             'context_compiler':'Explicit expanded private conservative byte budget; no production gate proof'}
 
+class ControlledScopeModelWorker(ControlledCommentModelWorker):
+    """Explicit private ordinary-action boundary; no SQL-manufactured outputs."""
+    async def _drive(self, identity, lease):
+        from backend.app.infrastructure.execution_lease import LeasedDatabase
+        from backend.app.guide.orchestrator import execute_guide_run
+        from backend.app.documents.markdown import parse_markdown
+        with self.database.transaction() as connection:
+            row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
+                'ON m.id=r.trigger_message_id WHERE r.id=?',(identity,)).fetchone()
+            controlled = row is not None and row['status']=='RUNNING' and row['content'].startswith('操作范围验收 ')
+            if controlled:
+                current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'",(row['requirement_id'],)).fetchone()
+                scope = None if row['scope_ref_json'] is None else json.loads(row['scope_ref_json'])
+                pairs = list(zip(parse_markdown(current['markdown_content']).blocks,json.loads(current['block_state_json'])['blocks']))
+                block,meta = next((block,meta) for block,meta in reversed(pairs) if block.block_type=='paragraph')
+                if row['scope_type'] in ('BLOCK','SELECTION'):
+                    block,meta = next((b,m) for b,m in pairs if m['block_id']==scope['block_id'])
+        if not controlled:
+            # The original initialization still runs the ordinary missing-key path.
+            await GuideWorker._drive(self,identity,lease); return
+        if row['action_type']=='ASK':
+            output = {'schema_version':1,'response_type':'ANSWER','message':'本机受控回答：正文保持不变😀'}
+        elif row['action_type']=='REVIEW':
+            output = {'schema_version':1,'response_type':'REVIEW_RESULT','message':'本机受控检查：已保存检查结果😀',
+                'review_result':{'schema_version':1,'summary':'检查原文中的可测试性',
+                    'issues':[{'issue_key':'testability','severity':'WARNING','category':'UNTESTABLE',
+                        'title':'需要验收标准','description':'受控检查项用于验证来源链路',
+                        'block_ids':[meta['block_id']],'evidence':block.plain_text,'recommendation':'明确验收步骤'}]}}
+        elif row['content']=='操作范围验收 NO_CHANGE':
+            output = {'schema_version':1,'response_type':'NO_CHANGE','message':'本机受控无需修改：正文保持不变😀'}
+        else:
+            proposed = block.markdown.replace(scope['selected_text'],'正式规则😀',1) if row['scope_type']=='SELECTION' else '范围内的明确规则😀\n'
+            patch = {'title':'范围内补丁','explanation':'受控HTTP输出；真实程序校验','impact':None,
+                'patch_operation':'REPLACE_BLOCK','target_ref':{'block_id':meta['block_id']},'selector_json':None,
+                'original_content':block.markdown,'proposed_markdown':proposed,'proposed_data_json':None}
+            output = {'schema_version':1,'response_type':'SUGGESTIONS','message':'本机受控修改建议😀',
+                'title':'范围内建议','summary':'仅生成建议，不直接采用','suggestions':[patch]}
+        response = self.wire.envelope(model=self.profile.model_name)
+        response['choices'][0]['message']['content'] = json.dumps(output,ensure_ascii=False)
+        self.server.responses.append((200,json.dumps(response,ensure_ascii=False).encode('utf-8'),{},None))
+        outcome = await execute_guide_run(LeasedDatabase(self.database,lease),{'guide_run_id':identity},
+            process_lock=self.process_lock,catalog=self.catalog,clock=self.clock,profile=self.profile,gateway=self.gateway,
+            context_compiler=self.compile,compatibility_check=lambda *args:True)
+        self.events.append({'event':'CONTROLLED_SCOPE_RETURNED','guide_run_id':identity,'code':outcome['code']})
+
+
 async def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--database', required=True)
     parser.add_argument('--frontend-dist', type=Path)
@@ -270,6 +316,7 @@ async def main():
     fixture.add_argument('--seed-suggestion-fixture', action='store_true')
     fixture.add_argument('--seed-comment-suggestion-fixture', action='store_true')
     fixture.add_argument('--controlled-comment-model', action='store_true')
+    fixture.add_argument('--controlled-scope-model', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -287,6 +334,9 @@ async def main():
     if args.controlled_comment_model:
         def factory(db,catalog):
             worker = ControlledCommentModelWorker(db,catalog=catalog); controlled.append(worker); return worker
+    if args.controlled_scope_model:
+        def factory(db,catalog):
+            worker = ControlledScopeModelWorker(db,catalog=catalog); controlled.append(worker); return worker
     server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory, frontend_directory=args.frontend_dist), host='127.0.0.1', port=0, workers=1,
         timeout_graceful_shutdown=10, log_level='warning'))
     task = asyncio.create_task(server.serve())
@@ -300,7 +350,7 @@ async def main():
     with database.transaction() as connection:
         facts = {name: connection.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
             for name in ('requirements', 'requirement_documents', 'revisions', 'comments', 'guide_runs', 'llm_uses')}
-        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture or args.controlled_comment_model:
+        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture or args.controlled_comment_model or args.controlled_scope_model:
             facts.update({name: connection.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('suggestion_batches','suggestions')})
     print(json.dumps({'closed': True, 'facts': facts, **({'controlled_model':controlled[0].diagnostic_facts()} if controlled else {})}), flush=True)
 

@@ -1,0 +1,41 @@
+{
+  "session": "walle-guide-scope-1791369353313-c03d041ec87b",
+  "source_evidence": "guide-scope-browser-2026-10-07T10-35-53-315Z-c03d041ec87b.json",
+  "original_screenshots": [
+    {
+      "path": "docs/verification/guide-root-media/walle-guide-scope-1791369353313-c03d041ec87b/walle-guide-scope-1791369353313-c03d041ec87b-ASK-ACTIVE-result.png",
+      "sha256": "7985d5f03386872214db92ac7d0f663f5374acf05f4b0ca3ab80abf521e55a3f",
+      "bytes": 106545
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-guide-scope-1791369353313-c03d041ec87b/walle-guide-scope-1791369353313-c03d041ec87b-ASK-COMPLETED-result.png",
+      "sha256": "189af48f50204de8167f4ae2b0e44ee5aa32b8f34cf53ec1024390251c3c2dcc",
+      "bytes": 105424
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-guide-scope-1791369353313-c03d041ec87b/walle-guide-scope-1791369353313-c03d041ec87b-BLOCK-generated.png",
+      "sha256": "8320bab365fb857538e24d513a8c8b96e67a1c9a73ff5152ac1666c2e7cce5f3",
+      "bytes": 107411
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-guide-scope-1791369353313-c03d041ec87b/walle-guide-scope-1791369353313-c03d041ec87b-DOCUMENT-generated.png",
+      "sha256": "0e7cda9f2c69c07eb721609582f3e5cbf85047a8c833e235070269f997c846e3",
+      "bytes": 106851
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-guide-scope-1791369353313-c03d041ec87b/walle-guide-scope-1791369353313-c03d041ec87b-MODIFY-NO_CHANGE-result.png",
+      "sha256": "7db4f8780cb37bdaa79e3f5495c55d5cc858b175a4af0b1690b17a50c4daef8e",
+      "bytes": 106733
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-guide-scope-1791369353313-c03d041ec87b/walle-guide-scope-1791369353313-c03d041ec87b-SECTION-generated.png",
+      "sha256": "0c49478ff239d3f072058acd917fe054b030fb8dbd45ba36b150b2450802476d",
+      "bytes": 107230
+    },
+    {
+      "path": "docs/verification/guide-root-media/walle-guide-scope-1791369353313-c03d041ec87b/walle-guide-scope-1791369353313-c03d041ec87b-SELECTION-generated.png",
+      "sha256": "f4335bd2b0ab99c450687d04648d260474ca99f7ee24eca29873ba62d9d4bf29",
+      "bytes": 108156
+    }
+  ]
+}

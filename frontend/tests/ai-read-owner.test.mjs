@@ -33,3 +33,27 @@ test('fresh actual activity replaces an accepted old selection, while an explici
  const f=fixture(),owner=new RequirementAiRead(detail,f.api,f.read,f.adopt,f.open,f.timing);await owner.receive({id:3,requirement_id:1});await flush();const active=run(4,'RUNNING');f.facts.run=active;owner.adopt({...detail,activity:{kind:'GUIDE',run:active}});await flush();assert.equal(owner.getSnapshot().selected,4);assert.equal(owner.getSnapshot().selection,'ACTIVITY');assert.equal(owner.getSnapshot().run.id,4);
  owner.open(run());owner.adopt({...detail,activity:{kind:'GUIDE',run:active}});assert.equal(owner.getSnapshot().selected,3);assert.equal(owner.getSnapshot().selection,'HISTORY');owner.dispose();
 });
+
+test('a reopened panel caller awaits its current read instead of inheriting the retired visibility failure',async()=>{
+ const f=fixture();let resolve;const hold=new Promise(yes=>resolve=yes);let first=true;
+ const owner=new RequirementAiRead(detail,f.api,async()=>{f.facts.parents++;if(first){first=false;return hold;}return detail;},f.adopt,f.open,f.timing);
+ owner.setVisible(true);await flush();owner.setVisible(false);owner.setVisible(true);
+ const reopened=owner.refresh();resolve(detail);await reopened;await flush();
+ assert.equal(f.facts.parents,2);assert.equal(f.facts.adopts,1);assert.equal(owner.getSnapshot().error,null);owner.dispose();
+});
+
+test('reopened panel request retired again before its predecessor settles does not adopt or start a hidden read',async()=>{
+ const f=fixture();let resolve;const hold=new Promise(yes=>resolve=yes);
+ const owner=new RequirementAiRead(detail,f.api,async()=>{f.facts.parents++;return hold;},f.adopt,f.open,f.timing);
+ owner.setVisible(true);await flush();owner.setVisible(false);owner.setVisible(true);
+ const reopened=owner.refresh(),rejected=assert.rejects(reopened,/hidden|retired/);owner.setVisible(false);resolve(detail);await rejected;await flush();
+ assert.equal(f.facts.parents,1);assert.equal(f.facts.adopts,0);owner.dispose();
+});
+
+test('current visibility network failure remains a real failure after an obsolete read settles',async()=>{
+ const f=fixture();let resolve;const hold=new Promise(yes=>resolve=yes);let first=true;
+ const owner=new RequirementAiRead(detail,f.api,async()=>{f.facts.parents++;if(first){first=false;return hold;}throw Error('Current connection failure');},f.adopt,f.open,f.timing);
+ owner.setVisible(true);await flush();owner.setVisible(false);owner.setVisible(true);
+ const reopened=owner.refresh(),rejected=assert.rejects(reopened,/Current connection failure/);resolve(detail);await rejected;await flush();
+ assert.equal(f.facts.parents,2);assert.equal(f.facts.adopts,0);assert.equal(owner.getSnapshot().error,'Current connection failure');owner.dispose();
+});

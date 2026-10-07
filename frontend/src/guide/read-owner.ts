@@ -18,7 +18,7 @@ const changes=(run:GuideRun)=>JSON.stringify([run.status,run.latest_assistant_me
 export class RequirementAiRead{
  readonly messages:RequirementMessages;readonly history:RequirementRunHistory;
  private readonly api:Api;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private readonly openPanel:()=>void|Promise<void>;private readonly timing:PollClock|undefined;
- private value:AiReadState;private readonly listeners=new Set<()=>void>();private poll:GuideRunPolling|undefined;private releasePoll:(()=>void)|undefined;private pollSignature:string|null=null;private generation=0;private visibilityGeneration=0;private closed=false;private pending:Promise<void>|undefined;private dirty=false;
+ private value:AiReadState;private readonly listeners=new Set<()=>void>();private poll:GuideRunPolling|undefined;private releasePoll:(()=>void)|undefined;private pollSignature:string|null=null;private generation=0;private visibilityGeneration=0;private closed=false;private pending:Promise<void>|undefined;private pendingGeneration=0;private dirty=false;
  constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,openPanel:()=>void|Promise<void>,timing?:PollClock){
   positiveInteger(detail.requirement.id);if(detail.current.requirement_id!==detail.requirement.id||detail.current.document_type!=='CURRENT')throw TypeError('Owned actual detail required');
   this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.openPanel=openPanel;this.timing=timing;this.messages=new RequirementMessages(detail.requirement.id,api);this.history=new RequirementRunHistory(detail.requirement.id,api);
@@ -56,7 +56,17 @@ export class RequirementAiRead{
   else{this.dirty=true;void this.refresh().catch(()=>undefined);}
  }
  refresh():Promise<void>{
-  if(this.closed||!this.value.visible)return Promise.reject(Error('AI view is hidden or retired'));if(this.pending)return this.pending;
+  if(this.closed||!this.value.visible)return Promise.reject(Error('AI view is hidden or retired'));
+  if(this.pending){
+   if(this.pendingGeneration===this.visibilityGeneration)return this.pending;
+   // A reopened panel must await its own read. The obsolete request retains
+   // its failure for its original caller, without leaking it into the new view.
+   const generation=this.visibilityGeneration;
+   return this.pending.catch(()=>undefined).then(()=>{
+    if(this.closed||!this.value.visible||generation!==this.visibilityGeneration)throw Error('AI view is hidden or retired');
+    return this.refresh();
+   });
+  }
   const generation=this.visibilityGeneration,alive=()=>!this.closed&&this.value.visible&&generation===this.visibilityGeneration;
   const pending=Promise.resolve().then(async()=>{
    do{this.dirty=false;if(!alive())throw Error('AI view is hidden or retired');const actual=await this.readActual();if(!alive())throw Error('AI read was hidden');
@@ -64,7 +74,7 @@ export class RequirementAiRead{
     const results=await Promise.all([this.messages.refresh(),this.history.refresh()]);if(!alive())throw Error('AI resources were hidden');if(results.some(ok=>!ok))throw Error('会话或运行记录暂时无法读取，已确认内容仍保留');
    }while(this.dirty);this.publish({error:null});
   }).catch(error=>{if(alive())this.publish({error:error instanceof Error?error.message:'实际AI状态暂时无法读取，已确认内容仍保留'});throw error;}).finally(()=>{if(this.pending===pending)this.pending=undefined;this.publish({refreshing:false});if(!this.closed&&this.value.visible&&generation!==this.visibilityGeneration)void this.refresh().catch(()=>undefined);});
-  this.pending=pending;this.publish({refreshing:true});return pending;
+  this.pending=pending;this.pendingGeneration=generation;this.publish({refreshing:true});return pending;
  }
  dispose():void{if(this.closed)return;this.publish({active:false,visible:false});this.closed=true;this.generation++;this.releasePoll?.();this.poll?.dispose();this.messages.dispose();this.history.dispose();this.listeners.clear();}
 }

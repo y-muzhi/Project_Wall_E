@@ -1,0 +1,11 @@
+{
+  "session": "walle-run-cancel-1791370263253-9715f263766d",
+  "source_evidence": "run-cancel-browser-2026-10-07T10-51-03-254Z-9715f263766d.json",
+  "original_screenshots": [
+    {
+      "path": "docs/verification/guide-root-media/walle-run-cancel-1791370263253-9715f263766d/walle-run-cancel-1791370263253-9715f263766d-failure.png",
+      "sha256": "60d95e2ea8220ad201e8a6bfcf96d05a5cab2c18214d94eed1058668417534b0",
+      "bytes": 99949
+    }
+  ]
+}
