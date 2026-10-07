@@ -1,0 +1,222 @@
+{
+  "recorded_at": "2026-10-07T14:42:29.316713+00:00",
+  "scope": "Original screenshot bytes, no edits; all card presentation stages and current cards regression",
+  "images": [
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-11-25-342Z-027388d7fe07.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791382285341-027388d7fe07-failure.png",
+      "file": "walle-card-presentation-1791382285341-027388d7fe07-failure.png",
+      "bytes": 104383,
+      "sha256": "60c27c339615db483c26595f523591fa905fb8745454ff3b495faa1b3e383f22"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-14-44-002Z-fa00db5c4745.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791382484001-fa00db5c4745-CARDS-normal-completed.png",
+      "file": "walle-card-presentation-1791382484001-fa00db5c4745-CARDS-normal-completed.png",
+      "bytes": 105193,
+      "sha256": "9da1493eed04569f7848e488eef4478d2b14648da2957978c26bb790e82cb461"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-14-44-002Z-fa00db5c4745.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791382484001-fa00db5c4745-CARDS-normal-waiting.png",
+      "file": "walle-card-presentation-1791382484001-fa00db5c4745-CARDS-normal-waiting.png",
+      "bytes": 106449,
+      "sha256": "3b166d939cf1428ecf405fde6f698482fdcb02f448cfc8f79df11bb630bab8b8"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-14-44-002Z-fa00db5c4745.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791382484001-fa00db5c4745-failure.png",
+      "file": "walle-card-presentation-1791382484001-fa00db5c4745-failure.png",
+      "bytes": 17410,
+      "sha256": "a34f812b12e795e783fbf8281c323df809375cca0a04310d9b61d8d35500d98e"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-14-44-002Z-fa00db5c4745.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791382484001-fa00db5c4745-TEXT-normal-completed.png",
+      "file": "walle-card-presentation-1791382484001-fa00db5c4745-TEXT-normal-completed.png",
+      "bytes": 104932,
+      "sha256": "d2de67d047475990f5aec1d1c304c7234ec884c7869440f7b02321169232d25c"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-14-44-002Z-fa00db5c4745.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791382484001-fa00db5c4745-TEXT-normal-waiting.png",
+      "file": "walle-card-presentation-1791382484001-fa00db5c4745-TEXT-normal-waiting.png",
+      "bytes": 105608,
+      "sha256": "b16d407b0eed1f76adecf7b08e872b70b38ec021b18b4dd31dc826993a9b27e3"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-21-19-313Z-ae269ab43f49.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791382879312-ae269ab43f49-failure.png",
+      "file": "walle-card-presentation-1791382879312-ae269ab43f49-failure.png",
+      "bytes": 113088,
+      "sha256": "6e0ae56c3655fe5659afd5e2556cb42ae1d2537595ff4b7dbea4250e23650c80"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-30-00-192Z-c1309a55ee57.json",
+      "case_set_passed": false,
+      "source_image": "output/playwright/walle-card-presentation-1791383400191-c1309a55ee57-failure.png",
+      "file": "walle-card-presentation-1791383400191-c1309a55ee57-failure.png",
+      "bytes": 113088,
+      "sha256": "6e0ae56c3655fe5659afd5e2556cb42ae1d2537595ff4b7dbea4250e23650c80"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-32-22-894Z-d4c389f4048f.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-completed.png",
+      "file": "walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-completed.png",
+      "bytes": 105390,
+      "sha256": "b0b50f2916a5f020dc59668fbdf70aaae208091eaabd35d0212c6fbbe3fda9e9"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-32-22-894Z-d4c389f4048f.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-fallback.png",
+      "file": "walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-fallback.png",
+      "bytes": 113088,
+      "sha256": "6e0ae56c3655fe5659afd5e2556cb42ae1d2537595ff4b7dbea4250e23650c80"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-32-22-894Z-d4c389f4048f.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-recovered.png",
+      "file": "walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-recovered.png",
+      "bytes": 107027,
+      "sha256": "cedcb0d72fbcf7005fecb00852bc1310df56b41e491f19e8b74aefc254b2e454"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-32-22-894Z-d4c389f4048f.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-waiting.png",
+      "file": "walle-card-presentation-1791383542892-d4c389f4048f-CARDS-source-error-waiting.png",
+      "bytes": 107027,
+      "sha256": "cedcb0d72fbcf7005fecb00852bc1310df56b41e491f19e8b74aefc254b2e454"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-normal-completed.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-normal-completed.png",
+      "bytes": 105307,
+      "sha256": "10db03a767342207914bc5d2510a1bcb33b441a5ca1793ffbdbb626a7a99e5bb"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-normal-waiting.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-normal-waiting.png",
+      "bytes": 106449,
+      "sha256": "3b166d939cf1428ecf405fde6f698482fdcb02f448cfc8f79df11bb630bab8b8"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-completed.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-completed.png",
+      "bytes": 105924,
+      "sha256": "78c0d4b0115f8671d0c0c1cea07a51b4244ff1cc813c91b7029fa7c93a4901ea"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-fallback.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-fallback.png",
+      "bytes": 113571,
+      "sha256": "7c0c358adbde61a6fcd5e3c2991b80a5b97a85901e75445acd9f321a54b596d9"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-recovered.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-recovered.png",
+      "bytes": 107484,
+      "sha256": "81097852e3be8e06d91c6c6392af3398434f4e692b615d42caa1a6f9b75096cd"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-waiting.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-source-error-waiting.png",
+      "bytes": 107484,
+      "sha256": "81097852e3be8e06d91c6c6392af3398434f4e692b615d42caa1a6f9b75096cd"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-unknown-completed.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-unknown-completed.png",
+      "bytes": 103441,
+      "sha256": "c96b0dde05370e43d2acbdaa758637abfadac531eaae943c641d142871e2a893"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-unknown-unknown.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-unknown-unknown.png",
+      "bytes": 107699,
+      "sha256": "58d65d226f717a9fdd1833cb8e8bbab180b8b2fa5060f746ae80805474a3c109"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-unknown-waiting.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-CARDS-unknown-waiting.png",
+      "bytes": 106393,
+      "sha256": "120fd4851dfc0e1f6ec457bb7e2fc9862dd95ee0661aca5a569061408f72688f"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-TEXT-normal-completed.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-TEXT-normal-completed.png",
+      "bytes": 104956,
+      "sha256": "7754cc7bd1adc3164910d304e612c7a6be53f2a98b1ddfb50ce7ad53869b5ae1"
+    },
+    {
+      "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/walle-card-presentation-1791383672418-08a5b0866bb4-TEXT-normal-waiting.png",
+      "file": "walle-card-presentation-1791383672418-08a5b0866bb4-TEXT-normal-waiting.png",
+      "bytes": 105638,
+      "sha256": "b1641e2dbf5550c2ead2e29b1ebf1769ca92f73214e0f9bae15f0153a95b9cd7"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T14-33-07-653Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-initialize.png",
+      "file": "regression-2026-10-07-cards-initialize.png",
+      "bytes": 27576,
+      "sha256": "e91bee7477e762bc313b06f1feb4439a4ad5958009a05256fc42c473e003e6f6"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T14-33-07-653Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-waiting.png",
+      "file": "regression-2026-10-07-cards-waiting.png",
+      "bytes": 30893,
+      "sha256": "2f28aae15f8d82d7626b3e825af8582df573607c8fe0d84f62064e75d411d08b"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T14-33-07-653Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-expired.png",
+      "file": "regression-2026-10-07-cards-expired.png",
+      "bytes": 35158,
+      "sha256": "1284a23ab73dbd1affd5c47da1e11dfbce67b4688619c4ed56da3804e0d20352"
+    },
+    {
+      "source_evidence": "cards-browser-2026-10-07T14-33-07-653Z.json",
+      "case_set_passed": true,
+      "source_image": "output/playwright/cards-reading-anchor.png",
+      "file": "regression-2026-10-07-cards-reading-anchor.png",
+      "bytes": 35777,
+      "sha256": "4ab9d5ab30bdc328048efe25a5c0c77641851ececb5161fda9011a02330ba783"
+    }
+  ]
+}

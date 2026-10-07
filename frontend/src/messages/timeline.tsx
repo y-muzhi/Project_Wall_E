@@ -13,8 +13,8 @@ function restore(root:HTMLElement,previous:Anchor):void{
  const message=previous.id===null?null:root.querySelector<HTMLElement>('[data-message-id="'+previous.id+'"]'),part=previous.part===null?null:[...message?.querySelectorAll<HTMLElement>('[data-card-key]')??[]].find(card=>card.dataset.cardKey===previous.part),target=part??message;
  if(target)root.scrollTop+=target.getBoundingClientRect().top-root.getBoundingClientRect().top-previous.offset;else root.scrollTop=previous.top+root.scrollHeight-previous.height;
 }
-/** Text is always the actual public content. Structured card/answer controls
- * can be supplied by their real owner; damaged structures remain plain text.
+/** Plain messages and damaged structures retain actual public content.
+ * Valid cards use their real owner's question view and readable error fallback.
  * Fetching older windows preserves the native visible message, including a
  * user scroll that happens while the request is pending. */
 export function MessageTimeline({messages,structured}:Readonly<{messages:RequirementMessages;structured?:(message:Message)=>ReactNode}>){
@@ -53,7 +53,7 @@ export function MessageTimeline({messages,structured}:Readonly<{messages:Require
    {state.items?.length===0&&<p>暂无消息</p>}
    {state.items?.map(message=><article key={message.id} data-message-id={message.id} data-message-sequence={message.sequence_no} className={'conversation-message '+(message.role==='USER'?'from-user':'from-assistant')}>
     <header><strong>{message.role==='USER'?'你':'AI'}</strong><time dateTime={message.created_at}>{localTime(message.created_at)}</time></header>
-    <p className="message-content">{message.content}</p>
+    {(message.message_type!=='INTERACTION_CARDS'||message.structured_content===null||message.card_state===null||!structured)&&<p className="message-content">{message.content}</p>}
     {message.message_type==='INTERACTION_CARDS'&&message.structured_content===null&&<p role="status">历史问题结构无法读取，保留可读内容。</p>}
     {message.structured_content!==null&&structured?.(message)}
    </article>)}

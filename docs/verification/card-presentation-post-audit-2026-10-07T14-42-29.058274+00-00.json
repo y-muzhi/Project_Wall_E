@@ -1,0 +1,73 @@
+{
+  "recorded_at": "2026-10-07T14:42:29.058274+00:00",
+  "audit_source_sha256": "11280379af9a122e189fb7d7cf4763300e9a63e153730e3d5ab863746fbf9782",
+  "scope": "Card-first display/error fallback/recovery and C07 WAITING/I15 continuation; real raw canonical card content remains stored, original local draft retained and same Run audited; no paid/Provider proof",
+  "passed": true,
+  "audit": {
+    "source_evidence": "card-presentation-browser-2026-10-07T14-34-32-419Z-08a5b0866bb4.json",
+    "source_inputs": 452,
+    "native_counts": {
+      "requirements": 4,
+      "requirement_documents": 4,
+      "revisions": 4,
+      "comments": 0,
+      "guide_runs": 8,
+      "llm_uses": 8,
+      "suggestion_batches": 0,
+      "suggestions": 0
+    },
+    "database_sha256": "bb64beef269fe4f60bd063830b5a7ab404439a1a321fc7958be518dc9ccc395c",
+    "database_bytes_unchanged": true,
+    "cases": [
+      {
+        "name": "TEXT-normal",
+        "requirement_id": 1,
+        "continued_run": 2,
+        "calls": [
+          1,
+          2
+        ],
+        "messages": 5,
+        "card_state": null,
+        "passed": true
+      },
+      {
+        "name": "CARDS-normal",
+        "requirement_id": 2,
+        "continued_run": 4,
+        "calls": [
+          1,
+          2
+        ],
+        "messages": 5,
+        "card_state": "EXPIRED",
+        "passed": true
+      },
+      {
+        "name": "CARDS-source-error",
+        "requirement_id": 3,
+        "continued_run": 6,
+        "calls": [
+          1,
+          2
+        ],
+        "messages": 5,
+        "card_state": "EXPIRED",
+        "passed": true
+      },
+      {
+        "name": "CARDS-unknown",
+        "requirement_id": 4,
+        "continued_run": 8,
+        "calls": [
+          1,
+          2
+        ],
+        "messages": 5,
+        "card_state": "EXPIRED",
+        "passed": true
+      }
+    ],
+    "passed": true
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "recorded_at": "2026-10-07T14:38:43.056226+00:00",
+  "scope": "Normal production build completed exit 0 in tool; restored one-process preview read-only health and current dist equality, no model requests",
+  "build_command": "node npm-cli.js run build",
+  "build_cwd": "frontend",
+  "build_exit_code": 0,
+  "raw_build_output_truncated_in_tool": true,
+  "preview_launcher_pid": 50964,
+  "dist_index_sha256": "dff0a9ad249d93c5afaf9542abd268782e34100ab05d8b12d6b125e32bec904a",
+  "page_status": 200,
+  "i01_status": 200,
+  "html_equals_dist": true,
+  "database_sha256_before": "59c5e1a869e5ed0fd96e3e4c544d5a56c0741fbb97f31c50aa7e066d7202cc3d",
+  "database_sha256_after": "59c5e1a869e5ed0fd96e3e4c544d5a56c0741fbb97f31c50aa7e066d7202cc3d",
+  "database_unchanged_across_preview_restart": true,
+  "passed": true
+}
