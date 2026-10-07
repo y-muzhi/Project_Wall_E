@@ -61,16 +61,30 @@ export class RequirementDocumentOwner{
   }
   private async adoptLive(actual:DetailSnapshot):Promise<void>{
     this.owned(actual);const previous=this.live;
+    const choice=previous?.session?.recovery.getSnapshot();
+    // An explicit discard can discover a newer draft while its confirmation
+    // is open. Mount the chosen server baseline only after a complete read
+    // proves that exact draft and unchanged CURRENT. Ordinary refreshes and
+    // older choices after subsequent saves still preserve the live ledger.
+    const selectedNewer=previous?.session!==undefined&&previous.session!==null&&
+      previous.session.ending.getSnapshot().phase==='EDITING'&&choice?.phase==='SERVER_SELECTED'&&choice.server!==null&&
+      choice.server.content_version>previous.session.autosave.state.confirmed_version;
+    const replaceSelected=selectedNewer&&actual.activity.kind==='MANUAL'&&same(actual.activity.draft,choice.server)&&same(actual.current,this.value.detail?.current);
     if(previous?.session&&previous.session.ending.getSnapshot().phase!=='CLOSED'){
       // Existing local content is the authority for this editor. A fresh GET
       // may confirm its saved baseline, but may never replace it.
-      if(!previous.session.revalidate(actual))throw Error('实际正文或草稿已变化，本地编辑器仍保留，请对照处理');
-      previous.navigation.refresh();this.publish({detail:actual,manual:previous.session,error:null});return;
+      if(!replaceSelected){
+        if(!previous.session.revalidate(actual))throw Error('实际正文或草稿已变化，本地编辑器仍保留，请对照处理');
+        previous.navigation.refresh();this.publish({detail:actual,manual:previous.session,error:null});return;
+      }
     }
     if(previous&&!previous.session&&actual.activity.kind!=='MANUAL'&&same(previous.document,actual.current)){
       this.publish({detail:actual,error:null,manual:null});return;
     }
     const created=await this.makeLive(actual);if(this.closed){await this.retireLive(created);throw Error('Retired creation');}
+    // A newly appeared cache remains a fresh explicit recovery choice. Only
+    // the actual no-local server baseline can inherit the confirmed selection.
+    if(replaceSelected&&created.session?.recovery.canContinueServer)created.session.recovery.continueServerWithoutLocal();
     this.live=created;if(previous)await this.retireLive(previous);this.publish({detail:actual,manual:created.session,error:null});
   }
   private revealLive():void{if(!this.live)return;this.live.host.hidden=false;this.live.host.inert=false;this.live.navigation.setVisible(true);this.live.navigation.refresh();

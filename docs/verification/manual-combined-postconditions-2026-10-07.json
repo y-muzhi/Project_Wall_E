@@ -1,0 +1,93 @@
+{
+  "scope": "15 full plus6 supplement, one repeated enhanced cancellation =20 distinct cases; same production source, private verifier deliberately expanded",
+  "reports": [
+    {
+      "path": "manual-browser-2026-10-07T03-34-11-247Z-84bf458984fc.json",
+      "sha256": "347ca8ab4b925fcc220bddaf66bb591a055c5b386b7efc54848eeb6636582bd5"
+    },
+    {
+      "path": "manual-browser-2026-10-07T03-42-38-929Z-95ab9bc9e597.json",
+      "sha256": "19f7c09fa7381e1a26358195b1f45cb9721f44e811e85a1c88672801df89e579"
+    }
+  ],
+  "passed": true,
+  "distinct_cases": [
+    "TC-UI-DT-02-serial-coalescing",
+    "TC-UI-DT-03-transient-retry",
+    "TC-UI-DT-03-validation-stop",
+    "TC-UI-DT-03-native-conflict",
+    "TC-UI-DT-04-completion-drain",
+    "TC-UI-DT-04-cancel-pending",
+    "TC-UI-DT-01-local-refresh-recovery",
+    "TC-UI-DT-03-actual-commit-lost-receipt",
+    "TC-UI-DT-01-mismatched-server-selection",
+    "TC-UI-DT-01-server-advances-during-choice",
+    "TC-UI-DT-OP25-refusal-resume",
+    "TC-UI-DT-OP26-refusal-resume",
+    "TC-UI-DT-OP25-unknown-replay",
+    "TC-UI-DT-OP26-unknown-replay",
+    "TC-UI-DT-01-current-isolation",
+    "TC-UI-DT-OP23-refusal",
+    "TC-UI-DT-OP23-unknown",
+    "TC-UI-DT-OP24-maximum",
+    "TC-UI-DT-OP24-blur",
+    "TC-UI-DT-OP24-hidden"
+  ],
+  "production_inputs_equal": true,
+  "changed_harness_only": [
+    "tools/verify-manual-browser.mjs"
+  ],
+  "supplement": [
+    {
+      "name": "TC-UI-DT-04-cancel-pending",
+      "current_entirely_unchanged": true,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP23-refusal",
+      "current_entirely_unchanged": true,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP23-unknown",
+      "current_entirely_unchanged": true,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP24-maximum",
+      "current_entirely_unchanged": true,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP24-blur",
+      "current_entirely_unchanged": true,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP24-hidden",
+      "current_entirely_unchanged": true,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "passed": true
+    }
+  ],
+  "supplement_facts": {
+    "requirements": 6,
+    "requirement_documents": 11,
+    "revisions": 0,
+    "comments": 0,
+    "guide_runs": 6,
+    "llm_uses": 0
+  },
+  "paid_calls": 0
+}

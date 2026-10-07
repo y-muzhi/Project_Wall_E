@@ -1,0 +1,154 @@
+{
+  "scope": "Read-only independent postcondition audit of actual final15 report; no provider or additional request",
+  "report": "manual-browser-2026-10-07T03-34-11-247Z-84bf458984fc.json",
+  "report_sha256": "347ca8ab4b925fcc220bddaf66bb591a055c5b386b7efc54848eeb6636582bd5",
+  "passed": true,
+  "source_unchanged": true,
+  "native_closed_exit": 0,
+  "llm_uses": 0,
+  "facts": {
+    "requirements": 15,
+    "requirement_documents": 23,
+    "revisions": 1,
+    "comments": 1,
+    "guide_runs": 15,
+    "llm_uses": 0
+  },
+  "cases": [
+    {
+      "name": "TC-UI-DT-02-serial-coalescing",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-03-transient-retry",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-03-validation-stop",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-03-native-conflict",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-04-completion-drain",
+      "current_same_id": true,
+      "current_expected_version": 4,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "IDLE",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-04-cancel-pending",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "IDLE",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-01-local-refresh-recovery",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-03-actual-commit-lost-receipt",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-01-mismatched-server-selection",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-01-server-advances-during-choice",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "MANUAL_EDITING",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP25-refusal-resume",
+      "current_same_id": true,
+      "current_expected_version": 4,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "IDLE",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP26-refusal-resume",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "IDLE",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP25-unknown-replay",
+      "current_same_id": true,
+      "current_expected_version": 4,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "IDLE",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-OP26-unknown-replay",
+      "current_same_id": true,
+      "current_expected_version": 3,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "IDLE",
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-01-current-isolation",
+      "current_same_id": true,
+      "current_expected_version": 4,
+      "revisions_unchanged": true,
+      "lifecycle_unchanged": true,
+      "work_state": "IDLE",
+      "passed": true
+    }
+  ]
+}
