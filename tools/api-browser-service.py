@@ -2,7 +2,8 @@
 
 Only explicit test database paths outside the default production path are
 accepted. Startup uses production create_app. Stdin controls test shutdown;
-there is no extra HTTP route or fake HTTP success. Explicit private fixture
+Only the explicit commit-race flag adds a diagnostic read outside the business
+API; it never changes a business HTTP response. Explicit private fixture
 flags are isolated diagnostics and never evidence of real model production.
 """
 import argparse
@@ -365,6 +366,73 @@ class ControlledWaitingModelWorker(ControlledScopeModelWorker):
         self.events.append({'event':'CONTROLLED_WAITING_RETURNED','guide_run_id':identity,'code':outcome['code']})
 
 
+class ControlledCommitRaceWorker(ControlledScopeModelWorker):
+    """Private barriers observe native SQL, without manufacturing run state.
+
+    C07 holds its own real write transaction after its PERSISTING update.
+    The actual public cancel request's BEGIN IMMEDIATE releases that barrier.
+    SQLite still orders both transactions and production C03 decides the result.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from contextvars import ContextVar
+        from threading import Event, Lock, get_ident
+        import time
+        from backend.app.guide import result_persistence
+        self.cancel_context = ContextVar('private_cancel_request', default=None)
+        self.release_gate = Event(); self.race_lock = Lock(); self.race_events = []
+        self.held = False; self.gate_identity = None; self.hooks_restored = False
+        self.original_validate = result_persistence.validate_business_output
+        self.original_connect = self.database._connect
+        def record(event, **fields):
+            with self.race_lock:
+                self.race_events.append({'event':event,'order':len(self.race_events)+1,
+                    'monotonic_ns':time.monotonic_ns(),'thread_id':get_ident(),**fields})
+        def validate(connection, **fields):
+            run = connection.execute("SELECT id,status,current_step FROM guide_runs WHERE status='RUNNING' AND current_step='PERSISTING'").fetchone()
+            if run is not None:
+                if not connection.in_transaction: raise RuntimeError('No actual C07 transaction')
+                self.release_gate.clear(); self.gate_identity = run['id']; self.held = True
+                record('C07_NATIVE_GATE_HELD',guide_run_id=run['id'],status=run['status'],
+                    current_step=run['current_step'],in_transaction=connection.in_transaction)
+                try:
+                    if not self.release_gate.wait(30):
+                        record('GATE_TIMEOUT',guide_run_id=run['id']); raise RuntimeError('Finite private barrier expired')
+                    record('C07_NATIVE_GATE_RELEASED',guide_run_id=run['id'])
+                finally: self.held = False
+            return self.original_validate(connection,**fields)
+        def connect(*args, **kwargs):
+            connection = self.original_connect(*args,**kwargs)
+            request = self.cancel_context.get()
+            def trace(sql):
+                if sql == 'BEGIN IMMEDIATE' and request is not None and self.held:
+                    record('I17_NATIVE_WRITE_BEGIN',guide_run_id=request['guide_run_id'],
+                        idempotency_key=request['key'],gate_identity=self.gate_identity,
+                        gate_held=self.held,in_transaction=connection.in_transaction)
+                    self.release_gate.set()
+            connection.set_trace_callback(trace)
+            return connection
+        self.database._connect = connect
+        result_persistence.validate_business_output = validate
+
+    def gate_facts(self):
+        with self.race_lock:
+            return {'held':self.held,'guide_run_id':self.gate_identity,'events':list(self.race_events)}
+
+    async def close(self):
+        self.release_gate.set()
+        try: return await super().close()
+        finally:
+            from backend.app.guide import result_persistence
+            result_persistence.validate_business_output = self.original_validate
+            self.database._connect = self.original_connect
+            self.hooks_restored = True
+
+    def diagnostic_facts(self):
+        return {**super().diagnostic_facts(),'commit_race':self.gate_facts(),
+            'private_hooks_restored':self.hooks_restored}
+
+
 async def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--database', required=True)
     parser.add_argument('--frontend-dist', type=Path)
@@ -377,6 +445,7 @@ async def main():
     fixture.add_argument('--controlled-comment-model', action='store_true')
     fixture.add_argument('--controlled-scope-model', action='store_true')
     fixture.add_argument('--controlled-waiting-model', action='store_true')
+    fixture.add_argument('--controlled-commit-race-model', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -400,7 +469,24 @@ async def main():
     if args.controlled_waiting_model:
         def factory(db,catalog):
             worker = ControlledWaitingModelWorker(db,catalog=catalog); controlled.append(worker); return worker
-    server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory, frontend_directory=args.frontend_dist), host='127.0.0.1', port=0, workers=1,
+    if args.controlled_commit_race_model:
+        def factory(db,catalog):
+            worker = ControlledCommitRaceWorker(db,catalog=catalog); controlled.append(worker); return worker
+    app = create_app(worker_factory=factory, frontend_directory=args.frontend_dist)
+    if args.controlled_commit_race_model:
+        from starlette.responses import JSONResponse
+        @app.middleware('http')
+        async def private_race_observer(request, call_next):
+            worker = controlled[0]
+            if request.method == 'GET' and request.url.path == '/__verification__/commit-gate':
+                return JSONResponse(worker.gate_facts())
+            parts = request.url.path.split('/')
+            if request.method == 'POST' and len(parts)==6 and parts[1:4]==['api','v1','guide-runs'] and parts[5]=='cancel' and parts[4].isdigit():
+                token = worker.cancel_context.set({'guide_run_id':int(parts[4]),'key':request.headers.get('Idempotency-Key')})
+                try: return await call_next(request)
+                finally: worker.cancel_context.reset(token)
+            return await call_next(request)
+    server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=0, workers=1,
         timeout_graceful_shutdown=10, log_level='warning'))
     task = asyncio.create_task(server.serve())
     while not server.started and not task.done(): await asyncio.sleep(0.01)
@@ -413,7 +499,7 @@ async def main():
     with database.transaction() as connection:
         facts = {name: connection.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
             for name in ('requirements', 'requirement_documents', 'revisions', 'comments', 'guide_runs', 'llm_uses')}
-        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture or args.controlled_comment_model or args.controlled_scope_model or args.controlled_waiting_model:
+        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture or controlled:
             facts.update({name: connection.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('suggestion_batches','suggestions')})
     print(json.dumps({'closed': True, 'facts': facts, **({'controlled_model':controlled[0].diagnostic_facts()} if controlled else {})}), flush=True)
 

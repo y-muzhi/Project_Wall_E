@@ -1,0 +1,28 @@
+{
+  "recorded_at": "2026-10-07T16:16:28.452412+00:00",
+  "scope": "Fixed finite selected cases, isolated native service and external command capture; not runtime/crash investigation",
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "tools/verify-commit-race-browser.mjs",
+    "--cases",
+    "REVIEW-commit-wins"
+  ],
+  "selected_cases": [
+    "REVIEW-commit-wins"
+  ],
+  "exit_code": 0,
+  "stdout": "{\"case\":\"REVIEW-commit-wins\",\"passed\":true}\n{\"passed\":true,\"evidence\":\"C:\\\\Users\\\\羊牧之\\\\Documents\\\\ChatGPT\\\\Project_Wall_E 2\\\\docs\\\\verification\\\\commit-race-browser-2026-10-07T16-16-28-548Z-e680fd5ddaab.json\"}\n",
+  "stderr": "",
+  "inputs_before": {
+    "tools/run-commit-race-check.py": "3f309284b6b861e90cad85a1dce8a5704010c65f44a93cec536ef3541855a5c1",
+    "tools/verify-commit-race-browser.mjs": "7e35780e1b4bac0af0e44ca9daf69dcdab92c193f094dab700ce81cbd20db36f",
+    "tools/api-browser-service.py": "5d4bfbb3ab32d6dc9f831b49b07b2e70cd4a559fa04ac02b38b0f8b572563e35"
+  },
+  "inputs_after": {
+    "tools/run-commit-race-check.py": "3f309284b6b861e90cad85a1dce8a5704010c65f44a93cec536ef3541855a5c1",
+    "tools/verify-commit-race-browser.mjs": "7e35780e1b4bac0af0e44ca9daf69dcdab92c193f094dab700ce81cbd20db36f",
+    "tools/api-browser-service.py": "5d4bfbb3ab32d6dc9f831b49b07b2e70cd4a559fa04ac02b38b0f8b572563e35"
+  },
+  "model_environment_filtered": true,
+  "passed": true
+}
