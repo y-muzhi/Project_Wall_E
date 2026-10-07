@@ -21,7 +21,10 @@ const taskErrors = ['INVALID_INPUT', 'NOT_FOUND', 'MANUAL_DRAFT_NOT_FOUND', 'STA
 const title = checked(nonempty, value => require([...value].length <= 20 && !/[\r\n]/.test(value)));
 const number = checked(text, value => require(/^REQ[0-9]{6}$/.test(value)));
 export const requirementSummary = shape({ id, requirement_no: number, title, requirement_type: choices(requirementTypes),
-  status: choices(requirementStatuses), updated_at: time });
+  // Workbench time is display-only. Preserve the original text and server
+  // order; SHR-TIME renders an unparseable cell as -- rather than dropping
+  // the whole page. Full business objects retain the strict time decoder.
+  status: choices(requirementStatuses), updated_at: text });
 export const requirement = checked(shape({ id, requirement_no: number, title, requirement_type: choices(requirementTypes),
   initialization_mode: choices(['IDEATION', 'DESIGN']), template_key: nonempty, template_version: nonempty,
   status: choices(requirementStatuses), document_work_state: choices(['IDLE', 'MANUAL_EDITING', 'GUIDE_ACTIVE', 'SUGGESTION_REVIEWING']),

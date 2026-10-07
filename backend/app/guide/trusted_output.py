@@ -17,9 +17,9 @@ from backend.app.infrastructure.audit_repository import AuditRepository, _owned,
 from backend.app.infrastructure.audit_data import audit_json
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.idempotency import canonical_input
-from backend.app.infrastructure.model_profile import ModelProfile, MODEL_ID, MODEL_VERSION
+from backend.app.infrastructure.model_profile import ModelProfile
 from backend.app.infrastructure.process_lock import ProcessLock
-from backend.app.infrastructure.resources import ResourceCatalog, ProtocolInvalid
+from backend.app.infrastructure.resources import ResourceCatalog, ProtocolInvalid, ConfigInvalid
 from backend.app.messages.cards import CardsInvalid
 from backend.app.shared.command_execution import Rejected, operation_time
 from backend.app.shared.validation import strict_integer, strict_json_object
@@ -72,13 +72,17 @@ def audited_context(connection, row, catalog, profile):
     latest=connection.execute('SELECT id FROM llm_uses WHERE guide_run_id=? ORDER BY call_no DESC,attempt_no DESC LIMIT 1',(run['id'],)).fetchone()
     if latest is None or latest['id'] != row['id'] or run['current_step'] != 'VALIDATING':raise Rejected('STATE_CONFLICT')
     function=catalog.restore(run['function_type'],run['prompt_version'],prompt_version=run['prompt_version'],context_template=run['context_template_key']+'@'+run['context_template_version'])
-    if type(profile) is not ModelProfile or (row['provider'],row['model_name'],row['model_version'],row['function_type'],row['prompt_config']) != ('volcengine',MODEL_ID,MODEL_VERSION,function.function_type,function.prompt_reference):
+    if type(profile) is not ModelProfile or (row['provider'],row['model_name'],row['model_version'],row['function_type'],row['prompt_config']) != ('volcengine',profile.model_name,profile.model_version,function.function_type,function.prompt_reference):
         raise Rejected('CONFIG_INVALID')
     request_snapshot=strict_json_object(row['request_snapshot_json'])
     if 'counting' in request_snapshot and type(request_snapshot['counting']) is not dict:raise Rejected('CONFIG_INVALID')
     protocol={'function_type':function.function_type,'input_schema':function.input_schema,'output_schema':function.output_schema,
         'context_template':function.context_template,'prompt':function.prompt_reference,'manifest_sha256':function.manifest_sha256}
-    if set(request_snapshot) not in ({'profile','request','protocol'},{'profile','request','protocol','counting'}) or request_snapshot['profile'] != profile.snapshot or request_snapshot['protocol'] != protocol:
+    try:
+        stored_profile=ModelProfile.from_snapshot(request_snapshot.get('profile'))
+    except ConfigInvalid:
+        raise Rejected('CONFIG_INVALID') from None
+    if set(request_snapshot) not in ({'profile','request','protocol'},{'profile','request','protocol','counting'}) or stored_profile.profile_id != profile.profile_id or request_snapshot['protocol'] != protocol:
         raise Rejected('CONFIG_INVALID')
     request=request_snapshot['request']
     if type(request) is not dict:raise Rejected('SOURCE_INVALID')
@@ -88,8 +92,8 @@ def audited_context(connection, row, catalog, profile):
     system,content=messages[0]['content'],messages[1]['content']
     supplied=strict_json_object(content)
     context=BuiltContext(system,content,row['context_manifest_json'],len(content.encode('utf-8')),(),())
-    if request != profile.request(context):raise Rejected('CONFIG_INVALID')
-    actual,supplied=verify_actual_context(connection,run['id'],function,supplied,system,row['context_manifest_json'],catalog,counting=request_snapshot.get('counting'),input_json=content,counting_summary=True)
+    if canonical_input(request) != canonical_input(profile.request(context)):raise Rejected('CONFIG_INVALID')
+    actual,supplied=verify_actual_context(connection,run['id'],function,supplied,system,row['context_manifest_json'],catalog,counting=request_snapshot.get('counting'),input_json=content,counting_summary=True,profile=profile)
     return run,root,function,actual,supplied
 
 
@@ -144,11 +148,11 @@ def _review_quote(snapshot, identities, evidence):
     return False
 
 
-def _original_content(row):
+def _original_content(row, profile):
     """Repeat the successful original-envelope gate, never use parsed audit."""
     try:
         raw=strict_json_object(row['raw_response_json'])
-        if raw.get('model') != MODEL_ID or type(raw.get('choices')) is not list or len(raw['choices']) != 1:raise ValueError()
+        if raw.get('model') != profile.model_name or type(raw.get('choices')) is not list or len(raw['choices']) != 1:raise ValueError()
         choice=raw['choices'][0]
         if type(choice) is not dict:raise ValueError()
         message=choice['message']
@@ -178,7 +182,7 @@ def produce_trusted_output(database, llm_use_id, *, process_lock, profile, catal
         run,root,function,actual,supplied=audited_context(connection,row,resources,profile)
         if at < max(run['updated_at'],root['updated_at'],row['ended_at']):raise ValueError('Validation cannot precede prior activity')
         try:
-            content=_original_content(row)
+            content=_original_content(row,profile)
             if profile.api_key in content:raise OutputEvidenceInvalid('候选不可包含凭据')
             output=function.parse_output(content)
             validate_business_output(connection,output=output,function=function,actual=actual,supplied=supplied,catalog=resources)

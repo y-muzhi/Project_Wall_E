@@ -1,6 +1,6 @@
 {
   "decision": "D-014",
-  "status": "APPROVED_PENDING_IMPLEMENTATION",
+  "status": "ADOPTED_WITH_PRODUCTION_SEND_GATE_CLOSED",
   "recorded_at": "2026-10-07T01:57:21.087960+00:00",
   "user_statement": "确认候选方案，按稿接入",
   "approved": [
@@ -18,5 +18,20 @@
   "new_paid_execution_authorized": false,
   "provider_compatibility_proved": false,
   "production_counting_enabled": false,
-  "scope": "Adopt exact approved profile; independently bind model/version and counting strategy, preserve original audits/resources, no new paid call or automatic preview restart."
+  "scope": "Adopt exact approved profile; independently bind model/version and counting strategy, preserve original audits/resources, no new paid call or automatic preview restart.",
+  "implemented_at": "2026-10-07",
+  "default_model": "deepseek-v4-1-flash-260910",
+  "files": [
+    {
+      "path": "backend/resources/counting/v2/strategy.json",
+      "sha256": "cdf8453b1e3a5e5ecb9a7919413a2385c45cd8c7ba22cd8b1e8a73e27b536b32"
+    }
+  ],
+  "verification": {
+    "targeted": "docs/verification/deepseek-adoption-2026-10-07T02-16-00-047901+00-00.json",
+    "full_backend": "docs/verification/deepseek-adoption-2026-10-07T02-18-53-860411+00-00.json",
+    "tests": 814,
+    "new_paid_requests": 0,
+    "live_preview_restarted": false
+  }
 }

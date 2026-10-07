@@ -11,12 +11,19 @@ import json
 import httpx
 
 from .audit_data import audit_json, MAX_AUDIT_BYTES
-from .model_profile import ModelProfile, MODEL_ID, BASE_URL
+from .model_profile import ModelProfile, MODEL_ID, DEEPSEEK_MODEL_ID, BASE_URL
 from .resources import ConfigInvalid
 from backend.app.shared.validation import MAX_SAFE_INTEGER, strict_json_object
 
 ENDPOINT = BASE_URL + '/tokenization'
 STRATEGY = 'ark_exact_text_counts_v1_pending_chat_framing_proof'
+DEEPSEEK_STRATEGY = 'ark_exact_text_counts_deepseek_v2_pending_chat_framing_proof'
+
+
+def strategy_for(model):
+    if model == MODEL_ID: return STRATEGY
+    if model == DEEPSEEK_MODEL_ID: return DEEPSEEK_STRATEGY
+    raise ConfigInvalid('Exact counting model is not approved')
 
 
 def integer(value):
@@ -38,24 +45,25 @@ class TokenCounts:
 
     @property
     def evidence(self):
-        return {'strategy': STRATEGY, 'endpoint': ENDPOINT, 'model': self.model,
+        return {'strategy': strategy_for(self.model), 'endpoint': ENDPOINT, 'model': self.model,
                 'request_id': self.request_id, 'created': self.created,
                 'counts': list(self.counts), 'text_sha256': list(self.text_sha256),
                 'request_sha256': self.request_sha256,
                 'response': strict_json_object(self.response_json)} | ({} if self.journal_id is None else {'journal_id':self.journal_id})
 
 
-def restore_measurement(value, texts, *, raw_required=True):
+def restore_measurement(value, texts, *, raw_required=True, expected_model=MODEL_ID):
     """Recheck persisted count ownership; summaries never assert raw retention."""
     from .idempotency import canonical_input
     try:
+        strategy = strategy_for(expected_model)
         fields = {'strategy','endpoint','model','request_id','created','counts','text_sha256','request_sha256'}
         optional={'journal_id'} if type(value) is dict and 'journal_id' in value else set()
         if type(value) is not dict or set(value) != fields | ({'response'} if raw_required else {'response_sha256'}) | optional:
             raise ValueError('Count evidence fields')
         hashes = [hashlib.sha256(text.encode('utf-8')).hexdigest() for text in texts]
-        request = json.dumps({'model':MODEL_ID,'text':list(texts)},ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
-        if value['strategy'] != STRATEGY or value['endpoint'] != ENDPOINT or value['model'] != MODEL_ID or value['text_sha256'] != hashes or value['request_sha256'] != hashlib.sha256(request).hexdigest():
+        request = json.dumps({'model':expected_model,'text':list(texts)},ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
+        if value['strategy'] != strategy or value['endpoint'] != ENDPOINT or value['model'] != expected_model or value['text_sha256'] != hashes or value['request_sha256'] != hashlib.sha256(request).hexdigest():
             raise ValueError('Count evidence ownership')
         identity = value['request_id']
         if type(identity) is not str or not identity or len(identity)>1024 or any(ord(char)<32 or ord(char)==127 for char in identity):raise ValueError('Count identity')
@@ -66,7 +74,7 @@ def restore_measurement(value, texts, *, raw_required=True):
         if optional and (type(journal_id) is not str or len(journal_id)!=32 or any(char not in '0123456789abcdef' for char in journal_id)):raise ValueError('Counting journal identity')
         if raw_required:
             raw = value['response']
-            if type(raw) is not dict or raw.get('object')!='list' or raw.get('model')!=MODEL_ID or raw.get('id')!=identity or type(raw.get('created')) is not int or raw['created']!=created:raise ValueError('Count response')
+            if type(raw) is not dict or raw.get('object')!='list' or raw.get('model')!=expected_model or raw.get('id')!=identity or type(raw.get('created')) is not int or raw['created']!=created:raise ValueError('Count response')
             rows=raw.get('data')
             if type(rows) is not list or len(rows)!=len(texts):raise ValueError('Count response rows')
             for index,(row,count) in enumerate(zip(rows,counts)):
@@ -81,7 +89,7 @@ def restore_measurement(value, texts, *, raw_required=True):
             digest=value['response_sha256']
             if type(digest) is not str or len(digest)!=64 or any(char not in '0123456789abcdef' for char in digest):raise ValueError('Count response digest')
             response_json = '{}'
-        return TokenCounts(MODEL_ID,identity,created,counts,tuple(hashes),value['request_sha256'],response_json,journal_id)
+        return TokenCounts(expected_model,identity,created,counts,tuple(hashes),value['request_sha256'],response_json,journal_id)
     except (ValueError,TypeError,KeyError,UnicodeError) as error:
         raise ConfigInvalid('Persisted exact count evidence is invalid') from error
 
@@ -102,7 +110,7 @@ class TokenizationGateway:
         if type(profile) is not ModelProfile or type(texts) is not tuple or not texts or any(type(text) is not str for text in texts):
             raise ConfigInvalid('Frozen model and immutable text batch required')
         try:
-            body = {'model': MODEL_ID, 'text': list(texts)}
+            body = {'model': profile.model_name, 'text': list(texts)}
             request = json.dumps(body, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8')
             if len(request) > MAX_AUDIT_BYTES: raise ValueError('Counting request capacity')
             text_hashes = tuple(hashlib.sha256(text.encode('utf-8')).hexdigest() for text in texts)
@@ -118,7 +126,7 @@ class TokenizationGateway:
                         if size > MAX_AUDIT_BYTES: raise ValueError('Counting response capacity')
                         parts.append(part)
                     raw = strict_json_object(b''.join(parts).decode('utf-8'))
-            if raw.get('object') != 'list' or raw.get('model') != MODEL_ID:
+            if raw.get('object') != 'list' or raw.get('model') != profile.model_name:
                 raise ValueError('Counting response belongs to another model')
             identity = raw.get('id')
             if type(identity) is not str or not identity or len(identity) > 1024 or any(ord(char) < 32 or ord(char) == 127 for char in identity):
@@ -141,7 +149,7 @@ class TokenizationGateway:
             sanitized = audit_json(raw, credentials=(profile.api_key,))
             if strict_json_object(sanitized).get('id') != identity:
                 raise ValueError('Counting trace echoed a credential')
-            return TokenCounts(MODEL_ID, identity, created, tuple(counts), text_hashes,
+            return TokenCounts(profile.model_name, identity, created, tuple(counts), text_hashes,
                                hashlib.sha256(request).hexdigest(), sanitized)
         except (ValueError, TypeError, KeyError, UnicodeError, RecursionError, httpx.HTTPError) as error:
             # Never expose Provider bodies, input text or credentials in errors.

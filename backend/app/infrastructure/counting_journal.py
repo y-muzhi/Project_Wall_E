@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from .audit_data import audit_json, MAX_AUDIT_BYTES
 from .database import StorageUnavailable
-from .model_profile import MODEL_ID
+from .model_profile import ModelProfile
 from .process_lock import ProcessLock
 from .tokenization import ENDPOINT, measurement_summary
 from backend.app.documents.snapshot import _time
@@ -47,6 +47,7 @@ class CountingJournal:
         return path
 
     def _create(self, identity, phase, value, profile):
+        if type(profile) is not ModelProfile:raise ValueError('Counting audit requires an approved immutable model profile')
         encoded=audit_json(value,credentials=(profile.api_key,)).encode('utf-8')
         try:
             with self._guard():
@@ -56,7 +57,7 @@ class CountingJournal:
                     if len(raw)>MAX_AUDIT_BYTES:raise StorageUnavailable('Prepared count audit exceeds capacity')
                     prepared=strict_json_object(raw)
                     _time(prepared['at'])
-                    if prepared.get('id')!=identity or prepared.get('phase')!='PREPARED' or prepared.get('owner_epoch')!=self.process_lock.owner_epoch or value['at']<prepared['at']:
+                    if prepared.get('request',{}).get('model')!=profile.model_name or prepared.get('id')!=identity or prepared.get('phase')!='PREPARED' or prepared.get('owner_epoch')!=self.process_lock.owner_epoch or value['at']<prepared['at']:
                         raise StorageUnavailable('Count outcome must belong to this process preparation')
                 with self._file(identity,phase).open('xb') as handle:
                     handle.write(encoded);handle.flush();os.fsync(handle.fileno())
@@ -70,7 +71,7 @@ class CountingJournal:
                 'owner_epoch':self.process_lock.owner_epoch,'endpoint':ENDPOINT,
                 'protocol':{'function_type':function.function_type,'prompt':function.prompt_reference,
                             'context_template':function.context_template,'manifest_sha256':function.manifest_sha256},
-                'request':{'model':MODEL_ID,'text':list(texts)},'read_manifest':value['read_manifest']}
+                'request':{'model':profile.model_name,'text':list(texts)},'read_manifest':value['read_manifest']}
         self._create(record['id'],'prepared',record,profile)
         return record['id']
 

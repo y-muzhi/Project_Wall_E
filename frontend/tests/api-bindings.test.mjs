@@ -111,6 +111,19 @@ test('requirement page checks actual page/window/count and encodes repeated filt
     json({ items: [] }, 200, { page: 2, page_size: 20, total: 0, total_pages: 0 })])
     await assert.rejects(api(async () => reply).listRequirements(), ApiUnknown);
 });
+test('workbench keeps server order and raw display time while invalid business times remain rejected', async () => {
+  const summarize = ({ id, requirement_no, title, requirement_type, status, updated_at }) => ({ id, requirement_no, title, requirement_type, status, updated_at });
+  const first = { ...summarize(root()), id: 2, requirement_no: 'REQ000002', updated_at: 'invalid-time' };
+  const second = summarize(root());
+  const response = await api(async () => json({ items: [first, second] }, 200, { page: 1, page_size: 20, total: 2, total_pages: 1 })).listRequirements();
+  assert.deepEqual(response.data.items.map(row => row.id), [2, 1]);
+  assert.equal(response.data.items[0].updated_at, 'invalid-time');
+  const { localTime } = await import('../src/shared/time.ts');
+  assert.equal(localTime(response.data.items[0].updated_at), '--');
+  await assert.rejects(api(async () => json({ items: [{ ...first, updated_at: null }] }, 200,
+    { page: 1, page_size: 20, total: 1, total_pages: 1 })).listRequirements(), ApiUnknown);
+  await assert.rejects(api(async () => json({ ...root(), updated_at: 'invalid-time' })).getRequirement(1), ApiUnknown);
+});
 test('message cursor is exclusive, ascending and independently continued by first sequence', async () => {
   const message = sequence => ({ id: sequence, requirement_id: 1, guide_run_id: null, sequence_no: sequence, role: 'USER', content: '原文',
     message_type: 'TEXT', structured_content: null, reply_to_message_id: null, created_at: at, card_state: null });

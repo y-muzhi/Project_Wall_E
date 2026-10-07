@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-07T02:42:25.524341+00:00",
+  "scope": "Final staged source/evidence/screenshot guard. Actual private credential membership checked only in memory; no credential or fingerprint retained.",
+  "files_checked": 100,
+  "forbidden_paths": [],
+  "credential_byte_hits": [],
+  "whitespace_exit": 0,
+  "whitespace_output": "",
+  "passed": true
+}

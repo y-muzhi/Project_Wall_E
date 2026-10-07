@@ -60,7 +60,7 @@ def persist_ai_result(database,payload,*,process_lock,profile,catalog=None,clock
             if (receipt.trigger_message_id,receipt.document_id,receipt.content_version,receipt.function_type,receipt.prompt_version,receipt.context_template) != (
                 run['trigger_message_id'],supplied['read_manifest']['document_id'],supplied['read_manifest']['content_version'],function.function_type,function.version,function.context_template):raise Rejected('OUTPUT_INVALID')
             output=receipt.output
-            if receipt.manifest != supplied['read_manifest'] or strict_json_object(row['trusted_output_json']) != output or function.parse_output(_original_content(row)) != output:raise Rejected('OUTPUT_INVALID')
+            if receipt.manifest != supplied['read_manifest'] or strict_json_object(row['trusted_output_json']) != output or function.parse_output(_original_content(row,profile)) != output:raise Rejected('OUTPUT_INVALID')
             current=DocumentRepository(connection).by_requirement(root['id'],'CURRENT')[0]
             if at < max(run['updated_at'],root['updated_at'],current['updated_at'],row['ended_at']):raise ValueError('C07 cannot precede real persisted activity')
             gate=connection.execute("UPDATE guide_runs SET current_step='PERSISTING' WHERE id=? AND status='RUNNING' AND current_step='VALIDATING'",(run['id'],))

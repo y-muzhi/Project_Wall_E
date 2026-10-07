@@ -11,7 +11,7 @@ from .guide_repository import GuideRepository
 from .identifiers import EntityKind, entity_id, increment, require_write_transaction
 from .idempotency import canonical_input
 from .message_repository import MessageRepository
-from .model_profile import ModelProfile, MODEL_ID, MODEL_VERSION
+from .model_profile import ModelProfile
 from .requirement_repository import RequirementRepository
 from backend.app.documents.snapshot import _time
 from backend.app.guide.context_builder import assemble_input
@@ -30,7 +30,7 @@ def _owned(connection, run):
     return root
 
 
-def verify_actual_context(connection, run_id, function, supplied_input, system_text, manifest_json, catalog, *, counting=None, input_json=None, counting_summary=False):
+def verify_actual_context(connection, run_id, function, supplied_input, system_text, manifest_json, catalog, *, counting=None, input_json=None, counting_summary=False, profile=None):
     """Recheck exactly the real C03 facts and permitted whole-field trimming."""
     actual = read_context(connection,run_id,catalog)['data']
     expected = assemble_input(actual,function);supplied = function.validate_input(supplied_input)
@@ -55,7 +55,7 @@ def verify_actual_context(connection, run_id, function, supplied_input, system_t
         system = function.prompt+'\n'+json.dumps(json.loads(function.output_schema_json),ensure_ascii=False,separators=(',',':'))
         if system_text != system: raise Rejected('CONFIG_INVALID')
     else:
-        verify_counting_evidence(actual,function,system=system_text,input_json=input_json,manifest_json=manifest_json,evidence=counting,summary=counting_summary)
+        verify_counting_evidence(actual,function,system=system_text,input_json=input_json,manifest_json=manifest_json,evidence=counting,summary=counting_summary,profile=profile)
     return actual, supplied
 
 
@@ -77,7 +77,7 @@ class AuditRepository:
         if function != frozen or type(profile) is not ModelProfile: raise Rejected('CONFIG_INVALID')
         if run['updated_at'] > at or root['updated_at'] > at: raise ValueError('Attempt cannot precede persisted activity')
         counted=context.counting_evidence if type(context) is CountedContext else None
-        actual, supplied = verify_actual_context(self.connection,run_id,function,context.input,context.system,context.manifest_json,catalog,counting=counted,input_json=context.input_json)
+        actual, supplied = verify_actual_context(self.connection,run_id,function,context.input,context.system,context.manifest_json,catalog,counting=counted,input_json=context.input_json,profile=profile)
         manifest = supplied['read_manifest']
         last = self.connection.execute('SELECT * FROM llm_uses WHERE guide_run_id=? ORDER BY call_no DESC,attempt_no DESC LIMIT 1',(run_id,)).fetchone()
         if call_no is None:
@@ -91,13 +91,16 @@ class AuditRepository:
             strict_integer(call_no,'call_no')
             if last is None or last['call_no'] != call_no or last['ended_at'] is None or last['attempt_no'] >= 3 or last['trusted_output_json'] is not None or not (last['call_status']=='FAILED' or last['parse_status']=='FAILED' or last['validation_status']=='FAILED'):
                 raise Rejected('STATE_CONFLICT')
+            previous_profile = ModelProfile.from_snapshot(strict_json_object(last['request_snapshot_json'])['profile'])
+            if previous_profile.profile_id != profile.profile_id:
+                raise Rejected('CONFIG_INVALID')
             attempt_no = last['attempt_no']+1
         snapshot = {'profile':profile.snapshot,'request':profile.request(context),
             'protocol':{'function_type':function.function_type,'input_schema':function.input_schema,'output_schema':function.output_schema,
                 'context_template':function.context_template,'prompt':function.prompt_reference,'manifest_sha256':function.manifest_sha256}}
         if counted is not None:snapshot['counting']=counting_snapshot(counted)
         fields = {'id':entity_id(self.connection,EntityKind.LLM_USE),'guide_run_id':run_id,'call_no':call_no,'attempt_no':attempt_no,
-            'provider':'volcengine','model_name':MODEL_ID,'model_version':MODEL_VERSION,'function_type':function.function_type,'prompt_config':function.prompt_reference,
+            'provider':'volcengine','model_name':profile.model_name,'model_version':profile.model_version,'function_type':function.function_type,'prompt_config':function.prompt_reference,
             'request_snapshot_json':audit_json(snapshot,credentials=(profile.api_key,)),'parsed_output_json':None,'trusted_output_json':None,
             'input_summary':supplied['user_input']['content'],'context_manifest_json':canonical_input(manifest),'raw_response_json':None,'finish_reason':None,
             'parse_status':'NOT_STARTED','parse_error':None,'validation_status':'NOT_STARTED','validation_error':None,'call_status':'RUNNING',
@@ -114,6 +117,9 @@ class AuditRepository:
         require_write_transaction(self.connection);strict_integer(identity,'llm_use_id');_time(at)
         row = self.get(identity)
         if row is None: raise Rejected('NOT_FOUND')
+        stored_profile = ModelProfile.from_snapshot(strict_json_object(row['request_snapshot_json'])['profile'])
+        if type(profile) is not ModelProfile or stored_profile.profile_id != profile.profile_id or (row['provider'], row['model_name'], row['model_version']) != ('volcengine', profile.model_name, profile.model_version):
+            raise Rejected('CONFIG_INVALID')
         if row['raw_response_json'] is not None: raise Rejected('STATE_CONFLICT')
         if type(succeeded) is not bool: raise ValueError('Transport result must be explicit')
         if row['started_at'] > at: raise ValueError('Transport finish cannot precede attempt')
@@ -152,8 +158,11 @@ class AuditRepository:
         if run['updated_at'] > at or row['ended_at'] > at: raise ValueError('Parse cannot precede transport')
         parsed = None
         try:
+            stored_profile = ModelProfile.from_snapshot(strict_json_object(row['request_snapshot_json'])['profile'])
+            if (row['provider'], row['model_name'], row['model_version']) != ('volcengine', stored_profile.model_name, stored_profile.model_version):
+                raise ValueError('Audit model differs from its frozen profile')
             raw = strict_json_object(row['raw_response_json'])
-            if raw.get('model') != MODEL_ID or type(raw.get('choices')) is not list or len(raw['choices']) != 1: raise ValueError('Wrong model or response cardinality')
+            if raw.get('model') != stored_profile.model_name or type(raw.get('choices')) is not list or len(raw['choices']) != 1: raise ValueError('Wrong model or response cardinality')
             choice = raw['choices'][0];message = choice['message']
             if type(choice) is not dict or type(message) is not dict: raise ValueError('Malformed assistant envelope')
             if row['finish_reason'] != 'stop' or choice.get('finish_reason') != 'stop' or message.get('role')!='assistant' or message.get('refusal') or message.get('tool_calls') or message.get('function_call'):

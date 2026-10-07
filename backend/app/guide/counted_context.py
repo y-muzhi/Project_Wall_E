@@ -9,7 +9,7 @@ import hashlib
 from pathlib import Path
 
 from backend.app.infrastructure.audit_data import audit_json
-from backend.app.infrastructure.model_profile import ModelProfile, MODEL_ID
+from backend.app.infrastructure.model_profile import ModelProfile, MODEL_ID, DEFAULT_PROFILE
 from backend.app.infrastructure.resources import ConfigInvalid, FrozenFunction
 from backend.app.infrastructure.schema_transport import compact, function_schema
 from backend.app.infrastructure.tokenization import TokenCounts, integer, restore_measurement, measurement_summary
@@ -19,14 +19,26 @@ from .context_builder import BuiltContext, ContextLimitExceeded, assemble_input
 
 RELEASE_PATH = Path(__file__).resolve().parents[2] / 'resources/counting/v1/strategy.json'
 RELEASE_SHA256 = 'fbfc01bf6411111f3012e5362218ca1ae76ce6676be5089370f3a3607980b908'
+DEEPSEEK_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v2/strategy.json'
+DEEPSEEK_RELEASE_SHA256 = 'cdf8453b1e3a5e5ecb9a7919413a2385c45cd8c7ba22cd8b1e8a73e27b536b32'
 
 
-def counting_release():
+def release_identity(profile=None):
+    if profile is not None and type(profile) is not ModelProfile:
+        raise ConfigInvalid('Counting release requires a frozen model profile')
+    return (DEEPSEEK_RELEASE_PATH, DEEPSEEK_RELEASE_SHA256) if profile is not None and profile.profile_id == DEFAULT_PROFILE else (RELEASE_PATH, RELEASE_SHA256)
+
+
+def counting_release(profile=None):
     try:
-        raw = RELEASE_PATH.read_bytes()
-        if hashlib.sha256(raw).hexdigest() != RELEASE_SHA256:
+        path, digest = release_identity(profile)
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest:
             raise ValueError('Counting release bytes changed')
-        return strict_json_object(raw.decode('utf-8'))
+        value = strict_json_object(raw.decode('utf-8'))
+        if profile is not None and value['model'] != profile.model_name:
+            raise ValueError('Counting release belongs to another model')
+        return value
     except (OSError, ValueError, UnicodeError) as error:
         raise ConfigInvalid('Frozen counting candidate is unavailable') from error
 
@@ -50,7 +62,12 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
     """
     if type(function) is not FrozenFunction or type(profile) is not ModelProfile:
         raise ConfigInvalid('Frozen Function and model are required')
-    release = counting_release()
+    release = counting_release(profile)
+    reserve = release['framing_reserve_candidate']
+    if type(reserve) is not int or reserve < 0:
+        raise ConfigInvalid('This model has no independently established Chat framing bound')
+    model = profile.model_name
+    digest = release_identity(profile)[1]
     policy = function.context_policy
     if policy['budget'] != release['budget'] or policy['trim_order'] != release['trim_order']:
         raise ConfigInvalid('Counting cannot override the approved context budgets')
@@ -78,19 +95,19 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
         texts = (system, encoded, *(compact(value[key]) for key in ('user_input', 'source', 'template', 'history')))
         result = await counter.count(profile, texts)
         hashes = tuple(hashlib.sha256(text.encode('utf-8')).hexdigest() for text in texts)
-        if type(result) is not TokenCounts or result.model != MODEL_ID or result.text_sha256 != hashes or len(result.counts) != len(texts):
+        if type(result) is not TokenCounts or result.model != model or result.text_sha256 != hashes or len(result.counts) != len(texts):
             raise ConfigInvalid('Text counts do not belong to this exact candidate')
         try:
             counts = tuple(integer(count) for count in result.counts)
             # The request hash must bind the complete exact model/text batch.
-            expected_request = hashlib.sha256(compact({'model': MODEL_ID, 'text': list(texts)}).encode('utf-8')).hexdigest()
+            expected_request = hashlib.sha256(compact({'model': model, 'text': list(texts)}).encode('utf-8')).hexdigest()
             if result.request_sha256 != expected_request: raise ValueError('Count request mismatch')
         except (ValueError, TypeError) as error:
             raise ConfigInvalid('Text counts are invalid') from error
         attempts.append({'attempt_no': len(attempts)+1, 'removed_history_ids': list(removed_history),
                          'removed_neighbor_ids': list(removed_neighbors), 'measurement': result.evidence})
         input_tokens = counts[0] + counts[1] + release['framing_reserve_candidate']
-        evidence = {'release_sha256': RELEASE_SHA256, 'strategy': release['strategy'],
+        evidence = {'release_sha256': digest, 'strategy': release['strategy'],
                     'compatibility_proved': False, 'framing_reserve_candidate': release['framing_reserve_candidate'],
                     'schema': transport.evidence, 'counted_texts': release['counted_texts'],
                     'count_attempts': attempts, 'input_tokens_candidate': input_tokens}
@@ -123,19 +140,22 @@ def counting_snapshot(evidence):
         {**attempt,'measurement':measurement_summary(attempt['measurement'])} for attempt in evidence['count_attempts']]}
 
 
-def verify_counting_evidence(actual, function, *, system, input_json, manifest_json, evidence, summary=False):
+def verify_counting_evidence(actual, function, *, system, input_json, manifest_json, evidence, summary=False, profile=None):
     """Replay exact candidates from actual C03 without I/O or token guesses.
 
     Every retained/removed item, text hash, count ownership and each single cut
     must reproduce the final input. This gate grants no sending permission.
     """
     try:
-        release=counting_release();policy=function.context_policy
+        release=counting_release(profile);policy=function.context_policy
+        digest=release_identity(profile)[1];reserve=release['framing_reserve_candidate']
+        model=MODEL_ID if profile is None else profile.model_name
+        if type(reserve) is not int or reserve < 0:raise ValueError('Model-specific framing bound is not established')
         if policy['budget']!=release['budget'] or policy['trim_order']!=release['trim_order']:raise ValueError('Counting policy')
         fields={'release_sha256','strategy','compatibility_proved','framing_reserve_candidate','schema','counted_texts','count_attempts','input_tokens_candidate'}
         if type(evidence) is not dict or set(evidence)!=fields | ({'audit_format'} if summary else set()):raise ValueError('Counting fields')
         transport=function_schema(function)
-        if evidence['release_sha256']!=RELEASE_SHA256 or evidence['strategy']!=release['strategy'] or evidence['compatibility_proved'] is not False or type(evidence['framing_reserve_candidate']) is not int or evidence['framing_reserve_candidate']!=256 or canonical_input(evidence['schema'])!=canonical_input(transport.evidence) or evidence['counted_texts']!=release['counted_texts'] or summary and evidence['audit_format']!='counts_summary_v1':raise ValueError('Counting release identity')
+        if evidence['release_sha256']!=digest or evidence['strategy']!=release['strategy'] or evidence['compatibility_proved'] is not False or type(evidence['framing_reserve_candidate']) is not int or evidence['framing_reserve_candidate']!=reserve or canonical_input(evidence['schema'])!=canonical_input(transport.evidence) or evidence['counted_texts']!=release['counted_texts'] or summary and evidence['audit_format']!='counts_summary_v1':raise ValueError('Counting release identity')
         expected_system=function.prompt+'\n'+transport.schema_json
         if system!=expected_system:raise ValueError('Transport System differs')
         value=assemble_input(actual,function);budget=release['budget']
@@ -149,9 +169,9 @@ def verify_counting_evidence(actual, function, *, system, input_json, manifest_j
             if type(attempt) is not dict or set(attempt)!={'attempt_no','removed_history_ids','removed_neighbor_ids','measurement'} or type(attempt['attempt_no']) is not int or attempt['attempt_no']!=index+1 or compact(attempt['removed_history_ids'])!=compact(removed_history) or compact(attempt['removed_neighbor_ids'])!=compact(removed_neighbors):raise ValueError('Count cut sequence')
             encoded=compact({key:value[key] for key in policy['field_order']})
             texts=(system,encoded,*(compact(value[key]) for key in ('user_input','source','template','history')))
-            counts=restore_measurement(attempt['measurement'],texts,raw_required=not summary).counts
+            counts=restore_measurement(attempt['measurement'],texts,raw_required=not summary,expected_model=model).counts
             if any(count>budget[limit] for count,limit in zip((counts[0],counts[2],counts[3],counts[4]),('prompt_tokens','current_user_tokens','source_tokens','template_tokens'))):raise ValueError('Required count overflow')
-            total=counts[0]+counts[1]+256
+            total=counts[0]+counts[1]+reserve
             overflow=total>budget['input_tokens'] or total+budget['output_tokens']>budget['total_tokens']
             if value['history'] and (counts[5]>budget['history_tokens'] or overflow):
                 removed_history.append(value['history'].pop(0)['id'])

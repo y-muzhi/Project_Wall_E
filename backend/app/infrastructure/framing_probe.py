@@ -147,6 +147,8 @@ async def collect_observations(plan, profile, path, *, authorized_plan_sha256=No
     plan = validate_plan(plan,catalog=catalog)
     if type(profile) is not ModelProfile or type(authorized_plan_sha256) is not str or authorized_plan_sha256 != digest(plan):
         raise ConfigInvalid('Explicit paid authorization for this exact plan is required')
+    if canonical_input(profile.snapshot) != canonical_input(plan['profile']):
+        raise ConfigInvalid('Observation authorization cannot transfer to another model profile')
     counter = TokenizationGateway() if counter is None else counter
     gateway = ModelGateway() if gateway is None else gateway
     journal = ProbeJournal(path)

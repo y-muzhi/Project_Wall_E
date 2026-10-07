@@ -136,7 +136,7 @@ class _AuditedCounter:
             await _native(_count_state,self.database,self.actual,self.function,self.resources)
             receipt=await self.counter.count(profile,texts)
             if type(receipt) is not TokenCounts:raise ConfigInvalid('Exact count receipt required')
-            restore_measurement(receipt.evidence,texts)
+            restore_measurement(receipt.evidence,texts,expected_model=profile.model_name)
         except asyncio.CancelledError:
             try:await _native(self.journal.finish,identity,profile,operation_time(self.clock),status='INTERRUPTED')
             except (ExecutionRetired,StorageUnavailable):pass
@@ -203,7 +203,7 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
             # bypasses either the before-count proof gate or final send gate.
             if context_compiler is not build_context or compatibility_check is None or counting_compatibility_check is None:
                 raise ConfigInvalid('Counted execution requires both compatibility gates')
-            release=await _native(counting_release)
+            release=await _native(counting_release,frozen_profile)
             if await _native(counting_compatibility_check,frozen_profile,function,release) is not True:
                 raise ConfigInvalid('Same-model Chat framing compatibility is unavailable')
             counter=_AuditedCounter(database,process_lock,actual,function,resources,counting_counter,clock)
