@@ -1,6 +1,6 @@
 # 真实HTTP产品闭环验证
 
-2026-10-07（Asia/Hong_Kong）。最新整轮命令：`product-flow-command-2026-10-06T17-57-44-124Z.json`。21个独立库分支全部通过，覆盖TC-E2E-01/02/03/04/05/06/10七条核心串联的本文范围。每个重新初始化SQLite，经正式create_app/lifespan、GuideWorker及公开HTTP创建需求；无前一场景数据依赖。8.1样例ID以实际创建回执绑定，不把样例ID硬编码到业务库。
+2026-10-07（Asia/Hong_Kong）。最新整轮命令：`product-flow-command-2026-10-07T01-56-27-420Z.json`。55个独立库分支全部通过，覆盖TC-E2E-01—10十条核心串联的本文范围；其中八个幂等分支各含不同Python子进程原键重放。以下第一张21分支表保留较早历史范围，最新完整表见末尾。每个重新初始化SQLite，经正式create_app/lifespan、GuideWorker及公开HTTP创建需求；无前一场景数据依赖。8.1样例ID以实际创建回执绑定，不把样例ID硬编码到业务库。
 
 | 场景 | 断言数（含真实轮询） | 原始证据 |
 | --- | --- | --- |
@@ -80,3 +80,95 @@ TC-E2E-10新增：F-L全部41需求经实际公开创建，每项本机初始运
 | [product-flow-command-2026-10-06T17-52-47-984Z.json](product-flow-command-2026-10-06T17-52-47-984Z.json) | 通过 |
 | [product-flow-command-2026-10-06T17-55-43-219Z.json](product-flow-command-2026-10-06T17-55-43-219Z.json) | 通过 |
 | [product-flow-command-2026-10-06T17-57-44-124Z.json](product-flow-command-2026-10-06T17-57-44-124Z.json) | 通过 |
+
+
+2026-10-07接续：TC-E2E-07/08/09补齐（最新矩阵见后续断点，原21分支记录保留）。
+
+TC-E2E-07六分支：真实Chat在途审计updated_at作为T0，STARTUP的有效live_run_ids即使两小时仍不误中断；实际监测14:59全库相等、15:00恰好恢复一个Run/占用/未结束审计并关闭真实socket，重复扫描不刷新终态；串行锁竞争合并，记录实际扫描延迟，30秒周期不是15分钟完成上界。另以公开接口产出真实WAITING_USER卡片、人工草稿及PENDING批次，原生命周期关闭及新create_app/uvicorn启动均保留原对象、时间、正文、审计和回执。独占旧owner下实际C01接受后退出且未调度、遗留PROCESSING领取模拟启动前中断；实际启动屏障证明C09完成前尚未建立HTTP runtime/admission，另一OS锁竞争者被拒绝。先清理旧PROCESSING再INTERRUPTED，不重发模型。原成功回执在新epoch下仍回放原接受快照。
+
+TRUSTED以实际C07完成Run/PENDING批次为基础，明确把终态指针设置为旧GUIDE_ACTIVE；实际启动只更新该root为SUGGESTION_REVIEWING/唯一批次，其余全库逐字不变。MISSING/CROSS/MULTIPLE为明确历史占用损坏，真实扫描及create_app启动均WORK_STATE_INCONSISTENT、整库不改、未admit HTTP且锁释放。MULTIPLE第二候选是从实际C07派生、另分配父Run/用户消息/批次/建议的完整历史夹具，不称第二合法签名输出；同Run唯一批次约束和原不可改保护保留。
+
+TC-E2E-08二十分支：断连、真实本机读超时、429、503、非法JSON、完整Schema未知字段、越权区块输出分别失败后有限重试成功；所有真实出站由实际Gateway/ORCH完成，每尝试一LLMUse/一次新准确文本候选本机计数，System/User逐字对应。耗尽序列为JSON失败→Schema失败→503，call_no=1/attempt=1–3、最终MODEL_ERROR取最后失败，早期123输入/10输出真实返回用量仍保留。首个429后在实际ORCH退避点公开取消，后续不再计数/发送，无助手/正文/批次迟到采用。WAITING_USER前1/1–2，用户真实continue后2/1–2，历史整条审计不改。认证/权限/余额/配额/参数/未开模型/内容安全/上下文/未知供应方码/404十种不可重试各独立新库，一次计数和Chat即结束。
+
+退避是明确私有诊断sleep依赖：记录实际ORCH决定的2/5秒并让出事件循环，不声称测试经过这些墙钟秒数。TIMEOUT仅将本机ForwardTransport实际read缩为50ms，原始观察请求仍冻结180秒及10/10/10其他超时；断开socket、每次零底层重试均实际发生。实际生产周期/退避配置原完整回归已覆盖，这些局部时间加速不启用生产兼容。
+
+TC-E2E-09八分支：创建需求、创建草稿、整组卡片提交、批次完成各独立准备，两种未知模式分别新库。实际幂等领取提交之后、业务事务之前加暂停并继续原claim；公开原键/原输入重复409 REQUEST_IN_PROGRESS，原键改合法输入409 IDEMPOTENCY_CONFLICT，原生SQL BEFORE SUCCEEDED更新ABORT使业务对象/编号/审计/回执全部回滚、仅本领取释放，去触发器后与准备整库逐字相等。随后同原键成功：UNKNOWN_ACK把实际事务正常提交后抛CommitOutcomeUnknown，返回503但SUCCEEDED回执与业务对象已在磁盘；LOST_HTTP接收真实服务器成功状态与正文后在客户端交付前抛ReadError，未伪造服务端成功。先按实体GET复查再原键重放，原data/status不变、request_id新建，卡片仅一个正式响应/一次推进，批次CURRENT版本仅加1/同身份/独立字面预期，所有数量和全库对照证明不重复写。
+
+八分支还关闭原OS owner，启动不同PID的Python子进程与正式create_app/uvicorn/HTTP，剥离WALLE_环境变量并以明确拒绝任何模型发送的诊断Gateway守门；该子进程从磁盘重放原成功，新的owner_epoch与request_id、模型发送尝试0、HTTP同status/data、退出后锁可再取得，前后整个SQLite原生iterdump相等。子进程原始stdout/stderr/结果完整嵌入场景JSON；不把同进程刷新当跨进程证明。另一次父进程新生命周期回放仍无效果。404不存在不是通用完成证明；软删除以GET保留deleted_at证明。DRAFT先证明重放后真实持久草稿与独占，再明确公开cancel释放后做独立评论墓碑测试；不静默清占用。
+
+本批失败探针原记录全部保留：07编号枚举误写SUGGESTION_BATCH（正式值BATCH）；保护比对误把实际新增孤儿接受带来的合法sequences增长当恢复修改（现在分开证明C01分配与恢复不分配）；第二批次最初复用同父Run被真实UNIQUE拒绝（改另分配完整历史父对象，约束不改）；09决定建议漏Idempotency-Key被422拒绝（补合法新键）；在已证明的人工独占中创建评论被409拒绝（先明确公开cancel，不修改占用规则）。本批截至此处没有业务或前端实现改动，不重写原失败历史。
+
+
+最新完整55分支断点（2026-10-07）：[product-flow-command-2026-10-07T01-56-27-420Z.json](product-flow-command-2026-10-07T01-56-27-420Z.json)，source audit及所有退出码通过，运行前后源码哈希相等，八个不同Python子进程重放成功且发送模型尝试0。
+
+| 场景 | 断言数（含真实轮询） | 原始证据 |
+| --- | --- | --- |
+| TC-E2E-01 | 73 | [product-flow-2026-10-07T01-56-28-087801+00-00-TC-E2E-01.json](product-flow-2026-10-07T01-56-28-087801+00-00-TC-E2E-01.json) |
+| TC-E2E-02 | 141 | [product-flow-2026-10-07T01-56-32-244059+00-00-TC-E2E-02.json](product-flow-2026-10-07T01-56-32-244059+00-00-TC-E2E-02.json) |
+| TC-E2E-04 | 116 | [product-flow-2026-10-07T01-56-35-738761+00-00-TC-E2E-04.json](product-flow-2026-10-07T01-56-35-738761+00-00-TC-E2E-04.json) |
+| TC-E2E-03-APPLY | 136 | [product-flow-2026-10-07T01-56-42-278864+00-00-TC-E2E-03-APPLY.json](product-flow-2026-10-07T01-56-42-278864+00-00-TC-E2E-03-APPLY.json) |
+| TC-E2E-03-NOCHANGE | 112 | [product-flow-2026-10-07T01-56-46-979108+00-00-TC-E2E-03-NOCHANGE.json](product-flow-2026-10-07T01-56-46-979108+00-00-TC-E2E-03-NOCHANGE.json) |
+| TC-E2E-03-PENDING | 114 | [product-flow-2026-10-07T01-56-50-785155+00-00-TC-E2E-03-PENDING.json](product-flow-2026-10-07T01-56-50-785155+00-00-TC-E2E-03-PENDING.json) |
+| TC-E2E-03-VERSIONS | 118 | [product-flow-2026-10-07T01-56-54-705067+00-00-TC-E2E-03-VERSIONS.json](product-flow-2026-10-07T01-56-54-705067+00-00-TC-E2E-03-VERSIONS.json) |
+| TC-E2E-03-STALE | 116 | [product-flow-2026-10-07T01-56-59-242819+00-00-TC-E2E-03-STALE.json](product-flow-2026-10-07T01-56-59-242819+00-00-TC-E2E-03-STALE.json) |
+| TC-E2E-03-TARGET | 116 | [product-flow-2026-10-07T01-57-03-531929+00-00-TC-E2E-03-TARGET.json](product-flow-2026-10-07T01-57-03-531929+00-00-TC-E2E-03-TARGET.json) |
+| TC-E2E-03-COMBINATION | 118 | [product-flow-2026-10-07T01-57-07-859856+00-00-TC-E2E-03-COMBINATION.json](product-flow-2026-10-07T01-57-07-859856+00-00-TC-E2E-03-COMBINATION.json) |
+| TC-E2E-03-TABLE_ROW | 140 | [product-flow-2026-10-07T01-57-11-894765+00-00-TC-E2E-03-TABLE_ROW.json](product-flow-2026-10-07T01-57-11-894765+00-00-TC-E2E-03-TABLE_ROW.json) |
+| TC-E2E-03-TABLE_APPEND | 140 | [product-flow-2026-10-07T01-57-15-885623+00-00-TC-E2E-03-TABLE_APPEND.json](product-flow-2026-10-07T01-57-15-885623+00-00-TC-E2E-03-TABLE_APPEND.json) |
+| TC-E2E-05-OPEN-ATTACHED | 190 | [product-flow-2026-10-07T01-57-20-292362+00-00-TC-E2E-05-OPEN-ATTACHED.json](product-flow-2026-10-07T01-57-20-292362+00-00-TC-E2E-05-OPEN-ATTACHED.json) |
+| TC-E2E-05-OPEN-ORPHANED | 180 | [product-flow-2026-10-07T01-57-24-914687+00-00-TC-E2E-05-OPEN-ORPHANED.json](product-flow-2026-10-07T01-57-24-914687+00-00-TC-E2E-05-OPEN-ORPHANED.json) |
+| TC-E2E-05-RESOLVED-ATTACHED | 193 | [product-flow-2026-10-07T01-57-28-304355+00-00-TC-E2E-05-RESOLVED-ATTACHED.json](product-flow-2026-10-07T01-57-28-304355+00-00-TC-E2E-05-RESOLVED-ATTACHED.json) |
+| TC-E2E-05-RESOLVED-ORPHANED | 182 | [product-flow-2026-10-07T01-57-32-973659+00-00-TC-E2E-05-RESOLVED-ORPHANED.json](product-flow-2026-10-07T01-57-32-973659+00-00-TC-E2E-05-RESOLVED-ORPHANED.json) |
+| TC-E2E-10-LIST | 820 | [product-flow-2026-10-07T01-57-36-312792+00-00-TC-E2E-10-LIST.json](product-flow-2026-10-07T01-57-36-312792+00-00-TC-E2E-10-LIST.json) |
+| TC-E2E-10-READS | 589 | [product-flow-2026-10-07T01-58-19-279507+00-00-TC-E2E-10-READS.json](product-flow-2026-10-07T01-58-19-279507+00-00-TC-E2E-10-READS.json) |
+| TC-E2E-06-CANCEL_FIRST | 88 | [product-flow-2026-10-07T01-58-42-337483+00-00-TC-E2E-06-CANCEL_FIRST.json](product-flow-2026-10-07T01-58-42-337483+00-00-TC-E2E-06-CANCEL_FIRST.json) |
+| TC-E2E-06-PERSIST_FIRST | 85 | [product-flow-2026-10-07T01-58-46-066123+00-00-TC-E2E-06-PERSIST_FIRST.json](product-flow-2026-10-07T01-58-46-066123+00-00-TC-E2E-06-PERSIST_FIRST.json) |
+| TC-E2E-06-LATE_TCP | 87 | [product-flow-2026-10-07T01-58-49-903443+00-00-TC-E2E-06-LATE_TCP.json](product-flow-2026-10-07T01-58-49-903443+00-00-TC-E2E-06-LATE_TCP.json) |
+| TC-E2E-07-TIMEOUT | 86 | [product-flow-2026-10-07T01-58-53-631654+00-00-TC-E2E-07-TIMEOUT.json](product-flow-2026-10-07T01-58-53-631654+00-00-TC-E2E-07-TIMEOUT.json) |
+| TC-E2E-07-RESTART_KEEP | 132 | [product-flow-2026-10-07T01-58-57-365492+00-00-TC-E2E-07-RESTART_KEEP.json](product-flow-2026-10-07T01-58-57-365492+00-00-TC-E2E-07-RESTART_KEEP.json) |
+| TC-E2E-07-TRUSTED | 90 | [product-flow-2026-10-07T01-59-04-354455+00-00-TC-E2E-07-TRUSTED.json](product-flow-2026-10-07T01-59-04-354455+00-00-TC-E2E-07-TRUSTED.json) |
+| TC-E2E-07-MISSING | 89 | [product-flow-2026-10-07T01-59-08-503108+00-00-TC-E2E-07-MISSING.json](product-flow-2026-10-07T01-59-08-503108+00-00-TC-E2E-07-MISSING.json) |
+| TC-E2E-07-CROSS | 99 | [product-flow-2026-10-07T01-59-12-240315+00-00-TC-E2E-07-CROSS.json](product-flow-2026-10-07T01-59-12-240315+00-00-TC-E2E-07-CROSS.json) |
+| TC-E2E-07-MULTIPLE | 90 | [product-flow-2026-10-07T01-59-17-059341+00-00-TC-E2E-07-MULTIPLE.json](product-flow-2026-10-07T01-59-17-059341+00-00-TC-E2E-07-MULTIPLE.json) |
+| TC-E2E-08-NETWORK | 92 | [product-flow-2026-10-07T01-59-21-018329+00-00-TC-E2E-08-NETWORK.json](product-flow-2026-10-07T01-59-21-018329+00-00-TC-E2E-08-NETWORK.json) |
+| TC-E2E-08-TIMEOUT | 97 | [product-flow-2026-10-07T01-59-25-749885+00-00-TC-E2E-08-TIMEOUT.json](product-flow-2026-10-07T01-59-25-749885+00-00-TC-E2E-08-TIMEOUT.json) |
+| TC-E2E-08-RATE_LIMIT | 95 | [product-flow-2026-10-07T01-59-30-363586+00-00-TC-E2E-08-RATE_LIMIT.json](product-flow-2026-10-07T01-59-30-363586+00-00-TC-E2E-08-RATE_LIMIT.json) |
+| TC-E2E-08-TEMPORARY | 94 | [product-flow-2026-10-07T01-59-35-343285+00-00-TC-E2E-08-TEMPORARY.json](product-flow-2026-10-07T01-59-35-343285+00-00-TC-E2E-08-TEMPORARY.json) |
+| TC-E2E-08-JSON | 96 | [product-flow-2026-10-07T01-59-40-010167+00-00-TC-E2E-08-JSON.json](product-flow-2026-10-07T01-59-40-010167+00-00-TC-E2E-08-JSON.json) |
+| TC-E2E-08-SCHEMA | 98 | [product-flow-2026-10-07T01-59-44-548199+00-00-TC-E2E-08-SCHEMA.json](product-flow-2026-10-07T01-59-44-548199+00-00-TC-E2E-08-SCHEMA.json) |
+| TC-E2E-08-AUTHORITY | 97 | [product-flow-2026-10-07T01-59-49-213294+00-00-TC-E2E-08-AUTHORITY.json](product-flow-2026-10-07T01-59-49-213294+00-00-TC-E2E-08-AUTHORITY.json) |
+| TC-E2E-08-EXHAUST | 103 | [product-flow-2026-10-07T01-59-53-896364+00-00-TC-E2E-08-EXHAUST.json](product-flow-2026-10-07T01-59-53-896364+00-00-TC-E2E-08-EXHAUST.json) |
+| TC-E2E-08-CANCEL_FIRST | 84 | [product-flow-2026-10-07T01-59-59-139182+00-00-TC-E2E-08-CANCEL_FIRST.json](product-flow-2026-10-07T01-59-59-139182+00-00-TC-E2E-08-CANCEL_FIRST.json) |
+| TC-E2E-08-WAITING_CONTINUE | 110 | [product-flow-2026-10-07T02-00-02-686766+00-00-TC-E2E-08-WAITING_CONTINUE.json](product-flow-2026-10-07T02-00-02-686766+00-00-TC-E2E-08-WAITING_CONTINUE.json) |
+| TC-E2E-08-NO_RETRY-AUTHENTICATION | 88 | [product-flow-2026-10-07T02-00-08-905830+00-00-TC-E2E-08-NO_RETRY-AUTHENTICATION.json](product-flow-2026-10-07T02-00-08-905830+00-00-TC-E2E-08-NO_RETRY-AUTHENTICATION.json) |
+| TC-E2E-08-NO_RETRY-PERMISSION | 88 | [product-flow-2026-10-07T02-00-12-447329+00-00-TC-E2E-08-NO_RETRY-PERMISSION.json](product-flow-2026-10-07T02-00-12-447329+00-00-TC-E2E-08-NO_RETRY-PERMISSION.json) |
+| TC-E2E-08-NO_RETRY-BALANCE | 88 | [product-flow-2026-10-07T02-00-16-222919+00-00-TC-E2E-08-NO_RETRY-BALANCE.json](product-flow-2026-10-07T02-00-16-222919+00-00-TC-E2E-08-NO_RETRY-BALANCE.json) |
+| TC-E2E-08-NO_RETRY-QUOTA | 88 | [product-flow-2026-10-07T02-00-20-022491+00-00-TC-E2E-08-NO_RETRY-QUOTA.json](product-flow-2026-10-07T02-00-20-022491+00-00-TC-E2E-08-NO_RETRY-QUOTA.json) |
+| TC-E2E-08-NO_RETRY-PARAMETER | 88 | [product-flow-2026-10-07T02-00-23-873361+00-00-TC-E2E-08-NO_RETRY-PARAMETER.json](product-flow-2026-10-07T02-00-23-873361+00-00-TC-E2E-08-NO_RETRY-PARAMETER.json) |
+| TC-E2E-08-NO_RETRY-MODEL | 87 | [product-flow-2026-10-07T02-00-27-446358+00-00-TC-E2E-08-NO_RETRY-MODEL.json](product-flow-2026-10-07T02-00-27-446358+00-00-TC-E2E-08-NO_RETRY-MODEL.json) |
+| TC-E2E-08-NO_RETRY-CONTENT_FILTER | 89 | [product-flow-2026-10-07T02-00-31-334362+00-00-TC-E2E-08-NO_RETRY-CONTENT_FILTER.json](product-flow-2026-10-07T02-00-31-334362+00-00-TC-E2E-08-NO_RETRY-CONTENT_FILTER.json) |
+| TC-E2E-08-NO_RETRY-CONTEXT_LIMIT | 89 | [product-flow-2026-10-07T02-00-35-140397+00-00-TC-E2E-08-NO_RETRY-CONTEXT_LIMIT.json](product-flow-2026-10-07T02-00-35-140397+00-00-TC-E2E-08-NO_RETRY-CONTEXT_LIMIT.json) |
+| TC-E2E-08-NO_RETRY-UNKNOWN | 88 | [product-flow-2026-10-07T02-00-38-907788+00-00-TC-E2E-08-NO_RETRY-UNKNOWN.json](product-flow-2026-10-07T02-00-38-907788+00-00-TC-E2E-08-NO_RETRY-UNKNOWN.json) |
+| TC-E2E-08-NO_RETRY-HTTP404 | 88 | [product-flow-2026-10-07T02-00-42-943191+00-00-TC-E2E-08-NO_RETRY-HTTP404.json](product-flow-2026-10-07T02-00-42-943191+00-00-TC-E2E-08-NO_RETRY-HTTP404.json) |
+| TC-E2E-09-CREATE-UNKNOWN_ACK | 115 | [product-flow-2026-10-07T02-00-46-573611+00-00-TC-E2E-09-CREATE-UNKNOWN_ACK.json](product-flow-2026-10-07T02-00-46-573611+00-00-TC-E2E-09-CREATE-UNKNOWN_ACK.json) |
+| TC-E2E-09-DRAFT-UNKNOWN_ACK | 114 | [product-flow-2026-10-07T02-00-53-292143+00-00-TC-E2E-09-DRAFT-UNKNOWN_ACK.json](product-flow-2026-10-07T02-00-53-292143+00-00-TC-E2E-09-DRAFT-UNKNOWN_ACK.json) |
+| TC-E2E-09-CARDS-UNKNOWN_ACK | 121 | [product-flow-2026-10-07T02-00-58-779444+00-00-TC-E2E-09-CARDS-UNKNOWN_ACK.json](product-flow-2026-10-07T02-00-58-779444+00-00-TC-E2E-09-CARDS-UNKNOWN_ACK.json) |
+| TC-E2E-09-BATCH-UNKNOWN_ACK | 120 | [product-flow-2026-10-07T02-01-06-593533+00-00-TC-E2E-09-BATCH-UNKNOWN_ACK.json](product-flow-2026-10-07T02-01-06-593533+00-00-TC-E2E-09-BATCH-UNKNOWN_ACK.json) |
+| TC-E2E-09-CREATE-LOST_HTTP | 111 | [product-flow-2026-10-07T02-01-12-818640+00-00-TC-E2E-09-CREATE-LOST_HTTP.json](product-flow-2026-10-07T02-01-12-818640+00-00-TC-E2E-09-CREATE-LOST_HTTP.json) |
+| TC-E2E-09-DRAFT-LOST_HTTP | 113 | [product-flow-2026-10-07T02-01-19-388441+00-00-TC-E2E-09-DRAFT-LOST_HTTP.json](product-flow-2026-10-07T02-01-19-388441+00-00-TC-E2E-09-DRAFT-LOST_HTTP.json) |
+| TC-E2E-09-CARDS-LOST_HTTP | 119 | [product-flow-2026-10-07T02-01-25-440759+00-00-TC-E2E-09-CARDS-LOST_HTTP.json](product-flow-2026-10-07T02-01-25-440759+00-00-TC-E2E-09-CARDS-LOST_HTTP.json) |
+| TC-E2E-09-BATCH-LOST_HTTP | 120 | [product-flow-2026-10-07T02-01-33-042510+00-00-TC-E2E-09-BATCH-LOST_HTTP.json](product-flow-2026-10-07T02-01-33-042510+00-00-TC-E2E-09-BATCH-LOST_HTTP.json) |
+
+本日命令历史（失败亦保留，不以局部通过冒充55整轮）：
+
+| 命令证据 | 结果 |
+| --- | --- |
+| [product-flow-command-2026-10-07T01-41-33-499Z.json](product-flow-command-2026-10-07T01-41-33-499Z.json) | 失败（保留） |
+| [product-flow-command-2026-10-07T01-42-21-952Z.json](product-flow-command-2026-10-07T01-42-21-952Z.json) | 失败（保留） |
+| [product-flow-command-2026-10-07T01-43-32-308Z.json](product-flow-command-2026-10-07T01-43-32-308Z.json) | 通过 |
+| [product-flow-command-2026-10-07T01-44-43-890Z.json](product-flow-command-2026-10-07T01-44-43-890Z.json) | 通过 |
+| [product-flow-command-2026-10-07T01-47-47-748Z.json](product-flow-command-2026-10-07T01-47-47-748Z.json) | 失败（保留） |
+| [product-flow-command-2026-10-07T01-48-59-808Z.json](product-flow-command-2026-10-07T01-48-59-808Z.json) | 通过 |
+| [product-flow-command-2026-10-07T01-49-51-421Z.json](product-flow-command-2026-10-07T01-49-51-421Z.json) | 通过 |
+| [product-flow-command-2026-10-07T01-55-11-871Z.json](product-flow-command-2026-10-07T01-55-11-871Z.json) | 通过 |
+| [product-flow-command-2026-10-07T01-56-27-420Z.json](product-flow-command-2026-10-07T01-56-27-420Z.json) | 通过 |

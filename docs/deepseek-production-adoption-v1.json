@@ -1,0 +1,22 @@
+{
+  "decision": "D-014",
+  "status": "APPROVED_PENDING_IMPLEMENTATION",
+  "recorded_at": "2026-10-07T01:57:21.087960+00:00",
+  "user_statement": "确认候选方案，按稿接入",
+  "approved": [
+    {
+      "path": "docs/proposals/deepseek-production-v1.md",
+      "sha256": "761b48642669baa5bd95bef2f102409c20f5eae5686de836cb2b30c88ef63ff8"
+    },
+    {
+      "path": "docs/proposals/deepseek-production-profile-v1.json",
+      "sha256": "a122a7c346442f8369d9eb1d5e111c4368642d0b72712a06c97514e666191cdc"
+    }
+  ],
+  "default_model_candidate": "deepseek-v4-1-flash-260910",
+  "retain_legacy_model": "doubao-seed-2-1-pro-260915",
+  "new_paid_execution_authorized": false,
+  "provider_compatibility_proved": false,
+  "production_counting_enabled": false,
+  "scope": "Adopt exact approved profile; independently bind model/version and counting strategy, preserve original audits/resources, no new paid call or automatic preview restart."
+}

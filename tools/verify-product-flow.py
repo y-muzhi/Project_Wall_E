@@ -1,4 +1,4 @@
-"""TC-E2E-01/02/03/04/05/06/10: independent actual HTTP and native SQLite scenarios.
+"""TC-E2E-01/02/03/04/05/06/07/08/09/10: independent actual HTTP and native SQLite scenarios.
 
 No paid Provider calls. Private diagnostic compatibility callbacks and synthetic
 token counts do not prove tokenizer/framing accuracy. No normal DB or secrets.
@@ -48,6 +48,10 @@ def hashes():
     files.append(ROOT / 'tools/product-comments-flow.py')
     files.append(ROOT / 'tools/product-query-flow.py')
     files.append(ROOT / 'tools/product-gates-flow.py')
+    files.append(ROOT / 'tools/product-recovery-flow.py')
+    files.append(ROOT / 'tools/product-retry-flow.py')
+    files.append(ROOT / 'tools/product-idempotency-flow.py')
+    files.append(ROOT / 'tools/product-replay-process.py')
     return {str(p.relative_to(ROOT)).replace('\\', '/'): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in files}
 
@@ -515,6 +519,18 @@ class Verification:
                 if scenario == 'TC-E2E-02':
                     await self.manual_flow(client, database, req, final_current)
                     self.record['tc_e2e_02_passed'] = True
+                elif scenario.startswith('TC-E2E-09-'):
+                    spec = importlib.util.spec_from_file_location('product_idempotency_flow', ROOT / 'tools/product-idempotency-flow.py')
+                    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                    await module.run(self, client, database, req, final_current, chat, counter, app, scenario.removeprefix('TC-E2E-09-'))
+                elif scenario.startswith('TC-E2E-08-'):
+                    spec = importlib.util.spec_from_file_location('product_retry_flow', ROOT / 'tools/product-retry-flow.py')
+                    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                    await module.run(self, client, database, req, final_current, chat, counter, app, scenario.removeprefix('TC-E2E-08-'))
+                elif scenario.startswith('TC-E2E-07-'):
+                    spec = importlib.util.spec_from_file_location('product_recovery_flow', ROOT / 'tools/product-recovery-flow.py')
+                    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                    await module.run(self, client, database, req, final_current, chat, counter, app, scenario.removeprefix('TC-E2E-07-'))
                 elif scenario.startswith('TC-E2E-06-'):
                     spec = importlib.util.spec_from_file_location('product_gates_flow', ROOT / 'tools/product-gates-flow.py')
                     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -552,7 +568,20 @@ def main():
                      'TC-E2E-05-OPEN-ATTACHED', 'TC-E2E-05-OPEN-ORPHANED',
                      'TC-E2E-05-RESOLVED-ATTACHED', 'TC-E2E-05-RESOLVED-ORPHANED',
                      'TC-E2E-10-LIST', 'TC-E2E-10-READS',
-                     'TC-E2E-06-CANCEL_FIRST', 'TC-E2E-06-PERSIST_FIRST', 'TC-E2E-06-LATE_TCP')
+                     'TC-E2E-06-CANCEL_FIRST', 'TC-E2E-06-PERSIST_FIRST', 'TC-E2E-06-LATE_TCP',
+                     'TC-E2E-07-TIMEOUT', 'TC-E2E-07-RESTART_KEEP', 'TC-E2E-07-TRUSTED',
+                     'TC-E2E-07-MISSING', 'TC-E2E-07-CROSS', 'TC-E2E-07-MULTIPLE',
+                     'TC-E2E-08-NETWORK', 'TC-E2E-08-TIMEOUT', 'TC-E2E-08-RATE_LIMIT', 'TC-E2E-08-TEMPORARY',
+                     'TC-E2E-08-JSON', 'TC-E2E-08-SCHEMA', 'TC-E2E-08-AUTHORITY', 'TC-E2E-08-EXHAUST',
+                     'TC-E2E-08-CANCEL_FIRST', 'TC-E2E-08-WAITING_CONTINUE',
+                     'TC-E2E-08-NO_RETRY-AUTHENTICATION', 'TC-E2E-08-NO_RETRY-PERMISSION',
+                     'TC-E2E-08-NO_RETRY-BALANCE', 'TC-E2E-08-NO_RETRY-QUOTA', 'TC-E2E-08-NO_RETRY-PARAMETER',
+                     'TC-E2E-08-NO_RETRY-MODEL', 'TC-E2E-08-NO_RETRY-CONTENT_FILTER', 'TC-E2E-08-NO_RETRY-CONTEXT_LIMIT',
+                     'TC-E2E-08-NO_RETRY-UNKNOWN', 'TC-E2E-08-NO_RETRY-HTTP404',
+                     'TC-E2E-09-CREATE-UNKNOWN_ACK', 'TC-E2E-09-DRAFT-UNKNOWN_ACK',
+                     'TC-E2E-09-CARDS-UNKNOWN_ACK', 'TC-E2E-09-BATCH-UNKNOWN_ACK',
+                     'TC-E2E-09-CREATE-LOST_HTTP', 'TC-E2E-09-DRAFT-LOST_HTTP',
+                     'TC-E2E-09-CARDS-LOST_HTTP', 'TC-E2E-09-BATCH-LOST_HTTP')
     if len(sys.argv) > 1:
         if len(sys.argv) < 3 or sys.argv[1] != '--scenarios' or any(s not in scenarios for s in sys.argv[2:]):
             raise SystemExit('Use --scenarios followed by registered local verification scenarios')

@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-07T02:03:21.856157+00:00",
+  "scope": "Staged path/credential-byte membership and command-local CR-at-EOL whitespace check; preserve native raw Windows records",
+  "staged_files": 175,
+  "private_runtime_paths_found": [],
+  "credential_bytes_found": false,
+  "whitespace_exit_code": 0,
+  "passed": true
+}

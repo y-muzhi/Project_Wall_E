@@ -50,6 +50,12 @@ if framing_path.exists():
     expected['docs/proposals/framing-observation-approval-v1.json'] = digest(framing_path.read_bytes())
 for path in ('backend/resources/v1/manifest.json', 'backend/app/infrastructure/migrations/002_idempotency_guards.sql', 'docs/resource-adoption-v1.json', 'docs/verification/proposals-v1.json'):
     expected[path] = digest((ROOT / path).read_bytes())
+deepseek_path = ROOT / 'docs/deepseek-production-adoption-v1.json'
+if deepseek_path.exists():
+    deepseek = json.loads(deepseek_path.read_text(encoding='utf-8'))
+    expected.update({entry['path']: entry['sha256'] for entry in deepseek['approved']})
+    expected.update({entry['path']: entry['sha256'] for entry in deepseek.get('files', [])})
+    expected['docs/deepseek-production-adoption-v1.json'] = digest(deepseek_path.read_bytes())
 actual = []
 for path, sha in expected.items():
     committed = digest(blob(path))
