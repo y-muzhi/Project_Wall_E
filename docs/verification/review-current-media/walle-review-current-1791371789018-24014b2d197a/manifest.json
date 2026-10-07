@@ -1,0 +1,27 @@
+{
+  "source_evidence": "review-current-browser-2026-10-07T11-16-29-019Z-24014b2d197a.json",
+  "session": "walle-review-current-1791371789018-24014b2d197a",
+  "scope": "Original screenshot bytes including failures; not standalone whole acceptance",
+  "images": [
+    {
+      "path": "walle-review-current-1791371789018-24014b2d197a-REVIEW-DOCUMENT-generated.png",
+      "source": "output/playwright/walle-review-current-1791371789018-24014b2d197a-REVIEW-DOCUMENT-generated.png",
+      "sha256": "11d9f06213294080e7cd972fa32f4084ef79f31c62b04785c3ed8e7a3bde1556"
+    },
+    {
+      "path": "walle-review-current-1791371789018-24014b2d197a-REVIEW-INVALID-SELECTION-generated.png",
+      "source": "output/playwright/walle-review-current-1791371789018-24014b2d197a-REVIEW-INVALID-SELECTION-generated.png",
+      "sha256": "7c88864c48a75134eeecc092f9cdced7bd939d5110ca99dfe253941627f3978a"
+    },
+    {
+      "path": "walle-review-current-1791371789018-24014b2d197a-REVIEW-INVALID-SELECTION-invalid.png",
+      "source": "output/playwright/walle-review-current-1791371789018-24014b2d197a-REVIEW-INVALID-SELECTION-invalid.png",
+      "sha256": "c889474c9c28208edc70f56985c4a36f99130e4298116b6a18849a3a3323e1f7"
+    },
+    {
+      "path": "walle-review-current-1791371789018-24014b2d197a-REVIEW-SELECTION-generated.png",
+      "source": "output/playwright/walle-review-current-1791371789018-24014b2d197a-REVIEW-SELECTION-generated.png",
+      "sha256": "0e39e4c3025aee039a1d38ec362ec1ec3cc62ca31b1ae7708a363cb8db93f705"
+    }
+  ]
+}

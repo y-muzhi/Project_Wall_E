@@ -19,7 +19,14 @@ export function GuideComposer({owner,documents,review}:Readonly<{owner:Requireme
    <button type="button" disabled={disabled||!options.find(option=>option.kind===state.target.scope.scope_type)?.target||JSON.stringify(options.find(option=>option.kind===state.target.scope.scope_type)?.target)===JSON.stringify(state.target)} onClick={()=>{const target=options.find(option=>option.kind===state.target.scope.scope_type)?.target;if(target)owner.select(target);}}>采用当前范围</button>
    {options.find(option=>option.kind==='SELECTION')?.error&&<p className="field-help">选区不可用：{options.find(option=>option.kind==='SELECTION')!.error}</p>}
    {state.review&&<p>根据已完成的检查运行 {state.review.id} 修改，提交时重新读取当前正文。</p>}
-   {review?.action_type==='REVIEW'&&review.status==='COMPLETED'&&state.detail.requirement.status==='ACTIVE'&&<button type="button" disabled={disabled||!binding} onClick={()=>{try{owner.useReview(review,reviewTarget(binding!.editor,review.scope));}catch{owner.rejectScope();}}}>根据这次检查修改</button>}
+   {review?.action_type==='REVIEW'&&review.status==='COMPLETED'&&state.detail.requirement.status==='ACTIVE'&&<>
+    <button type="button" disabled={disabled||!binding} onClick={()=>{try{owner.useReview(review,reviewTarget(binding!.editor,review.scope));}catch{owner.rejectScope();}}}>根据这次检查修改</button>
+    <button type="button" disabled={disabled||!binding||!owner.allowed} onClick={()=>{try{
+     const current=binding!.editor.loadedDocument;
+     if(state.target.document_id!==current.id||state.target.content_version!==current.content_version)throw Error('Stale chosen scope');
+     owner.useReview(review,reviewTarget(binding!.editor,state.target.scope));
+    }catch{owner.rejectScope();}}}>按本次范围根据检查修改</button>
+   </>}
   </>}
   <label>给 AI 的消息<textarea aria-label="给 AI 的消息" value={state.instruction} disabled={disabled} rows={4} aria-describedby={help} onChange={event=>owner.change(event.target.value)} onCompositionStart={()=>setComposing(true)} onCompositionEnd={event=>{setComposing(false);owner.change(event.currentTarget.value);}}/></label>
   <p id={help} className="field-help">允许换行，最多 10000 个字符。发送前请核对本次范围；未发送文字仅保留在输入区。</p>

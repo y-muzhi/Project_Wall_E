@@ -1,0 +1,12 @@
+{
+  "source_evidence": "review-current-browser-2026-10-07T11-11-46-774Z-dc0fa4868314.json",
+  "session": "walle-review-current-1791371506773-dc0fa4868314",
+  "scope": "Original screenshot bytes including failures; not standalone whole acceptance",
+  "images": [
+    {
+      "path": "walle-review-current-1791371506773-dc0fa4868314-failure.png",
+      "source": "output/playwright/walle-review-current-1791371506773-dc0fa4868314-failure.png",
+      "sha256": "068341bff9b6bb65d98b2ccc69cf90040d6d3da3d56ce73269f24eb243615f7c"
+    }
+  ]
+}
