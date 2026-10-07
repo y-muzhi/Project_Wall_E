@@ -1,0 +1,20 @@
+{
+  "source_evidence": "comment-ai-follow-browser-2026-10-07T09-15-50-680Z-b4672623e30c.json",
+  "scope": "Acceptance before explicit read and native FAILED after explicit read/panel retry; missing-model failure, not AI effect",
+  "images": [
+    {
+      "source": "output/playwright/walle-comment-ai-follow-1791364550679-b4672623e30c-block.png",
+      "saved": "docs/verification/header-media/walle-comment-ai-follow-1791364550679-b4672623e30c/walle-comment-ai-follow-1791364550679-b4672623e30c-block.png",
+      "sha256": "6c6a274952b52457cf019b29d8239b430f09ae04d5263e894766675a0430af54",
+      "bytes": 100744,
+      "viewed": true
+    },
+    {
+      "source": "output/playwright/walle-comment-ai-follow-1791364550679-b4672623e30c-selection.png",
+      "saved": "docs/verification/header-media/walle-comment-ai-follow-1791364550679-b4672623e30c/walle-comment-ai-follow-1791364550679-b4672623e30c-selection.png",
+      "sha256": "d71259b6508220572ce76f021def5e9df3de39a2c888304bcbb18a8ab01ad1ab",
+      "bytes": 103285,
+      "viewed": true
+    }
+  ]
+}

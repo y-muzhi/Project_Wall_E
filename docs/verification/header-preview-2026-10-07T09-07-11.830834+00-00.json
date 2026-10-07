@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-07T09:07:11.830834+00:00",
+  "scope": "Read-only existing 8000 preview and I01; no normal user payload preserved, no restart/credentials/model requests",
+  "html_status": 200,
+  "api_status": 200,
+  "html_matches_current_dist": true,
+  "api_success": true,
+  "passed": true
+}

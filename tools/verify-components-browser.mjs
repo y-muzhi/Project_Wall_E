@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-const root = resolve(import.meta.dirname, '..'), session = 'walle-components-' + Date.now();
+const root = resolve(import.meta.dirname, '..'), session = 'walle-components-' + Date.now() + '-' + crypto.randomUUID().replaceAll('-', '').slice(0,12);
 const report = { timestamp: new Date().toISOString(), scope: 'Real React/components/native dialog/browser input/focus with explicit controlled parent events and Toast clock; no business HTTP/Provider/product-page/full acceptance', commands: [] };
 const wrapper = process.env.WALLE_PLAYWRIGHT_WRAPPER ?? resolve(homedir(), '.codex/skills/playwright/scripts/playwright_cli.sh');
 const bash = process.env.WALLE_BASH ?? (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
@@ -20,7 +20,7 @@ async function hashes() {
 }
 report.inputs_before = await hashes();
 function run(command, args, cwd = root) {
-  const child = spawn(command, args, { cwd, windowsHide: true }), record = { command, args, stdout: '', stderr: '', code: null };
+  const child = spawn(command, args, { cwd, windowsHide: true, env: Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('WALLE_'))) }), record = { command, args, stdout: '', stderr: '', code: null };
   child.stdout.on('data', chunk => { record.stdout += chunk; }); child.stderr.on('data', chunk => { record.stderr += chunk; });
   const exited = new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', code => { record.code = code; resolve(code); }); });
   return { child, record, exited };
@@ -49,10 +49,21 @@ try {
     if (!await page.locator('dialog').isVisible() || !await cancel.isDisabled()) throw new Error('Busy closed');
     await page.evaluate(() => window.componentsProbe.complete('诊断拒绝')); await page.getByRole('alert').filter({hasText:'诊断拒绝'}).waitFor();
     if (await cancel.isDisabled()) throw new Error('Failure did not restore controls');
-    await page.screenshot({path:'output/playwright/components-confirmation.png'});
+    await page.screenshot({path:'output/playwright/${session}-confirmation.png'});
+    await page.getByRole('button',{name:'执行诊断',exact:true}).click();
+    if(!await cancel.isDisabled())throw Error('Retry did not enter actual busy state');
+    await page.getByRole('button',{name:'执行诊断',exact:true}).click({force:true});
+    if((await page.evaluate(()=>window.componentsProbe.state())).events.filter(event=>event.kind==='confirm').length!==2)throw Error('Retry emitted duplicate intent');
+    await page.evaluate(()=>window.componentsProbe.complete('诊断再次拒绝'));
+    await page.getByRole('alert').filter({hasText:'诊断再次拒绝'}).waitFor();
+    if(!await cancel.isEnabled())throw Error('Second failure did not restore cancellation');
     await cancel.click(); const state = await page.evaluate(() => window.componentsProbe.state());
-    if (state.events.filter(event=>event.kind==='confirm').length!==1 || state.toasts.length) throw new Error('Duplicate action/error toast');
-    return {passed:true,events:state.events};
+    if (state.events.filter(event=>event.kind==='confirm').length!==2 || state.toasts.length) throw new Error('Duplicate action/error toast');
+    for(const method of ['ESC','CLOSE']){
+      await open.click();if(method==='ESC')await page.keyboard.press('Escape');else await page.getByRole('button',{name:'关闭确认弹窗',exact:true}).click();
+      if(await page.locator('dialog').count()||!await open.evaluate(el=>el===document.activeElement))throw Error('Unsubmitted close/focus failed');
+    }
+    return {passed:true,events:state.events,known_failure_retry:true,escape_and_close_restored_focus:true,scope:'Native shared Confirmation with explicitly controlled parent events; no business HTTP retry claim'};
   }`); assert.equal(report.confirmation.passed,true);
   report.filters = await code(`async (page) => {
     await page.getByRole('button',{name:'数字类型：全部'}).click(); await page.getByLabel('一',{exact:true}).uncheck();
@@ -98,7 +109,7 @@ try {
     if (!await page.getByRole('button',{name:'返回入口'}).evaluate(element=>element===document.activeElement)) throw new Error('Removed trigger fallback missing');
     return {passed:true,scope:'Real pointer/focus and explicit controlled Toast clock, no wall-clock duration claim',toasts:state.toasts,removed_trigger_focus_fallback:true};
   }`); assert.equal(report.toast.passed,true);
-  await cli('screenshot','--filename=output/playwright/components-native.png');
+  await cli('screenshot',`--filename=output/playwright/${session}-native.png`);
   await code('async(page)=>{await page.evaluate(()=>window.componentsProbe.destroy());return true;}'); report.passed=true;
 } catch(error) {report.passed=false;report.error=String(error);process.exitCode=1;}
 finally {

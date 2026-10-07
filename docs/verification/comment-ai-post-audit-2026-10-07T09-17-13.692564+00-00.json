@@ -1,0 +1,46 @@
+{
+  "recorded_at": "2026-10-07T09:17:13.692564+00:00",
+  "audit_source_sha256": "ba42241b1a8dcc9522fabb514674e7e20d62ea3d02d46bcaf4c82aa2c1e4ed82",
+  "scope": "Independent closed SQLite comment I34 acceptance audit: full CURRENT/revisions unchanged, unique real source message/run, server-derived scope, native missing-model failure and explicit external refusals; no batch/Provider/effect acceptance claim",
+  "passed": true,
+  "distinct_cases": 2,
+  "audits": [
+    {
+      "source_evidence": "comment-ai-follow-browser-2026-10-07T09-15-50-680Z-b4672623e30c.json",
+      "passed": true,
+      "source_inputs": 452,
+      "native_counts": {
+        "requirements": 2,
+        "requirement_documents": 2,
+        "revisions": 2,
+        "comments": 2,
+        "guide_runs": 4,
+        "llm_uses": 0
+      },
+      "database_sha256": "2f0d6611e895b2444e1721162481b465b803814343ae1923759c48ef9a532a66",
+      "database_bytes_unchanged": true,
+      "cases": [
+        {
+          "name": "COMMENT-AI-block",
+          "requirement_id": 1,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 1,
+          "passed": true
+        },
+        {
+          "name": "COMMENT-AI-selection",
+          "requirement_id": 2,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 1,
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

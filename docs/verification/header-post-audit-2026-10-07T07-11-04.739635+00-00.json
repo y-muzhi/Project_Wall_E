@@ -1,0 +1,146 @@
+{
+  "recorded_at": "2026-10-07T07:11:04.739635+00:00",
+  "audit_source_sha256": "d801e45cf5863ec52f2452563141f35594a778fa0c0641db8e8c13ad2b2970f7",
+  "scope": "Independent read-only closed SQLite audit of unchanged full CURRENT/snapshots, lifecycle/attributes, original run/template and explicit external occupancy; no new model requests",
+  "passed": true,
+  "distinct_cases": 12,
+  "audits": [
+    {
+      "source_evidence": "header-browser-2026-10-07T07-02-48-837Z-8152dead3baf.json",
+      "passed": true,
+      "source_inputs": 452,
+      "native_counts": {
+        "requirements": 12,
+        "requirement_documents": 12,
+        "revisions": 10,
+        "comments": 2,
+        "guide_runs": 12,
+        "llm_uses": 0
+      },
+      "database_sha256": "e15d6524573322fdbd29f23cd13f530f8a0e4140a70662980d301db38f2e11fc",
+      "database_bytes_unchanged": true,
+      "cases": [
+        {
+          "name": "CONFIRM-viewport-cancel",
+          "requirement_id": 1,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "HEADER-INITIALIZATION-success",
+          "requirement_id": 2,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "HEADER-COMPLETE-success",
+          "requirement_id": 3,
+          "status": "COMPLETED",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "HEADER-REACTIVATE-success",
+          "requirement_id": 4,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "HEADER-title-success",
+          "requirement_id": 5,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "HEADER-title-unknown",
+          "requirement_id": 6,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "HEADER-initialization_mode-success",
+          "requirement_id": 7,
+          "status": "INITIALIZING",
+          "current_version": 3,
+          "revisions": 0,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "HEADER-initialization_mode-unknown",
+          "requirement_id": 8,
+          "status": "INITIALIZING",
+          "current_version": 3,
+          "revisions": 0,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "CONFIRM-ordinary-present",
+          "requirement_id": 9,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "CONFIRM-ordinary-removed",
+          "requirement_id": 10,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "CONFIRM-dangerous-present",
+          "requirement_id": 11,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 1,
+          "passed": true
+        },
+        {
+          "name": "CONFIRM-dangerous-removed",
+          "requirement_id": 12,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 1,
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

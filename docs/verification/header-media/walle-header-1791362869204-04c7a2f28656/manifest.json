@@ -1,0 +1,33 @@
+{
+  "source_evidence": "header-browser-2026-10-07T08-47-49-205Z-04c7a2f28656.json",
+  "images": [
+    {
+      "source": "output/playwright/walle-header-1791362869204-04c7a2f28656-ordinary-present.png",
+      "saved": "docs/verification/header-media/walle-header-1791362869204-04c7a2f28656/walle-header-1791362869204-04c7a2f28656-ordinary-present.png",
+      "sha256": "93e0bc9e92b60ec2f90ca169fe3a68c0e167fb4e56cb91c962e46d472aca0a02",
+      "bytes": 90703,
+      "viewed": true
+    },
+    {
+      "source": "output/playwright/walle-header-1791362869204-04c7a2f28656-ordinary-removed.png",
+      "saved": "docs/verification/header-media/walle-header-1791362869204-04c7a2f28656/walle-header-1791362869204-04c7a2f28656-ordinary-removed.png",
+      "sha256": "b215cf7b5bde5a1b9d7e4d0b8b4a488288d5b15ea60f1ed62ff0ee7b0a59add0",
+      "bytes": 90065,
+      "viewed": true
+    },
+    {
+      "source": "output/playwright/walle-header-1791362869204-04c7a2f28656-dangerous-present.png",
+      "saved": "docs/verification/header-media/walle-header-1791362869204-04c7a2f28656/walle-header-1791362869204-04c7a2f28656-dangerous-present.png",
+      "sha256": "b577a40de507e879de197566b7d59130196043a964b1ddfea1136e78f83fbac9",
+      "bytes": 121129,
+      "viewed": true
+    },
+    {
+      "source": "output/playwright/walle-header-1791362869204-04c7a2f28656-dangerous-removed.png",
+      "saved": "docs/verification/header-media/walle-header-1791362869204-04c7a2f28656/walle-header-1791362869204-04c7a2f28656-dangerous-removed.png",
+      "sha256": "fd00a462ef1c109ee28ecb8327ef7df25ad366fae6e7a5a175c64c173442181d",
+      "bytes": 109841,
+      "viewed": true
+    }
+  ]
+}

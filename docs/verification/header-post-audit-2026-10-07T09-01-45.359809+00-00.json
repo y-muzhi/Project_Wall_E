@@ -1,0 +1,56 @@
+{
+  "recorded_at": "2026-10-07T09:01:45.359809+00:00",
+  "audit_source_sha256": "1251419fca66a234a12043da6b5cebc80f7f0f42e27011363c15d3bccc2ccfbd",
+  "scope": "Independent read-only closed SQLite audit of unchanged full CURRENT/snapshots, lifecycle/attributes, original run/template and explicit external occupancy; no new model requests",
+  "passed": true,
+  "distinct_cases": 3,
+  "audits": [
+    {
+      "source_evidence": "lifecycle-late-browser-2026-10-07T08-59-54-006Z-3089fad952e1.json",
+      "passed": true,
+      "source_inputs": 452,
+      "native_counts": {
+        "requirements": 3,
+        "requirement_documents": 3,
+        "revisions": 3,
+        "comments": 0,
+        "guide_runs": 3,
+        "llm_uses": 0
+      },
+      "database_sha256": "d63b618a9e62118c64dec564f0505fa03f34e3f97fa2ab01de7af6823d258d93",
+      "database_bytes_unchanged": true,
+      "cases": [
+        {
+          "name": "LIFECYCLE-late-INITIALIZATION",
+          "requirement_id": 1,
+          "status": "COMPLETED",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "LIFECYCLE-late-COMPLETE",
+          "requirement_id": 2,
+          "status": "ACTIVE",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        },
+        {
+          "name": "LIFECYCLE-late-REACTIVATE",
+          "requirement_id": 3,
+          "status": "COMPLETED",
+          "current_version": 3,
+          "revisions": 1,
+          "external_manual_drafts": 0,
+          "comments": 0,
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

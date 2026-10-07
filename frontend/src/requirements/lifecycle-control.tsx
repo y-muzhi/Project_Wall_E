@@ -22,7 +22,7 @@ export function RequirementLifecycleControl(props:Readonly<{flow:RequirementLife
     {state.phase==='CONFIRMED'&&error&&<button type="button" disabled={props.blocked||active} onClick={()=>void execute(true)}>重新读取实际详情</button>}
     {error&&<p role="alert" className="inline-error">{error}</p>}
     {state.error&&!open&&<p role="alert" className="inline-error">{state.error}</p>}
-    <Confirmation open={open} title={`${label}？`} description={descriptions[props.flow.operation]} busy={props.blocked||active||state.phase!=='UNKNOWN'&&props.writeReady===false}
+    <Confirmation open={open} title={`${label}？`} description={descriptions[props.flow.operation]} busy={active} confirmDisabled={props.blocked||state.phase!=='UNKNOWN'&&props.writeReady===false}
       error={state.error} confirmLabel={state.phase==='UNKNOWN'?'重新确认结果':'确认'+label} cancelLabel={state.phase==='UNKNOWN'?'保留请求并关闭弹窗':'取消'}
       cancel={()=>setOpen(false)} confirm={()=>void execute()}/>
   </div>;

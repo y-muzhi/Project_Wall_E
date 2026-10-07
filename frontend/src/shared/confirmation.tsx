@@ -18,8 +18,13 @@ export function Confirmation(props: ConfirmationProps) {
     element.showModal(); const release = registerModal(element); cancel.current?.focus();
     return () => {
       element.close(); release(); if (active === element) active = null;
-      if (original?.isConnected && !original.closest('[inert]')) original.focus();
-      else document.querySelector<HTMLElement>('[data-focus-fallback], main button:not(:disabled), main a[href]')?.focus();
+      const focus = (candidate: HTMLElement | null) => {
+        if (!candidate?.isConnected || candidate.closest('[inert],[hidden]') || candidate.matches(':disabled') || !candidate.getClientRects().length) return false;
+        candidate.focus(); return document.activeElement === candidate;
+      };
+      if (!focus(original)) for (const candidate of document.querySelectorAll<HTMLElement>('[data-focus-fallback], main button:not(:disabled), main a[href]')) {
+        if (focus(candidate)) break;
+      }
     };
   }, [props.open]);
   if (!props.open) return null;

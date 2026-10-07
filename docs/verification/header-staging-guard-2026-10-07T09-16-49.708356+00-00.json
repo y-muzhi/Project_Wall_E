@@ -1,0 +1,6 @@
+{
+  "recorded_at": "2026-10-07T09:16:49.708356+00:00",
+  "passed": true,
+  "staged_paths_checked": 62,
+  "scope": "Privately compare exact local credential bytes against staged blobs and reject runtime paths; no credential value/length/hash retained"
+}
