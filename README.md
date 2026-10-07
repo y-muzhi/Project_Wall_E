@@ -42,3 +42,6 @@ node tools/verify-storage.mjs
 
 
 2026-10-07：D-014默认DeepSeek精确版本已接入，历史Doubao验证保留，生产计数/发送门禁仍待独立兼容证明；本轮0付费调用。工作台WB-01—07使用41条真实API前置，18个独立浏览器分支通过，修复异常时间显示。正常前端构建已更新，可刷新现有查看页面；旧后端进程保持运行，新模型默认在下次明确启动时生效。详见[接入验证](docs/verification/deepseek-adoption-notes.md)和[工作台验收](docs/verification/workbench-browser-notes.md)。
+
+
+2026-10-07详情继续验收：修复初始完整读取与人工开始的竞争；20个实际根页/原生SQLite分支通过，涵盖布局、离开/恢复、历史及分页；260＋独立4项前端测试、TypeScript及生产构建通过。现有查看页面可刷新。[验证范围与失败](docs/verification/detail-browser-notes.md)保留完整边界；全项目验收和真实模型兼容/效果仍在推进。

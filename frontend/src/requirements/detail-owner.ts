@@ -53,7 +53,9 @@ export class RequirementDetailOwner{
     if(this.priorHistory&&!historical&&this.supported)void regions.comments.comments.refresh(regions.comments.comments.getSnapshot().page,true);this.priorHistory=historical;
     document.navigation?.setVisible(this.supported);
    }
-   this.publish({detail:actual??this.value.detail,loading:this.read.getSnapshot().loading,error:this.read.getSnapshot().error??document.error,ready:!!regions&&this.supported&&this.read.writeReady&&this.documents.writeReady});
+   // A header mutation must not reuse the pre-mutation composite refresh.
+   // Keep writes gated through document adoption and the final comments read.
+   this.publish({detail:actual??this.value.detail,loading:this.read.getSnapshot().loading||this.refreshing!==null,error:this.read.getSnapshot().error??document.error,ready:!!regions&&this.refreshing===null&&this.supported&&this.read.writeReady&&this.documents.writeReady});
   }finally{this.syncing=false;}
  }
  adoptActual=async(actual:DetailSnapshot):Promise<void>=>{if(this.closed)throw Error('Detail is retired');await this.documents.adopt(actual);if(this.closed)throw Error('Detail is retired');this.sync();};
@@ -63,7 +65,7 @@ export class RequirementDetailOwner{
    await this.documents.adopt(actual);if(this.closed)throw Error('Detail is retired');if(!this.bindings)this.createRegions(actual);this.sync();
    // Full index/list assurance is independent of which auxiliary tab is open.
    if(this.supported&&!await this.bindings!.comments.comments.refresh(this.bindings!.comments.comments.getSnapshot().page,true))throw Error('正文评论标记暂时无法读取，已确认正文仍保留');return actual;
-  })().catch(error=>{this.publish({error:error instanceof Error?error.message:'实际详情无法展示'});throw error;}).finally(()=>{if(this.refreshing===pending)this.refreshing=null;});this.refreshing=pending;return pending;
+  })().catch(error=>{this.publish({error:error instanceof Error?error.message:'实际详情无法展示'});throw error;}).finally(()=>{if(this.refreshing===pending){this.refreshing=null;this.publish({loading:this.read.getSnapshot().loading,ready:!!this.bindings&&this.supported&&this.read.writeReady&&this.documents.writeReady&&!this.value.error});}});this.refreshing=pending;this.sync();return pending;
  };
  async readPanel(tab:DetailTab,signal:AbortSignal):Promise<void>{const regions=this.bindings;if(!regions||!this.supported||signal.aborted)throw Error('Panel is unavailable');
   if(tab==='AI'){if(this.documents.historical)return;await regions.conversation.refresh();}

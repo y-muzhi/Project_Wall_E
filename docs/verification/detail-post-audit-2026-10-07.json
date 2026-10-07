@@ -1,0 +1,240 @@
+{
+  "scope": "Independent read-only audit of closed native SQLite against final 20 actual-root branches; not additional tests/Provider proof",
+  "recorded_at": "2026-10-07T05:03:23.336210+00:00",
+  "source_evidence": "detail-browser-2026-10-07T04-56-43-821Z-6ab844bffe4a.json",
+  "passed": true,
+  "source_inputs_unchanged": 452,
+  "native_counts": {
+    "requirements": 20,
+    "requirement_documents": 28,
+    "revisions": 19,
+    "comments": 125,
+    "guide_runs": 61,
+    "llm_uses": 0
+  },
+  "database_bytes_unchanged": true,
+  "database_sha256": "9a3fb18741f74f88633ac5fd6ce4f1066c7b92c1e7082762f834fcb7b6487a82",
+  "cases": [
+    {
+      "name": "TC-UI-DT-05-initial-default",
+      "requirement_id": 1,
+      "current_id": 1,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 0,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-05-active-default",
+      "requirement_id": 2,
+      "current_id": 4,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-05-completed-default",
+      "requirement_id": 3,
+      "current_id": 7,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-05-geometry-preferences",
+      "requirement_id": 4,
+      "current_id": 10,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-05-compact-mutual",
+      "requirement_id": 5,
+      "current_id": 13,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-05-narrow-save-read",
+      "requirement_id": 6,
+      "current_id": 16,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-05-narrow-save-failure",
+      "requirement_id": 7,
+      "current_id": 20,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "DT-DEPARTURE-saved",
+      "requirement_id": 8,
+      "current_id": 24,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "DT-DEPARTURE-continue",
+      "requirement_id": 9,
+      "current_id": 28,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "DT-DEPARTURE-explicit-recovery",
+      "requirement_id": 10,
+      "current_id": 32,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-08-held-run",
+      "requirement_id": 11,
+      "current_id": 36,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-10-manual-history",
+      "requirement_id": 12,
+      "current_id": 39,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-PAGE-01-empty",
+      "requirement_id": 13,
+      "current_id": 43,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-PAGE-01-boundaries",
+      "requirement_id": 14,
+      "current_id": 46,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 20,
+      "soft_deleted_comments": 21,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-PAGE-02-failure",
+      "requirement_id": 15,
+      "current_id": 49,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 41,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-PAGE-02-late",
+      "requirement_id": 16,
+      "current_id": 52,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 42,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-PAGE-03-run-filter",
+      "requirement_id": 17,
+      "current_id": 55,
+      "current_version": 3,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "TC-UI-DT-10-current-updated",
+      "requirement_id": 18,
+      "current_id": 58,
+      "current_version": 4,
+      "work_state": "IDLE",
+      "revision_count": 1,
+      "live_comments": 1,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "DT-DEPARTURE-browser-back",
+      "requirement_id": 19,
+      "current_id": 62,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    },
+    {
+      "name": "DT-LOAD-write-gate",
+      "requirement_id": 20,
+      "current_id": 66,
+      "current_version": 3,
+      "work_state": "MANUAL_EDITING",
+      "revision_count": 1,
+      "live_comments": 0,
+      "soft_deleted_comments": 0,
+      "passed": true
+    }
+  ],
+  "paid_calls": 0
+}
