@@ -1,0 +1,24 @@
+{
+  "scope": "Actual root C07 controlled loopback chain, automatically tracked batch then applied/located target; no real Provider/effect proof",
+  "source_evidence": "comment-c07-browser-2026-10-07T10-16-37-941Z-751dac8b067c.json",
+  "images": [
+    {
+      "path": "docs/verification/comment-c07-media/walle-comment-c07-1791368197940-751dac8b067c/walle-comment-c07-1791368197940-751dac8b067c-block-applied.png",
+      "source": "output/playwright/walle-comment-c07-1791368197940-751dac8b067c-block-applied.png",
+      "sha256": "37f9b9a709ca2de50a58bcf4d61953caf98289c2f41a353f72c014cad0170692",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-c07-media/walle-comment-c07-1791368197940-751dac8b067c/walle-comment-c07-1791368197940-751dac8b067c-selection-applied.png",
+      "source": "output/playwright/walle-comment-c07-1791368197940-751dac8b067c-selection-applied.png",
+      "sha256": "21a9df021b51088b2afc228169b0993bd8263f53aee7d2d5dc7e821a9427fc09",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/verification/comment-c07-media/walle-comment-c07-1791368197940-751dac8b067c/walle-comment-c07-1791368197940-751dac8b067c-unknown-applied.png",
+      "source": "output/playwright/walle-comment-c07-1791368197940-751dac8b067c-unknown-applied.png",
+      "sha256": "ddec8fb273c610379cb52d1994dc3b836c96d6b29b93dbb3ce2d0d8415d6c034",
+      "visually_inspected": true
+    }
+  ]
+}

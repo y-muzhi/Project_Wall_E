@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-07T10:20:14.920863+00:00",
+  "scope": "Read-only existing preview health, no backend restart or normal DB writes",
+  "passed": true,
+  "statuses": {
+    "page": 200,
+    "I01": 200
+  },
+  "html_equals_current_dist": true
+}

@@ -1,0 +1,7 @@
+{
+  "recorded_at": "2026-10-07T10:08:42.098629+00:00",
+  "audit_source_sha256": "b8f5ccd658b504818d44e7f110deb4feaeac570bf2c60681ab7c813eb15ea48b",
+  "scope": "Closed SQLite real C07 comment chain under explicit loopback model and expanded private compiler: audited original response/frozen v2/real trigger/source/scope; unique C07 assistant and batch; actual I21/I22, CURRENT v4/provenance/unchanged Baseline; no production counting/Provider/effect proof",
+  "passed": false,
+  "error": "AssertionError: COMMENT-C07-selection exact durable completion receipt"
+}

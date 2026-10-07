@@ -192,6 +192,74 @@ class CommentSuggestionFixtureWorker(GuideWorker):
         await super()._drive(identity,lease)
 
 
+
+class ControlledCommentModelWorker(GuideWorker):
+    """Private loopback model boundary; real ORCH/audit/validation/C07 writes.
+
+    Synthetic response, synthetic credential, expanded diagnostic byte budget
+    and explicit private compatibility callback are not Provider proof. The
+    production counting gate/resources are unchanged. Other runs remain normal
+    missing-configuration failures. No SQL installs a batch or trusted audit.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from threading import Thread
+        from backend.tests.infrastructure import test_model_gateway as wire
+        from backend.app.infrastructure.model_gateway import ModelGateway
+        from backend.app.infrastructure.model_profile import ModelProfile
+        self.wire = wire; self.server = wire.ControlledServer(); self.observed = []; self.transports = []
+        self.thread = Thread(target=self.server.serve_forever, kwargs={'poll_interval':0.01}, daemon=True)
+        self.thread.start(); self.profile = ModelProfile.from_environment({'WALLE_MODEL_API_KEY':wire.KEY})
+        def transport():
+            value = wire.ForwardTransport(self.server.server_port,self.observed)
+            self.transports.append(value); return value
+        self.gateway = ModelGateway(transport_factory=transport)
+
+    def compile(self, actual, function):
+        from dataclasses import replace
+        from backend.app.guide.context_builder import build_context
+        policy = function.context_policy
+        policy['budget'].update(prompt_tokens=100000,input_tokens=100000,total_tokens=120000)
+        return build_context(actual,replace(function,context_json=json.dumps(policy)))
+
+    async def _drive(self, identity, lease):
+        from backend.app.infrastructure.execution_lease import LeasedDatabase
+        from backend.app.guide.orchestrator import execute_guide_run
+        from backend.app.documents.markdown import parse_markdown
+        with self.database.transaction() as connection:
+            row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
+                'ON m.id=r.trigger_message_id WHERE r.id=?',(identity,)).fetchone()
+            controlled = row is not None and row['function_type']=='MODIFY_FROM_COMMENT' and row['content']=='评论AI建议前置夹具'
+            if controlled:
+                current = connection.execute("SELECT * FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'",(row['requirement_id'],)).fetchone()
+                scope = json.loads(row['scope_ref_json']); state = json.loads(current['block_state_json'])
+                block = next(block for block,meta in zip(parse_markdown(current['markdown_content']).blocks,state['blocks']) if meta['block_id']==scope['block_id'])
+                proposed = block.markdown.replace(scope['selected_text'],'正式规则😀',1) if row['scope_type']=='SELECTION' else '评论要求的明确规则😀\n'
+                patch = {'title':'评论来源补丁','explanation':'受控HTTP输出；实际程序校验','impact':None,'patch_operation':'REPLACE_BLOCK',
+                    'target_ref':{'block_id':scope['block_id']},'selector_json':None,'original_content':block.markdown,'proposed_markdown':proposed,'proposed_data_json':None}
+        if not controlled:
+            await super()._drive(identity,lease); return
+        output = {'schema_version':1,'response_type':'SUGGESTIONS','message':'本机受控评论建议','title':'C07真实评论建议','summary':'程序校验后生成一项建议','suggestions':[patch]}
+        response = self.wire.envelope(model=self.profile.model_name)
+        response['choices'][0]['message']['content'] = json.dumps(output,ensure_ascii=False)
+        self.server.responses.append((200,json.dumps(response,ensure_ascii=False).encode('utf-8'),{},None))
+        outcome = await execute_guide_run(LeasedDatabase(self.database,lease),{'guide_run_id':identity},
+            process_lock=self.process_lock,catalog=self.catalog,clock=self.clock,profile=self.profile,gateway=self.gateway,
+            context_compiler=self.compile,compatibility_check=lambda *args:True)
+        self.events.append({'event':'CONTROLLED_MODEL_RETURNED','guide_run_id':identity,'code':outcome['code']})
+
+    async def close(self):
+        try: return await super().close()
+        finally:
+            await asyncio.to_thread(self.server.shutdown); self.server.server_close(); self.thread.join(2)
+            if self.thread.is_alive(): raise RuntimeError('Owned loopback server did not close')
+
+    def diagnostic_facts(self):
+        return {'loopback_chat_requests':len(self.server.receipts),'model':self.profile.model_name,
+            'transport_closed':all(item.closed for item in self.transports),'server_closed':not self.thread.is_alive(),
+            'server_errors':self.server.errors,'production_compatibility_proved':False,'paid_requests':0,
+            'context_compiler':'Explicit expanded private conservative byte budget; no production gate proof'}
+
 async def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--database', required=True)
     parser.add_argument('--frontend-dist', type=Path)
@@ -201,6 +269,7 @@ async def main():
     fixture.add_argument('--seed-cards-fixture', action='store_true')
     fixture.add_argument('--seed-suggestion-fixture', action='store_true')
     fixture.add_argument('--seed-comment-suggestion-fixture', action='store_true')
+    fixture.add_argument('--controlled-comment-model', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -214,6 +283,10 @@ async def main():
     if args.seed_cards_fixture: factory = lambda db, catalog: CardsFixtureWorker(db, catalog=catalog)
     if args.seed_suggestion_fixture: factory = lambda db, catalog: SuggestionFixtureWorker(db, catalog=catalog)
     if args.seed_comment_suggestion_fixture: factory = lambda db, catalog: CommentSuggestionFixtureWorker(db, catalog=catalog)
+    controlled = []
+    if args.controlled_comment_model:
+        def factory(db,catalog):
+            worker = ControlledCommentModelWorker(db,catalog=catalog); controlled.append(worker); return worker
     server = uvicorn.Server(uvicorn.Config(create_app(worker_factory=factory, frontend_directory=args.frontend_dist), host='127.0.0.1', port=0, workers=1,
         timeout_graceful_shutdown=10, log_level='warning'))
     task = asyncio.create_task(server.serve())
@@ -227,9 +300,9 @@ async def main():
     with database.transaction() as connection:
         facts = {name: connection.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
             for name in ('requirements', 'requirement_documents', 'revisions', 'comments', 'guide_runs', 'llm_uses')}
-        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture:
+        if args.seed_suggestion_fixture or args.seed_comment_suggestion_fixture or args.controlled_comment_model:
             facts.update({name: connection.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('suggestion_batches','suggestions')})
-    print(json.dumps({'closed': True, 'facts': facts}), flush=True)
+    print(json.dumps({'closed': True, 'facts': facts, **({'controlled_model':controlled[0].diagnostic_facts()} if controlled else {})}), flush=True)
 
 
 if __name__ == '__main__': asyncio.run(main())

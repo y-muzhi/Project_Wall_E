@@ -1,0 +1,7 @@
+{
+  "recorded_at": "2026-10-07T10:08:14.850217+00:00",
+  "audit_source_sha256": "8fa444db749d0b4e6fcf46704ed18d1cecc5b5f2d704966f1223c56db73ba18b",
+  "scope": "Closed SQLite real C07 comment chain under explicit loopback model and expanded private compiler: audited original response/frozen v2/real trigger/source/scope; unique C07 assistant and batch; actual I21/I22, CURRENT v4/provenance/unchanged Baseline; no production counting/Provider/effect proof",
+  "passed": false,
+  "error": "AttributeError: 'FrozenFunction' object has no attribute 'validate_output'"
+}
