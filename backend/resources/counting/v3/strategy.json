@@ -1,0 +1,45 @@
+{
+  "schema_version": 3,
+  "strategy": "ark_exact_text_counts_deepseek_empirical_framing_v3",
+  "status": "ADOPTED_AWAITING_BOUNDED_CHECKS",
+  "model": "deepseek-v4-1-flash-260910",
+  "schema_derivation": "root_reachable_local_defs_v1",
+  "count_endpoint": "https://ark.cn-beijing.volces.com/api/v3/tokenization",
+  "chat_roles": [
+    "system",
+    "user"
+  ],
+  "stream": false,
+  "tool_calling": false,
+  "framing_reserve_candidate": 1024,
+  "counted_texts": [
+    "system",
+    "input",
+    "user_input",
+    "source",
+    "template",
+    "history"
+  ],
+  "serialization": "json_utf8_ensure_ascii_false_compact_no_nan_frozen_field_order",
+  "budget": {
+    "total_tokens": 32768,
+    "input_tokens": 24576,
+    "output_tokens": 8192,
+    "prompt_tokens": 4096,
+    "current_user_tokens": 4096,
+    "source_tokens": 4096,
+    "history_tokens": 2048,
+    "template_tokens": 4096,
+    "counting": "conservative_utf8_bytes_pending_provider_proof"
+  },
+  "trim_order": [
+    "oldest_history_whole_message",
+    "optional_neighbor_whole_block"
+  ],
+  "production_enabled": false,
+  "model_version": "260910",
+  "provider_compatibility_proved": false,
+  "proof_requirement": "No universal framing proof is claimed. Exact text counts plus a 1024 reserve and actual usage checks; activation requires the separately pinned admission resource after approved bounded observations and offline checks.",
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "decision": "D-015"
+}

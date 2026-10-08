@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "decision": "D-015",
+  "status": "ENABLED_AFTER_APPROVED_CHECKS",
+  "adoption_sha256": "0a46525e989905ebca4725a07ed5e4b4b89a070b478929c875b7ae891554a1de",
+  "plan_sha256": "13c5657288a54ffad593a6e66d6097d5273af3e0771d7f429eecc8eec41a4e7a",
+  "release_sha256": "959f40c40ecff1b93bad62589a62bbd24c40fc215dce7cc6c44b863744e071ba",
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "model": "deepseek-v4-1-flash-260910",
+  "provider_compatibility_proved": false,
+  "observation_note_sha256": "9d4cc938a4e93bbfd2c09bd07a695cc0cbfbfac1881835a6e6255c99fa2b6eb9",
+  "offline_check_note_sha256": "632bad3ae548015f37ec5ab463dd69d105d9479822f3e4763540763f6b5c6130",
+  "activated_at": "2026-10-08T10:27:18.236805+00:00"
+}

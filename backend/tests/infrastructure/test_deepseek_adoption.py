@@ -8,7 +8,8 @@ import json
 import unittest
 
 from backend.app.guide.context_builder import build_context
-from backend.app.guide.counted_context import counting_release, release_identity, compile_counted_candidate
+from backend.app.guide.counted_context import counting_release, release_identity, compile_counted_candidate, DEEPSEEK_RELEASE_SHA256
+from backend.app.infrastructure.production_ai import before_count
 from backend.app.infrastructure.model_profile import (
     ModelProfile, MODEL_ID, MODEL_VERSION, DEEPSEEK_MODEL_ID,
     DEEPSEEK_MODEL_VERSION, DEFAULT_PROFILE,
@@ -57,7 +58,7 @@ class DeepSeekProfileTests(unittest.TestCase):
                     ModelProfile.from_snapshot(snapshot)
 
     def test_deepseek_release_is_independent_has_no_invented_framing_reserve(self):
-        old=counting_release(ModelProfile(audit.KEY));current=counting_release(deepseek())
+        old=counting_release(ModelProfile(audit.KEY));current=counting_release(deepseek(),release_sha256=DEEPSEEK_RELEASE_SHA256)
         self.assertNotEqual(release_identity(deepseek()),release_identity(ModelProfile(audit.KEY)))
         self.assertEqual(current['model'],DEEPSEEK_MODEL_ID)
         self.assertEqual(current['model_version'],DEEPSEEK_MODEL_VERSION)
@@ -192,13 +193,10 @@ class DeepSeekOrchestratorTests(unittest.IsolatedAsyncioTestCase):
         before=self.f.facts();self.assertEqual((await self.h.advance())['code'],'AI_STOPPED')
         self.assertEqual(self.f.facts(),before);self.assertEqual(len(self.h.server.receipts),1)
 
-    async def test_no_deepseek_framing_bound_blocks_before_count_chat_and_audit(self):
+    async def test_no_deepseek_admission_blocks_before_count_chat_and_audit(self):
         w=count_tcp.TokenizationTests();w.setUp();self.addCleanup(w.tearDown)
-        actual=self.f.context.input
-        with self.assertRaises(ConfigInvalid):
-            await compile_counted_candidate(actual,self.f.function,self.f.profile,counter=w.gateway)
         result=await self.h.advance(context_compiler=build_context,counting_counter=w.gateway,
-                                    counting_compatibility_check=lambda *args:True)
+                                    counting_compatibility_check=before_count)
         self.assertEqual(result['code'],'AI_FAILED',result)
         self.assertEqual(result['details']['error_code'],'CONFIG_INVALID')
         self.assertEqual(w.server.receipts,[]);self.assertEqual(self.h.server.receipts,[])

@@ -1,7 +1,7 @@
 """ORCH S01-S06: actual short audit stages, one wire attempt, sole C07 writer.
 
 Private injected compiler/compatibility/Gateway/sleep are diagnostic boundaries.
-Default execution keeps approved budgets and refuses unproved Provider counting.
+Default execution keeps approved budgets and requires versioned AI admission.
 No HTTP input may select these dependencies or a model endpoint.
 """
 import asyncio
@@ -19,13 +19,14 @@ from backend.app.infrastructure.model_profile import ModelProfile
 from backend.app.infrastructure.tokenization import TokenCounts, restore_measurement
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.practical_usage import validate_practical_usage
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.shared.command_execution import Rejected, operation_time
 from backend.app.shared.http_errors import ERRORS
 from backend.app.shared.validation import InvalidInput
 from .context_builder import build_context, ContextLimitExceeded
 from .context_builder import assemble_input
-from .counted_context import compile_counted_candidate, counting_release
+from .counted_context import CountedContext, compile_counted_candidate, counting_release
 from .model_context import read_context
 from .trusted_output import produce_trusted_output
 from .commands import persist_ai_result, fail_guide_run
@@ -96,6 +97,11 @@ def _transport(database, identity, value, profile, clock):
 def _parse(database, identity, clock):
     with database.transaction(write=True) as connection:
         return AuditRepository(connection).parse_response(identity, operation_time(clock))
+
+
+def _admission_failure(database, identity, clock):
+    with database.transaction(write=True) as connection:
+        AuditRepository(connection).record_admission_failure(identity,operation_time(clock))
 
 
 def _retry_context(database, identity, resources, original, profile, compiler):
@@ -222,6 +228,16 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
             await _native(_transport, database, prepared['id'], wire, frozen_profile, clock)
             row, last = await state()
             if row['status'] != 'RUNNING': return _result('AI_STOPPED', row, last)
+            if wire.succeeded:
+                # Actual usage is recorded first. A v3 budget/model mismatch
+                # terminates the run before parse/adoption and cannot retry.
+                try:
+                    validate_practical_usage(wire.raw_response, profile=frozen_profile,
+                        counting=context.counting_evidence if type(context) is CountedContext else None,
+                        input_tokens=wire.input_tokens,output_tokens=wire.output_tokens)
+                except ConfigInvalid:
+                    await _native(_admission_failure,database,prepared['id'],clock)
+                    raise
             error_code = 'MODEL_ERROR'
             retryable = wire.retryable
             if wire.succeeded:

@@ -1,0 +1,28 @@
+{
+  "decision": "D-015",
+  "status": "ADOPTED_AWAITING_BOUNDED_CHECKS",
+  "recorded_at": "2026-10-08T10:13:03.909832+00:00",
+  "user_statement": "确认实用方案，并授权本轮调用与专项检查（推荐）",
+  "approved_proposal": {
+    "path": "docs/proposals/deepseek-availability-v1.md",
+    "sha256": "c9cd07e273dde6957ad1a402955e52d7323dee9f3f309cc9a9ef638c7db4a09d"
+  },
+  "approved_plan": {
+    "path": "docs/proposals/deepseek-observation-plan-v2.json",
+    "canonical_sha256": "13c5657288a54ffad593a6e66d6097d5273af3e0771d7f429eecc8eec41a4e7a"
+  },
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "model": "deepseek-v4-1-flash-260910",
+  "framing_reserve": 1024,
+  "provider_compatibility_proved": false,
+  "paid_license": {
+    "rounds": 1,
+    "maximum_count_requests": 6,
+    "maximum_chat_requests": 6,
+    "maximum_requested_completion_tokens": 49152,
+    "retries": 0,
+    "stop_first_failure": true
+  },
+  "offline_scope": "AI counting/gateway/audit/ORCH/new tools only; no full acceptance or browser",
+  "production_enabled": false
+}

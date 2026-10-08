@@ -13,6 +13,7 @@ from backend.app.infrastructure.database import Database, configured_path
 from backend.app.infrastructure.execution_lease import ExecutionLease, LeasedDatabase
 from backend.app.infrastructure.idempotency import Idempotency
 from backend.app.infrastructure.resources import ResourceCatalog
+from backend.app.infrastructure.production_ai import production_options
 from backend.app.guide.worker import GuideWorker
 from backend.app.guide.orchestrator import _native
 from backend.app.shared.http_boundary import HttpRuntime
@@ -32,7 +33,7 @@ def create_app(*, database=None, catalog=None, worker_factory=None, frontend_dir
     async def lifespan(app):
         actual_database = Database(configured_path()) if database is None else database
         resources = await _native(ResourceCatalog) if catalog is None else catalog
-        worker = GuideWorker(actual_database, catalog=resources) if worker_factory is None else worker_factory(actual_database, resources)
+        worker = GuideWorker(actual_database, catalog=resources, orchestrator_options=production_options()) if worker_factory is None else worker_factory(actual_database, resources)
         if not isinstance(worker, GuideWorker) or worker.database is not actual_database or worker.catalog is not resources:
             raise ValueError('The startup owner must bind this actual database and catalog')
         await worker.start()

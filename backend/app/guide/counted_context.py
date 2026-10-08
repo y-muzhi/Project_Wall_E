@@ -1,8 +1,9 @@
-"""D-011 exact-text compiler candidate, NOT a production compatibility proof.
+"""D-011/D-015 exact-text compilation and versioned private audit replay.
 
 No Chat I/O and no database transaction. Each changed candidate is counted
 again as its actual serialized text. Private ORCH/audit integration is wired;
-production remains closed until real same-model framing proof is available.
+Legacy candidates retain their pending-proof identity. DeepSeek v3 uses the
+separately approved empirical reserve, never a universal compatibility proof.
 """
 from dataclasses import dataclass, field
 import hashlib
@@ -21,17 +22,28 @@ RELEASE_PATH = Path(__file__).resolve().parents[2] / 'resources/counting/v1/stra
 RELEASE_SHA256 = 'fbfc01bf6411111f3012e5362218ca1ae76ce6676be5089370f3a3607980b908'
 DEEPSEEK_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v2/strategy.json'
 DEEPSEEK_RELEASE_SHA256 = 'cdf8453b1e3a5e5ecb9a7919413a2385c45cd8c7ba22cd8b1e8a73e27b536b32'
+PRACTICAL_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v3/strategy.json'
+PRACTICAL_RELEASE_SHA256 = '959f40c40ecff1b93bad62589a62bbd24c40fc215dce7cc6c44b863744e071ba'
+PRACTICAL_MODE = 'exact_text_empirical_framing_v1'
 
 
-def release_identity(profile=None):
+def release_identity(profile=None, *, release_sha256=None):
     if profile is not None and type(profile) is not ModelProfile:
         raise ConfigInvalid('Counting release requires a frozen model profile')
-    return (DEEPSEEK_RELEASE_PATH, DEEPSEEK_RELEASE_SHA256) if profile is not None and profile.profile_id == DEFAULT_PROFILE else (RELEASE_PATH, RELEASE_SHA256)
+    if profile is not None and profile.profile_id == DEFAULT_PROFILE:
+        if release_sha256 in (None, PRACTICAL_RELEASE_SHA256):
+            return PRACTICAL_RELEASE_PATH, PRACTICAL_RELEASE_SHA256
+        if release_sha256 == DEEPSEEK_RELEASE_SHA256:
+            return DEEPSEEK_RELEASE_PATH, DEEPSEEK_RELEASE_SHA256
+        raise ConfigInvalid('Counting release does not belong to this profile')
+    if release_sha256 not in (None, RELEASE_SHA256):
+        raise ConfigInvalid('Counting release does not belong to this profile')
+    return RELEASE_PATH, RELEASE_SHA256
 
 
-def counting_release(profile=None):
+def counting_release(profile=None, *, release_sha256=None):
     try:
-        path, digest = release_identity(profile)
+        path, digest = release_identity(profile, release_sha256=release_sha256)
         raw = path.read_bytes()
         if hashlib.sha256(raw).hexdigest() != digest:
             raise ValueError('Counting release bytes changed')
@@ -56,8 +68,8 @@ class CountedContext(BuiltContext):
 async def compile_counted_candidate(context, function: FrozenFunction, profile: ModelProfile, *, counter):
     """Private candidate boundary: injected counter never grants Chat permission.
 
-    The 256-token reserve is explicitly pending proof. Successful compilation
-    proves only the candidate budget calculation against returned text counts.
+    Successful compilation proves only the configured budget calculation
+    against returned text counts. The independent admission gates grant I/O.
     Public requests cannot select this compiler, counter or counting release.
     """
     if type(function) is not FrozenFunction or type(profile) is not ModelProfile:
@@ -65,7 +77,7 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
     release = counting_release(profile)
     reserve = release['framing_reserve_candidate']
     if type(reserve) is not int or reserve < 0:
-        raise ConfigInvalid('This model has no independently established Chat framing bound')
+        raise ConfigInvalid('This model has no admitted Chat framing reserve')
     model = profile.model_name
     digest = release_identity(profile)[1]
     policy = function.context_policy
@@ -111,6 +123,8 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
                     'compatibility_proved': False, 'framing_reserve_candidate': release['framing_reserve_candidate'],
                     'schema': transport.evidence, 'counted_texts': release['counted_texts'],
                     'count_attempts': attempts, 'input_tokens_candidate': input_tokens}
+        if digest == PRACTICAL_RELEASE_SHA256:
+            evidence['admission_mode'] = PRACTICAL_MODE
         # Count calls have separate identities; audit overflow cannot silently
         # discard their history or authorize Chat. Credentials remain private.
         evidence_json = audit_json(evidence, credentials=(profile.api_key,))
@@ -147,12 +161,18 @@ def verify_counting_evidence(actual, function, *, system, input_json, manifest_j
     must reproduce the final input. This gate grants no sending permission.
     """
     try:
-        release=counting_release(profile);policy=function.context_policy
-        digest=release_identity(profile)[1];reserve=release['framing_reserve_candidate']
+        if type(evidence) is not dict:raise ValueError('Counting evidence required')
+        digest=evidence.get('release_sha256')
+        release=counting_release(profile,release_sha256=digest);policy=function.context_policy
+        if digest!=release_identity(profile,release_sha256=digest)[1]:raise ValueError('Counting release missing')
+        reserve=release['framing_reserve_candidate']
         model=MODEL_ID if profile is None else profile.model_name
-        if type(reserve) is not int or reserve < 0:raise ValueError('Model-specific framing bound is not established')
+        if type(reserve) is not int or reserve < 0:raise ValueError('Model-specific framing reserve is unavailable')
         if policy['budget']!=release['budget'] or policy['trim_order']!=release['trim_order']:raise ValueError('Counting policy')
         fields={'release_sha256','strategy','compatibility_proved','framing_reserve_candidate','schema','counted_texts','count_attempts','input_tokens_candidate'}
+        if digest==PRACTICAL_RELEASE_SHA256:
+            fields.add('admission_mode')
+            if evidence.get('admission_mode')!=PRACTICAL_MODE:raise ValueError('Practical admission identity differs')
         if type(evidence) is not dict or set(evidence)!=fields | ({'audit_format'} if summary else set()):raise ValueError('Counting fields')
         transport=function_schema(function)
         if evidence['release_sha256']!=digest or evidence['strategy']!=release['strategy'] or evidence['compatibility_proved'] is not False or type(evidence['framing_reserve_candidate']) is not int or evidence['framing_reserve_candidate']!=reserve or canonical_input(evidence['schema'])!=canonical_input(transport.evidence) or evidence['counted_texts']!=release['counted_texts'] or summary and evidence['audit_format']!='counts_summary_v1':raise ValueError('Counting release identity')

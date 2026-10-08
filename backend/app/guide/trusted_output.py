@@ -19,6 +19,7 @@ from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.model_profile import ModelProfile
 from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.practical_usage import validate_practical_usage
 from backend.app.infrastructure.resources import ResourceCatalog, ProtocolInvalid, ConfigInvalid
 from backend.app.messages.cards import CardsInvalid
 from backend.app.shared.command_execution import Rejected, operation_time
@@ -152,6 +153,9 @@ def _original_content(row, profile):
     """Repeat the successful original-envelope gate, never use parsed audit."""
     try:
         raw=strict_json_object(row['raw_response_json'])
+        request=strict_json_object(row['request_snapshot_json'])
+        validate_practical_usage(raw,profile=profile,counting=request.get('counting'),
+            input_tokens=row['input_tokens'],output_tokens=row['output_tokens'])
         if raw.get('model') != profile.model_name or type(raw.get('choices')) is not list or len(raw['choices']) != 1:raise ValueError()
         choice=raw['choices'][0]
         if type(choice) is not dict:raise ValueError()

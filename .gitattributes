@@ -10,6 +10,9 @@ docs/manual-identity-adoption-v1.json -text
 docs/output-evidence-adoption-v2.json -text
 docs/context-counting-adoption-v1.json -text
 docs/deepseek-production-adoption-v1.json -text
+docs/deepseek-availability-adoption-v1.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+# New fixed JSON resources preserve their Windows bytes; CR is a line ending.
+backend/resources/counting/v3/*.json whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 
 # User-provided design originals keep their exact source bytes in Git.
 docs/design/WALL-E.V1_0.6.*.md -text

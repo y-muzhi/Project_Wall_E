@@ -148,6 +148,19 @@ class AuditRepository:
             self.connection.execute("UPDATE guide_runs SET current_step=?,updated_at=? WHERE id=? AND status='RUNNING'",('VALIDATING' if succeeded else 'CALLING_MODEL',at,run['id']))
         return self.get(identity)
 
+    def record_admission_failure(self, identity, at):
+        """Transport remains an occurred success; actual budget admission failed."""
+        require_write_transaction(self.connection);strict_integer(identity,'llm_use_id');_time(at)
+        row=self.get(identity)
+        if row is None:raise Rejected('NOT_FOUND')
+        run=GuideRepository(self.connection).get(row['guide_run_id']);_owned(self.connection,run)
+        if row['call_status']!='SUCCEEDED' or row['parse_status']!='NOT_STARTED' or run['current_step']!='VALIDATING':
+            raise Rejected('STATE_CONFLICT')
+        if at < max(row['ended_at'],run['updated_at']):raise ValueError('Admission failure cannot precede transport')
+        self.connection.execute('UPDATE llm_uses SET error_code=?,error_message=? WHERE id=?',
+            ('CONFIG_INVALID','模型实际用量未通过已批准预算门禁',identity))
+        return self.get(identity)
+
     def parse_response(self, identity, at):
         """Single-object parse only; never repair unknown fields or run Schema."""
         require_write_transaction(self.connection);strict_integer(identity,'llm_use_id');_time(at)
