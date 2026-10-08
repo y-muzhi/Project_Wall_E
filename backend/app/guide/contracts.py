@@ -320,6 +320,19 @@ def get_guide_run_result(connection, row, message, batches, *, catalog: Resource
             actual = connection.execute("SELECT id,content_version FROM requirement_documents WHERE requirement_id=? AND document_type='CURRENT'", (row['requirement_id'],)).fetchall()
             if len(actual) != 1 or actual[0]['id'] != current['id'] or actual[0]['content_version'] < version:
                 raise ValueError('Completed document effect does not belong to this actual CURRENT history')
+            # C07 keeps the resulting identity/version even without a write so
+            # initialization cards can expire against their exact baseline.
+            # The public query reports only a version written by this run.
+            baseline = connection.execute('SELECT read_scope_manifest_json FROM guide_runs WHERE id=?', (row['id'],)).fetchone()
+            if baseline is None:
+                raise ValueError('Completed run has no accepted document baseline')
+            manifest = strict_json_object(baseline['read_scope_manifest_json'], 'read_scope_manifest_json')
+            document_id = strict_integer(manifest.get('document_id'), 'read_manifest.document_id')
+            base_version = strict_integer(manifest.get('content_version'), 'read_manifest.content_version')
+            if document_id != current['id'] or version not in (base_version, base_version + 1):
+                raise ValueError('Completed document effect contradicts its accepted baseline')
+            if version == base_version:
+                version = None
         summaries = {'INITIALIZE': '初始化任务已完成', 'ASK': '回答任务已完成', 'REVIEW': '检查任务已完成', 'MODIFY': '修改任务已完成'}
         summary_text = '修改建议已生成' if row['action_type'] == 'MODIFY' and batches else summaries[row['action_type']]
         value['final_result'] = {'summary': summary_text, 'assistant_message_id': assistant_id, 'current_document_version': version, 'suggestion_batch_id': value['suggestion_batch_id']}
