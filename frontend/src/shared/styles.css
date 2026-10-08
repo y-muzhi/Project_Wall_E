@@ -169,6 +169,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message-timeline { overflow:auto;height:360px;overflow-anchor:none;padding:8px 4px; }
 .conversation-message { border:1px solid var(--border);border-radius:10px;padding:12px;margin:12px 0; }
 .conversation-message.from-user { background:#f8fafc; }
+.conversation-message.is-reply-target { outline:2px solid #64748b;outline-offset:2px; }
 .conversation-message time { color:#64748b;font-size:12px; }
 .message-content,.run-summary { white-space:pre-wrap;overflow-wrap:anywhere; }
 .message-markdown { min-width:0;max-width:100%;font-size:16px;line-height:28px;overflow-wrap:anywhere; }

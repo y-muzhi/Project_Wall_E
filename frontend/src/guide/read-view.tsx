@@ -40,6 +40,6 @@ export function AiReadPanel({owner,structured,commands,renderMarkdown}:Readonly<
     {run.final_result&&<p className="run-summary">{run.final_result.summary}</p>}{commands?.(run)}</>}
    {state.connection_error&&<p role="alert" className="inline-error">运行连接异常，保留最后确认状态。<button type="button" disabled={!state.visible||state.querying} onClick={()=>owner.readRun()}>重读运行</button></p>}
   </section>}
-  <MessageTimeline messages={owner.messages} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/><RunHistory owner={owner}/>
+  <MessageTimeline messages={owner.messages} {...(run?.latest_assistant_message_id?{reply:{message_id:run.latest_assistant_message_id,guide_run_id:run.id}}:{})} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/><RunHistory owner={owner}/>
  </section>;
 }
