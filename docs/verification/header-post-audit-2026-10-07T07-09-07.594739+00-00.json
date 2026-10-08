@@ -1,7 +1,0 @@
-{
-  "recorded_at": "2026-10-07T07:09:07.594739+00:00",
-  "audit_source_sha256": "8469719f90b2f1a65a81cbb0e6a70d50c9bb27a9038ba1d45ea3886011e462ee",
-  "scope": "Independent read-only closed SQLite audit of unchanged full CURRENT/snapshots, lifecycle/attributes, original run/template and explicit external occupancy; no new model requests",
-  "passed": false,
-  "error": "AssertionError: CONFIRM-viewport-cancel original run"
-}

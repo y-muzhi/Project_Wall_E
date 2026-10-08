@@ -1,7 +1,0 @@
-{
-  "recorded_at": "2026-10-07T07:08:34.291025+00:00",
-  "audit_source_sha256": "a9b55b8b644ad0736a3c4ebd81f13a9223b2804c9ab453cf47f66fb10036b79a",
-  "scope": "Independent read-only closed SQLite audit of unchanged full CURRENT/snapshots, lifecycle/attributes, original run/template and explicit external occupancy; no new model requests",
-  "passed": false,
-  "error": "OperationalError: no such column: initialization_mode"
-}

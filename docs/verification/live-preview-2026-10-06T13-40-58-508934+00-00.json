@@ -1,9 +1,0 @@
-{
-  "scope": "Read-only existing user preview; no restart or business write, not acceptance",
-  "recorded_at": "2026-10-06T13:40:58.508934+00:00",
-  "index_status": 200,
-  "api_status": 200,
-  "served_index_sha256": "c98173696cfe14be55a1d91f5c7f229126270450c8250a41c8be43ef9dd237ed",
-  "local_index_sha256": "c98173696cfe14be55a1d91f5c7f229126270450c8250a41c8be43ef9dd237ed",
-  "passed": true
-}

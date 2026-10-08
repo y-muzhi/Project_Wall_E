@@ -17,3 +17,11 @@ output/playwright/
 # Local editor settings and generated runtime/browser artifacts
 /.vscode/
 /output/
+
+# Test results are recorded in Markdown only (user policy, 2026-10-08).
+/docs/verification/**/*.json
+/docs/verification/**/*.png
+/docs/verification/**/*.jpg
+/docs/verification/**/*.jpeg
+/docs/verification/**/*.webp
+/docs/verification/**/*.gif

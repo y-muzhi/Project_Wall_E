@@ -1,9 +1,0 @@
-{
-  "passed": false,
-  "phase": "Syntax precheck before any service/database/model request",
-  "source_sha256": "f63d0ff53a936fe9e8536bf68b253b27c324b50241af19346c76fb5fa244160b",
-  "exit_code": 1,
-  "stdout": "",
-  "stderr": "C:\\Users\\羊牧之\\Documents\\ChatGPT\\Project_Wall_E 2\\tools\\verify-header-browser.mjs:63\n}catch(error){report.shutdown_error=String(error);report.passed=false;process.exitCode=1;const killer=processRun('taskkill',['/PID',String(native.child.pid),'/T','/F']);await killer.exited;await native.exited;}finally{clearTimeout(timer);}report.native=native.record;const closed=native.record.stdout.trim().split('\\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line)).at(-1);report.native_facts=closed?.facts;if(native.record.code!==0||!closed?.closed||closed.facts.llm_uses!==0){report.passed=false;report.error??='Native cleanup or model isolation failed';process.exitCode=1;}report.database_sha256=createHash('sha256').update(await readFile(database)).digest('hex');}\n                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ^\n\nSyntaxError: Unexpected token '}'\n    at checkSyntax (node:internal/main/check_syntax:72:5)\n\nNode.js v24.15.0\n",
-  "cause": "Wrong extraction boundary copied the inner shutdown catch instead of main verifier catch"
-}

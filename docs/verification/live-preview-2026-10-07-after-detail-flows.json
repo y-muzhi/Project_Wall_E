@@ -1,9 +1,0 @@
-{
-  "scope": "Read-only existing preview; no stop/restart/business mutation; explicit local proxy bypass",
-  "recorded_at": "2026-10-07T04:55:16.763763+00:00",
-  "page_status": 200,
-  "api_status": 200,
-  "page_matches_current_dist": true,
-  "dist_sha256": "dd7b9b6de89208f1aecc5fa72658d027aec9cfe7e34a267025b46c2d6d4aa999",
-  "passed": true
-}

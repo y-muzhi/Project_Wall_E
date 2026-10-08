@@ -1,7 +1,0 @@
-{
-  "recorded_at": "2026-10-07T10:20:59.388878+00:00",
-  "passed": true,
-  "staged_files_checked": 25,
-  "scope": "Exact private credential bytes and runtime path exclusion; no key/hash/length emitted; original CRLF evidence permitted, real whitespace checks passed",
-  "owned_api_test_processes_after_close": 0
-}

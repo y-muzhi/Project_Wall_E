@@ -1,7 +1,0 @@
-{
-  "recorded_at": "2026-10-07T13:57:51.090534+00:00",
-  "audit_source_sha256": "f44d23a4d656cb02dbc057c3402380739e4f5538058c65a32311147a1d0836f5",
-  "scope": "Actual controlled C07 text/cards WAITING then same Run ordinary I15 continuation; immutable full document/baseline, two v2 raw audits and persistent receipts; no paid/Provider compatibility/effect proof",
-  "passed": false,
-  "error": "AssertionError: "
-}
