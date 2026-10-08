@@ -58,14 +58,16 @@ export class CreateRequirementFlow {
       try { const result = (await action.submit()).data; if (!this.closed) this.publish({ result, busy: false, unknown: false, error: null, fields: Object.freeze({}) }); }
       catch (error) {
         if (this.closed) return;
-        if (error instanceof ApiRejected) {
+        if (error instanceof ApiRejected && error.code !== 'REQUEST_IN_PROGRESS') {
           const fields: Partial<Record<keyof CreateDraft, string>> = {};
           const mapping: Record<string, keyof CreateDraft> = { title: 'title', requirement_type: 'type', template_key: 'template', template_version: 'template', initial_idea: 'idea', initialization_mode: 'mode' };
           if (error.code === 'VALIDATION_FAILED' && Array.isArray(error.details?.field_errors)) {
             for (const entry of error.details.field_errors) { const row = entry as { field: string; message: string }; const name = mapping[row.field]; if (name) fields[name] = row.message; }
           }
           this.publish({ busy: false, unknown: false, fields: Object.freeze(fields), error: Object.keys(fields).length ? null : error.message });
-        } else this.publish({ busy: false, unknown: true, error: '创建结果待核实，请使用原请求重试；不要重复新建' });
+        } else this.publish({ busy: false, unknown: true, fields: Object.freeze({}), error: error instanceof ApiRejected && error.code === 'REQUEST_IN_PROGRESS'
+          ? '原创建请求仍在处理中，请稍后使用原请求核实；不要重复新建'
+          : '创建结果待核实，请使用原请求重试；不要重复新建' });
       }
     }).finally(() => { if (this.pending === pending) this.pending = undefined; });
     this.pending = pending; this.publish({ busy: true, error: null }); return pending;

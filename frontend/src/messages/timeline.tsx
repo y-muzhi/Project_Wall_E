@@ -3,6 +3,8 @@ import type {ReactNode} from 'react';
 import type {Message} from '../api/models.ts';
 import {localTime} from '../shared/time.ts';
 import type {RequirementMessages} from './read.ts';
+import {MessageContent} from './content.tsx';
+import type {MessageMarkdownRenderer} from './content.tsx';
 type Anchor=Readonly<{id:string|null;part:string|null;offset:number;top:number;height:number;near:boolean;last:number}>;
 function anchor(root:HTMLElement):Anchor{
  const box=root.getBoundingClientRect(),cards=[...root.querySelectorAll<HTMLElement>('[data-message-id]')],visible=cards.find(card=>card.getBoundingClientRect().bottom>box.top&&card.getBoundingClientRect().top<box.bottom);
@@ -13,11 +15,12 @@ function restore(root:HTMLElement,previous:Anchor):void{
  const message=previous.id===null?null:root.querySelector<HTMLElement>('[data-message-id="'+previous.id+'"]'),part=previous.part===null?null:[...message?.querySelectorAll<HTMLElement>('[data-card-key]')??[]].find(card=>card.dataset.cardKey===previous.part),target=part??message;
  if(target)root.scrollTop+=target.getBoundingClientRect().top-root.getBoundingClientRect().top-previous.offset;else root.scrollTop=previous.top+root.scrollHeight-previous.height;
 }
-/** Plain messages and damaged structures retain actual public content.
+/** Text messages render their actual public content without changing it.
+ * Damaged structures retain the complete original text.
  * Valid cards use their real owner's question view and readable error fallback.
  * Fetching older windows preserves the native visible message, including a
  * user scroll that happens while the request is pending. */
-export function MessageTimeline({messages,structured}:Readonly<{messages:RequirementMessages;structured?:(message:Message)=>ReactNode}>){
+export function MessageTimeline({messages,structured,renderMarkdown}:Readonly<{messages:RequirementMessages;structured?:(message:Message)=>ReactNode;renderMarkdown?:MessageMarkdownRenderer}>){
  const state=useSyncExternalStore(messages.subscribe,messages.getSnapshot),root=useRef<HTMLDivElement>(null),content=useRef<HTMLDivElement>(null),position=useRef<Anchor|null>(null),stable=useRef<Anchor|null>(null),seen=useRef(0),[unread,setUnread]=useState(false);
  useLayoutEffect(()=>{
   const element=root.current;if(!element)return;
@@ -53,7 +56,8 @@ export function MessageTimeline({messages,structured}:Readonly<{messages:Require
    {state.items?.length===0&&<p>暂无消息</p>}
    {state.items?.map(message=><article key={message.id} data-message-id={message.id} data-message-sequence={message.sequence_no} className={'conversation-message '+(message.role==='USER'?'from-user':'from-assistant')}>
     <header><strong>{message.role==='USER'?'你':'AI'}</strong><time dateTime={message.created_at}>{localTime(message.created_at)}</time></header>
-    {(message.message_type!=='INTERACTION_CARDS'||message.structured_content===null||message.card_state===null||!structured)&&<p className="message-content">{message.content}</p>}
+    {message.message_type==='TEXT'?<MessageContent content={message.content} {...(renderMarkdown?{render:renderMarkdown}:{})}/>:
+     (message.message_type!=='INTERACTION_CARDS'||message.structured_content===null||message.card_state===null||!structured)&&<p className="message-content">{message.content}</p>}
     {message.message_type==='INTERACTION_CARDS'&&message.structured_content===null&&<p role="status">历史问题结构无法读取，保留可读内容。</p>}
     {message.structured_content!==null&&structured?.(message)}
    </article>)}

@@ -6,6 +6,7 @@ import {MultiFilter} from '../shared/filter.tsx';
 import {Pagination} from '../shared/pagination.tsx';
 import {localTime} from '../shared/time.ts';
 import {MessageTimeline} from '../messages/timeline.tsx';
+import type {MessageMarkdownRenderer} from '../messages/content.tsx';
 import type {RequirementAiRead} from './read-owner.ts';
 const statuses={RUNNING:'运行中',WAITING_USER:'等待回复',COMPLETED:'已完成',FAILED:'失败',CANCELLED:'已取消'} as const;
 const actions={INITIALIZE:'初始化',ASK:'提问',REVIEW:'检查',MODIFY:'修改'} as const;
@@ -26,7 +27,7 @@ export function RunHistory({owner}:Readonly<{owner:RequirementAiRead}>){
 }
 /** Read surfaces are independent of command/card/batch owners. A failed
  * connection keeps the last actual status and never produces FAILED. */
-export function AiReadPanel({owner,structured,commands}:Readonly<{owner:RequirementAiRead;structured?:(message:Message)=>ReactNode;commands?:(run:GuideRun)=>ReactNode}>){
+export function AiReadPanel({owner,structured,commands,renderMarkdown}:Readonly<{owner:RequirementAiRead;structured?:(message:Message)=>ReactNode;commands?:(run:GuideRun)=>ReactNode;renderMarkdown?:MessageMarkdownRenderer}>){
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),run=state.run;
  return <section className="ai-read-panel" aria-label="AI 对话">
   <header><strong>AI 对话</strong><button type="button" disabled={!state.visible||state.refreshing} onClick={()=>{owner.readRun();void owner.refresh().catch(()=>undefined);}}>刷新 AI 状态</button></header>
@@ -39,6 +40,6 @@ export function AiReadPanel({owner,structured,commands}:Readonly<{owner:Requirem
     {run.final_result&&<p className="run-summary">{run.final_result.summary}</p>}{commands?.(run)}</>}
    {state.connection_error&&<p role="alert" className="inline-error">运行连接异常，保留最后确认状态。<button type="button" disabled={!state.visible||state.querying} onClick={()=>owner.readRun()}>重读运行</button></p>}
   </section>}
-  <MessageTimeline messages={owner.messages} {...(structured?{structured}:{})}/><RunHistory owner={owner}/>
+  <MessageTimeline messages={owner.messages} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/><RunHistory owner={owner}/>
  </section>;
 }

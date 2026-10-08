@@ -171,6 +171,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .conversation-message.from-user { background:#f8fafc; }
 .conversation-message time { color:#64748b;font-size:12px; }
 .message-content,.run-summary { white-space:pre-wrap;overflow-wrap:anywhere; }
+.message-markdown { min-width:0;max-width:100%;font-size:16px;line-height:28px;overflow-wrap:anywhere; }
+.message-markdown h1 { font-size:24px;line-height:32px; }
+.message-markdown h2 { font-size:20px;line-height:28px; }
+.message-markdown h3,.message-markdown h4,.message-markdown h5,.message-markdown h6 { font-size:18px;line-height:26px; }
+.message-markdown pre { max-width:100%;overflow-x:auto;white-space:pre; }
+.message-markdown table { display:block;max-width:100%;overflow-x:auto;border-collapse:collapse; }
+.message-markdown th,.message-markdown td { min-width:60px;padding:6px 10px;border:1px solid var(--border);white-space:pre-wrap; }
+.message-markdown img { max-width:100%;height:auto; }
 .run-status { padding:12px;border:1px solid var(--border);border-radius:10px;margin:12px 0; }
 .run-filters { display:flex;gap:8px;flex-wrap:wrap;margin:8px 0; }
 .run-history { margin:16px 0; }

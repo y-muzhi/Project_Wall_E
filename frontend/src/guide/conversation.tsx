@@ -23,6 +23,9 @@ function BatchView({owner,documents,toasts}:Readonly<{owner:NonNullable<ReturnTy
 export function GuideConversation({owner,documents,toasts}:Readonly<{owner:RequirementConversation;documents:RequirementDocumentOwner;toasts:ToastStore}>){
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),read=useSyncExternalStore(owner.read.subscribe,owner.read.getSnapshot),document=useSyncExternalStore(documents.subscribe,documents.getSnapshot);
  const [showMessages,setShowMessages]=useState(false),batch=state.batch;
+ // Retry display when the actual editor/parser becomes available or changes.
+ // This only creates DOM fragments and never adopts content as CURRENT.
+ const renderMarkdown=useCallback((markdown:string)=>documents.previewMarkdown(markdown),[documents,document.navigation]);
  // A different actual batch is a new display selection; original batches and
  // their drafts/unknown requests remain retained in the owner.
  useEffect(()=>setShowMessages(false),[batch]);
@@ -30,7 +33,7 @@ export function GuideConversation({owner,documents,toasts}:Readonly<{owner:Requi
   {batch&&<div className="conversation-view-switch"><button type="button" aria-pressed={!showMessages} onClick={()=>setShowMessages(false)}>修改建议</button><button type="button" aria-pressed={showMessages} onClick={()=>setShowMessages(true)}>对话与运行</button></div>}
   <div className="conversation-suggestions" hidden={!batch||showMessages} inert={!batch||showMessages}>{batch&&<BatchView key={batch.batchId} owner={batch} documents={documents} toasts={toasts}/>}</div>
   <div className="conversation-discussion" hidden={!!batch&&!showMessages} inert={!!batch&&!showMessages}>
-   <AiReadPanel owner={owner.read} structured={message=><CardMessage groups={owner.cards} message={message} busy={document.busy}/>} commands={()=><RunControls owner={owner.runs}/>}/>
+   <AiReadPanel owner={owner.read} structured={message=><CardMessage groups={owner.cards} message={message} busy={document.busy}/>} commands={()=><RunControls owner={owner.runs}/>} renderMarkdown={renderMarkdown}/>
    <GuideComposer owner={owner.composer} documents={documents} review={read.run}/>
   </div>
  </section>;
