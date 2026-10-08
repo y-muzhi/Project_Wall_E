@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-10-08T03:00:48.970724+00:00",
+  "scope": "Read-only normal preview; explicit local proxy bypass; no restart/user DB change/model request",
+  "passed": false,
+  "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>",
+  "database_sha256_before": "59c5e1a869e5ed0fd96e3e4c544d5a56c0741fbb97f31c50aa7e066d7202cc3d",
+  "database_sha256_after": "59c5e1a869e5ed0fd96e3e4c544d5a56c0741fbb97f31c50aa7e066d7202cc3d"
+}

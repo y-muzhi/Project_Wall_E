@@ -1,0 +1,45 @@
+{
+  "recorded_at": "2026-10-08T02:59:53.781113+00:00",
+  "audit_source_sha256": "426f4439476b0c968975b1e4f2ba6270ec99bc85b330655b6f26788b5146fe4f",
+  "scope": "Actual FAILED root/new I18 run/reused USER trigger, latest CURRENT, finite TCP attempts, original unknown replay and refusals; no paid/production compatibility proof",
+  "passed": true,
+  "audit": {
+    "source_evidence": "retry-root-browser-2026-10-07T16-26-31-734Z-46e961668e88.json",
+    "source_inputs": 452,
+    "native_counts": {
+      "requirements": 2,
+      "requirement_documents": 2,
+      "revisions": 2,
+      "comments": 0,
+      "guide_runs": 4,
+      "llm_uses": 6,
+      "suggestion_batches": 0,
+      "suggestions": 0
+    },
+    "database_sha256": "32fff1526ffd0ea126dd072613682b7613d9cdea0125489ccf2b8ecb7568a796",
+    "database_bytes_unchanged": true,
+    "cases": [
+      {
+        "name": "RETRY-scope-invalid",
+        "requirement_id": 1,
+        "old_failed_run": 2,
+        "new_run": null,
+        "failed_attempts": 3,
+        "actual_user_triggers": 1,
+        "current_version": 4,
+        "passed": true
+      },
+      {
+        "name": "RETRY-work-conflict",
+        "requirement_id": 2,
+        "old_failed_run": 4,
+        "new_run": null,
+        "failed_attempts": 3,
+        "actual_user_triggers": 1,
+        "current_version": 3,
+        "passed": true
+      }
+    ],
+    "passed": true
+  }
+}

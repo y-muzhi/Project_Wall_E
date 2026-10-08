@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-08T03:02:53.602941+00:00",
+  "scope": "Optional previously authorized normal preview restore attempted after 10061; execution rejected before launch",
+  "action": "Start one hidden local backend.app process, without model environment or dotenv",
+  "automatic_approval_review_rejected": true,
+  "stated_reason": "blocked by policy; no further reason provided",
+  "service_restarted": false,
+  "code_tests_and_commits_continue": true
+}

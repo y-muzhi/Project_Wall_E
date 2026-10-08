@@ -366,6 +366,29 @@ class ControlledWaitingModelWorker(ControlledScopeModelWorker):
         self.events.append({'event':'CONTROLLED_WAITING_RETURNED','guide_run_id':identity,'code':outcome['code']})
 
 
+class ControlledRetryModelWorker(ControlledScopeModelWorker):
+    """Three real local 503 attempts fail; an explicit new retry run succeeds.
+
+    Neither run status nor user message is seeded. Production ORCH chooses
+    attempts/backoff and C08/C04/C07 persist their actual results.
+    """
+    async def _drive(self, identity, lease):
+        from backend.app.infrastructure.execution_lease import LeasedDatabase
+        from backend.app.guide.orchestrator import execute_guide_run
+        with self.database.transaction() as connection:
+            row = connection.execute('SELECT r.*,m.content FROM guide_runs r JOIN conversation_messages m '
+                'ON m.id=r.trigger_message_id WHERE r.id=?',(identity,)).fetchone()
+            fail_first = (row is not None and row['status']=='RUNNING' and row['action_type']=='REVIEW'
+                and row['content']=='操作范围验收 RETRY_ROOT' and row['retry_of_guide_run_id'] is None)
+        if not fail_first:
+            await super()._drive(identity,lease); return
+        for unused in range(3): self.server.responses.append((503,b'{}',{},None))
+        outcome = await execute_guide_run(LeasedDatabase(self.database,lease),{'guide_run_id':identity},
+            process_lock=self.process_lock,catalog=self.catalog,clock=self.clock,profile=self.profile,gateway=self.gateway,
+            context_compiler=self.compile,compatibility_check=lambda *args:True)
+        self.events.append({'event':'CONTROLLED_RETRY_FAILURE_RETURNED','guide_run_id':identity,'code':outcome['code']})
+
+
 class ControlledCommitRaceWorker(ControlledScopeModelWorker):
     """Private barriers observe native SQL, without manufacturing run state.
 
@@ -446,6 +469,7 @@ async def main():
     fixture.add_argument('--controlled-scope-model', action='store_true')
     fixture.add_argument('--controlled-waiting-model', action='store_true')
     fixture.add_argument('--controlled-commit-race-model', action='store_true')
+    fixture.add_argument('--controlled-retry-model', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -472,6 +496,9 @@ async def main():
     if args.controlled_commit_race_model:
         def factory(db,catalog):
             worker = ControlledCommitRaceWorker(db,catalog=catalog); controlled.append(worker); return worker
+    if args.controlled_retry_model:
+        def factory(db,catalog):
+            worker = ControlledRetryModelWorker(db,catalog=catalog); controlled.append(worker); return worker
     app = create_app(worker_factory=factory, frontend_directory=args.frontend_dist)
     if args.controlled_commit_race_model:
         from starlette.responses import JSONResponse
