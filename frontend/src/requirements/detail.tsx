@@ -26,10 +26,10 @@ function LoadedDetail({owner,host,back}:Readonly<{owner:RequirementDetailOwner;h
  useEffect(()=>{const protect=(event:BeforeUnloadEvent)=>{const session=owner.documents.getSnapshot().manual;if(session&&(session.autosave.state.status!=='SAVED'||!['EDITING','CLOSED'].includes(session.ending.getSnapshot().phase))){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',protect);return()=>window.removeEventListener('beforeunload',protect);},[owner]);
  return <div className="detail-product">
   <DetailFrame layout={regions.layout} viewport={regions.viewport} title={actual.requirement.title} status={<span>{actual.requirement.status==='INITIALIZING'?'初始化中':actual.requirement.status==='ACTIVE'?'维护中':'已完成'} · 正文 v{actual.current.content_version}</span>}
-   actions={<><RequirementHeader commands={regions.header} ready={state.ready} blocked={blocked||document.busy} history={historical} refresh={owner.refresh} refreshRevisions={async()=>{if(!await owner.documents.revisions.refresh())throw Error('实际版本列表暂时无法读取');}}/>
+   actions={<><RequirementHeader commands={regions.header} ready={state.ready} blocked={blocked||document.busy} history={historical} refresh={owner.refresh} refreshRevisions={async()=>{if(!await owner.documents.revisions.refresh())throw Error('实际版本列表暂时无法读取');}} notifyConfirmed={owner.notifyConfirmed}/>
     <button type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button><button type="button" disabled={blocked} onClick={()=>regions.layout.openTab('REVISIONS')}>版本记录</button></>}
    outline={<OwnedDocumentOutline owner={owner.documents}/>}
-   document={<><OwnedDocumentControls owner={owner.documents} blocked={blocked} auxiliary={!regions.comments.writeReady||!owner.documents.currentBinding}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
+   document={<><OwnedDocumentControls owner={owner.documents} blocked={blocked} auxiliary={!regions.comments.writeReady||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
     {state.error&&<p className="inline-error" role="alert">{state.error}</p>}<DocumentMount host={host}/></>}
    ai={<GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
    comments={<CommentPanel panel={regions.comments} documents={owner.documents}/>}

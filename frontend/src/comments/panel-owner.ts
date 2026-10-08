@@ -5,6 +5,7 @@ import {detailPermissions} from '../requirements/permissions.ts';
 import {RequirementComments} from './read.ts';
 import {CommentCommand} from './commands.ts';
 import type {CommentTarget,CommentOutcome,CommentIntent} from './commands.ts';
+import type {ConfirmedNotice} from '../shared/toast-store.ts';
 type Api=ConstructorParameters<typeof RequirementComments>[1]&ConstructorParameters<typeof CommentCommand>[2];
 export type CommentSlot=Readonly<{key:number;identity:number|null;flow:CommentCommand;open:boolean}>;
 export type CommentPanelState=Readonly<{detail:DetailSnapshot;view:'CURRENT'|'MANUAL'|'HISTORY';suspended:boolean;active:boolean;refreshing:boolean;needs_refresh:boolean;error:string|null;slots:readonly CommentSlot[];revision:number}>;
@@ -21,11 +22,12 @@ const conflicts=new Set(['STATE_CONFLICT','WORK_STATE_CONFLICT','WORK_STATE_INCO
 export class RequirementCommentPanel{
   readonly comments:RequirementComments;private readonly api:Api;private readonly readActual:()=>Promise<DetailSnapshot>;
   private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private readonly acceptedGuide:(run:GuideRun)=>Promise<void>;
+  private readonly notifyConfirmed:ConfirmedNotice|undefined;
   private value:CommentPanelState;private readonly listeners=new Set<()=>void>();private readonly owners=new Map<number,OwnedSlot>();private nextKey=1;private closed=false;private syncing=false;
   private readonly releaseRead:()=>void;private tail:Promise<unknown>=Promise.resolve();private jobs=0;private refreshPending:Promise<void>|undefined;
-  constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,acceptedGuide:(run:GuideRun)=>Promise<void>){
+  constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,acceptedGuide:(run:GuideRun)=>Promise<void>,notifyConfirmed?:ConfirmedNotice){
     if(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)throw TypeError('Actual owned detail required');
-    this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.acceptedGuide=acceptedGuide;
+    this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.acceptedGuide=acceptedGuide;this.notifyConfirmed=notifyConfirmed;
     this.value=Object.freeze({detail:capture(detail),view:detail.activity.kind==='MANUAL'?'MANUAL':'CURRENT',suspended:false,active:true,refreshing:false,needs_refresh:false,error:null,slots:Object.freeze([]),revision:0});
     this.comments=new RequirementComments(detail.current,api);this.releaseRead=this.comments.subscribe(()=>{this.syncBaselines();this.publish({});});
   }
@@ -98,6 +100,7 @@ export class RequirementCommentPanel{
   finish(flow:CommentCommand,outcome:CommentOutcome):Promise<void>{
     const entry=[...this.owners.entries()].find(([,owner])=>owner.slot.flow===flow);if(!entry||flow.getSnapshot().phase!=='CONFIRMED'||outcome!==flow.getSnapshot().outcome)return Promise.reject(Error('Original confirmed comment outcome required'));
     const [identity,owner]=entry;if(owner.pending)return owner.pending;
+    if(flow.intent.kind==='DELETE'&&outcome.kind==='COMMENT')this.notifyConfirmed?.(outcome,'评论已删除');
     const pending=this.enqueue(async()=>{
       if(outcome.kind==='GUIDE'&&!owner.guideDelivered){await this.acceptedGuide(outcome.run);owner.guideDelivered=true;}
       await this.readAndAdopt();if(this.closed||this.owners.get(identity)!==owner)throw Error('Retired comment outcome');

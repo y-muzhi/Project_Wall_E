@@ -1,4 +1,6 @@
 export type ToastType = 'success' | 'error' | 'info';
+/** Call only with the original positive command outcome, never a GET match. */
+export type ConfirmedNotice = (receipt: object, message: string) => void;
 export type Toast = Readonly<{ id: number; type: ToastType; message: string }>;
 export interface ToastClock { now(): number; schedule(callback: () => void, milliseconds: number): () => void; }
 const realClock: ToastClock = { now: () => performance.now(), schedule(callback, delay) { const timer = setTimeout(callback, delay); return () => clearTimeout(timer); } };

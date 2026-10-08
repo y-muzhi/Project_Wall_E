@@ -12,6 +12,7 @@ import {DetailLayout,DetailViewportGuard} from './detail-layout.ts';
 import type {DetailTab} from './detail-layout.ts';
 import {DetailDeparture} from './departure.ts';
 import {ToastStore} from '../shared/toast-store.ts';
+import type {ConfirmedNotice} from '../shared/toast-store.ts';
 
 export type DetailBindings=Readonly<{documents:RequirementDocumentOwner;header:RequirementHeaderCommands;conversation:RequirementConversation;comments:RequirementCommentPanel;layout:DetailLayout;viewport:DetailViewportGuard}>;
 export type DetailOwnerState=Readonly<{detail:DetailSnapshot|null;loading:boolean;error:string|null;ready:boolean;revision:number;revisionSave:RequirementRevisionSave|null}>;
@@ -20,6 +21,7 @@ export type DetailOwnerState=Readonly<{detail:DetailSnapshot|null;loading:boolea
  * History and viewport gates affect views only, never business cancellation. */
 export class RequirementDetailOwner{
  readonly read:RequirementDetailRead;readonly documents:RequirementDocumentOwner;readonly departure:DetailDeparture;readonly toasts=new ToastStore();
+ private readonly notices=new WeakSet<object>();
  private readonly api:WalleApi;private readonly width:()=>number;private readonly storage:Pick<Storage,'getItem'|'setItem'>|null;private bindings:DetailBindings|null=null;private readonly listeners=new Set<()=>void>();private readonly releases:(()=>void)[]=[];
  private value:DetailOwnerState=Object.freeze({detail:null,loading:false,error:null,ready:false,revision:0,revisionSave:null});private closed=false;private syncing=false;private previous:DetailSnapshot|null=null;private priorHistory=false;private refreshing:Promise<DetailSnapshot>|null=null;private retiring:Promise<void>|null=null;
  constructor(identity:number,api:WalleApi,host:HTMLElement,width:()=>number,storage:Pick<Storage,'getItem'|'setItem'>|null,scrollport:HTMLElement|null=null){
@@ -28,13 +30,16 @@ export class RequirementDetailOwner{
  }
  getSnapshot=():DetailOwnerState=>this.value;subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
  get regions():DetailBindings|null{return this.bindings;}
+ /** A refresh can fail after success. Its retry must not repeat the notice or
+  * turn a read observation into another successful user action. */
+ notifyConfirmed:ConfirmedNotice=(receipt,message)=>{if(this.closed||this.notices.has(receipt))return;this.notices.add(receipt);this.toasts.push('success',message);};
  get supported():boolean{return !!this.bindings&&this.bindings.layout.getSnapshot().mode!=='BLOCKED'&&this.bindings.viewport.getSnapshot().phase==='SUPPORTED'&&this.departure.getSnapshot().phase==='IDLE';}
  private publish(changes:Partial<DetailOwnerState>){if(this.closed)return;this.value=Object.freeze({...this.value,...changes,revision:this.value.revision+1});for(const listener of this.listeners)try{listener();}catch(error){console.error('WALL-E detail observer failed',error);}}
  readActual=async():Promise<DetailSnapshot>=>{if(this.closed||!await this.read.refresh())throw Error(this.read.getSnapshot().error??'实际详情暂时无法读取');if(this.closed)throw Error('Detail is retired');return this.read.getSnapshot().confirmed!;};
  private createRegions(actual:DetailSnapshot):void{
   const layout=new DetailLayout(actual.requirement.status,this.width(),this.storage),viewport=new DetailViewportGuard(this.width(),{blockAndSave:()=>this.documents.blockAndSave(),readAfterSupport:async signal=>{if(signal.aborted)throw Error('Restore aborted');await this.documents.restoreSupported();if(signal.aborted)throw Error('Restore aborted');if(!this.documents.historical&&!await this.bindings!.comments.comments.refresh(this.bindings!.comments.comments.getSnapshot().page,true))throw Error('正文评论标记暂时无法读取');if(signal.aborted)throw Error('Restore aborted');}}),header=new RequirementHeaderCommands(actual,this.api);
   const conversation=new RequirementConversation(actual,this.api,this.readActual,this.adoptActual,()=>{layout.openTab('AI');this.sync();});
-  const comments=new RequirementCommentPanel(actual,this.api,this.readActual,this.adoptActual,conversation.receive);
+  const comments=new RequirementCommentPanel(actual,this.api,this.readActual,this.adoptActual,conversation.receive,this.notifyConfirmed);
   this.bindings=Object.freeze({documents:this.documents,header,conversation,comments,layout,viewport});
   this.releases.push(layout.subscribe(()=>this.sync()),viewport.subscribe(()=>this.sync()),header.subscribe(()=>this.sync()));
  }
