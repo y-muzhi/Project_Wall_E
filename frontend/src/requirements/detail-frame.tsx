@@ -22,16 +22,21 @@ export function DetailFrame(props: DetailFrameProps) {
   const [panelError,setPanelError] = useState(false), [panelRetry,setPanelRetry] = useState(0);
   const supported = state.mode !== 'BLOCKED' && guard.phase === 'SUPPORTED';
   useLayoutEffect(() => {
+    const owner = columns.current!.ownerDocument, browser = owner.defaultView!;
+    const visibility = () => props.viewport.setForeground(!owner.hidden);
+    const pagehide = () => props.viewport.setForeground(false);
+    const focus = () => { visibility(); props.viewport.refreshAfterFocus(); };
     const measure = () => {
-      const width = window.innerWidth, padding = width < 1280 ? 16 : 32;
+      const width = browser.innerWidth, padding = width < 1280 ? 16 : 32;
       // The hidden columns have zero rect width; viewport content width remains
       // the constraint while the guard waits for actual state re-read.
       const actual = columns.current?.getBoundingClientRect().width ?? 0;
       props.layout.viewport(width, actual > 0 ? actual : Math.max(0,width-padding)); props.viewport.viewport(width);
     };
-    measure(); props.viewport.activate(); window.addEventListener('resize',measure);
+    visibility(); measure(); props.viewport.activate(); browser.addEventListener('resize',measure);
+    owner.addEventListener('visibilitychange',visibility); browser.addEventListener('pagehide',pagehide); browser.addEventListener('pageshow',visibility); browser.addEventListener('focus',focus);
     const observer = new ResizeObserver(measure); if(columns.current)observer.observe(columns.current);
-    return () => {window.removeEventListener('resize',measure);observer.disconnect();};
+    return () => {browser.removeEventListener('resize',measure);owner.removeEventListener('visibilitychange',visibility);browser.removeEventListener('pagehide',pagehide);browser.removeEventListener('pageshow',visibility);browser.removeEventListener('focus',focus);observer.disconnect();};
   },[props.layout,props.viewport]);
   useEffect(() => {
     if (!supported || !state.right_open) return;

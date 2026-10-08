@@ -36,7 +36,7 @@ export class ManualDraftSession {
   static async create(root:HTMLElement,initial:DetailSnapshot,api:WalleApi,diagnostic:Readonly<{cacheName?:string;clock?:PollClock}>={}):Promise<ManualDraftSession>{
     if(initial.activity.kind!=='MANUAL')throw new TypeError('Actual manual detail required');let session:ManualDraftSession|undefined,cache:DraftRecoveryStore|undefined;
     const editor=await RequirementEditor.create(root,initial.activity.draft,true,{change:()=>session?.autosave.changed(),
-      validity:valid=>session?.publish({valid}),error:error=>{if(error!==null||session?.getSnapshot().block_reason!=='READ_CONFLICT')session?.publish({error});},selection:selection=>session?.publish({selection}),blur:()=>{void session?.flushCurrent();}});
+      validity:valid=>session?.publish({valid}),error:error=>{if(error!==null||session?.getSnapshot().block_reason!=='READ_CONFLICT')session?.publish({error});},selection:selection=>session?.publish({selection}),blur:()=>{void session?.flushCurrent();}},initial.requirement.status==='INITIALIZING'?initial.requirement:null);
     try{
       cache=editor.action(ctx=>new DraftRecoveryStore(ctx,diagnostic.cacheName?{name:diagnostic.cacheName}:{}));const id=initial.requirement.id;
       const autosave=new ManualDraftAutosave(initial.activity.draft,editor.ledger!,{read:async()=>(await api.getManualDraft(id)).data,

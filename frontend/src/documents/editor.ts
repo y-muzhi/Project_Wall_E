@@ -12,6 +12,8 @@ import { selectionFromEditorState, locateEditorSelection } from './editor-select
 import type { SelectionEvent } from './selection.ts';
 import { snapshotObject } from '../api/client.ts';
 import type {LocalDraftSnapshot} from './recovery-store.ts';
+import { TemplateHeadingLock, templateLockMessage } from './template-lock.ts';
+import type { InitializationTemplate } from './template-lock.ts';
 
 export type EditorEvents = Readonly<{
   change?: (snapshot: EditedSnapshot) => void;
@@ -28,12 +30,15 @@ export type EditorEvents = Readonly<{
 export class RequirementEditor {
   private readonly crepe: Crepe; private readonly document: DocumentReadModel; private readonly events: EditorEvents;
   private readonly session: EditedSnapshotLedger | null;
+  private readonly templateLock: TemplateHeadingLock | null;
   private accepted: EditorState; private readonly root: HTMLElement;
   private readonly removeListeners: (() => void)[] = [];
   private readonlyMode: boolean; private closed = false; private composing = false; private invalid = false; private editingTime: number;
-  private constructor(crepe: Crepe, root: HTMLElement, document: DocumentReadModel, readonly: boolean, events: EditorEvents) {
+  private constructor(crepe: Crepe, root: HTMLElement, document: DocumentReadModel, readonly: boolean, events: EditorEvents, templateLock: TemplateHeadingLock | null) {
     this.crepe = crepe; this.root = root; this.document = document; this.events = events; this.readonlyMode = readonly;
+    this.templateLock = templateLock;
     this.accepted = crepe.editor.action(ctx => ctx.get(editorViewCtx).state);
+    templateLock?.assertDocument(this.accepted.doc);
     this.session = document.document_type === 'MANUAL_DRAFT' ? crepe.editor.action(ctx => new EditedSnapshotLedger(ctx, document, this.accepted)) : null;
     this.editingTime = Math.max(Date.now(), Date.parse(document.updated_at) + 1);
     crepe.setReadonly(readonly);
@@ -47,7 +52,7 @@ export class RequirementEditor {
     listen('compositionend', () => { this.composing = false; queueMicrotask(() => { if (!this.closed) this.flushLocal(); }); });
     listen('focusout', event => { if (!root.contains((event as FocusEvent).relatedTarget as Node | null)) { this.flushLocal(); this.notify(() => this.events.blur?.()); } });
   }
-  static async create(root: HTMLElement, input: DocumentReadModel, readonly = true, events: EditorEvents = {}): Promise<RequirementEditor> {
+  static async create(root: HTMLElement, input: DocumentReadModel, readonly = true, events: EditorEvents = {}, initializing: InitializationTemplate | null = null): Promise<RequirementEditor> {
     input = snapshotObject(input) as unknown as DocumentReadModel;
     if (!readonly && input.document_type !== 'MANUAL_DRAFT') throw new TypeError('Only actual manual draft may be edited');
     const crepe = new Crepe({ root, defaultValue: input.markdown_content, features: {
@@ -60,7 +65,8 @@ export class RequirementEditor {
       installIdentityState(crepe, input.block_state_json.blocks.map(block => block.block_id), input.block_state_json.next_block_id);
       await crepe.create();
       const document = crepe.editor.action(ctx => validateDocumentReadModel(ctx, input).document);
-      return new RequirementEditor(crepe, root, document, readonly, events);
+      const lock = initializing === null ? null : crepe.editor.action(ctx => new TemplateHeadingLock(ctx, initializing));
+      return new RequirementEditor(crepe, root, document, readonly, events, lock);
     } catch (error) { await crepe.destroy(); root.replaceChildren(); throw error; }
   }
   /** Parent receives this actual ledger only for MANUAL_DRAFT. */
@@ -96,6 +102,7 @@ export class RequirementEditor {
       });
       const at = new Date(this.editingTime = Math.max(this.editingTime + 1, Date.now(), Date.parse(this.session.savedAt) + 1)).toISOString();
       const prepared = raw.length === 1 ? this.session.prepareRawDocument(state, raw[0]!, at) : this.session.prepare(state, at);
+      this.templateLock?.assertDocument(prepared.state.doc);
       const view = ctx.get(editorViewCtx); view.updateState(prepared.state);
       const pair = this.session.accept(prepared, view.state); this.accepted = view.state; this.invalid = false;
       this.notify(() => this.events.error?.(null)); this.notify(() => this.events.change?.(pair)); this.notifyValidity(); return true;
@@ -109,6 +116,14 @@ export class RequirementEditor {
     const view = ctx.get(editorViewCtx);
     try {
       const state = view.state.applyTransaction(transaction).state;
+      if (!state.doc.eq(view.state.doc) && this.templateLock) {
+        try { this.templateLock.assertDocument(state.doc); }
+        catch {
+          // Reconcile a native DOM/IME edit with the retained valid state.
+          // A rejected edit must not poison or autosave the previous draft.
+          view.updateState(view.state); this.notify(() => this.events.error?.(templateLockMessage)); this.notifyValidity(); return;
+        }
+      }
       view.updateState(state);
       if (transaction.docChanged && !this.composing) this.capture(ctx, state);
       this.select(ctx);
@@ -131,6 +146,7 @@ export class RequirementEditor {
     if(this.closed||!this.session||!this.readonlyMode||this.composing)throw new TypeError('Fresh frozen actual draft required');
     return this.action(ctx=>{
       const view=ctx.get(editorViewCtx),prepared=this.session!.prepareLocalRecovery(view.state,local);
+      this.templateLock?.assertDocument(prepared.state.doc);
       view.updateState(prepared.state);const pair=this.session!.accept(prepared,view.state);this.accepted=view.state;this.invalid=false;
       this.editingTime=Math.max(this.editingTime,Date.parse(local.updated_at),...pair.block_state_json.blocks.map(block=>Date.parse(block.last_modified_at)));
       this.notifyValidity();

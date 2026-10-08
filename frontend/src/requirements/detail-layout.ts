@@ -81,10 +81,11 @@ export interface ViewportActions { blockAndSave(): Promise<void>; readAfterSuppo
 export class DetailViewportGuard {
   private readonly actions: ViewportActions; private value: ViewportState;
   private active = false; private closed = false; private blocked: boolean; private generation = 0;
+  private width: number; private foreground = true;
   private save: Promise<void> = Promise.resolve(); private saveTicket = 0; private controller: AbortController | undefined;
   private readonly listeners = new Set<() => void>();
   constructor(width: number, actions: ViewportActions) {
-    this.blocked = dimension(width) < 1024; this.actions = actions;
+    this.width = dimension(width); this.blocked = this.width < 1024; this.actions = actions;
     this.value = Object.freeze({phase: this.blocked ? 'BLOCKED' : 'SUPPORTED', saving: false, save_failed: false});
   }
   getSnapshot = (): ViewportState => this.value;
@@ -95,7 +96,22 @@ export class DetailViewportGuard {
   }
   activate(): void { if (this.active || this.closed) return; this.active = true; if (this.blocked) this.enterBlocked(); }
   viewport(width: number): void {
-    const blocked = dimension(width) < 1024; if (this.closed || blocked === this.blocked) return;
+    this.width = dimension(width); this.updateAvailability();
+  }
+  /** Visibility and geometry share one restoration barrier. A resize while
+   * hidden must never resume an editor or its polling before the tab returns. */
+  setForeground(foreground: boolean): void {
+    if (this.closed || foreground === this.foreground) return;
+    this.foreground = foreground; this.updateAvailability();
+  }
+  /** A visible window can regain focus without visibilitychange (for example
+   * after another desktop window). Reuse the same save/read barrier once. */
+  refreshAfterFocus(): void {
+    if (this.closed || !this.active || this.blocked || this.value.phase !== 'SUPPORTED') return;
+    this.enterBlocked(); this.restore();
+  }
+  private updateAvailability(): void {
+    const blocked = this.width < 1024 || !this.foreground; if (this.closed || blocked === this.blocked) return;
     this.blocked = blocked; if (!this.active) { this.publish({phase: blocked ? 'BLOCKED' : 'SUPPORTED'}); return; }
     if (blocked) this.enterBlocked(); else this.restore();
   }

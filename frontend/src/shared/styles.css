@@ -125,7 +125,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .detail-document-content .ProseMirror { padding: 12px 0; min-width: 0; white-space: pre-wrap; }
 .detail-document-content pre { max-width: 100%; overflow-x: auto; white-space: pre; }
 .detail-document-content .tableWrapper, .detail-document-content .milkdown-table-block { max-width: 100%; overflow-x: auto; }
-.detail-document-content table { max-width: 100%; }
+.detail-document-content table { display: block; max-width: 100%; overflow-x: auto; }
 .detail-document-content img { max-width: 100%; height: auto; }
 .detail-document-content code, .detail-document-content pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
 .detail-resizer { width: 6px; cursor: col-resize; touch-action: none; background: linear-gradient(to right, transparent 2px, #e5e7eb 2px, #e5e7eb 3px, transparent 3px); }

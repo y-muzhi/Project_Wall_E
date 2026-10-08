@@ -38,6 +38,7 @@ export function OwnedDocumentControls({owner,blocked=false,auxiliary=true,notify
       <button type="button" disabled={blocked||state.busy} onClick={()=>void owner.exitHistory()}>退出历史</button>
       {state.save_warning&&<p role="alert">草稿尚未同步，原编辑内容和本地暂存仍保留；历史正文只读。</p>}</>}
     {state.error&&<p role="alert" className="inline-error">{state.error}</p>}
+    {session&&state.mode!=='HISTORY'&&state.detail?.requirement.status==='INITIALIZING'&&<p>初始化期间模板标题固定，可编辑标题下的正文。</p>}
     {session&&state.mode==='HISTORY'&&state.restoration_conflict&&<HistoricalDraftConflict owner={owner} session={session} actual={state.restoration_conflict} blocked={blocked||state.busy} {...(notifyConfirmed?{notifyConfirmed}:{})}/>}
     {session&&state.mode!=='HISTORY'&&<ManualDraftControls autosave={session.autosave} ending={session.ending} recovery={session.recovery} valid={session.editor.valid}
       blocked={blocked||state.busy||session.getSnapshot().blocked} ended={async outcome=>{notifyConfirmed?.(outcome,outcome.kind==='COMPLETED'?'人工编辑已完成':'人工编辑已取消，正式正文保持不变');await owner.refresh();}} serverSelected={async()=>{await owner.refresh();}}/>}
