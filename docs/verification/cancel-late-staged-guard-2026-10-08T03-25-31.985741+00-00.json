@@ -1,0 +1,28 @@
+{
+  "scope": "Exact staged whitelist/private literal credential scan/path/format guard; no credential contents or hashes",
+  "files": [
+    "tools/api-browser-service.py",
+    "tools/verify-cancel-late-browser.mjs",
+    "tools/audit-cancel-late-browser.py",
+    "tools/run-cancel-late-check.py",
+    "docs/实现进度.md",
+    "docs/需求实现映射.md",
+    "docs/验收场景映射.md",
+    "docs/verification/cancel-late-browser-2026-10-08T03-16-14-131Z-f1f489282f40.json",
+    "docs/verification/cancel-late-browser-2026-10-08T03-16-14-267Z-ed9bbfbcca81.json",
+    "docs/verification/cancel-late-combined-2026-10-08.json",
+    "docs/verification/cancel-late-command-2026-10-08T03-16-14.044797+00-00.json",
+    "docs/verification/cancel-late-command-2026-10-08T03-16-14.221634+00-00.json",
+    "docs/verification/cancel-late-native-regression-2026-10-08T03-17-33.885443+00-00.json",
+    "docs/verification/cancel-late-notes.md",
+    "docs/verification/cancel-late-post-audit-2026-10-08T03-19-31.399394+00-00.json",
+    "docs/verification/cancel-late-post-audit-2026-10-08T03-19-31.574257+00-00.json",
+    "docs/verification/cancel-late-media/manifest.json",
+    "docs/verification/cancel-late-media/walle-cancel-late-1791429374129-f1f489282f40-CANCEL-wire-cancelled.png",
+    "docs/verification/cancel-late-media/walle-cancel-late-1791429374129-f1f489282f40-CANCEL-wire-unknown-cancelled.png",
+    "docs/verification/cancel-late-media/walle-cancel-late-1791429374266-ed9bbfbcca81-CANCEL-backoff-cancelled.png",
+    "docs/verification/cancel-late-media/walle-cancel-late-1791429374266-ed9bbfbcca81-CANCEL-validated-cancelled.png",
+    "docs/verification/cancel-late-media/walle-cancel-late-1791429374266-ed9bbfbcca81-CANCEL-waiting-cards-cancelled.png"
+  ],
+  "passed": true
+}

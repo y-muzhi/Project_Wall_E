@@ -2,7 +2,7 @@
 
 Only explicit test database paths outside the default production path are
 accepted. Startup uses production create_app. Stdin controls test shutdown;
-Only the explicit commit-race flag adds a diagnostic read outside the business
+Only explicit commit-race/cancellation flags add diagnostic reads outside the business
 API; it never changes a business HTTP response. Explicit private fixture
 flags are isolated diagnostics and never evidence of real model production.
 """
@@ -263,6 +263,9 @@ class ControlledCommentModelWorker(GuideWorker):
 
 class ControlledScopeModelWorker(ControlledCommentModelWorker):
     """Explicit private ordinary-action boundary; no SQL-manufactured outputs."""
+    def _scope_execution_options(self):
+        return {}
+
     def _controlled_trigger(self, row, connection):
         return row['status']=='RUNNING' and row['content'].startswith('操作范围验收 ')
 
@@ -306,7 +309,7 @@ class ControlledScopeModelWorker(ControlledCommentModelWorker):
         self.server.responses.append((200,json.dumps(response,ensure_ascii=False).encode('utf-8'),{},None))
         outcome = await execute_guide_run(LeasedDatabase(self.database,lease),{'guide_run_id':identity},
             process_lock=self.process_lock,catalog=self.catalog,clock=self.clock,profile=self.profile,gateway=self.gateway,
-            context_compiler=self.compile,compatibility_check=lambda *args:True)
+            context_compiler=self.compile,compatibility_check=lambda *args:True,**self._scope_execution_options())
         self.events.append({'event':'CONTROLLED_SCOPE_RETURNED','guide_run_id':identity,'code':outcome['code']})
 
 
@@ -364,6 +367,119 @@ class ControlledWaitingModelWorker(ControlledScopeModelWorker):
             process_lock=self.process_lock,catalog=self.catalog,clock=self.clock,profile=self.profile,gateway=self.gateway,
             context_compiler=self.compile,compatibility_check=lambda *args:True)
         self.events.append({'event':'CONTROLLED_WAITING_RETURNED','guide_run_id':identity,'code':outcome['code']})
+
+
+class ControlledCancellationModelWorker(ControlledWaitingModelWorker):
+    """Private real TCP/ORCH barriers; production cancellation and SQL gates.
+
+    No cancelled status or trusted output is seeded. A held real validation
+    receipt can deliberately reach native C07 after cancellation, which must
+    reject it without business writes. No business HTTP response is replaced.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from threading import Event, Lock
+        from backend.app.guide import orchestrator
+        self.cancel_events = []; self.cancel_lock = Lock(); self.release_receipt = Event()
+        self.resume_backoff = asyncio.Event(); self.receipt = None; self.original_produce = orchestrator.produce_trusted_output
+        self.backoff_run = None; self.active_identity = None; self.hooks_restored = False
+        self.wire_hold_armed = False; self.backoff_held = False; self.receipt_held = False
+        original_send = self.gateway.send
+        async def send(profile, context):
+            content = context.input['user_input']['content']
+            if content == '操作范围验收 CANCEL_WIRE':
+                status,body,headers,unused = self.server.responses[-1]
+                self.server.responses[-1] = (status,body,headers,'hold')
+                self.server.hold_timeout = 30; self.wire_hold_armed = True
+                self.record_cancel('REAL_TCP_BODY_HOLD_ARMED',guide_run_id=self.active_identity)
+            elif content == '操作范围验收 CANCEL_BACKOFF':
+                self.server.responses[-1] = (503,b'{}',{},None)
+                self.backoff_run = self.active_identity
+            return await original_send(profile,context)
+        self.gateway.send = send
+        def produce(database, identity, **options):
+            receipt = self.original_produce(database,identity,**options)
+            if receipt is not None:
+                with self.database.transaction() as connection:
+                    row = connection.execute('SELECT m.content FROM guide_runs r JOIN conversation_messages m ON m.id=r.trigger_message_id WHERE r.id=?',(receipt.guide_run_id,)).fetchone()
+                if row['content'] == '操作范围验收 CANCEL_VALIDATED':
+                    self.release_receipt.clear(); self.receipt = receipt; self.receipt_held = True
+                    self.record_cancel('REAL_TRUSTED_RECEIPT_HELD',guide_run_id=receipt.guide_run_id,llm_use_id=receipt.llm_use_id)
+                    try:
+                        if not self.release_receipt.wait(30): raise RuntimeError('Finite receipt barrier expired')
+                    finally: self.receipt_held = False
+            return receipt
+        orchestrator.produce_trusted_output = produce
+
+    def record_cancel(self, event, **fields):
+        with self.cancel_lock:
+            self.cancel_events.append({'event':event,'order':len(self.cancel_events)+1,**fields})
+
+    def _scope_execution_options(self):
+        async def backoff(seconds):
+            self.backoff_held = True
+            self.record_cancel('REAL_ORCH_BACKOFF_HELD',guide_run_id=self.backoff_run,seconds=seconds)
+            try: await asyncio.wait_for(self.resume_backoff.wait(),30)
+            finally: self.backoff_held = False
+        return {'sleep':backoff}
+
+    def _late_receipt_probe(self, identity):
+        import hashlib
+        from backend.app.guide.result_persistence import persist_ai_result
+        from backend.app.shared.command_execution import Rejected
+        def facts():
+            with self.database.transaction() as connection:
+                return {table:[dict(row) for row in connection.execute('SELECT * FROM '+table+' ORDER BY id')]
+                    for table in ('requirements','requirement_documents','revisions','comments','guide_runs','conversation_messages','suggestion_batches','suggestions','llm_uses')}
+        before = facts()
+        result = persist_ai_result(self.database,{'guide_run_id':identity,'llm_use_id':self.receipt.llm_use_id,
+            'trusted_output':self.receipt},process_lock=self.process_lock,profile=self.profile,catalog=self.catalog,clock=self.clock)
+        try:
+            self.original_produce(self.database,self.receipt.llm_use_id,process_lock=self.process_lock,
+                profile=self.profile,catalog=self.catalog,clock=self.clock)
+            validation = 'UNEXPECTED_SUCCESS'
+        except Rejected as error: validation = error.code
+        after = facts()
+        digest = lambda value:hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        self.record_cancel('LATE_NATIVE_RECEIPT_REJECTED',guide_run_id=identity,llm_use_id=self.receipt.llm_use_id,
+            persistence_code=result['code'],validation_code=validation,business_facts_unchanged=before==after,
+            facts_sha256_before=digest(before),facts_sha256_after=digest(after))
+
+    async def _drive(self, identity, lease):
+        self.active_identity = identity; self.server.entered.clear(); self.server.peer_closed.clear()
+        self.wire_hold_armed = False; self.backoff_run = None; self.resume_backoff.clear()
+        try: await super()._drive(identity,lease)
+        except asyncio.CancelledError:
+            self.record_cancel('ACTUAL_WORKER_TASK_CANCELLED',guide_run_id=identity,lease_retired=lease.retired)
+        finally:
+            if self.receipt is not None and self.receipt.guide_run_id==identity:
+                await asyncio.to_thread(self._late_receipt_probe,identity)
+
+    async def cancel_connection(self, identity):
+        lease = self._leases.get(identity)
+        await super().cancel_connection(identity)
+        self.record_cancel('ACTUAL_CANCEL_CONNECTION_FINISHED',guide_run_id=identity,
+            lease_retired=None if lease is None else lease.retired)
+        self.release_receipt.set()
+
+    def cancellation_facts(self):
+        with self.cancel_lock:
+            return {'events':list(self.cancel_events),'wire_hold_armed':self.wire_hold_armed,
+                'tcp_headers_sent':self.server.entered.is_set(),'tcp_peer_closed':self.server.peer_closed.is_set(),
+                'backoff_held':self.backoff_held,'receipt_held':self.receipt_held,
+                'loopback_chat_requests':len(self.server.receipts),'active_worker_ids':sorted(self.live_run_ids)}
+
+    async def close(self):
+        self.release_receipt.set(); self.resume_backoff.set()
+        try: return await super().close()
+        finally:
+            from backend.app.guide import orchestrator
+            orchestrator.produce_trusted_output = self.original_produce
+            self.hooks_restored = True
+
+    def diagnostic_facts(self):
+        return {**super().diagnostic_facts(),'cancellation':self.cancellation_facts(),
+            'private_hooks_restored':self.hooks_restored}
 
 
 class ControlledRetryModelWorker(ControlledScopeModelWorker):
@@ -470,6 +586,7 @@ async def main():
     fixture.add_argument('--controlled-waiting-model', action='store_true')
     fixture.add_argument('--controlled-commit-race-model', action='store_true')
     fixture.add_argument('--controlled-retry-model', action='store_true')
+    fixture.add_argument('--controlled-cancellation-model', action='store_true')
     args = parser.parse_args(); path = Path(args.database).resolve()
     if not path.is_relative_to(ROOT / 'output' / 'playwright') or not path.name.startswith('api-walle-') or path.exists():
         raise ValueError('A fresh, explicit verification output database is required')
@@ -499,7 +616,17 @@ async def main():
     if args.controlled_retry_model:
         def factory(db,catalog):
             worker = ControlledRetryModelWorker(db,catalog=catalog); controlled.append(worker); return worker
+    if args.controlled_cancellation_model:
+        def factory(db,catalog):
+            worker = ControlledCancellationModelWorker(db,catalog=catalog); controlled.append(worker); return worker
     app = create_app(worker_factory=factory, frontend_directory=args.frontend_dist)
+    if args.controlled_cancellation_model:
+        from starlette.responses import JSONResponse
+        @app.middleware('http')
+        async def private_cancellation_observer(request, call_next):
+            if request.method=='GET' and request.url.path=='/__verification__/cancellation':
+                return JSONResponse(controlled[0].cancellation_facts())
+            return await call_next(request)
     if args.controlled_commit_race_model:
         from starlette.responses import JSONResponse
         @app.middleware('http')

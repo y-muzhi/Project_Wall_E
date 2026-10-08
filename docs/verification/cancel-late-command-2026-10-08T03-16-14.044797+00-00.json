@@ -1,0 +1,30 @@
+{
+  "recorded_at": "2026-10-08T03:16:14.044797+00:00",
+  "scope": "Fixed finite selected cases, isolated native service and external command capture; not runtime/crash investigation",
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "tools/verify-cancel-late-browser.mjs",
+    "--cases",
+    "CANCEL-wire",
+    "CANCEL-wire-unknown"
+  ],
+  "selected_cases": [
+    "CANCEL-wire",
+    "CANCEL-wire-unknown"
+  ],
+  "exit_code": 0,
+  "stdout": "{\"case\":\"CANCEL-wire\",\"passed\":true}\n{\"case\":\"CANCEL-wire-unknown\",\"passed\":true}\n{\"passed\":true,\"evidence\":\"C:\\\\Users\\\\羊牧之\\\\Documents\\\\ChatGPT\\\\Project_Wall_E 2\\\\docs\\\\verification\\\\cancel-late-browser-2026-10-08T03-16-14-131Z-f1f489282f40.json\"}\n",
+  "stderr": "",
+  "inputs_before": {
+    "tools/run-cancel-late-check.py": "85648a4d396939abc9c7e9e9de3f519cab71701da9bb242a94c7786958c44c79",
+    "tools/verify-cancel-late-browser.mjs": "e492b58eb3cf78c8ba3b163aeb21909bb59a830c8f085845b75025b26aacdda2",
+    "tools/api-browser-service.py": "e5adabc2351c94888918a0ce6f1c45e0ef19ce73bfc5a190b65333b09111bf60"
+  },
+  "inputs_after": {
+    "tools/run-cancel-late-check.py": "85648a4d396939abc9c7e9e9de3f519cab71701da9bb242a94c7786958c44c79",
+    "tools/verify-cancel-late-browser.mjs": "e492b58eb3cf78c8ba3b163aeb21909bb59a830c8f085845b75025b26aacdda2",
+    "tools/api-browser-service.py": "e5adabc2351c94888918a0ce6f1c45e0ef19ce73bfc5a190b65333b09111bf60"
+  },
+  "model_environment_filtered": true,
+  "passed": true
+}

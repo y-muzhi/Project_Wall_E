@@ -1,0 +1,75 @@
+{
+  "scope": "Fixed 2 wire and 3 stage cancellation roots, diagnostic loopback only",
+  "source_inputs": 452,
+  "common_previous_inputs": 451,
+  "changed_common_previous_inputs": [
+    "tools/api-browser-service.py"
+  ],
+  "native_counts": {
+    "requirements": 5,
+    "requirement_documents": 5,
+    "revisions": 5,
+    "comments": 0,
+    "guide_runs": 10,
+    "llm_uses": 5,
+    "suggestion_batches": 0,
+    "suggestions": 0
+  },
+  "loopback_chat_requests": 5,
+  "paid_requests": 0,
+  "cases": [
+    {
+      "name": "CANCEL-wire",
+      "passed": true
+    },
+    {
+      "name": "CANCEL-wire-unknown",
+      "passed": true
+    },
+    {
+      "name": "CANCEL-backoff",
+      "passed": true
+    },
+    {
+      "name": "CANCEL-validated",
+      "passed": true
+    },
+    {
+      "name": "CANCEL-waiting-cards",
+      "passed": true
+    }
+  ],
+  "media": [
+    {
+      "path": "walle-cancel-late-1791429374129-f1f489282f40-CANCEL-wire-cancelled.png",
+      "source_session": "walle-cancel-late-1791429374129-f1f489282f40",
+      "sha256": "d04e98727b22d50b5442de2b6115361602fcf297597041080dc72283eb19fedf",
+      "bytes": 100794
+    },
+    {
+      "path": "walle-cancel-late-1791429374129-f1f489282f40-CANCEL-wire-unknown-cancelled.png",
+      "source_session": "walle-cancel-late-1791429374129-f1f489282f40",
+      "sha256": "f539046b622f8f21064b7b1f2ed400301825d1e0621c016d8fca5825ab4c5279",
+      "bytes": 101061
+    },
+    {
+      "path": "walle-cancel-late-1791429374266-ed9bbfbcca81-CANCEL-backoff-cancelled.png",
+      "source_session": "walle-cancel-late-1791429374266-ed9bbfbcca81",
+      "sha256": "236a7d72139ce2670afbd0f81a68b0896aa90581f8fee93b996773f8c3fc2bfb",
+      "bytes": 100939
+    },
+    {
+      "path": "walle-cancel-late-1791429374266-ed9bbfbcca81-CANCEL-validated-cancelled.png",
+      "source_session": "walle-cancel-late-1791429374266-ed9bbfbcca81",
+      "sha256": "977c02b8ca68fe0e182456b85d5eb42468b44a2f1f2439a0d66601100d41278a",
+      "bytes": 101133
+    },
+    {
+      "path": "walle-cancel-late-1791429374266-ed9bbfbcca81-CANCEL-waiting-cards-cancelled.png",
+      "source_session": "walle-cancel-late-1791429374266-ed9bbfbcca81",
+      "sha256": "a63ec7a6665340bd0e11df2137a96b40d438e7303eaeea9918ef9b6156b1436d",
+      "bytes": 107320
+    }
+  ],
+  "passed": true
+}
