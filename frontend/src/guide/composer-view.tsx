@@ -12,13 +12,13 @@ export function GuideComposer({owner,documents,review}:Readonly<{owner:Requireme
  const options=useMemo(()=>Object.keys(scopeNames).map(key=>{const kind=key as keyof typeof scopeNames;try{if(!binding||nav?.error)throw Error('当前正式正文暂不可操作');return {kind,target:guideTarget(binding.editor,kind,nav?.selected_block??nav?.active_heading??null,document.selection),error:null};}catch(error){return {kind,target:null,error:error instanceof Error?error.message:'当前范围不可用'};}}),[binding,nav?.selected_block,nav?.active_heading,nav?.error,document.selection]);
  const disabled=!state.available||!owner.editable||state.refreshing||document.busy,actions=state.detail.requirement.status==='INITIALIZING'?['INITIALIZE'] as const:state.detail.requirement.status==='COMPLETED'?['ASK'] as const:['ASK','REVIEW','MODIFY'] as const;
  return <section aria-label="AI 消息输入" className="guide-composer" aria-busy={state.refreshing||state.phase==='SUBMITTING'||state.phase==='READING'}>
-  {waiting?<p>回复当前等待运行 {waiting.id}；本次普通文字将继续同一运行。</p>:<>
+  {waiting?<p>回复当前等待中的运行；本次普通文字将继续同一运行。</p>:<>
    <label>AI 操作<select aria-label="AI 操作" value={state.action} disabled={disabled} onChange={event=>owner.choose(event.target.value as typeof state.action)}>{!actions.some(action=>action===state.action)&&<option value={state.action} disabled>{names[state.action]}（当前不可用）</option>}{actions.map(action=><option key={action} value={action}>{names[action]}</option>)}</select></label>
    <label>操作范围<select aria-label="操作范围" value={state.target.scope.scope_type} disabled={disabled} onChange={event=>{const target=options.find(option=>option.kind===event.target.value)?.target;if(target)owner.select(target);else owner.rejectScope();}}>{options.map(option=><option key={option.kind} value={option.kind} disabled={!option.target}>{scopeNames[option.kind]}</option>)}</select></label>
    <p>本次范围：{state.target.label}</p>{state.target.content_version!==state.detail.current.content_version&&<p role="alert">正文版本已变化，请重新选择范围；原输入仍保留。</p>}
    <button type="button" disabled={disabled||!options.find(option=>option.kind===state.target.scope.scope_type)?.target||JSON.stringify(options.find(option=>option.kind===state.target.scope.scope_type)?.target)===JSON.stringify(state.target)} onClick={()=>{const target=options.find(option=>option.kind===state.target.scope.scope_type)?.target;if(target)owner.select(target);}}>采用当前范围</button>
    {options.find(option=>option.kind==='SELECTION')?.error&&<p className="field-help">选区不可用：{options.find(option=>option.kind==='SELECTION')!.error}</p>}
-   {state.review&&<p>根据已完成的检查运行 {state.review.id} 修改，提交时重新读取当前正文。</p>}
+   {state.review&&<p>根据已完成的检查结果修改，提交时重新读取当前正文。</p>}
    {review?.action_type==='REVIEW'&&review.status==='COMPLETED'&&state.detail.requirement.status==='ACTIVE'&&<>
     <button type="button" disabled={disabled||!binding} onClick={()=>{try{owner.useReview(review,reviewTarget(binding!.editor,review.scope));}catch{owner.rejectScope();}}}>根据这次检查修改</button>
     <button type="button" disabled={disabled||!binding||!owner.allowed} onClick={()=>{try{

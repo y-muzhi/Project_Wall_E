@@ -31,9 +31,9 @@ export function SuggestionPanel({owner,render,locate,notify}:Readonly<{owner:Req
   {(state.stale||batch?.status==='PENDING'&&batch.base_content_version!==state.detail.current.content_version)&&<p role="alert">正文版本或目标已变化，不能直接完成；请放弃本批后重新发起修改。</p>}
   {protectedIntent&&!modal&&<button type="button" disabled={busy||!state.available} onClick={()=>void recover()}>{state.phase==='UNKNOWN'?'重新确认建议操作结果':'重读已确认建议操作'}</button>}
   <div className="suggestion-list" role="region" aria-label="建议列表">
-  {batch?.suggestions.map(original=>{const item=confirmedItem?.id===original.id?confirmedItem:original;return <article key={item.id} data-suggestion-id={item.id} className="suggestion-card" onClick={event=>{if(!(event.target instanceof Element)||event.target.closest('button,a,input,textarea,label,select'))return;indicate(item.id);}}>
+  {batch?.suggestions.map(original=>{const item=confirmedItem?.id===original.id?confirmedItem:original;return <article key={item.id} data-suggestion-id={item.id} className="suggestion-card" onClick={event=>{if(!(event.target instanceof Element)||event.target.closest('button,a,input,textarea,label,select')||window.getSelection()?.isCollapsed===false)return;indicate(item.id);}}>
    <h3>{item.order_no}. {item.title}</h3><p>{statuses[item.status]}</p><p>{item.explanation}</p>{item.impact&&<p>影响：{item.impact}</p>}
-   {item.patch_operation==='INSERT_BEFORE'||item.patch_operation==='INSERT_AFTER'?<p>在区块 {item.target_ref.block_id} {item.patch_operation==='INSERT_BEFORE'?'之前':'之后'}插入</p>:null}
+   {item.patch_operation==='INSERT_BEFORE'||item.patch_operation==='INSERT_AFTER'?<p>在目标区块{item.patch_operation==='INSERT_BEFORE'?'之前':'之后'}插入</p>:null}
    <h4>{item.patch_operation==='DELETE_BLOCK'?'待删除内容':item.patch_operation==='REPLACE_TABLE_ROW'?'原表格行':'原内容'}</h4>
    <Preview markdown={item.original_content} {...(item.patch_operation==='REPLACE_TABLE_ROW'?{columns:item.proposed_data!.cells.length}:{})} render={render}/>
    {item.patch_operation!=='DELETE_BLOCK'&&<><h4>{item.patch_operation.startsWith('INSERT_')?'新增内容':item.patch_operation==='REPLACE_TABLE_ROW'?'建议表格行':'建议内容'}</h4>

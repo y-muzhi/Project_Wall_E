@@ -37,7 +37,7 @@ export function RevisionList(props:Readonly<{flow:RequirementRevisions;blocked:b
     {!list&&!state.loading&&state.error&&<p role="alert" className="inline-error">{state.error} <button type="button" onClick={()=>void props.flow.refresh()}>重试</button></p>}
     {list&&<>{list.items.length===0&&<p>{list.pagination.total===0?'暂无版本记录':'当前页暂无版本记录'}</p>}
       <ol>{list.items.map(row=><li key={row.id}><strong>V{row.version_no}</strong> · {row.revision_type==='BASELINE'?'初始化基线':'手动版本'} · 来源正文 v{row.source_content_version}
-        <p className="revision-description">{row.description??'无版本说明'}</p><time dateTime={row.created_at}>{localTime(row.created_at)}</time>{' '}
+        <p className="revision-description">{row.description??'--'}</p><time dateTime={row.created_at}>{localTime(row.created_at)}</time>{' '}
         <button type="button" disabled={props.blocked||['EXITING','RESTORING'].includes(state.history.phase)} onClick={()=>props.open(row)}>查看 V{row.version_no}</button></li>)}</ol>
       <Pagination value={list.pagination} loading={state.loading} error={state.error} change={page=>void props.flow.refresh(page)} retry={()=>void props.flow.refresh()}/>
     </>}

@@ -80,8 +80,10 @@ export class RequirementComments{
   }
   located(identity:number):Readonly<{current:DocumentReadModel;comment:CommentItem}>|null{
     if(!this.ready)return null;const bundle=this.value.confirmed!,comment=bundle.items.find(row=>row.id===identity);
-    return comment?.location.status==='ATTACHED'?Object.freeze({current:bundle.current,comment}):null;
+    return comment?.anchor_status==='ATTACHED'&&comment.location.status==='ATTACHED'?Object.freeze({current:bundle.current,comment}):null;
   }
+  /** Select an already confirmed visible comment without reordering or HTTP. */
+  markLocated(identity:number):void{if(this.located(identity))this.publish({selected:identity});}
   pause():void{if(this.closed)return;this.generation++;this.controller?.abort();this.pending=undefined;this.publish({active:false,loading:false});}
   dispose():void{this.closed=true;this.generation++;this.controller?.abort();this.listeners.clear();}
 }

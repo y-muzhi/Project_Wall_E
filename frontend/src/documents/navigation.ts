@@ -40,6 +40,7 @@ export class DocumentNavigation{
   private readonly root:HTMLElement;private readonly port:NavigationPort;private readonly scrollport:HTMLElement|null;
   private readonly listeners=new Set<()=>void>();private readonly removers:(()=>void)[]=[];private observer:MutationObserver;private resize:ResizeObserver;
   private frame:number|null=null;private needsRead=false;private closed=false;private visible=true;
+  private highlighted:HTMLElement|null=null;private highlightTimer:ReturnType<typeof setTimeout>|undefined;
   private value:NavigationState=Object.freeze({content:null,active_heading:null,selected_block:null,source_block:null,toolbar:null,error:null});
   private constructor(root:HTMLElement,port:NavigationPort,scrollport:HTMLElement|null){
     this.root=root;this.port=port;this.scrollport=scrollport;
@@ -66,7 +67,7 @@ export class DocumentNavigation{
   }
   private schedule(read:boolean):void{if(this.closed)return;this.needsRead||=read;if(this.frame!==null)return;this.frame=requestAnimationFrame(()=>{this.frame=null;const read=this.needsRead;this.needsRead=false;if(read)this.refresh();else this.measure();});}
   refresh():void{
-    if(this.closed)return;try{const content=this.port.read(),ids=new Set(content.blocks.map(block=>block.block_id));
+    if(this.closed)return;this.clearHighlight();try{const content=this.port.read(),ids=new Set(content.blocks.map(block=>block.block_id));
       this.publish({content,error:null,selected_block:this.value.selected_block!==null&&ids.has(this.value.selected_block)?this.value.selected_block:null,
         source_block:this.value.source_block!==null&&ids.has(this.value.source_block)?this.value.source_block:null});this.measure();
     }catch{this.publish({error:'当前输入尚未形成完整文档，大纲和区块来源暂不可操作。',toolbar:null,source_block:null});}
@@ -84,13 +85,14 @@ export class DocumentNavigation{
     if(!this.visible||this.value.error||!this.value.content||!(target instanceof Node))return;
     for(const block of this.value.content.blocks){const element=this.port.element(block.block_id);if(element&&(element===target||element.contains(target))){this.publish({selected_block:block.block_id});this.measure();return;}}
   }
-  locate(blockId:number):boolean{
+  private clearHighlight():void{if(this.highlightTimer!==undefined)clearTimeout(this.highlightTimer);this.highlightTimer=undefined;this.highlighted?.classList.remove('comment-target-highlight');this.highlighted=null;}
+  locate(blockId:number,highlight=false):boolean{
     if(this.closed||!this.visible||this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId))return false;
     const element=this.port.element(blockId);if(!element?.getClientRects().length)return false;
     if(this.scrollport){const top=element.getBoundingClientRect().top-this.scrollport.getBoundingClientRect().top-this.scrollport.clientTop;this.scrollport.scrollTop+=top;}
-    else element.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'});this.publish({selected_block:blockId});this.measure();return true;
+    else element.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'});this.publish({selected_block:blockId});this.measure();if(highlight){this.clearHighlight();this.highlighted=element;element.classList.add('comment-target-highlight');this.highlightTimer=setTimeout(()=>this.clearHighlight(),2000);}return true;
   }
   source(blockId:number|null):void{if(this.closed)return;if(blockId!==null&&(!this.visible||this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId)))return;this.publish({source_block:blockId});}
-  setVisible(visible:boolean):void{if(this.closed||this.visible===visible)return;this.visible=visible;if(visible)this.refresh();else this.publish({toolbar:null,source_block:null,active_heading:null});}
-  dispose():void{if(this.closed)return;this.closed=true;for(const remove of this.removers)remove();this.observer.disconnect();this.resize.disconnect();if(this.frame!==null)cancelAnimationFrame(this.frame);this.listeners.clear();}
+  setVisible(visible:boolean):void{if(this.closed||this.visible===visible)return;this.visible=visible;if(visible)this.refresh();else{this.clearHighlight();this.publish({toolbar:null,source_block:null,active_heading:null});}}
+  dispose():void{if(this.closed)return;this.closed=true;this.clearHighlight();for(const remove of this.removers)remove();this.observer.disconnect();this.resize.disconnect();if(this.frame!==null)cancelAnimationFrame(this.frame);this.listeners.clear();}
 }

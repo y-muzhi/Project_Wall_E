@@ -212,3 +212,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .application .detail-product .requirement-detail-frame { height:100%; }
 .application-warning { margin:0;padding:8px 24px;background:#fff8e6; }
 .application-missing { padding:32px; }
+
+/* Temporary comment location feedback lives only on the displayed document DOM. */
+.comment-target-highlight{outline:2px solid #64748b;outline-offset:4px;background:#f1f5f9}

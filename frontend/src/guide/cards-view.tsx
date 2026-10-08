@@ -31,7 +31,7 @@ export function InteractionCardsView({owner,busy=false}:Readonly<{owner:Interact
     {!card.required&&<label><input type="checkbox" checked={answer?.skipped??false} onChange={event=>owner.skip(card.card_key,event.target.checked)}/>明确跳过此问题</label>}
     {card.card_type==='MULTI_SELECT'&&<p>请选择 {card.selection_rule.min}～{card.selection_rule.max} 项。</p>}
     {card.recommendation&&<p className="field-help">AI 推荐：{card.recommendation.option_keys.map(key=>card.options.find(option=>option.option_key===key)!.label).join('、')}。{card.recommendation.reason} 推荐仅供参考，请自行选择。</p>}
-    {card.related_spec_context.map((context,i)=><blockquote key={i}><p>关联正文区块 {context.block_id}（问题生成时的原文）</p><p className="message-content">{context.content_snapshot}</p></blockquote>)}
+    {card.related_spec_context.map((context,i)=><blockquote key={i}><p>关联正文（问题生成时的原文）</p><p className="message-content">{context.content_snapshot}</p></blockquote>)}
     {state.card_error===card.card_key&&state.error&&<p role="alert" className="inline-error">{state.error}</p>}
    </fieldset>;
   })}

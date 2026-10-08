@@ -14,6 +14,6 @@ export function locateComment(comments:RequirementComments,editor:RequirementEdi
       if(!('selected_text' in comment.anchor_ref)||comment.location.start_offset===null||comment.location.end_offset===null)return false;
       editor.locate({document_id:current.id,content_version:current.content_version,block_id:comment.block_id,start_offset:comment.location.start_offset,end_offset:comment.location.end_offset,...comment.anchor_ref});
     }
-    return navigation.locate(comment.block_id);
+    return navigation.locate(comment.block_id,true);
   }catch{return false;}
 }
