@@ -61,9 +61,10 @@ def table_model(block: ParsedBlock) -> Table:
 
 
 def select_row(table: Table, selector: dict) -> int:
-    if type(selector) is not dict or set(selector) != {'key_column_index', 'key_value'} or type(selector['key_column_index']) is not int or selector['key_column_index'] != 0 or type(selector['key_value']) is not str:
-        raise PatchInvalid('行选择条件必须使用第0列的精确文本键')
-    matches = [index for index, row in enumerate(table.rows) if row.cells[0] == selector['key_value']]
+    if type(selector) is not dict or set(selector) != {'key_column_index', 'key_value'} or type(selector['key_column_index']) is not int or not 0 <= selector['key_column_index'] < len(table.headers) or type(selector['key_value']) is not str:
+        raise PatchInvalid('行选择条件必须使用有效列索引和精确文本键')
+    column = selector['key_column_index']
+    matches = [index for index, row in enumerate(table.rows) if row.cells[column] == selector['key_value']]
     if len(matches) != 1:
         raise TargetStale('表格键不能唯一定位原行')
     return matches[0]
