@@ -1,0 +1,31 @@
+{
+  "scope": "Exact staged whitelist/private literal credential scan/path/format guard; no credential contents or hashes",
+  "files": [
+    "tools/api-browser-service.py",
+    "tools/verify-cancel-failure-browser.mjs",
+    "tools/audit-cancel-failure-browser.py",
+    "tools/run-cancel-failure-check.py",
+    "docs/实现进度.md",
+    "docs/需求实现映射.md",
+    "docs/验收场景映射.md",
+    "docs/verification/cancel-failure-browser-2026-10-08T03-29-25-568Z-88a5dc034889.json",
+    "docs/verification/cancel-failure-browser-2026-10-08T03-32-35-669Z-ea3a726b0ead.json",
+    "docs/verification/cancel-failure-browser-2026-10-08T03-34-53-496Z-1796a172bdbf.json",
+    "docs/verification/cancel-failure-combined-2026-10-08.json",
+    "docs/verification/cancel-failure-command-2026-10-08T03-29-25.496776+00-00.json",
+    "docs/verification/cancel-failure-command-2026-10-08T03-32-35.599385+00-00.json",
+    "docs/verification/cancel-failure-command-2026-10-08T03-34-53.435546+00-00.json",
+    "docs/verification/cancel-failure-frontend-regression-2026-10-08T03-35-28.105561+00-00.json",
+    "docs/verification/cancel-failure-http-regression-2026-10-08T03-33-33.419789+00-00.json",
+    "docs/verification/cancel-failure-notes.md",
+    "docs/verification/cancel-failure-post-audit-2026-10-08T03-37-09.403930+00-00.json",
+    "docs/verification/cancel-failure-media/manifest.json",
+    "docs/verification/cancel-failure-media/walle-cancel-failure-1791430165567-88a5dc034889-failure.png",
+    "docs/verification/cancel-failure-media/walle-cancel-failure-1791430355667-ea3a726b0ead-failure.png",
+    "docs/verification/cancel-failure-media/walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-receipt-cancelled.png",
+    "docs/verification/cancel-failure-media/walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-receipt-storage-unknown.png",
+    "docs/verification/cancel-failure-media/walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-storage-cancelled.png",
+    "docs/verification/cancel-failure-media/walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-storage-storage-unknown.png"
+  ],
+  "passed": true
+}

@@ -1,0 +1,30 @@
+{
+  "recorded_at": "2026-10-08T03:34:53.435546+00:00",
+  "scope": "Fixed finite selected cases, isolated native service and external command capture; not runtime/crash investigation",
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "tools/verify-cancel-failure-browser.mjs",
+    "--cases",
+    "CANCEL-wire-storage",
+    "CANCEL-wire-receipt"
+  ],
+  "selected_cases": [
+    "CANCEL-wire-storage",
+    "CANCEL-wire-receipt"
+  ],
+  "exit_code": 0,
+  "stdout": "{\"case\":\"CANCEL-wire-storage\",\"passed\":true}\n{\"case\":\"CANCEL-wire-receipt\",\"passed\":true}\n{\"passed\":true,\"evidence\":\"C:\\\\Users\\\\羊牧之\\\\Documents\\\\ChatGPT\\\\Project_Wall_E 2\\\\docs\\\\verification\\\\cancel-failure-browser-2026-10-08T03-34-53-496Z-1796a172bdbf.json\"}\n",
+  "stderr": "",
+  "inputs_before": {
+    "tools/run-cancel-failure-check.py": "bd8967deb3ae65f32a39d0f1caae3c3bd1a757861ca1fa7be497498939fe734d",
+    "tools/verify-cancel-failure-browser.mjs": "0166e06a5b58108bc25aa29147549e3ddf0ed7e5a8a48b05ab92f77e5e2145d2",
+    "tools/api-browser-service.py": "0f4244d4988e7dbeb6b27336b8c00f9a7f91cc56bcb27e889eb2404e7c402973"
+  },
+  "inputs_after": {
+    "tools/run-cancel-failure-check.py": "bd8967deb3ae65f32a39d0f1caae3c3bd1a757861ca1fa7be497498939fe734d",
+    "tools/verify-cancel-failure-browser.mjs": "0166e06a5b58108bc25aa29147549e3ddf0ed7e5a8a48b05ab92f77e5e2145d2",
+    "tools/api-browser-service.py": "0f4244d4988e7dbeb6b27336b8c00f9a7f91cc56bcb27e889eb2404e7c402973"
+  },
+  "model_environment_filtered": true,
+  "passed": true
+}

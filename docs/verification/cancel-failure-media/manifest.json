@@ -1,0 +1,44 @@
+[
+  {
+    "path": "walle-cancel-failure-1791430165567-88a5dc034889-failure.png",
+    "source_evidence": "cancel-failure-browser-2026-10-08T03-29-25-568Z-88a5dc034889.json",
+    "successful_run": false,
+    "sha256": "fe07ef23dbf897a1a8c500440d1085ad20d0b4a0e1019893ab19c9289bb14bd0",
+    "bytes": 107558
+  },
+  {
+    "path": "walle-cancel-failure-1791430355667-ea3a726b0ead-failure.png",
+    "source_evidence": "cancel-failure-browser-2026-10-08T03-32-35-669Z-ea3a726b0ead.json",
+    "successful_run": false,
+    "sha256": "112ba6ad08b87663eb4ebbebb5616e0e74fffaf35b6dff550b0567e426a8f4a0",
+    "bytes": 107433
+  },
+  {
+    "path": "walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-receipt-cancelled.png",
+    "source_evidence": "cancel-failure-browser-2026-10-08T03-34-53-496Z-1796a172bdbf.json",
+    "successful_run": true,
+    "sha256": "7d230363af449fe938823f2a561eea8646bd78877e3b2cce2e1ef955a2ca32bd",
+    "bytes": 101228
+  },
+  {
+    "path": "walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-receipt-storage-unknown.png",
+    "source_evidence": "cancel-failure-browser-2026-10-08T03-34-53-496Z-1796a172bdbf.json",
+    "successful_run": true,
+    "sha256": "0fd1c4f01212de442d6a579c3d25625f1aee0faad51edbf9b5e10dbc031d464c",
+    "bytes": 107797
+  },
+  {
+    "path": "walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-storage-cancelled.png",
+    "source_evidence": "cancel-failure-browser-2026-10-08T03-34-53-496Z-1796a172bdbf.json",
+    "successful_run": true,
+    "sha256": "3a678c7e7c7005352a916854580f59f177ad82fa36b9a0681c7bb02614ec8500",
+    "bytes": 100910
+  },
+  {
+    "path": "walle-cancel-failure-1791430493495-1796a172bdbf-CANCEL-wire-storage-storage-unknown.png",
+    "source_evidence": "cancel-failure-browser-2026-10-08T03-34-53-496Z-1796a172bdbf.json",
+    "successful_run": true,
+    "sha256": "b1319e9f73a17881d05457d02bdb31de13ac2e9c6d7169671c97aa01011bc13f",
+    "bytes": 107455
+  }
+]

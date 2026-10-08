@@ -383,15 +383,17 @@ class ControlledCancellationModelWorker(ControlledWaitingModelWorker):
         self.cancel_events = []; self.cancel_lock = Lock(); self.release_receipt = Event()
         self.resume_backoff = asyncio.Event(); self.receipt = None; self.original_produce = orchestrator.produce_trusted_output
         self.backoff_run = None; self.active_identity = None; self.hooks_restored = False
-        self.wire_hold_armed = False; self.backoff_held = False; self.receipt_held = False
+        self.wire_hold_armed = False; self.backoff_held = False; self.receipt_held = False; self.fault_run = None; self.fault_table = None
         original_send = self.gateway.send
         async def send(profile, context):
             content = context.input['user_input']['content']
-            if content == '操作范围验收 CANCEL_WIRE':
+            if content in ('操作范围验收 CANCEL_WIRE','操作范围验收 CANCEL_SQL_FAIL','操作范围验收 CANCEL_RECEIPT_FAIL'):
                 status,body,headers,unused = self.server.responses[-1]
                 self.server.responses[-1] = (status,body,headers,'hold')
-                self.server.hold_timeout = 30; self.wire_hold_armed = True
+                self.server.hold_timeout = 30 if content=='操作范围验收 CANCEL_WIRE' else 60; self.wire_hold_armed = True
                 self.record_cancel('REAL_TCP_BODY_HOLD_ARMED',guide_run_id=self.active_identity)
+                if content != '操作范围验收 CANCEL_WIRE':
+                    self.arm_cancel_fault('guide_runs' if content.endswith('SQL_FAIL') else 'idempotency_records')
             elif content == '操作范围验收 CANCEL_BACKOFF':
                 self.server.responses[-1] = (503,b'{}',{},None)
                 self.backoff_run = self.active_identity
@@ -414,6 +416,30 @@ class ControlledCancellationModelWorker(ControlledWaitingModelWorker):
     def record_cancel(self, event, **fields):
         with self.cancel_lock:
             self.cancel_events.append({'event':event,'order':len(self.cancel_events)+1,**fields})
+
+    def business_facts(self):
+        with self.database.transaction() as connection:
+            return {table:[dict(row) for row in connection.execute('SELECT * FROM '+table+' ORDER BY id')]
+                for table in ('requirements','requirement_documents','revisions','comments','guide_runs','conversation_messages','suggestion_batches','suggestions','llm_uses')}
+
+    def arm_cancel_fault(self, table):
+        assert table in ('guide_runs','idempotency_records') and self.fault_run is None
+        predicate = "WHEN NEW.status='CANCELLED' AND OLD.id="+str(self.active_identity) if table=='guide_runs' else "WHEN NEW.status='SUCCEEDED'"
+        with self.database.transaction(write=True) as connection:
+            connection.execute('CREATE TRIGGER private_cancel_fault AFTER UPDATE ON '+table+' '+predicate+" BEGIN SELECT RAISE(ABORT,'explicit isolated cancellation fault'); END")
+        self.fault_run = self.active_identity; self.fault_table = table
+        self.record_cancel('REAL_CANCEL_FAULT_ARMED',guide_run_id=self.fault_run,table=table)
+
+    def finish_cancel_fault(self, identity, before, status):
+        import hashlib
+        after = self.business_facts(); table = self.fault_table
+        digest = lambda value:hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        with self.database.transaction(write=True) as connection:
+            connection.execute('DROP TRIGGER private_cancel_fault')
+        self.fault_run = None; self.fault_table = None
+        self.record_cancel('REAL_CANCEL_FAULT_REMOVED_AFTER_RESPONSE',guide_run_id=identity,table=table,
+            http_status=status,business_facts_unchanged=before==after,
+            facts_sha256_before=digest(before),facts_sha256_after=digest(after))
 
     def _scope_execution_options(self):
         async def backoff(seconds):
@@ -467,10 +493,15 @@ class ControlledCancellationModelWorker(ControlledWaitingModelWorker):
             return {'events':list(self.cancel_events),'wire_hold_armed':self.wire_hold_armed,
                 'tcp_headers_sent':self.server.entered.is_set(),'tcp_peer_closed':self.server.peer_closed.is_set(),
                 'backoff_held':self.backoff_held,'receipt_held':self.receipt_held,
-                'loopback_chat_requests':len(self.server.receipts),'active_worker_ids':sorted(self.live_run_ids)}
+                'loopback_chat_requests':len(self.server.receipts),'active_worker_ids':sorted(self.live_run_ids),
+                'fault_run':self.fault_run,'fault_table':self.fault_table}
 
     async def close(self):
         self.release_receipt.set(); self.resume_backoff.set()
+        if self.fault_run is not None:
+            with self.database.transaction(write=True) as connection:
+                connection.execute('DROP TRIGGER IF EXISTS private_cancel_fault')
+            self.fault_run = None; self.fault_table = None
         try: return await super().close()
         finally:
             from backend.app.guide import orchestrator
@@ -626,6 +657,12 @@ async def main():
         async def private_cancellation_observer(request, call_next):
             if request.method=='GET' and request.url.path=='/__verification__/cancellation':
                 return JSONResponse(controlled[0].cancellation_facts())
+            parts = request.url.path.split('/'); worker = controlled[0]
+            if request.method=='POST' and len(parts)==6 and parts[1:4]==['api','v1','guide-runs'] and parts[5]=='cancel' and parts[4].isdigit() and worker.fault_run==int(parts[4]):
+                identity=int(parts[4]); before=worker.business_facts()
+                response=await call_next(request)
+                worker.finish_cancel_fault(identity,before,response.status_code)
+                return response
             return await call_next(request)
     if args.controlled_commit_race_model:
         from starlette.responses import JSONResponse

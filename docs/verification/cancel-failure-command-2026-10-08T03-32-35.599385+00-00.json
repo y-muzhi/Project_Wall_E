@@ -1,0 +1,30 @@
+{
+  "recorded_at": "2026-10-08T03:32:35.599385+00:00",
+  "scope": "Fixed finite selected cases, isolated native service and external command capture; not runtime/crash investigation",
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "tools/verify-cancel-failure-browser.mjs",
+    "--cases",
+    "CANCEL-wire-storage",
+    "CANCEL-wire-receipt"
+  ],
+  "selected_cases": [
+    "CANCEL-wire-storage",
+    "CANCEL-wire-receipt"
+  ],
+  "exit_code": 1,
+  "stdout": "{\"passed\":false,\"evidence\":\"C:\\\\Users\\\\羊牧之\\\\Documents\\\\ChatGPT\\\\Project_Wall_E 2\\\\docs\\\\verification\\\\cancel-failure-browser-2026-10-08T03-32-35-669Z-ea3a726b0ead.json\",\"error\":\"AssertionError [ERR_ASSERTION]: ### Error\\nTimeoutError: locator.isEnabled: Timeout 30000ms exceeded.\\nCall log:\\n\\u001b[2m  - waiting for getByRole('button', { name: '人工编辑', exact: true })\\u001b[22m\\n\\n\\n\\n\\n1 !== 0\\n\"}\n",
+  "stderr": "",
+  "inputs_before": {
+    "tools/run-cancel-failure-check.py": "bd8967deb3ae65f32a39d0f1caae3c3bd1a757861ca1fa7be497498939fe734d",
+    "tools/verify-cancel-failure-browser.mjs": "04d5149d3939c574945b39ccf155bb95cfedf75c5af9485003b334eb0bc19d31",
+    "tools/api-browser-service.py": "0f4244d4988e7dbeb6b27336b8c00f9a7f91cc56bcb27e889eb2404e7c402973"
+  },
+  "inputs_after": {
+    "tools/run-cancel-failure-check.py": "bd8967deb3ae65f32a39d0f1caae3c3bd1a757861ca1fa7be497498939fe734d",
+    "tools/verify-cancel-failure-browser.mjs": "04d5149d3939c574945b39ccf155bb95cfedf75c5af9485003b334eb0bc19d31",
+    "tools/api-browser-service.py": "0f4244d4988e7dbeb6b27336b8c00f9a7f91cc56bcb27e889eb2404e7c402973"
+  },
+  "model_environment_filtered": true,
+  "passed": false
+}

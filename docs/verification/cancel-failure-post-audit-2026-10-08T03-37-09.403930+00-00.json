@@ -1,0 +1,45 @@
+{
+  "recorded_at": "2026-10-08T03:37:09.403930+00:00",
+  "audit_source_sha256": "f09203011439fb3430fb08c2a44d69c43ef7f7b4c8bb46af8b630792ea18e9e9",
+  "scope": "Known native SQL cancellation and success-receipt failure, whole business rollback, native active run retained, failed recovery read/no replay and original-key cancellation recovery; independent closed SQLite, no paid/model compatibility proof",
+  "passed": true,
+  "audit": {
+    "source_evidence": "cancel-failure-browser-2026-10-08T03-34-53-496Z-1796a172bdbf.json",
+    "source_inputs": 452,
+    "native_counts": {
+      "requirements": 2,
+      "requirement_documents": 2,
+      "revisions": 2,
+      "comments": 0,
+      "guide_runs": 4,
+      "llm_uses": 2,
+      "suggestion_batches": 0,
+      "suggestions": 0
+    },
+    "database_sha256": "082008b25423ba475a35cac41de852b31ef2cdb7ae2c005c6a630989b3566a18",
+    "database_bytes_unchanged": true,
+    "cases": [
+      {
+        "name": "CANCEL-wire-storage",
+        "requirement_id": 1,
+        "current_version": 3,
+        "runs": 2,
+        "user_messages": 2,
+        "assistant_messages": 0,
+        "llm_uses": 1,
+        "passed": true
+      },
+      {
+        "name": "CANCEL-wire-receipt",
+        "requirement_id": 2,
+        "current_version": 3,
+        "runs": 2,
+        "user_messages": 2,
+        "assistant_messages": 0,
+        "llm_uses": 1,
+        "passed": true
+      }
+    ],
+    "passed": true
+  }
+}
