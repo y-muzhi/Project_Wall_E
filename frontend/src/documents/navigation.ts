@@ -72,14 +72,16 @@ export class DocumentNavigation{
         source_block:this.value.source_block!==null&&ids.has(this.value.source_block)?this.value.source_block:null});this.measure();
     }catch{this.publish({error:'当前输入尚未形成完整文档，大纲和区块来源暂不可操作。',toolbar:null,source_block:null});}
   }
-  private bounds():{top:number;bottom:number}{const box=this.scrollport?.getBoundingClientRect();return {top:Math.max(0,box?.top??0),bottom:Math.min(window.innerHeight,box?.bottom??window.innerHeight)};}
+  private bounds():{left:number;right:number;top:number;bottom:number}{const box=this.scrollport?.getBoundingClientRect();return {left:Math.max(0,box?.left??0),right:Math.min(window.innerWidth,box?.right??window.innerWidth),top:Math.max(0,box?.top??0),bottom:Math.min(window.innerHeight,box?.bottom??window.innerHeight)};}
   private measure():void{
     if(this.closed||!this.visible||this.value.error||!this.value.content)return;const bounds=this.bounds();let heading:number|null=null,first:number|null=null;
     const scrolling=this.scrollport??document.scrollingElement,atEnd=scrolling!==null&&scrolling.scrollHeight-scrolling.clientHeight-scrolling.scrollTop<=1;
     if(this.root.getClientRects().length){for(const entry of this.value.content.outline){const element=this.port.element(entry.block_id);if(!element?.getClientRects().length)continue;const top=element.getBoundingClientRect().top;first??=entry.block_id;if(top<=(atEnd?bounds.bottom-1:bounds.top+24))heading=entry.block_id;else break;}}
     heading??=first;const element=this.value.selected_block===null?null:this.port.element(this.value.selected_block),box=element?.getBoundingClientRect();
     const visible=element?.getClientRects().length&&box&&box.bottom>bounds.top&&box.top<bounds.bottom;
-    this.publish({active_heading:heading,toolbar:visible?Object.freeze({left:Math.max(8,Math.min(window.innerWidth-80,box.left-76)),top:Math.max(bounds.top+4,Math.min(bounds.bottom-40,box.top))}):null});
+    // CSS aligns the toolbar's right edge with this anchor, within the actual
+    // document viewport instead of placing it over the left outline/panel.
+    this.publish({active_heading:heading,toolbar:visible?Object.freeze({left:Math.max(bounds.left+8,Math.min(bounds.right-8,box.right)),top:Math.max(bounds.top+4,Math.min(bounds.bottom-40,box.top))}):null});
   }
   private selectTarget(target:EventTarget|null):void{
     if(!this.visible||this.value.error||!this.value.content||!(target instanceof Node))return;

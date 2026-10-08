@@ -4,6 +4,7 @@ import {DocumentNavigation} from './navigation.ts';
 import {localTime} from '../shared/time.ts';
 import type {Actor,SourceType} from './contracts.ts';
 import type {ReactNode} from 'react';
+import {activeModal} from '../shared/modal.ts';
 
 const actors:Record<Actor,string>={SYSTEM:'系统',AI:'AI',USER:'用户'};
 const sources:Record<SourceType,string>={TEMPLATE:'模板',GUIDE_RUN:'AI 运行',SUGGESTION_BATCH:'建议批次',MANUAL_EDIT:'人工编辑'};
@@ -22,18 +23,22 @@ export function DocumentOutline({navigation}:{navigation:DocumentNavigation}){
 export function BlockAuxiliary({navigation,extra}:{navigation:DocumentNavigation;extra?:ReactNode}){
   const state=useSyncExternalStore(navigation.subscribe,navigation.getSnapshot),trigger=useRef<HTMLButtonElement>(null),popover=useRef<HTMLDivElement>(null);
   const block=state.content?.blocks.find(item=>item.block_id===state.source_block);
-  useEffect(()=>{if(!block)return;const previous=document.activeElement;popover.current?.focus();
-    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();navigation.source(null);}};
-    const outside=(event:PointerEvent)=>{if(!popover.current?.contains(event.target as Node)&&!trigger.current?.contains(event.target as Node))navigation.source(null);};
+  useEffect(()=>{if(!block)return;const previous=document.activeElement,element=popover.current;let restoreFocus=true;element?.focus();
+    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!activeModal()){event.preventDefault();navigation.source(null);}};
+    const outside=(event:PointerEvent)=>{if(!element?.contains(event.target as Node)&&!trigger.current?.contains(event.target as Node)){restoreFocus=false;navigation.source(null);}};
     document.addEventListener('keydown',escape);document.addEventListener('pointerdown',outside);
-    return()=>{document.removeEventListener('keydown',escape);document.removeEventListener('pointerdown',outside);if(previous instanceof HTMLElement&&previous.isConnected)previous.focus({preventScroll:true});};
+    return()=>{document.removeEventListener('keydown',escape);document.removeEventListener('pointerdown',outside);
+      const focused=document.activeElement;
+      // Closing a non-modal source view must not undo a new outside focus or
+      // move focus behind a confirmation dialog that has just opened.
+      if(restoreFocus&&!activeModal()&&(focused===document.body||focused===null||element?.contains(focused))&&previous instanceof HTMLElement&&previous.isConnected&&!previous.closest('[inert],[hidden]')&&!previous.matches(':disabled'))previous.focus({preventScroll:true});};
   },[navigation,block?.block_id]);
   return createPortal(<>
     {state.toolbar&&state.selected_block!==null&&!state.error&&<div className="block-auxiliary" aria-label="区块辅助栏" style={state.toolbar}>
       <button type="button" ref={trigger} aria-expanded={block!==undefined} onClick={()=>navigation.source(block?null:state.selected_block)}>来源</button>
       {extra}
     </div>}
-    {block&&<div ref={popover} className="block-source-popover" role="dialog" aria-label="区块来源" tabIndex={-1} style={{left:Math.max(8,Math.min(window.innerWidth-336,state.toolbar?.left??16)),top:Math.max(8,Math.min(window.innerHeight-300,(state.toolbar?.top??16)+40))}}>
+    {block&&<div ref={popover} className="block-source-popover" role="dialog" aria-label="区块来源" tabIndex={-1} style={{left:Math.max(8,Math.min(window.innerWidth-336,(state.toolbar?.left??336)-320)),top:Math.max(8,Math.min(window.innerHeight-300,(state.toolbar?.top??16)+40))}}>
       <header><strong>区块来源</strong><button type="button" aria-label="关闭来源" onClick={()=>navigation.source(null)}>×</button></header>
       {state.content?.kind==='REVISION'&&<p>历史版本来源</p>}
       {state.content?.kind==='MANUAL_DRAFT'&&<p>人工草稿来源；本地变更尚未在正式正文生效，保存时间以服务器确认为准。</p>}

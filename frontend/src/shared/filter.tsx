@@ -13,7 +13,7 @@ export function MultiFilter<T extends FilterValue>({ name, options, value, disab
   const all = value.length === options.length;
   const label = `${name}：${all ? '全部' : value.length === 1 ? options.find(option => Object.is(option.value, value[0]))!.label : '已选 ' + value.length + ' 项'}`;
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     const update = () => {
       const rect = trigger.current!.getBoundingClientRect(), up = window.innerHeight - rect.bottom < 280 && rect.top > window.innerHeight - rect.bottom; setUpwards(up);
       if (menu.current) {
@@ -26,8 +26,9 @@ export function MultiFilter<T extends FilterValue>({ name, options, value, disab
     update(); window.addEventListener('resize', update); window.addEventListener('scroll', update, true);
     const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
     document.addEventListener('pointerdown', outside);
-    return () => { document.removeEventListener('pointerdown', outside); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); };
-  }, [open]);
+    const observer = new ResizeObserver(update); if (trigger.current) observer.observe(trigger.current);
+    return () => { observer.disconnect(); document.removeEventListener('pointerdown', outside); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); };
+  }, [open, disabled, upwards]);
   const select = (selected: readonly T[]) => { if (!selected.length) return; change(Object.freeze([...selected]), selected.length === options.length); };
   return <div className="multi-filter" ref={root} onKeyDown={event => { if (event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false); trigger.current?.focus(); } }}>
     <button type="button" ref={trigger} className="filter-trigger" disabled={disabled} aria-expanded={open && !disabled} aria-controls={id} title={label} onClick={() => setOpen(!open)}>

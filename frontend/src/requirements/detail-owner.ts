@@ -79,8 +79,8 @@ export class RequirementDetailOwner{
  }
  openComments=():void=>{if(this.supported){this.bindings?.layout.openTab('COMMENTS');this.sync();}};
  async openHistory(summary:RevisionSummary):Promise<void>{if(!this.supported)return;this.bindings!.layout.openTab('REVISIONS');await this.documents.openHistory(summary);this.sync();}
- async savedRevision(receipt:RevisionSummary):Promise<void>{if(receipt.requirement_id!==this.value.detail?.requirement.id)throw TypeError('Owned revision required');if(!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
-  if(this.closed)return;const actual=await this.refresh();this.toasts.push('success',`版本 V${receipt.version_no} 已保存`);
+ async savedRevision(receipt:RevisionSummary):Promise<void>{if(receipt.requirement_id!==this.value.detail?.requirement.id)throw TypeError('Owned revision required');this.notifyConfirmed(receipt,`版本 V${receipt.version_no} 已保存`);if(!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
+  if(this.closed)return;const actual=await this.refresh();
   const previous=this.value.revisionSave;if(previous?.getSnapshot().receipt?.id===receipt.id){previous.dispose();this.publish({revisionSave:detailPermissions(actual,true).revision_save?new RequirementRevisionSave(actual,this.api):null});}
  }
  retire():Promise<void>{if(this.retiring)return this.retiring;this.closed=true;for(const release of this.releases)release();this.departure.dispose();this.bindings?.viewport.dispose();this.bindings?.header.dispose();this.bindings?.conversation.dispose();this.bindings?.comments.dispose();this.value.revisionSave?.dispose();this.read.dispose();this.toasts.dispose();this.listeners.clear();this.retiring=this.documents.retire();return this.retiring;}
