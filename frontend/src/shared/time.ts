@@ -5,3 +5,9 @@ export function localTime(input:string):string {
   const pad=(value:number)=>String(value).padStart(2,'0');
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** Compact conversation display; the time element retains the full server instant. */
+export function conversationTime(input:string):string {
+  const display=localTime(input);
+  return display.replace(/^\d+-/,'');
+}

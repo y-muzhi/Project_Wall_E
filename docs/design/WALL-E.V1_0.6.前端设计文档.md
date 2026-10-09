@@ -1,5 +1,7 @@
 # WALL-E.V1_0.6 前端设计文档
 
+修订依据：[原始设计文档修改清单](../原始设计文档修改清单.md)及其中 D-001—D-015 的有效确认。沿用原章节、字段表、处理表、结果表和稳定编号；本次文档合并不表示测试通过。原始版本见 [归档](originals/WALL-E.V1_0.6.前端设计文档.md)。2026-10-09按用户授权接入[前端优化方案V1](WALL-E.V1_0.6.前端优化方案V1.md)，具体采用规则见[FE-OPT-V1](#sync-fe-opt-v1)。后续迭代UX-001—019的最终规则已按用户本次授权合入各页面、组件和验收章节，去向及代码一致性核对见[2026-10-09合并记录](合并记录-2026-10-09.md)。
+
 ## 1. 文档说明与系统范围
 
 ### 1.1 基本信息
@@ -10,9 +12,10 @@
 |系统名称|WALL-E|
 |规格类型|0→1初始规格|
 |目标软件版本|V1_0.6|
-|规格版本|1.1-draft|
-|文档状态|DRAFT；附录A中的未决事项影响相应功能的实施与定稿|
-|最后更新时间|2026-10-02；补充公共视觉与交互设计原则|
+|规格版本|1.1-draft-sync6|
+|原始规格版本|1.1-draft；原字节归档在 originals/ 同名文件|
+|文档状态|DRAFT；已确认结论已合入，剩余待定及运行验收状态不因此改变|
+|最后更新时间|2026-10-09；按原模板合入迭代优化V2 UX-001—019最终规则，核对代码及被替代条目；文档静态复核不代表新增运行验收|
 
 ### 1.2 目标与范围
 
@@ -31,7 +34,7 @@
 
 页面禁用和表单检查用于及时反馈，服务端仍须校验业务条件。只有后端确认成功提交的数据才能显示为已保存或已完成；AI 任务受理与最终完成分别展示。网络失败、响应丢失或无法解析不能直接当作服务端未执行。未确认输入保留和重复请求必须遵循本文的本地生命周期与后端幂等、版本契约。
 
-前端只发送各接口允许的字段；不得由页面补造 FunctionType、Allowed Targets、模板内容或缺失的配置选项。未决页面路径、配置来源、历史版本承载形式与统计能力见附录A。
+前端只发送各接口允许的字段；不得由页面补造 FunctionType、Allowed Targets、模板内容或缺失的配置选项。页面路径、配置来源、历史版本容器与全文评论统计已在本文对应章节确认，附录A保留结论索引。
 
 ### 1.4 术语与缩写
 
@@ -48,7 +51,7 @@
 
 ### 1.5 稳定引用与实现定位
 
-页面、组件沿用 BND 编号，详情操作沿用 DT-OP 编号，验收沿用 TC 编号。跨文档引用以《WALL-E.V1_0.6.后端设计文档.md》中的稳定编号定位。源码路径是目标实现位置，不表示已有代码或执行证据。
+页面、组件沿用 BND 编号，详情操作沿用 DT-OP 编号，验收沿用 TC 编号。跨文档引用以《WALL-E.V1_0.6.后端设计文档.md》中的稳定编号定位。源码路径按当前责任位置登记，不表示对应场景已经执行或验收通过。
 
 ## 2. 技术基线与公共规则
 
@@ -68,7 +71,16 @@
 |frontend/src 下详情及业务组件|详情布局、本地状态、操作绑定与各组件表现；准确路径见相应 BND 实现定位。|
 |页面与组件分工|页面发起业务 HTTP 请求并决定成功后的资源刷新；组件输出用户意图或本地值，不伪装为业务已经完成。|
 
-前端框架、运行时、构建与测试工具、依赖版本和支持浏览器范围尚未完整确定，见 [Q-FE-BASELINE](#q-fe-baseline)。实现者可确定内部封装和辅助函数，但不得改变已定视觉参数、保存时序、接口输入或状态语义。
+前端技术与支持浏览器基线采用本节已确认配置，完整依赖以 package.json/package-lock.json 为准，见 [Q-FE-BASELINE](#q-fe-baseline)。实现者可确定内部封装和辅助函数，但不得改变已定视觉参数、保存时序、接口输入或状态语义。
+
+
+<a id="sync-fe-01"></a>
+
+**技术与运行基线**
+
+采用 React/React DOM 19.3.0、TypeScript 7.0.2、Vite 8.3.2、React 插件 6.1.1、Milkdown Crepe/Kit 7.22.2；Node 基线为 24.15.0。直接和传递依赖以 `frontend/package.json`、`frontend/package-lock.json` 为固定安装依据，不临时替换编辑器。支持基线为 Windows 11 的桌面 Chrome/Edge，实际验收仍须记录浏览器版本。前端目录执行 `npm ci --no-audit --no-fund` 安装、`npm run build` 进行 TypeScript 检查和生产构建、`npm run dev` 启动开发服务。开发地址为 `127.0.0.1:5173`，默认代理本机 `127.0.0.1:8000` 的 `/api`，开发代理目标可通过 `WALLE_API_URL` 指定；生产由后端同源提供 `frontend/dist`。这些是项目操作约定，不表示安装或构建可以由页面自动触发。
+
+**确认依据**：D-001、D-003；[公共决策稿 A](../proposals/公共决策稿-v1.md)。**代码对应**：`frontend/package.json`、`frontend/package-lock.json`、`frontend/vite.config.ts`、`backend/app/frontend.py::install_frontend`、`backend/app/__main__.py`。
 
 ### 2.2 公共规则
 
@@ -79,13 +91,26 @@
 |业务结构|正文、卡片、建议、评论和运行|后端 [OBJ-DOC](WALL-E.V1_0.6.后端设计文档.md#obj-doc)、[OBJ-MSG](WALL-E.V1_0.6.后端设计文档.md#obj-msg)、[OBJ-BATCH](WALL-E.V1_0.6.后端设计文档.md#obj-batch)、[OBJ-COMMENT](WALL-E.V1_0.6.后端设计文档.md#obj-comment)、[OBJ-GUIDE](WALL-E.V1_0.6.后端设计文档.md#obj-guide) 及对应应用读取模型。传输 JSON 对象不能替换成转义 JSON 文本；[I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21) 的表格行 edited_content 按该入口明确使用 JSON 文本。|
 |视觉与结果反馈|页面和组件|本文第5.1节及 [BND-CONFIRM](#bnd-confirm)、[BND-TOAST](#bnd-toast)；页面特殊状态在各页面5.5节定义。|
 
+
+<a id="sync-fe-10"></a>
+
+**受控输入和组件职责**
+
+创建表单 title/idea 初始为 `""`，type/mode/template 未选为 `null`，模板选择值为 `{template_key,template_version}`；选项明确 value/label、适用类型和禁用语义。父级受控值更新不产生用户提交事件。卡片回答完全使用 SHR-CARDS 正式结构，推荐不自动选中。建议决策包含 `suggestion_id/decision/edited_content`，非 EDITED 的编辑内容为 null，完成使用 CURRENT 的预期版本；定位事件带文档身份及版本约束。IME 组合期间不触发 Enter 搜索或提交，组合结束不隐式提交。HTTP 仍由页面/状态所有者负责，不由显示组件自行改变业务事实。
+
+内部接入说明：无错误不展示内联错误区域，当前状态所有者通常使用 null，部分可选 props 允许省略；Toast 内部时长单位为毫秒（默认成功/提示 3000、失败 5000）。这是对原文既定秒数及无错误状态的实现表示，不是新增业务或 HTTP 字段。
+
+实现定位为 `requirements/create_drawer.tsx`、`documents/editor.ts`、`guide/cards-view.tsx`、`suggestions/panel.tsx`、`shared/{confirmation,toast,filter,pagination}.tsx`；这是内部组织定位，不应把每个内部 props 名称扩成公开协议。
+
+**确认依据**：D-004，公共决策稿 B/D；保持原组件约束。**代码对应**：上述组件及 `requirements/create.ts`、`guide/card-answers.ts`、`shared/toast-store.ts`。
+
 ### 2.3 运行配置与生命周期
 
-需求类型和模板选项必须有可取得的正式配置来源；NEW、CHANGE 是已确认业务枚举，但模板目录、类型适用关系与前端获取方式不能凭示例构造，见 [FE-Q02](#fe-q02) 及后端 [Q-01](WALL-E.V1_0.6.后端设计文档.md#q-01)。
+需求类型、模式中文及模板适用关系从正式 templates/catalog.v1.json 随构建打包取得；模板自身仍为 v1，资源位于后端 v2 发布目录。见[正式配置](#sync-fe-03)及后端[模板资源](WALL-E.V1_0.6.后端设计文档.md#sync-be-06)，不另增模板配置 HTTP 接口。
 
-进入详情先读取需求和 CURRENT，再依工作占用读取草稿、运行或建议批次。重新进入与窗口恢复后重新核对服务端状态；页面离开、侧栏切换或折叠不取消后台任务。人工草稿的保存、离开保护和本地未确认快照恢复由 [BND-DETAIL](#bnd-detail) 定义，不能把卸载事件当作必定保存成功的保证。
+进入详情先读取需求和 CURRENT，再依工作占用读取草稿、运行或建议批次。重新进入路由、从小于1024px恢复支持宽度、真实pagehide后的pageshow恢复时重新核对服务端状态；普通window.focus／blur和标签页visibilitychange不触发详情冻结或整页重读。人工草稿原有隐藏时保存已变更内容及编辑器真正离焦保存保留；页面离开、侧栏切换或折叠不取消后台任务。人工草稿的保存、离开保护和本地未确认快照恢复由 [BND-DETAIL](#bnd-detail) 定义，不能把卸载事件当作必定保存成功的保证。
 
-安装、构建、启动命令、后端地址来源、浏览器存储不可用时的处理及退出清理机制的未决部分见 [Q-FE-BASELINE](#q-fe-baseline)、[Q-FE-DRAFT](#q-fe-draft)。
+安装、构建、启动和代理地址采用[运行基线](#sync-fe-01)；浏览器存储不可用、恢复和清理采用第7.4节。
 
 
 ## 5. 页面与交互
@@ -162,6 +187,69 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 
 本节为公共视觉与交互定义，页面和组件直接引用；已明确的局部参数优先。建议字号、间距档位和未定颜色值与原有弹窗、Toast建议参数统一登记[Q-FE-VISUAL](#q-fe-visual)。对应检查见第8.4节[FE-UI-QUALITY](#fe-ui-quality)。
 
+
+<a id="sync-fe-12"></a>
+
+**视觉值的批准边界**
+
+D-004 允许按建议先实现并保留暂定属性，不代表全部建议已转成固定像素指标。40% 遮罩、440px 确认框、Toast 顶部 24px/最大 480px 及未固定的灰阶、字号、行高、字重、间距继续标“暂定”；原有已固定的筛选控件尺寸、布局宽度及断点不变。`Q-FE-VISUAL` 保留“是否转为固定参数”的待确认部分，不能因代码已使用这些值而删除。
+
+**确认依据**：原请求允许建议性视觉先实现；D-004 公共决策稿 D 明确保留暂定值。**代码对应**：`frontend/src/shared/styles.css`、`requirements/detail-layout.ts`。当前 CSS 只能证明采用值，不能证明视觉规范已定稿或视觉效果已验收。
+
+<a id="sync-fe-opt-v1"></a>
+
+**前端优化V1采用规则**
+
+|内容|确定定义|
+|---|---|
+|采用依据|用户授权Codex自行确定优化方案中的8项待确认表现契约，随后要求按方案修改代码并仅做基础测试；授权与选择理由见[优化方案第1.4节](WALL-E.V1_0.6.前端优化方案V1.md)|
+|统一文案|需求状态为初始化中、进行中、已完成；需求状态及八类草稿保存状态各维护一份共享映射。刷新名称说明真实读取责任，未知结果重查和命令专属恢复不合并成通用刷新|
+|公共视觉与图标|颜色按用途集中为CSS变量，评论、定位、徽章、消息和警告采用中性灰阶；错误/危险红色及Toast成功图标绿色保留。使用共享16px内联SVG及静态三点加载位，保持可访问名称和减少动态效果支持|
+|控件样式|原生按钮和输入通过显式ui-button/ui-input接入共享样式；全局保留字体/盒模型、焦点兜底、accent-color与无障碍规则。搜索输入焦点在容器外显示一次轮廓，图标按钮保持各自焦点，不增加容器Tab停靠|
+|详情页头|使用[FE-OPT-V2](#sync-fe-opt-v2)共享固定顶部及[BND-DETAIL](#bnd-detail)当前信息／操作分组；V1原字段旁编辑与独立多行布局已被UX-007／009／015／016／017替代。原请求所有者、输入保护及业务许可保持|
+|视图与保存状态|所看正文身份与保存事实统一在详情页头居中信息带；正式正文、人工草稿、历史分别显示实际版本／基线及只读或保存状态。等待恢复编辑另行说明，不把已保存等同于可以编辑|
+|评论操作|默认定位、解决/重开、更多三个入口；更多就地展开编辑、AI修改及删除，保留原可用条件。正在编辑与结果恢复独立于折叠动作区；Esc收起后回到更多，子弹窗优先处理其Esc|
+|建议操作|定位与决策分组；接受、拒绝、编辑后接受保持原顺序与同等权重；编辑态只显示保存编辑并接受和取消编辑。DELETE建议不增加编辑能力，单项决定不直接改正文|
+|对话滚动|conversation-discussion为消息、卡片和运行历史的主纵向阅读区；GuideComposer独立固定在工作区底部，上限55%，输入内容可内部滚动，发送操作在其滚动之外。近底80px、旧消息锚点与回复定位使用阅读区；V1把输入纳入同一主滚动区的规则已被UX-014替代|
+|主导航|按FE-OPT-V2共享顶部和独立应用导航；68px常态顶部包含品牌区与页面头宿主，真实需求身份来自详情已读资源，不另行请求／推算；原路由及离开保护保持|
+|尺寸边界|正文填满中间栏，左右24px边界，取消V1的960px限宽居中；编辑器区域至少640px，侧栏上下限与1024／1280断点保持。分页独立固定值见[BND-PAGINATION](#bnd-pagination)|
+|实现与检查|实现定位及24项去向见[优化方案第9节](WALL-E.V1_0.6.前端优化方案V1.md)；已完成类型检查、生产构建与43项相关基础测试。未执行完整视觉/浏览器验收，不新增截图、JSON报告或真实AI调用，结果仅记录Markdown|
+
+除本节明确固定的页头分组间距与分页取值外，D-004中的其他视觉建议继续保留暂定属性，不批量关闭Q-FE-VISUAL。设计采用、代码实施与完整运行验收分别记录。
+
+<a id="sync-fe-opt-v2"></a>
+
+**前端优化V2公共交互、导航与编辑规则**
+
+|内容|确定定义|
+|---|---|
+|采用依据|用户逐轮要求实施UX-001—019；最终采用以[迭代优化V2](WALL-E.V1_0.6.迭代优化V2文档.md)第16.5、17.2、18.2、20.1、22.1、24.1（开合由25.2覆盖）、25.2、26.2—26.3（焦点／定位由27.2覆盖）、27.2为准；合并去向见[记录](合并记录-2026-10-09.md)|
+|鼠标按下|普通按钮使用浅灰背景，不增加通用内描边；主要按钮及危险按钮保持语义色，按下分别使用#111827、#7a271a。正文/消息/表格/预览链接用下划线反馈，不以按下新增外框|
+|输入聚焦|普通输入、文本域、下拉框保留单一原边框，非错误字段聚焦使用#6B7280；鼠标点入不叠加装饰性外轮廓。错误边框优先，不用正常焦点色覆盖错误|
+|输入方式|文档级捕获pointerdown切换鼠标/触控表现；未处于组合输入且不带Alt/Ctrl/Meta的Tab、Enter、Space、Esc、方向、Home/End、PageUp/Down切回键盘表现；普通字符及IME不自行切换。初始以键盘表现兜底，覆盖body下的Portal弹窗与Toast|
+|可见焦点|键盘表现结合focus-visible显示清楚的2px外轮廓；同一焦点不由父子重复绘制。强制颜色模式始终允许可见焦点。输入方式规则只影响装饰性焦点轮廓，不移除真实焦点、Tab停靠或激活行为|
+|复合搜索|容器保留1px边框；内部input显式无原生外观、边框、圆角、阴影及轮廓。输入的键盘焦点仅由容器显示一次，搜索/清除按钮独立显示各自焦点；鼠标清除后返回输入，普通字符输入保持单边框|
+|业务标记|评论选中、回复目标、正文定位、字段错误继续独立显示；不得因鼠标表现统一关闭这些标记。非选中评论/非回复目标消息、分隔条与可编辑区的装饰性焦点沿用公共输入方式规则|
+|共用主导航|应用壳统一挂载共享固定顶部和独立左导航，工作台、详情、页面不存在视图共用。正常工作台与详情顶部68px，品牌及导航按钮在左品牌区，页面头在剩余宿主；真实额外错误／保存反馈可换行，由ResizeObserver测量实际头高并同步正文、导航及窄窗抽屉起点，不裁掉反馈。导航背景、宽度、模块强调与生命周期、路由加载及保存无关，aria-current表达语义；≥1480px常驻，较窄200px模态抽屉，Esc／遮罩／焦点循环和离开保护保持|
+|工作台内容宽度|填满应用壳剩余内容列，width:100%、min-width:0、margin:0、内边距16px；不再限制1600px并居中，以免在导航旁产生额外灰色空带。详情滚动／高度约束仅作用于内容区|
+|导航收起／展开|桌面品牌区右侧按钮切换200px展开导航与64px图标导航，收起显示W及工作台图标，完整名称可访问；aria-label、title、aria-expanded、aria-controls及键盘操作保持。localStorage walle:v1:navigation-collapsed，仅1收起，其余默认展开；用户开合写入，跨路由及刷新保留，存储失败仍可当前切换。窄窗200px完整抽屉，回桌面恢复偏好|
+|详情布局|共享顶部内主标题单次居中，元信息及正文身份合并为紧凑第二行；长标题单行省略且完整title／可访问文本保留。正文从常态头下8px开始，填满中间栏并用24px左右边界；大纲200px、正文至少640px、右栏360px下限及比例上限保持。最终开合入口见详情5.2，不再用页头左侧双图标或独立工具行|
+|格式工具|真实人工草稿使用固定格式工具＋斜杠菜单＋选区浮动栏及局部快捷键；命令、事务、内部焦点与上方定位定义在[BND-EDITOR](#bnd-editor)。不依赖已关闭的Crepe默认入口；原模板锁、来源账本和同快照保存保持|
+|评论原因|不改变DT-OP17的ACTIVE＋IDLE限制；初始化、完成、占用、非正式视图、加载或暂停分别显示原因。选区评论另需单Block有效选择。面板显示完整原因，辅助栏使用按钮悬停说明及辅助技术描述，不以长说明行遮挡正文；按视图只挂载一个区块辅助栏|
+|导航补修与开合检查|app.tsx、application/navigation.tsx、shared/styles.css；生产构建及11项路由/布局基础测试通过，简短Chromium观察跨页样式、刷新偏好及窄窗抽屉通过，结果仅[Markdown记录](../verification/navigation-shell-collapse-v2-2026-10-09.md)，不代替完整验收|
+|本轮实现与检查|application/navigation.tsx、documents/format-toolbar.ts、requirements详情及comments面板；含类型检查的生产构建、22项基础测试及简短Chromium观察，结果仅[Markdown记录](../verification/navigation-editor-v2-2026-10-09.md)，不代表完整验收|
+|实现与检查|frontend/src/shared/focus-feedback.ts、main.tsx及shared/styles.css；6项基础测试、含类型检查的生产构建与简短Chromium交互检查通过，结果仅[Markdown记录](../verification/focus-feedback-v2-2026-10-09.md)。受控CSS样例与真实业务控件观察分别记录，不宣称完整业务/跨浏览器验收|
+
+<a id="fe-document-typography-v2"></a>
+
+**正文与建议预览已采用排版**
+
+|内容|确定定义|
+|---|---|
+|D-06|为正文、人工编辑、历史正文及建议预览明确标题排版：H1 28px／38px、H2 24px／34px、H3 20px／30px、H4—H6 18px／28px，字重600；上下间距分别24／16、24／12、20／10、16／8px。编辑器起始H1／H2顶部间距12px，正文段落上下12px。建议卡片自身的小标题不覆盖其预览正文。AI消息继续使用已有紧凑标题规则；不改960px取消决定与24px正文边界|
+
+这些值来自UX-014采用，不由当前CSS反推批准；正文、草稿、历史与建议正文预览同用，AI消息继续原紧凑规则。其他暂定视觉值及Q-FE-VISUAL保持。
+
 <a id="bnd-workbench"></a>
 ### BND-WORKBENCH 需求工作台
 
@@ -174,7 +262,8 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 |页面用途|查看已有需求，按需求编号、标题、状态和类型查询；进入需求详情或发起新建需求|
 |数据范围|当前单一 Project 下的全部 Requirement|
 |进入方式|Project Wall-E 主导航；从需求详情返回|
-|路由|前端 URL 尚未确定，见 [FE-Q01](#fe-q01)；接口 URL 不作为页面路由|
+|应用壳与布局|采用[FE-OPT-V2](#sync-fe-opt-v2)独立固定顶栏与主导航；工作台填满剩余内容列，margin:0、内边距16px，不使用1600px居中限制。桌面导航200px／64px开合不改变查询或离开保护|
+|路由|/requirements；/ 进入工作台。路由和返回状态见[页面导航](#sync-fe-02)；接口 URL 不作为页面路由|
 |首次查询|[BND-REQ-API-I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) → [APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)|
 |新建组件|[BND-CREATE](#bnd-create)，定义见 [BND-CREATE](#bnd-create)／5.6|
 |搜索筛选组件|[BND-FILTER](#bnd-filter)，定义见 [BND-FILTER](#bnd-filter)／5.6|
@@ -183,9 +272,7 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 
 **页面布局与交互说明**
 
-需求工作台顶部包括：
-
-- 页面标题；
+页面标题在共享固定顶部显示一次；工作台内容区的操作行包括：
 
 - 关键词查询；
 
@@ -199,7 +286,8 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 
 |区域编号|区域|包含内容|数据来源|布局与交互|
 |---|---|---|---|---|
-|WB-HEADER|顶部操作区|页面标题、关键词、状态、类型、新建按钮|页面配置、需求类型配置、页面受控筛选值|沿用本节顺序；搜索筛选复用 [BND-FILTER](#bnd-filter)|
+|WB-HEADER|共享固定顶部|单次页面标题|页面配置|共用68px常态页头，内容区不重复显示标题|
+|WB-QUERY|内容操作区|关键词、状态、类型、新建按钮|需求类型配置、受控筛选值|沿用本节顺序；搜索筛选复用[BND-FILTER](#bnd-filter)|
 |WB-LIST|需求表格|编号、标题、类型、状态、更新时间|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) 的 data.items|标题及类型按列宽处理；行点击与文字拖选分别处理|
 |WB-PAGE|分页区|页码、每页条数、总数及可用翻页操作|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) 的 meta.pagination|位于表格下方；每页固定20条|
 |WB-CREATE|新建需求抽屉|五项表单、取消、创建需求|[BND-CREATE](#bnd-create)|从右侧展开，固定600px|
@@ -231,6 +319,17 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 |更新时间|`updated_at`|不可为空；解析异常时显示 `--`|后端按 UTC 原始值倒序排列，时间相同时按 `id` 倒序；前端不使用格式化后的展示文字重新排序|将 UTC 时间转换为浏览器本地时区，显示为 `YYYY-MM-DD HH:mm`|
 
 
+
+<a id="sync-fe-02"></a>
+
+**页面路由及工作台返回状态**
+
+工作台、详情及页面不存在视图共用[FE-OPT-V2](#sync-fe-opt-v2)固定应用导航；导航收起偏好独立于页面、需求状态和查询条件，开合不触发路由或业务请求。
+
+工作台路由为 `/requirements`，详情为 `/requirements/:id`，`:id` 是规范十进制正安全整数的内部需求 ID，不使用 REQ 展示编号。`/` 进入工作台。工作台浏览器历史条目保存独立 `entry_id`、已提交查询条件、页码和滚动位置，`sessionStorage` 按该条目补充刷新恢复；未提交搜索草稿不作为已生效条件。主导航进入使用默认条件，从详情返回恢复原条目并重新查询，再恢复滚动。浏览器前进/后退同样经过离开保护，保存失败或结果未知时保留原详情和导航位置。
+
+**确认依据**：D-004，公共决策稿 D。**代码对应**：`frontend/src/application/router.ts::ApplicationRouter`、`requirements/workbench-history.ts::{pageRoute,WorkbenchHistory}`、`requirements/departure.ts`。
+
 #### 5.3 页面数据与输入
 
 
@@ -240,7 +339,7 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 |列表、总数、页码|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01)|首次进入、提交关键词、筛选变化、翻页及详情返回；发送已提交条件|同时替换列表与对应分页信息，不能混用不同次响应|从详情返回恢复已提交条件、页码、滚动位置并重新查询|
 |搜索输入文字|页面本地值|编辑时更新，不发请求|提交时去首尾空格；与已提交关键词分开保存|详情返回恢复已提交关键词，不把未提交文字当筛选条件|
 |状态选项|RequirementStatus|初始化时建立编码与中文文案映射|全选不发送 status，部分选中发送完整值数组|主导航进入默认全选|
-|类型选项|需求类型配置|页面加载时取得可用配置；获取方式见 [FE-Q02](#fe-q02)|按配置中文名称展示，值与接口配置一致|主导航进入默认全选|
+|类型选项|随构建打包的正式templates/catalog.v1.json|页面加载读取固定资源，不发模板配置HTTP请求|NEW显示“需求新增”，CHANGE显示“需求改造”；值与接口配置一致|主导航进入默认全选|
 |查询条件快照|页面本地值|发请求时冻结本次条件和本地请求序号|仅最新请求可更新列表、分页、加载状态和错误|保留最后一次成功结果所属条件，用于区分新查询失败|
 
 **筛选与搜索配置**
@@ -249,7 +348,7 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 
 |控件名称|控件类型|对应条件|可选值或输入限制|默认值|生效与清空规则|
 |---|---|---|---|---|---|
-|关键词|输入查询|`Requirement.requirement_no`、`Requirement.title`|占位提示文案为“请输入需求编号或需求标题”；需求编号仅支持完整编号精确查询；需求标题支持模糊查询；不支持同时输入多个关键词|空字符串|遵守“输入查询”公共规则；业务页面收到关键词后组装查询参数；清空关键词时保留其他筛选条件并回到第一页|
+|关键词|输入查询|`Requirement.requirement_no`、`Requirement.title`|占位提示文案为“请输入需求编号或需求标题”；需求编号仅支持完整编号精确查询；需求标题按字面值包含匹配，区分大小写，%和_不作通配符；不支持同时输入多个关键词|空字符串|遵守“输入查询”公共规则；业务页面收到关键词后组装查询参数；清空关键词时保留其他筛选条件并回到第一页|
 |需求状态|下拉筛选|`Requirement.status`|`[{"value":"INITIALIZING","label":"初始化中"},{"value":"ACTIVE","label":"进行中"},{"value":"COMPLETED","label":"已完成"}]`|全部选中|遵守“下拉筛选”公共规则；全选时不传状态筛选条件；部分选中时传递完整选中值数组|
 |需求类型|下拉筛选|`Requirement.requirement_type`|选项来源于需求类型配置，每项包含类型值和中文名称|全部选中|遵守“下拉筛选”公共规则；全选时不传需求类型筛选条件；部分选中时传递完整选中值数组|
 
@@ -289,7 +388,7 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 |1|首次进入|主导航进入使用空关键词、全选筛选、第一页；详情返回使用已保存查询状态|暂不修改上一次成功结果|
 |2|编辑关键词|只更新输入值；修改其他筛选时继续使用已提交关键词|不请求|
 |3|Enter、搜索图标或筛选变更|关键词提交时 trim；筛选变更使用完整当前选择；查询条件变化设为第一页|全选字段从查询参数中省略|
-|4|清除关键词|点击清除按钮始终取消已生效关键词；手动删空按 [BND-FILTER](#bnd-filter) 的已提交值/未提交草稿规则判断|实际清除时只查询一次，保留其他筛选，回第一页|
+|4|清除关键词|手动删空仅改草稿；点击清除先清草稿，仅已提交关键词非空时取消已生效条件|实际清除时只查询一次，保留其他筛选，回第一页|
 |5|翻页|校验目标页码；保留已提交关键词和筛选|不因翻页重新提交输入框草稿|
 |6|发出查询|冻结条件，分配递增请求序号；有历史结果时显示刷新状态|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) → [APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)|
 |7|最新请求成功|同时更新 items、分页、成功条件快照；按列表状态表显示结果|只使用后端排序，不按格式化时间再排序|
@@ -365,8 +464,8 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 |补充项|定义|
 |---|---|
 |构造编号|[BND-DETAIL](#bnd-detail)|
-|页面路由|待 [FE-Q01](#fe-q01)；根据内部 requirement_id 定位需求|
-|主要代码|frontend/src/requirements/detail.ts :: RequirementDetail|
+|页面路由|/requirements/:id；:id 为规范十进制正安全整数内部 requirement_id，不是 REQ 展示编号|
+|主要代码|frontend/src/requirements/detail.tsx :: RequirementDetail|
 |首次读取|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03) 需求、[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08) 正文；根据工作状态和活动对象引用读取 [I10](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i10) 草稿、[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16) 运行或 [I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20) 批次|
 |本页使用组件|[BND-EDITOR](#bnd-editor)、[BND-CARDS](#bnd-cards)、[BND-SUGGESTIONS](#bnd-suggestions)、[BND-CONFIRM](#bnd-confirm)、[BND-TOAST](#bnd-toast)、[BND-PAGINATION](#bnd-pagination)|
 |分区实现|大纲、标题编辑、AI 对话、评论、版本是本页子区域；其代码映射列于 [BND-DETAIL](#bnd-detail)／5.5 实现定位，不因有一个按钮或展示项就新增独立构造|
@@ -376,6 +475,27 @@ WALL-E采用以黑、白和中性灰为主的简洁界面，参考OpenAI风格�
 需求详情页采用“文档主区域 + 两侧辅助区域”的三栏结构：
 
 Current Document 始终是页面唯一主区域。AI 对话不是与文档同等权重的永久主区域，而是右侧辅助面板中的一个功能页签。
+
+<a id="fe-detail-shell-v2"></a>
+
+**固定需求工作栏与面板交互**
+
+|内容|确定定义|
+|---|---|
+|E-01 页头层级|标题、编号／类型／生命周期、正文身份与保存状态集中到固定页头的居中区域。初始化模式移入“更多”的只读属性，标注创建后只读；去掉更多菜单中的重复版本入口。正式正文显示版本＋只读，草稿显示基线＋实际保存状态，历史显示版本＋来源正文版本＋只读|
+|E-02 任务动作|沿用人工编辑、完成／取消编辑的现有任务控制；历史的退出入口改为主操作，历史期间收起READY态的普通编辑／生命周期入口。已发起、未知或已确认但未读回的操作继续可见。建议完成按钮突出，放弃作为次要危险文字操作且仍需确认|
+|页头左侧|只保留返回工作台；移除原“大纲／辅助面板”双图标。全局主导航继续由独立应用导航控制，不与文档大纲混用|
+|大纲展开态|双左箭头收起按钮位于大纲标题左侧。标题与按钮由详情框架统一拥有，加载中、没有标题或读取错误时仍有收起入口；标题栏保持在大纲滚动区顶部。章节折叠及定位沿用真实正文导航|
+|大纲收起态|正文区域左上角显示“图标＋大纲”展开入口，常驻可见；它在正文内部占32px局部工具行，不增加额外横向侧栏，不遮挡正文或挤占640px正文宽度。仅明确点击开合时把焦点交给新显示的对应入口；自动响应窗口变化不会主动抢焦点|
+|页头右侧AI入口|新增“AI 助手”具名按钮，位于业务操作前。点击打开右栏并选择AI对话，已打开AI时保持打开；不是再次点击就关闭的开关。实际AI活动在右栏关闭时仍可见。aria-expanded反映AI对话实际显示状态|
+|辅助栏左上角|面板图标按钮在当前可用最大宽度与360px之间切换；它不切换业务标签，不发送消息。可用最大宽度不足380px时不提供仅几像素的无意义一键调整，按钮禁用并用title说明窗口空间不足。原拖拽与键盘微调仍可用|
+|辅助栏右上角|使用X关闭辅助栏，关闭后焦点回到页头“AI 助手”。关闭按钮和调宽按钮位于AI／评论／版本标签组外；标签组保留方向键、Home和End操作|
+|面板边界|保持6px真实拖拽命中区域，平时只呈现1px分隔线。悬停、键盘聚焦或实际拖动期间才显示48px短握柄，不铺满整条粗色带；键盘焦点仍明确可见。方向键每次调整20px，Home到360px、End到当前可用最大宽度|
+|页头和窄屏|页头左右采用对称的最小操作区域容纳新增入口，标题仍对齐剩余共享顶部中心；原真实反馈可换行的高度测量保持。紧凑窗口继续一次只显示一个侧栏，打开大纲／AI按既有规则切换，不改变持久偏好与自动临时收起的区分|
+
+页头左侧为返回，右侧依次为AI助手及实际业务动作／更多；中间与剩余页头宿主中心对齐。正常主标题20px／28px，元信息12px／20px。生命周期、人工编辑、历史退出使用原请求所有者；完成／取消编辑及退出历史通过Portal放入共享顶部动作宿主，仅移动呈现位置，不重建控制器。更多浮层340px并受视口限制、内部可滚动；标题表单在其中使用明确保存／取消。编辑、提交、未知结果及读回恢复期间不因外部点击、Esc或三点按钮隐藏标题输入；普通读态支持外点、焦点移出关闭，Esc关闭后回到触发按钮，子模态优先。初始化模式在更多的只读属性中显示，创建后不能修改。
+
+实现定位：`application/{app,header,navigation}.tsx`、`requirements/{detail-frame,detail,header,document-controls}.tsx`、`documents/manual-controls.tsx`、`shared/styles.css`（均位于frontend/src）。
 
 **左侧大纲**
 
@@ -389,7 +509,7 @@ Current Document 始终是页面唯一主区域。AI 对话不是与文档同等
 
 - 收起后完全释放原占用空间，不保留空白窄栏。
 
-- 收起后在文档工具栏中保留“大纲”入口。
+- 收起后在正文左上角保留32px局部“图标＋大纲”入口，不增加横向窄栏；开合及焦点规则见[固定工作栏](#fe-detail-shell-v2)。
 
 - 页面恢复时，优先恢复用户上次的大纲展开状态。
 
@@ -411,7 +531,7 @@ Current Document 始终是页面唯一主区域。AI 对话不是与文档同等
 
 文档编辑器区域宽度不得小于 `640px`。
 
-Markdown 正文内容列最大宽度为 `960px`；编辑器区域超过该宽度时，正文内容列在编辑器区域内居中展示。
+Markdown 正文占满中间栏可用宽度，取消960px最大宽度和自动居中外边距；正文、格式工具与草稿提示统一左右24px边界，滚动宿主不额外叠加水平内边距。侧栏开合／拖动后自适应，宽屏长行是减少留白的已采用取舍。
 
 表格、代码块等宽内容超出正文内容列时，在自身容器内横向滚动，不撑开整个页面。
 
@@ -443,7 +563,7 @@ Markdown 正文内容列最大宽度为 `960px`；编辑器区域超过该宽度
 
 - 最小宽度为 `360px`。
 
-- 支持拖动分隔线调整宽度。
+- 支持拖动分隔线调整宽度；6px命中区与1px常态分隔线、48px条件握柄、20px键盘步长和一键调宽规则见[固定工作栏](#fe-detail-shell-v2)。
 
 - 文档编辑器区域始终不得小于 `640px`。
 
@@ -559,13 +679,21 @@ Requirement 为 `ACTIVE` 时：
 
     - 切换页签不会改变评论状态。
 
+<a id="fe-outline-v2"></a>
+
+**大纲层级与扫描**
+
+|内容|确定定义|
+|---|---|
+|E-09 大纲扫描|200px大纲增加标题与收起入口；有实际子章节的标题可折叠，折叠按真实深度和区块ID处理，重复标题与跳级不会混淆。当前章节保持轻背景及稳定边缘标记，长标题保留完整title提示|
+
 **区块辅助栏**
 
 - Current Document 的每个顶层 Block 右侧提供区块辅助栏。
 
 - 区块辅助栏不得写入 Markdown，也不得改变 Markdown 的序列化结果。
 
-- 鼠标悬停、键盘聚焦或选中区块时，显示来源信息入口。
+- 鼠标悬停、键盘正文定位或非空选区交互后显示区块辅助条；离开且没有正文／工具焦点时收起，来源浮层打开期间保留。辅助条隐藏不清空区块身份或AI已采用范围。
 
 - 点击来源信息入口，打开非模态浮层，分别展示区块创建信息和最近修改信息。
 
@@ -665,13 +793,22 @@ Requirement 为 `ACTIVE` 时：
 
 |区域编号|区域|内容及组件|数据来源|显示条件|
 |---|---|---|---|---|
-|DT-TOOLBAR|页面标题与工具栏|返回需求工作台、需求标题、状态、初始化模式、可用业务动作、大纲及右侧面板入口|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)、[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)、活动对象|需求加载成功；具体操作条件见[BND-DETAIL](#bnd-detail)／5.4|
-|DT-OUTLINE|左侧大纲|Markdown 标题树、当前章节高亮|当前展示的文档快照|大纲展开且支持当前视口布局|
+|DT-TOOLBAR|共享固定需求工作栏|返回、单次居中标题、编号／类型／生命周期／正文身份与保存状态；右侧AI助手、实际业务动作和更多（含标题编辑及只读模式）|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)、[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)、活动对象|需求加载成功；具体操作条件见[BND-DETAIL](#bnd-detail)／5.4|
+|DT-OUTLINE|左侧大纲|常驻标题及收起入口、可折叠真实标题树、当前章节高亮；关闭时正文内展开入口|当前展示的文档快照|大纲展开且支持当前视口布局|
 |DT-DOCUMENT|中间文档区|[BND-EDITOR](#bnd-editor)、区块辅助栏、来源浮层和评论标记|正式阅读 [I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)；人工编辑 [I10](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i10)；历史快照 [I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)|对应快照已读取成功|
-|DT-AI|AI 对话页签|消息、输入、运行状态、[BND-CARDS](#bnd-cards)、[BND-SUGGESTIONS](#bnd-suggestions)|[I35](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i35)、[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)、[I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20)|选中 AI 对话|
+|DT-AI|AI 对话页签|独立消息阅读区、底部固定输入、当前运行与折叠历史、[BND-CARDS](#bnd-cards)、[BND-SUGGESTIONS](#bnd-suggestions)|[I35](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i35)、[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)、[I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20)|选中 AI 对话|
 |DT-COMMENTS|评论页签|评论列表、引用、双状态标签、编辑和处理操作|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)、[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28)|选中评论；正文标记使用全量计数来源见 [FE-Q05](#fe-q05)|
 |DT-REVISIONS|版本记录页签|版本列表、保存版本入口、只读快照入口|[I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24)、[I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)|选中版本记录|
 
+
+
+<a id="sync-fe-04"></a>
+
+**历史快照容器和退出路径**
+
+历史版本在详情页原正文区域以只读快照替换当前展示，提供“退出历史”入口，右侧保留版本页签。进入历史后不展示或定位 CURRENT 的活动评论；不增加历史恢复操作，不将快照作为新的 CURRENT。退出历史重新读取当前需求、正文及活动状态，再按实际状态恢复页面。
+
+**确认依据**：D-004，公共决策稿 D。**代码对应**：`frontend/src/revisions/viewer.ts`、`requirements/document-owner.ts`、`requirements/document-controls.tsx`、`requirements/detail.tsx`。
 
 #### 5.3 页面数据与输入
 
@@ -683,11 +820,12 @@ Requirement 为 `ACTIVE` 时：
 |GuideRun|[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03) 活动引用、创建/继续/重试返回的运行 ID|非停止状态可见页面每1秒轮询；失败退避2/5/10/30秒|保留最后确认状态；查询失败不等于运行 FAILED|
 |对话消息|[I35](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i35)|首次进入 AI 页签；运行产生新消息；用户请求更早消息|按 before_sequence_no 读取更早消息；首批最新20条|按 id 去重，按 sequence_no 升序；切页签不清空会话|
 |SuggestionBatch|[I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20)|活动类型为建议批次；单项决策、完成或放弃后|采用后端单项结果和 counts|不能用本地未提交决策计算已处理成功数量|
-|评论列表|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)|评论页签加载、分页、评论写入或 CURRENT 更新后|刷新受影响列表及正文评论标记|当前页数不等于全文评论数；分页定位缺口见 [FE-Q05](#fe-q05)|
+|评论列表|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)|评论页签加载、分页、评论写入或 CURRENT 更新后|刷新受影响列表及正文评论标记|当前页数不等于全文评论数；全文索引及跨页定位采用[I37](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i37)|
+|全文评论索引|[I37](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i37)|首次加载当前正文；评论写入、CURRENT更新及跨页定位复查时|仅与相同CURRENT身份及版本配对；并发变化重查，不重排或插入目标评论|total_count为全部未删；open_count含无法定位的OPEN；正文标记只计OPEN且location.status=ATTACHED；按索引顺序计算I27页码|
 |单条评论|[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28)|已知评论 ID 的定位、状态恢复或错误复查|与列表中的同 ID 合并|不改变原 created_at 排序|
 |Revision 列表|[I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24)|打开版本页签、分页、保存版本或完成初始化后|使用返回总数、页码及列表|切页签可保留最后结果，再按操作刷新|
 |Revision 快照|[I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)|用户点击一个 revision_id|每次打开对应快照|与 CURRENT 和草稿缓存分开，不展示当前评论|
-|类型、模板、模式中文文案|固定配置与类型/模板资源|创建表单及详情展示|按资源版本使用|获取路径见 [FE-Q02](#fe-q02)；不临时猜测类型名称|
+|类型、模板、模式中文文案|随构建打包的正式templates/catalog.v1.json|创建表单及详情展示|模板自身v1，来自后端v2发布目录，按资源版本使用|NEW“需求新增”、CHANGE“需求改造”；IDEATION“灵感模式”、DESIGN“设计模式”；完整适用关系见[正式配置](#sync-fe-03)|
 
 **进入与恢复步骤**
 
@@ -703,6 +841,24 @@ Requirement 为 `ACTIVE` 时：
 
 6. 编辑恢复时比较后端草稿版本与本地未确认快照基线；相同才允许用户恢复本地内容，不同则保留两者供人工处理。
 
+
+
+<a id="sync-fe-03"></a>
+
+**类型、模板和模式配置来源**
+
+类型中文为 NEW“需求新增”、CHANGE“需求改造”；初始化模式为 IDEATION“灵感模式”、DESIGN“设计模式”。正式模板为 `new-requirement@v1`（NEW）和 `change-requirement@v1`（CHANGE）。前端从随构建打包的正式 `templates/catalog.v1.json` 取得中文文案和适用关系，后端按固定资源清单校验模板；不增加模板配置 HTTP 接口。保留类型未选禁用模板、单个适用模板自动选择、多个不默认、类型切换清除不兼容模板的原规则。资源目前从后端 v2 发布目录打包，其中模板自身版本仍为 v1。
+
+**确认依据**：D-004、D-005、D-010。**代码对应**：`frontend/src/requirements/catalog.ts`、`create.ts`、`create_drawer.tsx`；`backend/resources/v2/templates/`、`backend/app/infrastructure/resources.py::ResourceCatalog.template`。
+
+
+<a id="sync-fe-05"></a>
+
+**全文评论统计和跨页定位**
+
+全文统计和正文区块标记使用新增只读 I37 `GET /api/v1/requirements/{requirement_id}/comment-index`；I27 继续分页读取完整评论内容，I28 继续读取单条。I37 绑定同一 CURRENT 身份和版本，返回全部未删除评论的索引，不将当前页数量当全文数量。`total_count` 统计全部未删评论；`open_count` 统计其中 OPEN 评论，包括当前无法定位者；正文标记仅计入 OPEN 且当前 `location.status=ATTACHED` 的评论。点击标记按索引的评论顺序计算 I27 页码，加载后核实目标确实在页内；并发变化时重新读取索引和页面，不擅自重排或把目标插到列表顶部。后端字段和错误以 [BE-23](WALL-E.V1_0.6.后端设计文档.md#sync-be-23) 为准。
+
+**确认依据**：D-004，公共决策稿 D 中明确批准的新增 I37。**代码对应**：`frontend/src/comments/read.ts`、`panel-owner.ts`、`locate.ts`；`backend/app/comments/{api,queries,contracts}.py`。
 
 #### 5.4 操作与结果反馈
 
@@ -767,23 +923,20 @@ Requirement 为 `ACTIVE` 时：
 
 
 <a id="dt-op04"></a>
-**[DT-OP04](#dt-op04) 切换初始化模式**
-
+**[DT-OP04](#dt-op04) 初始化模式只读（原切换操作已撤销）**
 
 |项目|确定定义|
 |---|---|
-|入口与条件|初始化模式选择控件；`INITIALIZING + IDLE`|
-|操作对象/范围|当前 Requirement|
-|输入与请求|只发送 initialization_mode；不顺带提交其他未修改字段|
-|调用接口与能力|[BND-REQ-API-I04](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i04)（修改需求属性）→ [APP-REQ-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c02)|
+|入口与条件|详情更多中只读显示创建时模式；不提供修改按钮、下拉表单或MODE请求所有者；所有生命周期均不可修改|
+|操作对象／范围|已存在Requirement.initialization_mode、已有运行mode_snapshot与历史数据保持原值|
+|输入与请求|创建时仍主动选择IDEATION／DESIGN；详情不发送模式更新。I04只接受必填title，携带模式（同值或与title混合）整体422／VALIDATION_FAILED；应用层非法字段为INVALID_INPUT|
+|调用接口与能力|只读来自[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)；标题修改继续[DT-OP27](#dt-op27)。编号保留供旧引用定位，不是可执行的模式写操作|
 
 |步骤|页面处理与可观察结果|
 |---|---|
-|1 触发与检查|用户选择 `IDEATION` 或 `DESIGN` 并提交|
-|2 准备并提交|选择待提交值，提交期间禁止重复保存；成功后回显服务端模式；失败恢复确认值并保留待选意图|
-|3 已确认成功|只更新 `Requirement.initialization_mode`；后续 INITIALIZE GuideRun 使用新模式；已有运行、模板和正文不变|
-|4 明确失败或取消|状态、占用或枚举校验失败时保留原模式|
-
+|1 展示|更多属性显示真实模式及创建后只读说明|
+|2 拒绝旧请求|客户端、HTTP及应用输入边界拒绝模式更新；不部分修改标题、updated_at或运行快照|
+|3 既有事实|无需数据库迁移，不重写历史需求、正文或审计；新初始化运行继续冻结真实创建模式|
 
 <a id="dt-op05"></a>
 **[DT-OP05](#dt-op05) 完成初始化**
@@ -1008,7 +1161,7 @@ Requirement 为 `ACTIVE` 时：
 |步骤|页面处理与可观察结果|
 |---|---|
 |1 触发与检查|打开快照|
-|2 准备并提交|加载对应只读 Markdown 与区块状态；展示历史标识，关闭当前评论交互；退出后恢复 CURRENT 或当前草稿视图|
+|2 准备并提交|在原正文区域加载对应只读 Markdown 与区块状态；展示历史标识，右侧保留版本页签，关闭当前评论交互；点击“退出历史”先重读需求、CURRENT和活动状态，再恢复实际当前视图|
 |3 已确认成功|以历史身份只读展示 Markdown 和区块状态快照；不改 CURRENT，不带入当前活动评论；具体快照容器见 [FE-Q03](#fe-q03)。|
 |4 明确失败或取消|失败允许重试|
 
@@ -1019,7 +1172,7 @@ Requirement 为 `ACTIVE` 时：
 
 |项目|确定定义|
 |---|---|
-|入口与条件|正文 Block 或单 Block Selection 的添加评论入口；ACTIVE 且 IDLE|
+|入口与条件|正文 Block 或单 Block Selection 的添加评论入口；ACTIVE 且 IDLE。不可用时评论面板及区块辅助栏显示状态原因；选区入口另需同Block有效文字选择，不因提示而放宽后端条件|
 |操作对象/范围|Block 或单 Block Selection|
 |输入与请求|expected_content_version、content、anchor_type、block_id；SELECTION 额外传 selection；引用快照由后端确认|
 |调用接口与能力|[BND-COMMENT-API-I29](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i29)（创建评论）→ [APP-COMMENT-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-comment-cmd-c01)|
@@ -1209,12 +1362,12 @@ Requirement 为 `ACTIVE` 时：
 
 |项目|定义|
 |---|---|
-|入口与条件|INITIALIZING 或 ACTIVE；详情标题编辑入口|
+|入口与条件|INITIALIZING 或 ACTIVE；详情右侧更多内的标题编辑入口；历史、窗口暂停及原请求保护仍约束操作|
 |请求输入|title；去首尾空格后1～20字符，不允许换行|
 |调用接口与能力|[BND-REQ-API-I04](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i04)（修改需求属性）→ [APP-REQ-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c02)|
 |处理顺序|进入标题编辑并保留原值；提交期间显示保存中；成功回显后端标题；失败保留当前输入。标题操作不改变正文与版本。取消编辑恢复原值。|
-|补充规则|提交入口具体呈现与快捷键见 [FE-Q07](#fe-q07)|
-|代码与验证|frontend/src/requirements/detail.ts :: RequirementDetail；frontend/tests/detail.test.ts :: test_detail_operations；TC-UI-DT-OP27|
+|补充规则|显式“保存/取消”按钮，不新增标题提交快捷键；见[标题交互](#sync-fe-06)|
+|代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP27|
 
 |步骤|页面处理与结果|
 |---|---|
@@ -1235,7 +1388,7 @@ Requirement 为 `ACTIVE` 时：
 |调用接口与能力|[BND-GUIDE-API-I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15)（继续等待中的运行）→ [APP-GUIDE-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c02)|
 |处理顺序|保留输入并显示发送中；接受后使用同一运行 ID 恢复轮询，读取正式用户消息；失败保留文字；不另建运行。|
 |补充规则|卡片回复改用 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)，普通文本不能自动转换成选项|
-|代码与验证|frontend/src/requirements/detail.ts :: RequirementDetail；frontend/tests/detail.test.ts :: test_detail_operations；TC-UI-DT-OP28|
+|代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP28|
 
 |步骤|页面处理与结果|
 |---|---|
@@ -1256,7 +1409,7 @@ Requirement 为 `ACTIVE` 时：
 |调用接口与能力|[BND-GUIDE-API-I17](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i17)（取消AI运行）→ [APP-GUIDE-CMD-C03](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c03)|
 |处理顺序|提交时禁重复取消；成功读取运行及需求，显示已取消并退出处理中；如后端已进入提交阶段，保持跟踪直到结果确定。|
 |补充规则|收起面板或切换页签不调用本接口|
-|代码与验证|frontend/src/requirements/detail.ts :: RequirementDetail；frontend/tests/detail.test.ts :: test_detail_operations；TC-UI-DT-OP29|
+|代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP29|
 
 |步骤|页面处理与结果|
 |---|---|
@@ -1277,7 +1430,7 @@ Requirement 为 `ACTIVE` 时：
 |调用接口与能力|[BND-GUIDE-API-I18](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i18)（重新运行失败任务）→ [APP-GUIDE-CMD-C04](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c04)|
 |处理顺序|点击重新运行后等待新运行 ID；成功跟踪新运行，旧运行保留失败记录；失败保留原错误摘要与重试入口。|
 |补充规则|来源或范围失效时显示具体错误，不能拿旧正文或旧建议直接重试应用|
-|代码与验证|frontend/src/requirements/detail.ts :: RequirementDetail；frontend/tests/detail.test.ts :: test_detail_operations；TC-UI-DT-OP30|
+|代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP30|
 
 |步骤|页面处理与结果|
 |---|---|
@@ -1286,6 +1439,15 @@ Requirement 为 `ACTIVE` 时：
 |3 成功|使用返回的新运行ID跟踪处理，原运行仍保留FAILED。|
 |4 失败|显示状态、来源或范围错误，保留失败信息，不应用旧输出。|
 
+
+
+<a id="sync-fe-06"></a>
+
+**标题、范围选择和消息滚动交互**
+
+标题在更多浮层内采用显式“保存/取消”按钮，不新增标题提交快捷键；编辑／未知结果／恢复中保持表单可见，普通读态关闭与焦点规则见[固定工作栏](#fe-detail-shell-v2)。范围选择器提供 DOCUMENT、当前 SECTION、BLOCK、SELECTION；无有效单区块选区时禁用 SELECTION 并说明原因，范围来自当前正式正文。消息距底部不超过 80px 时，新消息到达滚至底部；否则保持阅读位置并展示“有新消息·回到底部”。加载更早消息保持原阅读锚点，不强制滚至底部。
+
+**确认依据**：D-004，公共决策稿 D。**代码对应**：`frontend/src/requirements/property-control.tsx`、`frontend/src/guide/scope.ts`、`frontend/src/guide/composer-view.tsx`、`frontend/src/messages/timeline.tsx`。
 
 #### 5.5 特殊状态与生命周期
 
@@ -1301,7 +1463,7 @@ Requirement 为 `ACTIVE` 时：
 |GUIDE_RUNNING|正文只读，显示运行步骤安全文案|PERSISTING前可取消；收起页签不取消|
 |GUIDE_WAITING|显示正式问题或AVAILABLE卡片|文本/卡片继续或取消；停止轮询|
 |BATCH_REVIEW|正文仍旧快照，显示建议纵向对比|单项决定、完成或放弃|
-|VERSION_VIEW|只读历史快照，不显示当前评论|退出快照返回CURRENT；展示容器见[FE-Q03](#fe-q03)|
+|VERSION_VIEW|原正文区域显示只读历史快照，不显示当前评论，右侧保留版本页签|“退出历史”先重读需求、CURRENT及活动状态，再恢复实际当前视图；见[历史规则](#sync-fe-04)|
 |CONTENT_VERSION_CONFLICT|提示内容已变化，保留本地输入|停止自动覆盖/合并；读取后人工处理|
 |WORK_STATE_INCONSISTENT|显示“数据状态异常，请重试”并阻止新写入|不自动删除或猜测活动对象|
 |GUIDE_FAILED|显示安全错误和重新运行入口|新建Run重试；旧Run不变|
@@ -1311,14 +1473,14 @@ Requirement 为 `ACTIVE` 时：
 
 |状态维度|前端表现|
 |---|---|
-|INITIALIZING|展示初始化模式和继续初始化入口；IDLE 时允许完成初始化、开始人工编辑；不出现正式维护期专属修改操作|
+|INITIALIZING|更多属性只读展示初始化模式，提供继续初始化入口；IDLE 时允许完成初始化、开始人工编辑；不出现正式维护期专属修改操作|
 |ACTIVE|IDLE 时开放 ASK、REVIEW、MODIFY、人工编辑、评论写操作、保存版本和完成需求|
 |COMPLETED|正文和评论只读；IDLE 时仍允许 ASK 和重新激活；历史版本可查看|
 |GUIDE_ACTIVE|展示运行进展或待回复内容；取消是否可用还要检查运行阶段；其他正文流程不可启动|
 |MANUAL_EDITING|编辑独立草稿，展示保存状态及完成/取消操作；不开放其他正文写入流程|
 |SUGGESTION_REVIEWING|展示当前建议批次和单项决策、完成、放弃入口；正文继续展示原 CURRENT|
 |标题编辑|按 [APP-REQ-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c02)：INITIALIZING 或 ACTIVE 可修改；不额外把 IDLE 套到标题条件上|
-|初始化模式修改|仅 INITIALIZING + IDLE；运行中的模式展示不能被本地选择直接改变|
+|初始化模式|创建后只读，详情所有状态均无修改入口；原DT-OP04写入撤销，创建及读取字段保留|
 
 前端根据已读取的状态提前控制入口；后端仍在提交时检查。状态冲突时重新读取需求和活动对象，保留用户未提交输入。
 
@@ -1330,7 +1492,7 @@ Requirement 为 `ACTIVE` 时：
 |---|---|---|---|---|---|
 |需求标题|Requirement.title|页面标题|INITIALIZING、ACTIVE可编辑；COMPLETED不可编辑|去除首尾空格后1～20个字符，不允许换行|通过Requirement修改接口保存|
 |需求状态|Requirement.status|中文状态标签|否|只能通过合法状态事件变化|后端事务保存|
-|初始化模式|Requirement.initialization_mode|IDEATION 或 DESIGN|仅 `INITIALIZING + IDLE` 可切换|只影响后续INITIALIZE GuideRun；不修改模板、正文、正文版本和已有GuideRun|修改 Requirement|
+|初始化模式|Requirement.initialization_mode|更多属性内显示灵感／设计模式及创建后只读说明|否|创建时必选，创建后不得通过属性更新修改；旧请求整体拒绝|创建时保存；详情仅真实读取|
 |AI 对话|ConversationMessage|按 sequence_no 展示 TEXT、INTERACTION_CARDS 和 CARD_RESPONSE|历史消息不可编辑；用户只能提交新消息|只保存实际可见消息；内部 Prompt、工具结果和模型原始 JSON 不作为普通消息|消息生成或用户提交成功后保存|
 |交互卡片|后端[MessageReadModel](WALL-E.V1_0.6.后端设计文档.md#messagereadmodel).structured_content|一条消息展示1～5张卡片|AVAILABLE 时可填写；ANSWERED 或 EXPIRED 时只读|必答项必须回答；非必答项可跳过；整组一次提交|正式提交后创建 CARD_RESPONSE；提交前仅使用 sessionStorage 暂存|
 |Current Document|`RequirementDocument(document_type=CURRENT)`|Milkdown + Crepe|不直接编辑；人工编辑时切换到独立 MANUAL_DRAFT|是当前唯一正式事实源；人工编辑时以其内容创建草稿；AI 建议或人工编辑完成后才能更新|正式操作完成时与区块状态同事务保存|
@@ -1349,12 +1511,33 @@ Requirement 为 `ACTIVE` 时：
 |INTERACTION_CARDS|展示引导语和1～5张卡片|组件规则见 [BND-CARDS](#bnd-cards)；只使用已校验结构，损坏时退化为可读 content|
 |CARD_RESPONSE|展示用户正式答案|按 reply_to_message_id 对应原卡片；已提交答案不可编辑|
 |输入与动作|初始化使用 INITIALIZE；正式维护选择 ASK、REVIEW、MODIFY|输入长度及换行规则与 [I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)/[I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15) 一致；未提交输入不进入 ConversationMessage|
-|操作范围|DOCUMENT、SECTION、BLOCK、SELECTION|显示本次选中范围，SELECTION 仅一个 Block；范围选择器呈现及锚点细节见 [FE-Q07](#fe-q07)/[FE-Q08](#fe-q08)|
+|操作范围|DOCUMENT、SECTION、BLOCK、SELECTION|显示本次选中范围，SELECTION仅一个Block；无有效单区块选区时禁用并说明原因，范围来自当前正式正文；见[范围交互](#sync-fe-06)与[选区契约](#sync-fe-07)|
 |等待回复|展示正式问题或 AVAILABLE 卡片|普通文本走 [I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15)；整组卡片走 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)；等待期间停止运行轮询，用户提交后恢复|
 |运行进度|展示安全的运行状态或步骤文案|网络查询失败显示连接异常；原状态保留；PERSISTING 时取消不可用|
 |最终结果|ASK 显示回答；REVIEW 显示检查结果；MODIFY 显示追问、无需修改说明或建议批次|运行成功后刷新消息及相关资源，不能仅根据 HTTP 接受任务就显示处理成功|
 |更早消息加载失败|保留当前消息|原游标重试；不把失败当作没有更多消息|
-|消息滚动|加载更早消息不使用户正在阅读的消息丢失定位|新消息自动滚动与回到底部入口规则尚未确定，见 [FE-Q07](#fe-q07)|
+|消息滚动|加载更早消息不使用户正在阅读的消息丢失定位|距底部≤80px自动滚至底部；否则保持位置并显示“有新消息·回到底部”；更早消息保留阅读锚点|
+
+<a id="fe-ai-workspace-v2"></a>
+
+**AI阅读、输入、状态与局部读取**
+
+|内容|确定定义|
+|---|---|
+|D-01|对话工作区分为独立阅读区和底部输入区。消息、卡片与运行记录在阅读区滚动；输入区最大占工作区高度55%，超出部分在输入区内部滚动，发送按钮位于内部滚动之外。切换到修改建议时保留原对话和输入实例。运行记录仍保留在阅读区，没有另建运行历史视图|
+|D-02|AI操作、范围选择及检查结果操作收进默认折叠的“操作设置”，摘要显示动作与已采用范围；展开后显示采用对象和正文版本。下拉选择仍立即采用有效范围；只有当前位置或版本与已采用对象不同，才显示“更新为当前章节／区块／选区／整篇文档”。不再常驻重复采用按钮或与当前范围无关的选区错误。已采用版本过期时在折叠区域之外保留警告，原输入保留|
+|D-03|输入时按既有普通文字规则计算字符数：Unicode码点、换行归一及首尾空白处理与发送校验相同，范围1—10000。空白、超限、非法Unicode或输入法组合期间禁止发送，并提供就近反馈；原始输入仍由原控制器保留，提交时再次严格校验|
+|E-03 对话与运行分层|AI标签内重复的“AI对话／对话消息”可见标题去除，保留辅助技术名称及固定20px读取状态槽。运行记录改为默认收起的可展开区，筛选随区展开；错误及读取恢复入口放在收纳区外。评论、版本、运行列表的有效单页只显示总数，越界页仍保留返回有效页入口|
+|E-04 历史与发送对象|选中历史运行时显示“历史运行详情”及实际ID；输入区提示将对当前需求发起新操作、不回复历史运行。实际等待回复时说明回复当前等待中的运行ID。失败运行的“重新运行”旁说明按原请求创建独立新运行、保留原失败记录，此结果只代表该次运行|
+|E-05 输入体验|保留动作／范围短摘要与折叠设置；输入提示按初始化、提问、检查、修改或等待回复变化。空输入只提示先输入并核对范围；非空输入继续显示字符反馈和错误。禁用主按钮采用浅灰背景与弱文字，固定发送区继续可见|
+|E-10 空态与异常|空评论说明从正文文字或区块添加，初始化禁用原因仍直接显示；空版本说明初始化基线和进行中空闲时的手动版本路径。运行终态不再重复显示“运行结束”，长结果摘要可展开；运行失败、连接异常、未知提交分别保留各自实际原因和恢复动作|
+|E-11 视觉语法|正文白底、辅助轻灰保持；对话／运行摘要减少嵌套边框，历史与长内容使用轻量分隔。主／次／危险文字／禁用分层明确，等待及失败使用文字加少量语义强调；沿用普通36px及局部32px工具、现有间距变量|
+|E-12 状态一致性|页头统一所看正文身份，当前正式正文活动显示“AI运行中／等待补充信息／建议待处理尚未应用”；历史运行、输入对象和草稿保存分别说明。已回答卡片、建议决定与正文生效继续区分；普通状态简短、待核实请求按原来源分别保留|
+|常态入口与恢复|正常状态无刷新运行记录、刷新消息、刷新AI状态、刷新卡片状态、刷新建议、刷新评论六类常驻按钮；进入面板、原运行轮询变化及业务操作后按原所有者更新。错误及未知结果专属恢复仍可见，不能用普通读取替换受保护的原请求；不新增焦点刷新或定时器|
+|局部加载|局部读取保留最后确认列表、消息、卡片与输入组件。普通列表标题使用28px最小状态行、右侧180px上限状态位；对话重复标题去除后状态槽为20px。分页禁用与aria-busy保持，运行／评论／版本不重复插入分页加载提示。真实内容新增允许改变高度，不能承诺数据变化永不移动布局|
+|请求隔离|运行历史筛选／翻页只读取I19，不组合重读详情或消息、不改变当前运行。列表失败保留确认内容和查询关系，按原查询／游标重试；AI读取错误仅显示专属重试，当前运行连接异常仍有重读运行。建议仅错误、needs_refresh或定位失败且未被UNKNOWN／CONFIRMED意图保护时显示重新核对；成功才清定位错误|
+
+实现定位：`frontend/src/guide/{conversation,read-view,composer-view,cards-view,run-controls}.tsx`、`guide/input-feedback.ts`、`messages/timeline.tsx`、`shared/pagination.tsx`、`shared/styles.css`。
 
 **评论展示、输入和操作**
 
@@ -1372,7 +1555,18 @@ Requirement 为 `ACTIVE` 时：
 |处理请求中|针对当前评论禁止重复提交；成功后根据返回评论更新对应卡片，列表仍按创建时间排列|
 |正文标记联动|OPEN + ATTACHED 计入标记数量；解决、重开、删除、锚点变化后更新；完整统计依赖见 [FE-Q05](#fe-q05)|
 |评论分页|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27) 固定每页20条；空结果显示评论空态；失败保留当前成功页|
-|定位不在当前页的评论|[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28) 可读单条，但定位到完整列表页的机制仍需 [FE-Q05](#fe-q05) 闭合；不能擅自把该评论挪到列表顶部|
+|定位不在当前页的评论|按I37索引顺序计算I27目标页，加载并核实；并发变化重读索引及列表，不能擅自把该评论挪到列表顶部|
+
+<a id="fe-comment-read-v2"></a>
+
+**评论正常读取与恢复**
+
+|内容|确定定义|
+|---|---|
+|D-09|评论面板移除常驻“刷新评论”，继续按进入与业务操作后的既有机制读取。错误、需要核对或定位失败时提供“重新读取评论与正文”，实际恢复仍读取所需详情、正文与评论，保证版本一致；加载在固定标题状态槽显示|
+|禁用与空态|ACTIVE＋IDLE及正式正文空闲许可保持。初始化、完成、占用、非正式视图、加载或暂停分别说明原因，选区另需有效单Block；面板完整说明，辅助条用title及辅助技术描述。空评论提示从正文区块／文字发起；孤立、已解决及历史显示仍依原双状态规则|
+
+实现定位：`frontend/src/comments/{panel,components}.tsx`、`panel-owner.ts`及`documents/navigation-view.tsx`。
 
 **版本记录**
 
@@ -1384,9 +1578,20 @@ Requirement 为 `ACTIVE` 时：
 |读取快照|点击某版本读取 [I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)；加载失败保留版本列表并允许重试|
 |快照身份|明确展示正在查看的版本号与历史只读状态，不能让它与 CURRENT 或草稿混淆|
 |快照内容|同一 Revision 的 Markdown 与区块状态；不展示当前活动评论，不允许编辑和恢复|
-|退出查看|返回之前的当前文档视图并读取最新工作状态；不得把历史正文写回 CURRENT|
+|退出查看|点击“退出历史”重新读取需求、CURRENT及活动状态，再恢复实际当前文档或草稿视图；不得把历史正文写回CURRENT|
 |空值|未填写版本说明显示 --；快照为空与读取失败分别处理|
-|未确定布局|快照在何处打开及关闭入口见 [FE-Q03](#fe-q03)，不默认使用覆盖式抽屉或第二主编辑区|
+|快照容器与退出|在原正文区域替换为只读快照，右侧保留版本页签；“退出历史”重新读取实际当前状态，不增加第二主编辑区|
+
+<a id="fe-revision-read-v2"></a>
+
+**版本列表读取表现**
+
+|内容|确定定义|
+|---|---|
+|D-10|版本记录使用固定标题状态槽呈现正在读取的页数；读取时保留已有列表，分页不重复显示加载文字。错误与重试继续保留。这里只统一版本列表的读取表现，不删历史正文首次展示及退出恢复所需提示|
+|空态与分页|空版本说明初始化完成产生基线及ACTIVE＋IDLE可手动保存版本；有效单页只显示总数，越界保留回有效页。真实total_pages=0不改成1；历史读取与退出恢复提示仍保留|
+
+实现定位：`frontend/src/revisions/components.tsx`、`shared/pagination.tsx`。
 
 **人工草稿保存状态**
 
@@ -1400,6 +1605,14 @@ Requirement 为 `ACTIVE` 时：
 |版本冲突|CONTENT_VERSION_CONFLICT|提示已被其他页面更新，保留本地内容|停止自动覆盖，读取后端草稿供人工处理|
 |结果未知|请求可能已提交但未取得响应|保持待确认，不显示已保存|读取草稿确认版本与快照；未确认前不随意递增本地版本|
 
+<a id="fe-draft-readiness-v2"></a>
+
+**保存与恢复编辑分开判断**
+
+|内容|确定定义|
+|---|---|
+|D-05|保存事实与编辑就绪分别显示。草稿未恢复时明确显示“等待恢复编辑”及下一步说明；没有本地内容时说明将继续服务器已保存草稿。页头保存状态附加等待恢复信息，完成编辑按钮说明恢复、结束结果、正文无效或保存未确认等原因。仍须经过RESTORED／SERVER_SELECTED及原完成条件，不因“已保存”直接放开工具或完成按钮|
+
 **保存与快照顺序**
 
 1. 编辑器一次输出完整 Markdown 和对应 block_state_json；两者必须属于同一编辑快照。
@@ -1408,7 +1621,7 @@ Requirement 为 `ACTIVE` 时：
 
 3. 保存请求在途时继续输入，只替换一个“最新待发快照”，不排队保存所有中间版本。
 
-4. 保存成功时更新后端确认版本；如果编辑器已有更新，不能用返回的较旧内容覆盖它，也不能显示全部内容已保存。
+4. 保存成功时按实际提交快照和草稿版本接续权威回执，更新服务端确认版本、创建事实和出生账本；保留较新的本地正文、顺序、选区及高水位，不能用迟到响应整份覆盖编辑器，也不能显示较新内容已保存。撤销恢复只使用同草稿已证明身份，见[权威回执契约](#sync-fe-07)。
 
 5. 存在最新待发快照时，以最新确认版本发送；自动保存失败按上表处理。
 
@@ -1445,6 +1658,21 @@ Requirement 为 `ACTIVE` 时：
 |收起面板或切页签|只改本地布局|Run/Batch/Comment均保留|活动任务入口显示状态|
 |完成/重新激活/放弃草稿或批次/删除评论|调用[BND-CONFIRM](#bnd-confirm)|取消确认不发请求|成功后刷新对应资源|
 |运行轮询断网|保留最后状态，退避查询|不把查询失败改成Run失败|连接异常提示；成功恢复1秒轮询|
+
+<a id="fe-detail-refresh-v2"></a>
+
+**恢复、读取与可见性触发矩阵**
+
+|场景|触发与处理|画面／输入与操作边界|
+|---|---|---|
+|普通窗口focus／blur|不触发详情恢复、冻结、同步提示或整页读取|保留编辑器和面板实例；真正编辑器离焦的草稿保存另按组件规则执行|
+|普通标签页visibilitychange|不触发详情恢复屏障；人工草稿隐藏时仍flushCurrent保存已变更内容|不把标签页显隐当pagehide，不因普通切换冻结编辑|
+|路由进入／明确重新读取／历史退出|读取实际需求、正文及所需活动资源|沿原所有者及未知结果保护，首次缺少确认数据不造空编辑器|
+|低于1024px再恢复支持宽度|同步冻结／尝试保存，等待实际读取后开放操作|不足宽度继续阻断；恢复读取期间保留最后确认画面，用inert／只读暂停交互，状态提示不替换整个正文|
+|真实pagehide后pageshow|suspendPage／resumePage幂等；初次pageshow无此前离开时不重复读|保存后核对实际状态；失败保留画面和输入，明确重试读取才恢复操作|
+|局部面板读取失败|各面板就近错误／专属重试|不将正常详情转入视口恢复屏障，不把读取失败判成业务FAILED|
+
+实现定位：`frontend/src/requirements/detail-frame.tsx`、`detail-layout.ts :: DetailViewportGuard`；草稿隐藏保存监听由原人工编辑会话负责。
 
 **异常场景与恢复**
 
@@ -1510,15 +1738,15 @@ Requirement 为 `ACTIVE` 时：
 
 |模块|关键入口|职责|
 |---|---|---|
-|frontend/src/requirements/detail.ts|RequirementDetail|进入、活动状态、操作路由与结果刷新|
-|frontend/src/requirements/detail_header.ts|RequirementHeader|标题、模式、生命周期入口|
-|frontend/src/documents/outline.ts|DocumentOutline|大纲、定位、滚动高亮|
-|frontend/src/documents/block_toolbar.ts|BlockToolbar|来源浮层与评论入口|
+|frontend/src/requirements/detail.tsx|RequirementDetail|进入、活动状态、操作路由与结果刷新|
+|frontend/src/requirements/header.tsx|RequirementHeader|标题、模式、生命周期入口|
+|frontend/src/documents/navigation-view.tsx|DocumentOutline|大纲、定位、滚动高亮|
+|frontend/src/documents/navigation-view.tsx|BlockAuxiliary；CommentDocumentTools|来源浮层在navigation-view.tsx，评论入口在comments/panel.tsx|
 |frontend/src/documents/autosave.ts|ManualDraftAutosave|串行保存、最新快照、版本冲突与恢复|
-|frontend/src/guide/conversation.ts|GuideConversation|消息、输入、范围选择及卡片/建议接入|
+|frontend/src/guide/conversation.tsx|GuideConversation|消息、输入、范围选择及卡片/建议接入|
 |frontend/src/guide/polling.ts|GuideRunPolling|轮询、停止状态与网络退避|
-|frontend/src/comments/panel.ts|CommentPanel|双状态、编辑、列表与正文定位|
-|frontend/src/revisions/panel.ts|RevisionPanel|版本列表、保存说明与快照读取|
+|frontend/src/comments/panel.tsx|CommentPanel|双状态、编辑、列表与正文定位|
+|frontend/src/revisions/components.tsx|RevisionList / RevisionHistory / RevisionSaveControl|版本列表、保存说明与快照读取；状态见read.ts/save.ts/viewer.ts|
 
 
 <a id="bnd-create"></a>
@@ -1529,8 +1757,8 @@ Requirement 为 `ACTIVE` 时：
 
 |输入项|类型或定义引用|必传、可空与默认规则|用途及外部变化后的同步|
 |---|---|---|---|
-|title / type / template / idea / mode|五字段表单；最终值及约束见后端[BND-REQ-API-I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)|所有字段初始为空；提交必填性及允许null以[I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)为准。表单未选值的具体表示见[Q-FE-COMPONENT](#q-fe-component)|受父级当前值控制；template选择绑定template_key、template_version，不增加第六个用户输入|
-|可选配置|需求类型、模板及适用关系、工作模式选项|配置来源见[FE-Q02](#fe-q02)；选项编码和对象结构见[Q-FE-COMPONENT](#q-fe-component)|类型未选时禁用模板；一个适用模板自动选中，多个适用模板不默认选择；切换类型清空不兼容模板|
+|title / type / template / idea / mode|五字段表单；最终值及约束见后端[BND-REQ-API-I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)|所有字段初始为空；提交必填性及允许null以[I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)为准。title/idea初始为""，type/mode/template未选为null，template={template_key,template_version}|受父级当前值控制；template选择绑定template_key、template_version，不增加第六个用户输入|
+|可选配置|需求类型、模板及适用关系、工作模式选项|采用[正式配置](#sync-fe-03)；选项含明确value/label、适用类型及禁用语义；父级受控更新不触发用户事件|类型未选时禁用模板；一个适用模板自动选中，多个适用模板不默认选择；切换类型清空不兼容模板|
 |提交状态|是否正在执行创建请求|由父页面传入；初始未提交|同步控制重复提交和关闭限制|
 
 |输出事件|触发条件|输出结构|表达的事实|
@@ -1542,7 +1770,7 @@ Requirement 为 `ACTIVE` 时：
 
 视觉依据与变体：600px宽右侧抽屉，标题及底部操作区固定；其余表单布局采用[BND-WORKBENCH](#bnd-workbench)／5.2。
 
-组件实现定位：`frontend/src/requirements/create_drawer.ts :: CreateRequirementDrawer`。
+组件实现定位：`frontend/src/requirements/create_drawer.tsx :: CreateRequirementDrawer`。
 
 
 <a id="bnd-editor"></a>
@@ -1560,12 +1788,66 @@ Requirement 为 `ACTIVE` 时：
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
 |文档变化|允许编辑并发生内容变化|同一编辑器快照的完整Markdown与BlockState；结构引用后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)及[BND-DOC-API-I11](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i11)|本地文档已变化，不代表保存成功|
-|selection / block选择|用户选择文本或区块|选择和block_id的精确事件字段、偏移单位见[Q-FE-COMPONENT](#q-fe-component)、[Q-06](WALL-E.V1_0.6.后端设计文档.md#q-06)|当前用户选择；供父级范围、评论或定位操作使用|
+|selection / block选择|用户选择文本或区块|document_id/content_version/block_id/start_offset/end_offset/selected_text/prefix_text/suffix_text；UTF-16转Unicode码点半开区间，见[选区契约](#sync-fe-07)|当前用户选择；供父级范围、评论或定位操作使用|
 
-特殊交互：只读→人工编辑→保存、冲突或提交，生命周期由[BND-DETAIL](#bnd-detail)／5.5统一控制。编辑器采用Milkdown+Crepe；节点属性携带block_id，Markdown序列化不得泄漏元数据。身份继承以及拆分、合并、复制的正式规则归属后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)，未定算法见[Q-06](WALL-E.V1_0.6.后端设计文档.md#q-06)。视觉及滚动宽度采用[BND-DETAIL](#bnd-detail)／5.2正文区。
+特殊交互：只读→人工编辑→保存、冲突或提交，生命周期由[BND-DETAIL](#bnd-detail)／5.5统一控制。编辑器采用Milkdown+Crepe；节点属性携带block_id，Markdown序列化不得泄漏元数据。身份继承以及拆分、合并、复制的正式规则归属后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)，算法见后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)。视觉及滚动宽度采用[BND-DETAIL](#bnd-detail)／5.2正文区。
 
-组件实现定位：`frontend/src/documents/editor.ts :: RequirementEditor`。
+|内容|确定定义|
+|---|---|
+|可见编辑入口|MANUAL_DRAFT在正文滚动区域内显示吸顶格式工具；CURRENT及历史只读不展示。冻结及IME组合输入期间禁用，普通无效快照仍允许可用撤销/修正，完成编辑仍受valid状态约束|
+|文本与结构格式|正文、标题1—6、加粗、斜体、删除线、行内代码、有序/无序列表、引用及退出引用/列表、代码块、分隔线；表格插入初始3×3，支持当前位置加行/列与删除当前行/列/表格|
+|链接及历史|通过可取消表单添加/更新http、https、mailto链接，支持移除所选文字链接及撤销/重做；操作保留原正文选区，按钮与表单可键盘访问|
+|事务与保护|通过原编辑器dispatchTransaction、模板标题锁、区块身份与完整快照账本执行；格式改变仅是本地草稿变化，持久化依赖原自动保存确认。初始化固定标题的文字/级别/相对顺序/身份不能改变，正文可新增标题|
+|列表生成|规范化列表命令新生成节点的松散排版属性，使其与Markdown回读一致；不放宽快照等价检查，不批量改写未参与命令的旧节点|
+|不适用与边界|命令不适用则禁用或说明；不新增无持久化API的上传、媒体存储、LaTeX或编辑器AI入口。a###是普通文本；行首“### ”属于标题快捷输入|
 
+<a id="fe-editor-interactions-v2"></a>
+
+**格式入口、内部焦点与就地交互**
+
+|内容|确定定义|
+|---|---|
+|D-04|常用组保留正文／H1—H6、加粗、斜体、无序／有序列表、撤销、重做及链接。表格增删行列和删除表格仅在表格选区显示。删除线、行内代码、引用、退出引用／列表、代码块、分隔线、插入表格及移除链接进入“更多格式”。支持展开状态、Escape收起及点击外部收起；禁用工具提供编辑就绪或选区原因。所有原命令及事务保护继续使用|
+|斜杠菜单触发|可编辑普通段落开头输入“/”弹出插入类型；继续输入中文或英文关键字可筛选。光标须为折叠文本选区。正文中间的斜杠、URL、代码块及原始源码节点不作为菜单触发；空格、第二个斜杠或超过32字符的查询退出触发条件|
+|可插入类型|正文、标题1—3、3×3表格、链接、无序／有序列表、引用、代码块、分隔线。当前命令不适用时不允许选择该项。正文项把当前位置转为正文，随后可直接输入；不会添加一段虚构内容作为占位|
+|菜单键盘|焦点留在编辑区；↑／↓选择可用项，Enter执行，Esc关闭并保留原斜杠与查询文字。菜单关闭后在同一位置不立即自行重开，查询或光标改变后重新判断；点击菜单外关闭|
+|插入事务|选择命令时，把删除“/＋查询”与插入／转样式合成一次真实编辑事务。不支持或已过期的查询不删除输入。一次撤销可从所插入类型回到原斜杠查询；原有邻段、区块身份及模板验证仍经过现有账本|
+|选区浮动栏|编辑区选择非空文本，按选区上沿规则显示正文／标题1—6、加粗、斜体、删除线、行内代码、链接。按钮操作保留选区；实际标记状态用aria-pressed表达。光标折叠、离开相关区域、只读／暂停编辑、输入法组合期间或Esc关闭时不继续悬浮|
+|链接就地输入|选区链接或Ctrl/⌘+K打开附近的链接地址表单。支持完整http、https、mailto地址；不接受相对地址或javascript协议。选中已有文字时保留文字，仅赋予链接；斜杠菜单或空光标处插入链接时，以地址本身作为可见文字。取消不删除斜杠或改正文，Esc取消；正文已变化则关闭旧位置表单，避免套用过期位置|
+|浮层边界|根据真实选区位置定位并限制在可见窗口／正文区域；滚动与窗口调整时重定位。编辑器销毁时移除浮层和事件监听；开合／重建不保留失效表单或独立编辑器状态|
+|列表一致性|顶部工具栏、斜杠菜单及快捷键共用既有列表命令的生成间距规范化，使新列表仍能通过Markdown往返快照检查，不降低该检查|
+|原保护|新入口仅安装到真实人工草稿编辑器，编辑许可／组合输入判断复用formattingReady。初始化锁定标题的文字、级别、顺序和身份继续由原TemplateHeadingLock拒绝不允许的事务。只读当前正文、历史正文和冻结草稿不会通过新入口写入|
+|原生下拉点击|保留原生正文／标题选择器；鼠标进入浮动控件的焦点过渡期间保持浮窗挂载。原生选择器持有焦点时不反复重设value，避免干扰已展开的选项。标题可切回正文，仍经过原编辑器事务和模板保护|
+|编辑器内部焦点|正文、顶部格式工具、选区浮动栏、插入菜单及链接表单统一作为该编辑器的内部交互区域；在它们之间移动焦点不触发离开编辑器。焦点真正移到其他控件或窗口外时，原flushLocal和blur保存通知保持；文档级监听按事件来源过滤，不处理其他编辑器／页面控件|
+|上方锚定|从真实ProseMirror文本选区的from／to构造DOM Range，使用整个选区的边界；浮窗底部距选区上沿8px。水平优先对齐选区中心，临近正文左右边缘时限制在可见正文范围；不再把文字末尾当浮窗左上角|
+|顶部空间不足|只在选区上方显示，不翻转到下方，也不遮住固定格式工具栏。上方空间不足或选区离开可见正文区域时隐藏浮窗，用户仍可使用已有固定工具栏；滚动回来或窗口空间恢复时，根据保留的真实选区重新判断|
+|位置稳定与保护|点击下拉框不会改锚点或将浮窗隐藏；真实格式改变导致文字尺寸变化、滚动和窗口变化时按同一选区上沿重算。Esc关闭、只读／冻结隐藏、编辑器销毁清理、初始化标题锁及草稿账本继续保持|
+|浮层空间语义|选区浮窗始终在真实选区上方，底部距选区上沿8px；横向居中并在可见正文左右边界夹取。上方被固定工具栏占用、选区离开可见区域或宽度不足时隐藏，使用固定工具栏；不翻到下方，不是固定浏览器绝对坐标|
+
+**编辑区键盘操作**
+
+|功能|快捷键／边界|
+|---|---|
+|加粗／斜体／链接|Ctrl或⌘＋B／I／K|
+|撤销／重做|Ctrl或⌘＋Z；Ctrl＋Y或Ctrl／⌘＋Shift＋Z|
+|无序／有序列表|Ctrl／⌘＋Shift＋8／7|
+|插入菜单|上下键选可用项，Enter执行，Esc关闭并保留斜杠查询；不全局接管键盘|
+|常规输入与IME|Enter、Backspace、Delete及文本导航保留原编辑器行为；组合输入／isComposing／keyCode229期间不执行格式命令，不截获链接输入框自己的撤销|
+|操作范围|仅真实可编辑正文；不触发完成保存、AI发送、生命周期或建议采用。只读／冻结／销毁清理规则保持|
+
+组件实现定位：`frontend/src/documents/editor.ts :: RequirementEditor`、`frontend/src/documents/format-toolbar.ts :: installFormatToolbar`、`format-commands.ts`、`editor-interactions.ts`、`selection-toolbar-position.ts`；初始化保护仍由`template-lock.ts`及快照账本承担。
+
+
+
+<a id="sync-fe-07"></a>
+
+**选区、定位和权威回执契约**
+
+选区事件携带 `document_id/content_version/block_id/start_offset/end_offset/selected_text/prefix_text/suffix_text`。DOM/ProseMirror 的 UTF-16 位置必须显式转为后端共同规则的 Unicode 码点半开区间；不得跨 Block 或根据相似文本猜身份。定位动作校验当前需求、文档身份及版本，历史快照不接收当前评论定位；HTTP 只传原接口已有字段，不新增客户端可信 offset。
+
+保存回执按实际提交快照和草稿版本接续服务器确认的创建事实、确认版本和出生账本，保留较新的本地正文、顺序、选区及高水位。迟到回执不能整份覆盖编辑器；撤销恢复使用同草稿的已证明身份。具体来源与分配时间规则统一引用 [BE-08](WALL-E.V1_0.6.后端设计文档.md#sync-be-08)/09。
+
+**确认依据**：D-004、D-008、D-009。**代码对应**：`frontend/src/documents/{selection,editor-selection,identity,edited-snapshot,autosave,manual-session}.ts`；`backend/app/documents/{anchors,manual_identity,sources}.py`。
 
 <a id="bnd-cards"></a>
 
@@ -1585,7 +1867,18 @@ Requirement 为 `ACTIVE` 时：
 
 特殊交互：AVAILABLE本地填写→提交中→ANSWERED；状态变化可变为EXPIRED。required卡必须回答；可跳过卡使用显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）。未提交草稿按requirement_id与message_id存入sessionStorage，仅AVAILABLE时恢复；失败保留本地。重复响应读取已有正式答案。卡片业务可用条件由后端[APP-GUIDE-CMD-C06](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c06)判断。视觉依据：同一消息内展示1～5张卡，采用[BND-DETAIL](#bnd-detail)／5.2右侧对话区；输入、按钮和错误按5.1公共规则。
 
-组件实现定位：`frontend/src/guide/cards.ts :: InteractionCards`。
+<a id="fe-cards-presentation-v2"></a>
+
+**卡片填写进度与收纳**
+
+|内容|确定定义|
+|---|---|
+|E-06 卡片减负|组顶部显示本地有效已填题数、待填必答数量及下一道必答题，明确本地状态不是正式提交。影响说明和关联原文可展开，选项描述及关键风险保持可见；影响展开在选择label之外，避免误选。已回答问题组默认收起，仍能查看原问题与正式答案；提交／读取／未知结果的恢复入口保留在收纳区之外|
+|正常读取与异常恢复|正常刷新卡片按钮移除；来源失败、正式回答缺失、未知提交及确认后未读回分别保留原恢复入口，位于收纳区之外。开合影响或关联原文不改变选择，描述及关键风险保持可见；不默认推荐，不隐式跳过可选题|
+
+实现定位补充：`frontend/src/guide/card-progress.ts`、`cards-view.tsx`、`card-message.tsx`。
+
+组件实现定位：`frontend/src/guide/cards-view.tsx :: InteractionCardsView；guide/cards.ts :: InteractionCards`。
 
 
 <a id="bnd-suggestions"></a>
@@ -1604,11 +1897,24 @@ Requirement 为 `ACTIVE` 时：
 |decide|用户决定一项建议|suggestion_id、decision、满足[I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21)条件的edited_content|单项决定意图；不表示事实正文已改变|
 |complete|用户完成批次且页面前置条件满足|batch_id、当前已读取expected_content_version，引用[I22](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i22)|应用批次的意图；实际允许条件与原子采用在后端|
 |discard|用户确认放弃批次|batch_id，引用[I23](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i23)|放弃意图|
-|locate|用户选择定位建议目标|该建议的目标引用；具体事件字段见[Q-FE-COMPONENT](#q-fe-component)|页面内定位，不发起事实写入|
+|locate|用户选择定位建议目标|该建议的目标引用及当前需求、文档身份与版本；按[定位契约](#sync-fe-07)校验|页面内定位，不发起事实写入|
 
 特殊交互：PENDING可决定，终态只读；未知结果先GET复查；目标失效显示不可继续并允许放弃，不自动合并。决定与最终采用规则分别引用[APP-BATCH-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-batch-cmd-c01)、C02、C03。视觉依据：按区块纵向展示原内容与新内容，原内容始终只读；批次操作固定可见。
 
-组件实现定位：`frontend/src/suggestions/panel.ts :: SuggestionPanel`。
+<a id="fe-suggestions-presentation-v2"></a>
+
+**建议编辑、筛选与采用表达**
+
+|内容|确定定义|
+|---|---|
+|D-11|表格行建议以固定原列数的“第N列”文字框编辑，内部序列化为既有cells结构。保留其他单元格的空白、换行、引号及空字符串；组合输入期间禁止保存与取消，内部序列化内容超过100000码点时禁止保存。无效的旧本地输入原样保留，并提供明确的“从建议行重新编辑”操作，不静默覆盖。该操作只重置本地输入，不提交决定；单项决定仍不直接修改正式正文|
+|E-07 建议效率|增加“全部／待处理”视图筛选和按原排序循环的“下一条待处理”，定位目标并聚焦建议项。正在编辑的项、原请求涉及的项始终保留；筛选不销毁编辑控件。底部说明实际已处理数量和完成本批后才应用的后果，终态使用终态文案|
+|决定与完成|定位及决定分组，接受／拒绝／编辑后接受保持原顺序及同等权重；编辑态只显示保存并接受／取消；DELETE不新增编辑能力。完成为主动作、放弃为次要危险文字且仍确认；实际已处理数、尚未应用与终态文案来自后端，不把单项接受当正文生效|
+|读取恢复|正常不显示刷新建议；错误、needs_refresh或定位失败且未被UNKNOWN／CONFIRMED请求保护时显示重新核对建议状态。原请求涉及项与编辑项在筛选下仍保留，成功重读才清定位错误|
+
+实现定位补充：`frontend/src/suggestions/{row-edit,display,batch-owner}.ts`及`panel.tsx`。
+
+组件实现定位：`frontend/src/suggestions/panel.tsx :: SuggestionPanel`。
 
 
 <a id="bnd-confirm"></a>
@@ -1623,7 +1929,7 @@ Requirement 为 `ACTIVE` 时：
 |确认 / 取消按钮文案|string|默认分别为“确认”“取消”；确认文案建议按操作命名|父级可指定本次动作文字|
 |操作类型|普通、危险|默认普通|不可恢复操作用危险类型|
 |提交状态|boolean|由父页面传入|同步禁用重复提交、关闭、取消和Esc|
-|错误信息|string；无错误表示的具体约定见[Q-FE-COMPONENT](#q-fe-component)|失败时传入|在正文下方展示，恢复按钮；同一错误不再Toast|
+|错误信息|string；无错误为null或省略，不展示错误区域|失败时传入|在正文下方展示，恢复按钮；同一错误不再Toast|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
@@ -1675,7 +1981,7 @@ Requirement 为 `ACTIVE` 时：
 
 建议透明度40%、宽440px属于视觉建议，尚未确认的设计令牌见[Q-FE-VISUAL](#q-fe-visual)。
 
-组件实现定位：公共控件的主要模块尚无已确认位置，见附录A [Q-FE-COMPONENT](#q-fe-component)。
+组件实现定位：`frontend/src/shared/confirmation.tsx :: Confirmation`。
 
 
 <a id="bnd-toast"></a>
@@ -1688,7 +1994,7 @@ Requirement 为 `ACTIVE` 时：
 |---|---|---|---|
 |提示类型|成功、失败、提示|由业务明确传入|决定图标、色彩和默认时长|
 |提示文案|string|必填|简短说明实际结果；长文案可换行，不截断关键结论|
-|显示时长|时长|可选；成功、提示默认3秒，失败默认5秒|显式时长覆盖默认；具体程序单位见[Q-FE-COMPONENT](#q-fe-component)|
+|显示时长|毫秒数|可选；成功、提示默认3000ms，失败默认5000ms，与原3秒/5秒一致|显式时长覆盖默认；属于内部表示，不增加HTTP字段|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
@@ -1738,7 +2044,7 @@ Requirement 为 `ACTIVE` 时：
 
 建议顶部24px、最大宽480px属于视觉建议，相关确认见[Q-FE-VISUAL](#q-fe-visual)。
 
-组件实现定位：公共控件的主要模块尚无已确认位置，见附录A [Q-FE-COMPONENT](#q-fe-component)。
+组件实现定位：`frontend/src/shared/toast.tsx :: ToastViewport`。
 
 
 <a id="bnd-filter"></a>
@@ -1753,19 +2059,19 @@ Requirement 为 `ACTIVE` 时：
 |选项列表|数组；每项唯一value及显示label|至少2项；value保留调用者传入的类型，不做数字/字符串转换|显示名仅用于展示|
 |默认选中项 / 当前选中值|选项值数组|默认项未传时全选；当前值由父页面控制|外部恢复条件仅同步展示，不自动再次输出查询|
 |占位提示 / 当前输入值|string|初始输入为空字符串；占位文案由页面给出|编辑仅改变输入草稿，未提交内容不参与查询|
-|关键词限制与匹配|[BND-WORKBENCH](#bnd-workbench)及后端[APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)|工作台keyword最多100 Unicode码点；不支持多个关键词|工作台标题包含匹配与完整REQ编号精确匹配按后端定义；通用控件的默认匹配表述冲突见[Q-FE-FILTER](#q-fe-filter)|
+|关键词限制与匹配|[BND-WORKBENCH](#bnd-workbench)及后端[APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)|工作台keyword最多100 Unicode码点；不支持多个关键词|工作台标题包含匹配与完整REQ编号精确匹配按后端定义；通用控件不另作默认模糊匹配|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
 |选择变化|用户改变选中集合|{selectedValues: 完整选中值数组, isAllSelected: boolean}|选择已改变；父级回到第1页查询|
 |查询提交|按Enter或点击搜索图标|去除首尾空格后的关键词string；纯空格输出空字符串|新的已提交关键词|
-|清除|点击清除按钮；手动删除至空的分支见下文|空字符串，一次操作只通知一次|取消已生效关键词；保留其他条件并回到第1页|
+|清除|点击清除先清输入草稿；已提交关键词非空时才发出取消查询|空字符串；实际取消条件只通知一次|已提交为空不重复查询；保留其他条件并回到第1页|
 
 特殊交互：
 
 - 下拉多选至少保留一项，取消最后一个选中项不改变值且不输出事件。一键全选输出全部值及isAllSelected=true，一次变化只通知一次；已全选再点击不重复输出。全选由父级省略该字段筛选参数；部分选中映射成对应Query数组。多选时面板保持打开，点击外部关闭。
 - 编辑搜索文字不查询；Enter或搜索图标提交；去除首尾空格，纯空格按空关键词处理。其他筛选变动继续使用上一次已提交关键词。提交后回显已提交关键词，清空后恢复占位文案。
-- 点击清除无论当前输入是否提交，都取消已生效关键词并查询。手动删除至空存在来源内冲突：公共规则要求仅当输入与已生效关键词一致时取消条件，未提交草稿清空不影响已生效条件；输入查询子项却要求一律触发清除。工作台按5.4已确定的草稿/提交区分组织状态；通用控件事件触发的统一结论必须解决[Q-FE-FILTER](#q-fe-filter)。
+- 手动删除至空只更新输入草稿，Enter或搜索按钮才提交。点击清除先清草稿；仅已提交关键词非空时取消条件并查询一次，已提交为空不重复查询。输入法组合期间Enter不提交，组合结束不隐式提交。
 - 页面受控更新不产生第二次查询。连续查询仅最新请求可更新列表、分页、错误及加载状态。
 
 视觉依据与变体：
@@ -1774,7 +2080,7 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |公共尺寸|高度36px、圆角8px、字号14px、左右padding 12px；白底、1px实线边框；正文深灰，占位浅灰；宽度由页面布局决定；同类控件跨页一致|
 |图标与反馈|图标16px，点击区域至少28×28px；浅灰悬停底、6px圆角；悬停或焦点不改变尺寸或移动布局|
-|边框|默认#D1D5DB；悬停#9CA3AF；聚焦#6B7280；键盘焦点另有清晰外轮廓；搜索聚焦不使用大面积高亮背景|
+|边框|默认#D1D5DB；悬停#9CA3AF；聚焦#6B7280；鼠标输入聚焦保留单边框，键盘焦点另有清晰外轮廓，输入方式与强制颜色规则按[FE-OPT-V2](#sync-fe-opt-v2)；搜索聚焦不使用大面积高亮背景|
 |下拉展开|收起向下箭头，展开向上；展开保持聚焦边框；优先向下，空间不足向上；面板至少控件宽且不超视口，最大高度280px；白底、8px圆角、浅灰边框、轻微阴影|
 |下拉内容|一键全选固定顶部，选项区独立滚动；选项单行省略并悬停展示全文；每项左侧复选框，悬停浅灰底，选中勾选及浅色背景；最后一个选中项保留勾选但不可取消，悬停提示“至少保留一个选项”，其他未选项可选；全选时一键全选不可操作|
 |收起标签|全选为“筛选名称：全部”；仅选1项为“筛选名称：选项显示名称”；部分多选为“筛选名称：已选 X 项”；超宽省略并悬停展示全文|
@@ -1782,8 +2088,17 @@ Requirement 为 `ACTIVE` 时：
 |搜索/清除图标|搜索图标固定最右，点击区与输入区分开，悬停提示“搜索”；清除位于搜索左侧，仅有输入时显示，提示“清除”；二者浅灰圆角悬停反馈；清除显隐不改变整体宽度或搜索图标位置|
 
 
-组件实现定位：公共控件的主要模块尚无已确认位置，见附录A [Q-FE-COMPONENT](#q-fe-component)。
+组件实现定位：`frontend/src/shared/filter.tsx :: MultiFilter / SearchInput`。
 
+
+
+<a id="sync-fe-11"></a>
+
+**搜索匹配与手动清空规则**
+
+搜索匹配由后端业务 Query 决定：完整 REQ 编号精确匹配，标题按字面包含匹配；通用控件不另做默认模糊匹配。输入草稿和已提交关键词独立；手动删空仅更新草稿，Enter 或搜索按钮才提交。点击清除先清草稿，只有已提交关键词非空时发出一次取消关键词查询；已提交为空不重复查询。IME 期间不因 Enter 触发搜索，父级受控更新不再次触发查询。
+
+**确认依据**：D-004，公共决策稿 D 的统一结论。**代码对应**：`frontend/src/shared/filter.tsx::SearchInput`、`requirements/workbench.ts`；`backend/app/requirements/queries.py`、`infrastructure/requirement_repository.py`。
 
 <a id="bnd-pagination"></a>
 
@@ -1798,6 +2113,8 @@ Requirement 为 `ACTIVE` 时：
 |total|integer|必传，非负|符合条件总记录数|
 |totalPages|integer|必传，total=0时为0|使用后端返回值|
 |loading|boolean|必传|本次分页查询执行状态|
+|showLoadingStatus|boolean|可选，默认true|仅控制分页自身加载提示；运行／评论／版本已有固定状态位时传false，禁用及aria-busy保留|
+|compactSingle|boolean|可选，默认false|运行／评论／版本有效单页只显示总数；越界仍显示返回有效页；工作台保留普通分页|
 |error|string或null|可选；未传等同无本次错误|用于翻页失败反馈，不伪造分页数据|
 
 |输出事件|触发条件|输出结构|表达的事实|
@@ -1810,17 +2127,26 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |正常翻页|输出目标页，父页面加载；成功同时更新列表和分页|
 |第一页/最后一页|分别禁止无效上一页/下一页|
-|total=0|展示无记录及0个总页，不生成第0页请求|
+|total=0|不显示页码、总页数及箭头，空态由父面板显示；有错误或需要加载反馈仍提供状态／重试；不生成第0页请求，不改变后端total_pages=0|
 |越界页|保留请求页和实际总页数，可回有效页，不无限自动重试|
 |翻页失败|保留上一成功页列表和分页并显示重试，不能新页号配旧数据|
 |筛选变化|父页面改page=1并查询一次；组件受控更新不发第二次请求|
 |请求竞态与重复点击|仅最新响应生效；重复选当前页不输出，不被旧响应覆盖总数|
 
-视觉依据与变体：置于列表之后，显示当前页、总页数/总数及可用翻页入口；加载与禁用可区分；每页20条为固定信息，没有排序选择、自定义跳页或容量选择器。数字页按钮数量、省略号和间距见[FE-Q10](#fe-q10)。
+视觉依据与变体：置于列表之后，显示当前页、总页数/总数及可用翻页入口；加载与禁用可区分；每页20条为固定信息，没有排序选择、自定义跳页或容量选择器。数字按钮显示首尾页和当前页前后各两页；间隙为不可操作省略号；分页尺寸和间距按下方前端优化V1规则固定，其他组件视觉建议不受此影响。
 
 
-组件实现定位：`frontend/src/shared/pagination.ts :: Pagination`。
+组件实现定位：`frontend/src/shared/pagination.tsx :: Pagination`。
 
+
+
+<a id="sync-fe-08"></a>
+
+**数字分页规则与已定视觉参数**
+
+固定每页 20 条；数字按钮显示首尾页和当前页前后各两页，中间间隙用不可操作省略号。保留加载禁用、当前页不可重复提交、越界回有效页等原规则；不新增跳页、页容量或排序选择。用户授权确定的前端优化V1固定分页按钮高32px、最小宽32px、水平内边距8px、文字14px；页码组内间距6px，信息区与页码组间距16px、换行间距8px。当前页使用深灰文字及2px下划线，保留aria-current与不可重复提交；不是从当前CSS反推确认。
+
+**确认依据**：D-004、公共决策稿 D及[前端优化V1采用记录](#sync-fe-opt-v1)。**代码对应**：`frontend/src/shared/pagination.tsx::pageNumbers`、`Pagination`；`shared/styles.css`。
 
 ## 7. 数据存储与外部依赖
 
@@ -1828,18 +2154,28 @@ Requirement 为 `ACTIVE` 时：
 
 前端调用的HTTP契约由[后端设计文档第6章](WALL-E.V1_0.6.后端设计文档.md#api-com)正式定义。浏览器持有的数据按下表管理，不能替代服务端业务事实。
 
+<a id="sync-fe-09"></a>
+
 |数据或依赖|负责范围与存储|写入、恢复与失效|技术限制|
 |---|---|---|---|
-|卡片未提交回答|[BND-CARDS](#bnd-cards)；sessionStorage；按requirement_id+message_id隔离|填写时保留；重新进入仅对AVAILABLE恢复；ANSWERED或EXPIRED清除；提交失败保留|键字符串格式、结构版本、容量/不可用处理见[Q-FE-DRAFT](#q-fe-draft)；正式答案只来自服务端CARD_RESPONSE|
-|详情侧栏偏好|[BND-DETAIL](#bnd-detail)；同一浏览器保存明确设置的展开、宽度、Tab|用户主动设置写入；响应式临时收起、宽度钳制不覆盖原偏好|具体存储载体、键、版本与失效规则见[Q-FE-DRAFT](#q-fe-draft)；不是服务端业务状态|
-|工作台返回状态|[BND-WORKBENCH](#bnd-workbench)；保留筛选、已提交关键词、当前页与滚动|详情返回恢复并重新查询；旧响应不覆盖新条件|路由/状态载体的正式基线见[FE-Q01](#fe-q01)；不将未提交关键词当作已生效条件|
-|本地未确认编辑快照|[BND-DETAIL](#bnd-detail)／5.5自动保存与离开保护|运行期间保留最新完整Markdown与BlockState及保存关联；失败不丢失本地内容；恢复前GET重核服务端版本|跨刷新或关闭的持久保存位置、容量、错误与清理机制见[Q-FE-DRAFT](#q-fe-draft)；不能依靠beforeunload保证必需保存成功|
-|配置与服务端事实|需求、文档、运行、消息、建议、评论、版本通过第5章指定接口；模板配置来源见[FE-Q02](#fe-q02)|重新进入、恢复可见性或未知结果时按页面规则重查；HTTP接受不等于AI完成|不得从本地缓存创造新的模板、权限、正式答案或成功状态|
+|卡片未提交回答|BND-CARDS；sessionStorage；walle:v1:cards:{requirement_id}:{message_id}|{schema_version:1,responses,updated_at}；仅AVAILABLE恢复，ANSWERED/EXPIRED清理，提交失败保留|存储不可用保留内存并提示跨刷新保护不足；正式答案只来自CARD_RESPONSE|
+|全局导航开合|localStorage；walle:v1:navigation-collapsed|仅1为收起、其他默认展开；用户操作写入，跨路由及刷新恢复|与详情偏好和业务状态独立；存储失败当前仍可切换；窄窗抽屉完整200px|
+|详情侧栏偏好|localStorage；walle:v1:preferences|{schema_version:1,left_open,right_open,right_tab,right_width}；仅用户明确设置写入|响应式收起/钳制不覆盖偏好；不可用时当前布局仍可调整并提示|
+|工作台返回状态|浏览器history条目与sessionStorage，按独立entry_id隔离|保存已提交条件、页码和滚动；详情返回重查后恢复滚动|未提交草稿不作生效条件；前进/后退经过离开保护|
+|本地未确认编辑快照|IndexedDB walle-v1/draft_snapshots；复合键(requirement_id,draft_id)|{schema_version:1,base_confirmed_version,markdown_content,block_state_json,local_revision,updated_at}；恢复先GET核实并由用户选择|单份8MiB、最多20份/160MiB，不自动淘汰未确认稿；失败保留内存，完成/取消明确成功才清理|
+|配置与服务端事实|需求、文档、运行、消息、建议、评论、版本通过第5章指定接口；模板配置来源见[FE-Q02](#fe-q02)|重新进入、必要的真实页面／宽度恢复或未知结果时按[触发矩阵](#fe-detail-refresh-v2)重查；普通显隐不重读；HTTP接受不等于AI完成|不得从本地缓存创造新的模板、权限、正式答案或成功状态|
 
-实现定位采用第5章各页面/组件；浏览器存储适配的具体位置待[Q-FE-DRAFT](#q-fe-draft)确定。没有已确认的独立前端数据库、文件上传或消息总线。
+实现定位采用第5章各页面/组件，以及 documents/recovery-store.ts、guide/card-drafts.ts、requirements/detail-layout.ts。IndexedDB仅存本地未确认快照，不成为独立业务数据库；没有文件上传或消息总线。
 
+
+
+达到容量不自动淘汰未确认稿；存储不可用时保留内存、继续允许服务端保存，并明确提示跨刷新保护不足，提供保持页面/导出等保护。恢复先 GET 核实后端草稿及占用，再由用户明确选择恢复或对照，不自动覆盖。正常保存只有确认对应本地版本且无较新变化时才清理；完成/取消明确成功后清对应草稿，结果未知不清。退出事件不保证持久保存必达。
+
+**确认依据**：D-004，公共决策稿 D。**代码对应**：`frontend/src/guide/card-drafts.ts`、`requirements/detail-layout.ts`、`documents/{recovery-store,manual-recovery,autosave,manual-end}.ts`。
 
 ## 8. 验证与验收
+
+执行记录约定：只在docs/verification/*.md记录日期、规格/实现版本、环境、范围、方法、结果、失败原因及未覆盖项；不留存测试JSON、截图、录像或原始日志。实际浏览器观察、焦点、几何、颜色及故障判定要求保留，正常业务数据库/审计不作测试报告删除。本次文档合并不执行这些场景。
 
 ### 8.1 验收场景
 
@@ -1852,28 +2188,28 @@ Requirement 为 `ACTIVE` 时：
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-WB-01|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；输入未提交关键词后改变状态筛选|输入未提交关键词后改变状态筛选；每个并列分支独立准备，并控制请求/时钟/视口条件|查询仍使用上次已提交关键词；第一页；其他条件保留|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-WB-02|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；已提交关键词删空；未提交草稿删空；点击清除|已提交关键词删空；未提交草稿删空；点击清除；每个并列分支独立准备，并控制请求/时钟/视口条件|分别按已提交值规则判断；点击清除始终取消关键词；每次实际清除只请求一次|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-WB-03|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；两个查询逆序返回，旧请求随后失败|两个查询逆序返回，旧请求随后失败；每个并列分支独立准备，并控制请求/时钟/视口条件|只有最新查询更新列表、分页和错误；旧结果不关闭新加载态|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-WB-04|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；无数据、无匹配、越界页、首次失败、刷新失败|无数据、无匹配、越界页、首次失败、刷新失败；每个并列分支独立准备，并控制请求/时钟/视口条件|五种表现可区分；失败不伪造空列表|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-WB-05|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；主导航进入与详情返回|主导航进入与详情返回；每个并列分支独立准备，并控制请求/时钟/视口条件|前者默认条件；后者恢复已提交条件、页码、滚动并刷新|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-WB-06|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；文字拖选、标题点击、类型长文、时间解析失败|文字拖选、标题点击、类型长文、时间解析失败；每个并列分支独立准备，并控制请求/时钟/视口条件|拖选不跳转；标题进入详情；类型省略可查看全文；异常时间显示 --|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-WB-07|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；需求类型全选/部分选中，状态多选|需求类型全选/部分选中，状态多选；每个并列分支独立准备，并控制请求/时钟/视口条件|全选不传对应条件；部分传完整数组；同字段或、不同字段且|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-01|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；CURRENT与草稿并存，刷新后恢复人工编辑|CURRENT与草稿并存，刷新后恢复人工编辑；每个并列分支独立准备，并控制请求/时钟/视口条件|编辑器加载草稿；正式阅读、AI、评论继续引用 CURRENT；不混用版本|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-02|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；持续输入，前一次保存尚未返回|持续输入，前一次保存尚未返回；每个并列分支独立准备，并控制请求/时钟/视口条件|同一时刻一个请求；待发只保留最新快照；旧成功不覆盖新编辑|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-03|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；自动保存暂时失败、校验失败、版本冲突|自动保存暂时失败、校验失败、版本冲突；每个并列分支独立准备，并控制请求/时钟/视口条件|分别退避重试、停止重试待修正、保留双方内容待人工处理|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-04|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；完成或取消编辑时存在在途保存|完成或取消编辑时存在在途保存；每个并列分支独立准备，并控制请求/时钟/视口条件|按 [DT-OP25](#dt-op25)/26 排序执行；不会在草稿删除后再发送保存|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-05|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；完整/紧凑/不支持视口来回切换|完整/紧凑/不支持视口来回切换；每个并列分支独立准备，并控制请求/时钟/视口条件|宽度、互斥展开与阻断符合[BND-DETAIL](#bnd-detail)／5.2；自动布局不覆盖偏好；运行不被取消|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-06|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；INITIALIZE 卡片与 MODIFY 等待卡片提交|INITIALIZE 卡片与 MODIFY 等待卡片提交；每个并列分支独立准备，并控制请求/时钟/视口条件|前者新建运行，后者继续原运行；都只保存一条整组正式响应|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-07|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；评论 OPEN/RESOLVED 与 ATTACHED/ORPHANED 四组合|评论 OPEN/RESOLVED 与 ATTACHED/ORPHANED 四组合；每个并列分支独立准备，并控制请求/时钟/视口条件|双状态独立展示；操作与正文计数正确；孤立评论不定位|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-08|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；切换页签和收起面板时运行继续|切换页签和收起面板时运行继续；每个并列分支独立准备，并控制请求/时钟/视口条件|页面偏好变化，业务状态不变；重新展开读取最新状态|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-09|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；批次单项接受、编辑、完成、放弃|批次单项接受、编辑、完成、放弃；每个并列分支独立准备，并控制请求/时钟/视口条件|单项不改正文；完成后刷新正式正文；失败/失效不部分应用|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-10|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；历史快照查看与退出|历史快照查看与退出；每个并列分支独立准备，并控制请求/时钟/视口条件|历史只读、不显示当前评论；退出恢复最新工作状态，不覆盖正文|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-11|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；运行查询网络失败、运行业务失败、等待用户|运行查询网络失败、运行业务失败、等待用户；每个并列分支独立准备，并控制请求/时钟/视口条件|三类状态不混淆；分别退避、允许新运行重试、等待回复|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-DT-12|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；正文更新后来源浮层及评论标记变化|正文更新后来源浮层及评论标记变化；每个并列分支独立准备，并控制请求/时钟/视口条件|显示用户文案和本地时间，不暴露内部ID；全量标记来源待 [FE-Q05](#fe-q05) 闭合后验证|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-PAGE-01|[BND-PAGINATION](#bnd-pagination)／5.6|本节公共准备；total=0、首尾页、越界页|total=0、首尾页、越界页；每个并列分支独立准备，并控制请求/时钟/视口条件|不产生page=0；首尾无效方向不可用；越界能回有效页|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-PAGE-02|[BND-PAGINATION](#bnd-pagination)／5.6|本节公共准备；翻页成功/失败及旧请求迟到|翻页成功/失败及旧请求迟到；每个并列分支独立准备，并控制请求/时钟/视口条件|成功同步页码和列表；失败保留成功页；旧响应不覆盖|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
-|TC-UI-PAGE-03|[BND-PAGINATION](#bnd-pagination)／5.6|本节公共准备；父级筛选改变page与重复点击当前页|父级筛选改变page与重复点击当前页；每个并列分支独立准备，并控制请求/时钟/视口条件|不重复输出或重复查询；固定pageSize=20|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；涉及未决数据来源的分支按附录A标识阻塞|
+|TC-UI-WB-01|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；输入未提交关键词后改变状态筛选|输入未提交关键词后改变状态筛选；每个并列分支独立准备，并控制请求/时钟/视口条件|查询仍使用上次已提交关键词；第一页；其他条件保留|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-WB-02|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；已提交关键词删空；未提交草稿删空；点击清除|已提交关键词删空；未提交草稿删空；点击清除；每个并列分支独立准备，并控制请求/时钟/视口条件|手动删空不查询；点击清除仅在已提交非空时取消关键词并查询一次|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-WB-03|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；两个查询逆序返回，旧请求随后失败|两个查询逆序返回，旧请求随后失败；每个并列分支独立准备，并控制请求/时钟/视口条件|只有最新查询更新列表、分页和错误；旧结果不关闭新加载态|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-WB-04|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；无数据、无匹配、越界页、首次失败、刷新失败|无数据、无匹配、越界页、首次失败、刷新失败；每个并列分支独立准备，并控制请求/时钟/视口条件|五种表现可区分；失败不伪造空列表|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-WB-05|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；主导航进入与详情返回|主导航进入与详情返回；每个并列分支独立准备，并控制请求/时钟/视口条件|前者默认条件；后者恢复已提交条件、页码、滚动并刷新|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-WB-06|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；文字拖选、标题点击、类型长文、时间解析失败|文字拖选、标题点击、类型长文、时间解析失败；每个并列分支独立准备，并控制请求/时钟/视口条件|拖选不跳转；标题进入详情；类型省略可查看全文；异常时间显示 --|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-WB-07|[BND-WORKBENCH](#bnd-workbench)／5.3—5.5|本节公共准备；需求类型全选/部分选中，状态多选|需求类型全选/部分选中，状态多选；每个并列分支独立准备，并控制请求/时钟/视口条件|全选不传对应条件；部分传完整数组；同字段或、不同字段且|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-01|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；CURRENT与草稿并存，刷新后恢复人工编辑|CURRENT与草稿并存，刷新后恢复人工编辑；每个并列分支独立准备，并控制请求/时钟/视口条件|编辑器加载草稿；正式阅读、AI、评论继续引用 CURRENT；不混用版本|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-02|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；持续输入，前一次保存尚未返回|持续输入，前一次保存尚未返回；每个并列分支独立准备，并控制请求/时钟/视口条件|同一时刻一个请求；待发只保留最新快照；旧成功不覆盖新编辑|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-03|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；自动保存暂时失败、校验失败、版本冲突|自动保存暂时失败、校验失败、版本冲突；每个并列分支独立准备，并控制请求/时钟/视口条件|分别退避重试、停止重试待修正、保留双方内容待人工处理|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-04|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；完成或取消编辑时存在在途保存|完成或取消编辑时存在在途保存；每个并列分支独立准备，并控制请求/时钟/视口条件|按 [DT-OP25](#dt-op25)/26 排序执行；不会在草稿删除后再发送保存|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-05|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；完整/紧凑/不支持视口来回切换|完整/紧凑/不支持视口来回切换；每个并列分支独立准备，并控制请求/时钟/视口条件|宽度、互斥展开与阻断符合[BND-DETAIL](#bnd-detail)／5.2；自动布局不覆盖偏好；运行不被取消|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-06|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；INITIALIZE 卡片与 MODIFY 等待卡片提交|INITIALIZE 卡片与 MODIFY 等待卡片提交；每个并列分支独立准备，并控制请求/时钟/视口条件|前者新建运行，后者继续原运行；都只保存一条整组正式响应|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-07|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；评论 OPEN/RESOLVED 与 ATTACHED/ORPHANED 四组合|评论 OPEN/RESOLVED 与 ATTACHED/ORPHANED 四组合；每个并列分支独立准备，并控制请求/时钟/视口条件|双状态独立展示；操作与正文计数正确；孤立评论不定位|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-08|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；切换页签和收起面板时运行继续|切换页签和收起面板时运行继续；每个并列分支独立准备，并控制请求/时钟/视口条件|页面偏好变化，业务状态不变；重新展开读取最新状态|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-09|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；批次单项接受、编辑、完成、放弃|批次单项接受、编辑、完成、放弃；每个并列分支独立准备，并控制请求/时钟/视口条件|单项不改正文；完成后刷新正式正文；失败/失效不部分应用|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-10|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；历史快照查看与退出|历史快照查看与退出；每个并列分支独立准备，并控制请求/时钟/视口条件|历史只读、不显示当前评论；退出恢复最新工作状态，不覆盖正文|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-11|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；运行查询网络失败、运行业务失败、等待用户|运行查询网络失败、运行业务失败、等待用户；每个并列分支独立准备，并控制请求/时钟/视口条件|三类状态不混淆；分别退避、允许新运行重试、等待回复|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-DT-12|[BND-DETAIL](#bnd-detail)／5.2—5.5|本节公共准备；正文更新后来源浮层及评论标记变化|正文更新后来源浮层及评论标记变化；每个并列分支独立准备，并控制请求/时钟/视口条件|显示用户文案和本地时间，不暴露内部ID；全文标记采用I37及共同选区算法验证|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-PAGE-01|[BND-PAGINATION](#bnd-pagination)／5.6|本节公共准备；total=0、首尾页、越界页|total=0、首尾页、越界页；每个并列分支独立准备，并控制请求/时钟/视口条件|不产生page=0；首尾无效方向不可用；越界能回有效页|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-PAGE-02|[BND-PAGINATION](#bnd-pagination)／5.6|本节公共准备；翻页成功/失败及旧请求迟到|翻页成功/失败及旧请求迟到；每个并列分支独立准备，并控制请求/时钟/视口条件|成功同步页码和列表；失败保留成功页；旧响应不覆盖|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
+|TC-UI-PAGE-03|[BND-PAGINATION](#bnd-pagination)／5.6|本节公共准备；父级筛选改变page与重复点击当前页|父级筛选改变page与重复点击当前页；每个并列分支独立准备，并控制请求/时钟/视口条件|不重复输出或重复查询；固定pageSize=20|浏览器自动化；布局、焦点、色彩与溢出辅以人工检查；按已确认数据来源核对；未执行场景不标通过|
 
 
 **TC-UI-DT-OP01 继续初始化**
@@ -1897,11 +2233,11 @@ Requirement 为 `ACTIVE` 时：
 |TC-UI-DT-OP03|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP03](#dt-op03)|AI 对话普通文本发送入口；当前存在 AVAILABLE 卡片；初始化空闲时 [I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14) 创建 INITIALIZE；ASK/REVIEW/MODIFY 等待时 [I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15) 继续原运行|1 触发与检查：用户不提交卡片，直接发送普通文本；2 准备并提交：发送前保留卡片本地输入；成功后重新读取消息，由服务端推导原卡片为 EXPIRED，再清理该组草稿；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：普通文本按正常用户消息处理，原卡片变为 EXPIRED；4 明确失败或取消：不将文本自动映射成任何选项；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
-**TC-UI-DT-OP04 切换初始化模式**
+**TC-UI-DT-OP04 初始化模式只读及旧请求拒绝**
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP04|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP04](#dt-op04)|初始化模式选择控件；`INITIALIZING + IDLE`；只发送 initialization_mode；不顺带提交其他未修改字段|1 触发与检查：用户选择 `IDEATION` 或 `DESIGN` 并提交；2 准备并提交：选择待提交值，提交期间禁止重复保存；成功后回显服务端模式；失败恢复确认值并保留待选意图；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：只更新 `Requirement.initialization_mode`；后续 INITIALIZE GuideRun 使用新模式；已有运行、模板和正文不变；4 明确失败或取消：状态、占用或枚举校验失败时保留原模式；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP04|[DT-OP04](#dt-op04)、后端I04／C02|初始化中／进行中／已完成及各占用；已知模式与updated_at|检查详情无模式修改入口；分别构造仅模式、同值模式、标题＋模式及空PATCH请求|详情仅真实只读；HTTP非法／缺少title整体422／VALIDATION_FAILED，应用非法输入INVALID_INPUT；标题、模式、updated_at及运行快照不变；创建仍接收必选模式|接口基础检查与浏览器入口检查；不操作用户数据，未执行不标通过|
 
 
 **TC-UI-DT-OP05 完成初始化**
@@ -1985,7 +2321,7 @@ Requirement 为 `ACTIVE` 时：
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP16|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP16](#dt-op16)|版本记录列表中的版本条目；Requirement 存在；revision_id 来自 [I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24) 的条目|1 触发与检查：打开快照；2 准备并提交：加载对应只读 Markdown 与区块状态；展示历史标识，关闭当前评论交互；退出后恢复 CURRENT 或当前草稿视图；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：以历史身份只读展示 Markdown 和区块状态快照；不改 CURRENT，不带入当前活动评论；具体快照容器见 [FE-Q03](#fe-q03)。；4 明确失败或取消：失败允许重试；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP16|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP16](#dt-op16)|版本记录列表中的版本条目；Requirement 存在；revision_id 来自 [I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24) 的条目|1 触发与检查：打开快照；2 准备并提交：在原正文区域加载对应只读 Markdown 与区块状态；展示历史标识，右侧保留版本页签，关闭当前评论交互；点击“退出历史”先重读需求、CURRENT和活动状态，再恢复实际当前视图；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：以历史身份只读展示 Markdown 和区块状态快照；不改 CURRENT，不带入当前活动评论；具体快照容器见 [FE-Q03](#fe-q03)。；4 明确失败或取消：失败允许重试；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP17 添加评论**
@@ -2090,16 +2426,35 @@ Requirement 为 `ACTIVE` 时：
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-CREATE 新建抽屉|[BND-CREATE](#bnd-create)、工作台5.4|空五字段表单；分别无类型、1个/多个适用模板；标题21码点与空idea；有效配置取[FE-Q02](#fe-q02)关闭后的固定资源|切换类型、提交错误表单、点击遮罩/Esc/取消、提交中再关闭；分别成功与失败响应|初始空、类型未选禁模板；1项自动选、多项不默认、不兼容清空；首错聚焦；输入未确认放弃前不丢；请求中不能关闭；成功由父页面处理、失败保留内容|frontend/tests/components.test.ts :: test_bnd_create；浏览器测600px抽屉及固定区|
-|TC-UI-EDITOR 编辑器快照|[BND-EDITOR](#bnd-editor)、[BND-DETAIL](#bnd-detail)／5.5、[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)|F-D；本地先改为快照A，再改为B，A响应迟到；只读CURRENT和历史快照对照|输入、选择、保存、切换只读；复制/拆分/合并按正式身份算法分别执行|每次输出Markdown与BlockState同一快照；旧成功不覆盖B；节点元数据不泄漏Markdown；只读不能发起编辑；身份继承待[Q-06](WALL-E.V1_0.6.后端设计文档.md#q-06)关闭后按正式算法证明|frontend/tests/components.test.ts :: test_bnd_editor；实际Milkdown+Crepe环境|
-|TC-UI-CARDS 整组回答|[BND-CARDS](#bnd-cards)、[DT-OP02](#dt-op02)、[SHR-CARDS](WALL-E.V1_0.6.后端设计文档.md#shr-cards)|F-K；1/5张卡、required与可跳过、自定义开/关；AVAILABLE/ANSWERED/EXPIRED|填写、刷新恢复、提交失败、已有正式答案、状态失效；切换requirement/message|必答全满足才提交；显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）；仅AVAILABLE恢复对应本地草稿；失败保留；已答/失效清理；每组一次正式提交，推荐不自动选择|frontend/tests/components.test.ts :: test_bnd_cards；浏览器sessionStorage与可控HTTP|
-|TC-UI-SUGGESTIONS 决定与批次|[BND-SUGGESTIONS](#bnd-suggestions)、[DT-OP12](#dt-op12)—14|F-B；PENDING与终态，目标失效及结果未知|接受/编辑/拒绝、定位、完成/放弃；模拟已提交丢响应|原文只读、纵向区块对比、固定批次操作；单项不把正文当已更新；未知先查；失效不可继续但可放弃；不自动合并，终态只读|frontend/tests/components.test.ts :: test_bnd_suggestions；真实业务后果用后端[TC-E2E-03](WALL-E.V1_0.6.后端设计文档.md#tc-e2e-03)|
+|TC-UI-CREATE 新建抽屉|[BND-CREATE](#bnd-create)、工作台5.4|空五字段表单；分别无类型、1个/多个适用模板；标题21码点与空idea；有效配置取[FE-Q02](#fe-q02)对应正式资源|切换类型、提交错误表单、点击遮罩/Esc/取消、提交中再关闭；分别成功与失败响应|初始空、类型未选禁模板；1项自动选、多项不默认、不兼容清空；首错聚焦；输入未确认放弃前不丢；请求中不能关闭；成功由父页面处理、失败保留内容|frontend/tests/requirements.test.mjs；frontend/tests/browser/create-probe.tsx；完整场景按验收场景映射核对；浏览器测600px抽屉及固定区|
+|TC-UI-EDITOR 编辑器快照|[BND-EDITOR](#bnd-editor)、[BND-DETAIL](#bnd-detail)／5.5、[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)|F-D；本地先改为快照A，再改为B，A响应迟到；只读CURRENT和历史快照对照|输入、选择、保存、切换只读；复制/拆分/合并按正式身份算法分别执行|每次输出Markdown与BlockState同一快照；旧成功不覆盖B；节点元数据不泄漏Markdown；只读不能发起编辑；身份继承按后端SHR-BLOCK及已确认分配/回执算法证明|frontend/tests/identity.test.mjs；frontend/tests/browser/editor-host-probe.ts；完整场景按验收场景映射核对；实际Milkdown+Crepe环境|
+|TC-UI-CARDS 整组回答|[BND-CARDS](#bnd-cards)、[DT-OP02](#dt-op02)、[SHR-CARDS](WALL-E.V1_0.6.后端设计文档.md#shr-cards)|F-K；1/5张卡、required与可跳过、自定义开/关；AVAILABLE/ANSWERED/EXPIRED|填写、刷新恢复、提交失败、已有正式答案、状态失效；切换requirement/message|必答全满足才提交；显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）；仅AVAILABLE恢复对应本地草稿；失败保留；已答/失效清理；每组一次正式提交，推荐不自动选择|frontend/tests/cards.test.mjs；frontend/tests/card-groups.test.mjs；完整场景按验收场景映射核对；浏览器sessionStorage与可控HTTP|
+|TC-UI-SUGGESTIONS 决定与批次|[BND-SUGGESTIONS](#bnd-suggestions)、[DT-OP12](#dt-op12)—14|F-B；PENDING与终态，目标失效及结果未知|接受/编辑/拒绝、定位、完成/放弃；模拟已提交丢响应|原文只读、纵向区块对比、固定批次操作；单项不把正文当已更新；未知先查；失效不可继续但可放弃；不自动合并，终态只读|frontend/tests/suggestion-batch.test.mjs；frontend/tests/browser/suggestion-panel-probe.tsx；完整场景按验收场景映射核对；真实业务后果用后端[TC-E2E-03](WALL-E.V1_0.6.后端设计文档.md#tc-e2e-03)|
 |TC-UI-CONFIRM 确认意图|[BND-CONFIRM](#bnd-confirm)|普通/危险类型；标题与说明；原触发元素分别存在/移除|打开、Tab循环、Enter、Esc、遮罩、确认；提交中重复操作；失败后取消/重试|初始焦点取消、焦点限弹窗；底层不可操作滚动，遮罩不关闭；只确认一次；请求中不关闭；成功父级关闭刷新；失败内联不重复Toast；关闭恢复有效焦点|浏览器自动化+键盘人工验证；宽度建议与令牌见[Q-FE-VISUAL](#q-fe-visual)|
 |TC-UI-TOAST 队列与计时|[BND-TOAST](#bnd-toast)|成功/提示3秒、失败5秒；连续相同类型文案及4条不同提示|显示、悬停/焦点暂停、离开续时、手动关闭、重复触发|只在明确结果后出现，不抢焦点不阻操作；同型同文合并重计时，最多3条新在上，超出移除最早；关闭无业务事件；辅助技术可感知；就地错误不重复提示|可控时钟浏览器测试+辅助技术检查；长文案换行不丢结论|
-|TC-UI-FILTER 受控筛选|[BND-FILTER](#bnd-filter)、TC-UI-WB-01/02/03/07|选项[{value:0,label:“甲”},{value:1,label:“乙”}]；全选、仅选0；已提交keyword与不同输入草稿|取消最后项、一键全选、重复全选、多选、外部受控更新；Enter/搜索/清除；手动删空两分支|值保留数字类型；至少一项、无变化不通知、一次变化一次事件；面板多选保持；父级更新不再查询；清除及草稿分支按5.4，冲突统一结论受[Q-FE-FILTER](#q-fe-filter)阻塞|浏览器事件计数、请求捕获及焦点/弹层检查；36px等视觉参数见8.4|
-|TC-UI-PAGINATION 接入|[BND-PAGINATION](#bnd-pagination)、TC-UI-PAGE-01—03|pageSize20；total=0/1/21；page=1/2/3；loading/error状态|有效/无效方向、重复当前页、筛选回1、翻页失败和逆序响应|全部TC-UI-PAGE断言；列表和页码同一成功结果，越界能回有效页，不自动循环，不请求page0|frontend/tests/components.test.ts :: test_bnd_pagination|
+|TC-UI-FILTER 受控筛选|[BND-FILTER](#bnd-filter)、TC-UI-WB-01/02/03/07|选项[{value:0,label:“甲”},{value:1,label:“乙”}]；全选、仅选0；已提交keyword与不同输入草稿|取消最后项、一键全选、重复全选、多选、外部受控更新；Enter/搜索/清除；手动删空两分支|值保留数字类型；至少一项、无变化不通知、一次变化一次事件；面板多选保持；父级更新不再查询；清除及草稿分支按5.4，手动删空仅改草稿；清除在已提交非空时才取消查询|浏览器事件计数、请求捕获及焦点/弹层检查；36px等视觉参数见8.4|
+|TC-UI-PAGINATION 接入|[BND-PAGINATION](#bnd-pagination)、TC-UI-PAGE-01—03|pageSize20；total=0/1/21；page=1/2/3；loading/error状态|有效/无效方向、重复当前页、筛选回1、翻页失败和逆序响应|全部TC-UI-PAGE断言；列表和页码同一成功结果，越界能回有效页，不自动循环，不请求page0|frontend/tests/browser/components-probe.tsx；完整场景按验收场景映射核对|
 
-验证定位：工作台`frontend/tests/workbench.test.ts :: test_workbench_queries`；详情`frontend/tests/detail.test.ts :: test_detail_states / test_detail_operations / test_detail_layout / test_detail_panels / test_manual_draft_lifecycle`。公共控件的具体测试文件位置可随其实现定位确定，不能因此省略上述验收。
+验证定位：工作台 `frontend/tests/requirements.test.mjs`、`workbench-history.test.mjs`、`workbench-pause.test.mjs`；详情 `frontend/tests/detail-read.test.mjs`、`detail-layout.test.mjs`、`departure.test.mjs`，以及各操作/浏览器专项。完整TC场景去向按[验收场景映射](../验收场景映射.md)核对；文件存在不表示每个故障组合已验证。
+
+<a id="tc-ui-iteration-v2"></a>
+
+**迭代交互对应场景**
+
+下表为设计要求及既有检查定位，不表示本次执行了新的产品测试；逐项执行状态见迭代文档与verification中的Markdown记录。
+
+|场景引用|规格依据|前置及动作|预期结果|验证方式／边界|
+|---|---|---|---|---|
+|TC-UI-V2-01|5.1 FE-OPT-V2|鼠标／键盘逐次聚焦普通输入、复合搜索、按钮和Portal控件；含错误及强制颜色|单一反馈；鼠标不叠外框，键盘可见焦点，错误及业务标记保持|基本真实点击＋Tab，不仅静态样式|
+|TC-UI-V2-02|详情5.2／共享壳|工作台／详情切页，主导航展开／收起／刷新；窄窗与存储失败|独立200／64导航，常态头68、正文起点76；真实额外反馈可增高；偏好保留、无额外居中空带|几何及行为观察；不把固定68用于错误组合裁切|
+|TC-UI-V2-03|详情5.2／UX-017|大纲关闭／展开、AI助手重复点击、右栏X关闭、宽度按钮／拖动／方向键|对应入口焦点恢复；AI再次点保持打开；宽度受限；输入及请求所有者保留；自动响应不抢焦点|实际开合及键盘；窄窗互斥、持久偏好另核对|
+|TC-UI-V2-04|详情5.5／触发矩阵|普通焦点／显隐；独立pagehide／pageshow；1023→1024及恢复失败|普通切换无整页读取／冻结；必要恢复保持画面并暂停操作，失败明确重试；初始pageshow无额外恢复|分别记录事件来源、请求及节点身份；合成事件不声称BFCache真实验收|
+|TC-UI-V2-05|AI／评论／版本读取|已有列表慢请求、失败、筛选和分页；切页签／收起|正常无重复刷新；局部读保留内容与输入，固定状态槽；I19隔离；失败专属恢复；空／单页／越界正确|读取观察，未知结果恢复不转普通重试|
+|TC-UI-V2-06|AI工作区|长对话＋长设置、小高度窗口、空白／Unicode／超限／IME；历史运行与当前WAITING|发送在阅读区外可见；55%输入上限；即时与提交校验同规则；当前回复ID不由历史选择推断|基础呈现与控制器检查，不触发付费请求|
+|TC-UI-V2-07|BND-EDITOR|段首／中段／代码／URL斜杠，筛选、取消、插入和撤销；只读／模板标题|只在合法位置触发，查询删除＋命令原子事务；撤销回查询；非法或过期不丢输入；模板锁保持|内存真实编辑器，不只检查生成字符串|
+|TC-UI-V2-08|BND-EDITOR／UX-019|鼠标真实点击原生浮动样式下拉，再用方向键选择正文／标题；内部／外部焦点；滚动及顶部不足|下拉打开不被隐藏、持焦不重置value；内部不离焦保存，外部保留保存；完整选区上方8px且边界夹取，放不下隐藏不翻下|必须覆盖pointerdown→focusout→focusin→change真实路径，selectOption单独不证明点击可用|
+|TC-UI-V2-09|BND-EDITOR|Ctrl／Meta+B、I、K、Z、Y／ShiftZ、Shift8／7及IME、链接取消／非法协议|局部格式事务可撤销，不触发业务写操作；链接文本保持；只读与IME无格式变化|平台实测与代码分支核对分开记录|
+|TC-UI-V2-10|BND-CARDS／SUGGESTIONS|填写收纳、本地进度、风险、已回答／UNKNOWN；单元格编辑、筛选、下一项、组合输入|本地进度非正式答案；风险可见；恢复在收纳外；固定列数精确保留、编辑／受保护项不隐藏；单项决定非正式正文|基础组件／控制器检查；实际保存与最终采用未执行不宣称通过|
 
 ### 8.2 关键技术保证验证
 
@@ -2110,7 +2465,7 @@ Requirement 为 `ACTIVE` 时：
 |轮询及离开|RUNNING可见时1秒轮询；失败2/5/10/30秒退避；WAITING_USER/终态停止；隐藏/恢复和页面离开|受控时间及响应顺序；观察定时器/请求和恢复重读；离开不自动取消后台业务，迟到响应不污染新需求页面|
 |查询竞态|工作台、评论、版本列表的列表/分页/错误/加载状态|请求1、2逆序成功/失败，只有最新生效；用户筛选和翻页保持绑定|
 |未知业务结果|原请求输入、幂等键、响应丢失与GET复查|分别对创建、卡片、批次、评论软删、草稿保存执行；不得把未收到响应当未执行；软删评论通过[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28).deleted_at核实；完整规则引用后端6.1|
-|浏览器恢复|卡片sessionStorage、侧栏偏好、本地未确认草稿|刷新、重入、切对象、窄屏临时收起、存储不可用等；已定行为逐项检查，跨刷新草稿和存储失败策略须待[Q-FE-DRAFT](#q-fe-draft)闭合|
+|浏览器恢复|卡片sessionStorage、侧栏偏好、本地未确认草稿|刷新、重入、切对象、窄屏临时收起、存储不可用等；已定行为逐项检查，跨刷新草稿和存储失败策略按第7.4节执行|
 
 ### 8.4 质量与人工验证
 
@@ -2118,38 +2473,38 @@ Requirement 为 `ACTIVE` 时：
 
 |要求与范围|条件与测量对象|判定标准|验证方式及环境|
 |---|---|---|---|
-|公共视觉与操作层级|工作台、详情及八个组件；默认、悬停、焦点、禁用、加载、错误和成功状态|符合[FE-UI-PRINCIPLES](#fe-ui-principles)与[FE-UI-COLOR](#fe-ui-color)：黑白灰为主、主要动作明确；红色危险/失败和绿色成功图标仍可辨；状态同时有文字或图形；同类控件跨页一致，不因状态变化跳动|在支持浏览器中逐态操作并截图对照；以现有业务场景驱动状态，不凭静态首页判定通过|
-|字体与阅读层级|中英文混排、长标题、正文、对话、说明、表格与代码；系统字体可用及回退情形|字体类别符合[FE-UI-TYPOGRAPHY](#fe-ui-typography)，层级清晰，重要状态可读；已有固定字号不变；长表格与代码不靠压缩文字适配；建议参数在Q-FE-VISUAL确认前不作已通过的像素验收依据|检查实际渲染字体和浏览器截图；在已确认的支持系统/浏览器上核对混排、换行和溢出|
+|公共视觉与操作层级|工作台、详情及八个组件；默认、悬停、焦点、禁用、加载、错误和成功状态|符合[FE-UI-PRINCIPLES](#fe-ui-principles)与[FE-UI-COLOR](#fe-ui-color)：黑白灰为主、主要动作明确；红色危险/失败和绿色成功图标仍可辨；状态同时有文字或图形；同类控件跨页一致，不因状态变化跳动|在支持浏览器中逐态操作并记录Markdown观察结论；以现有业务场景驱动状态，不凭静态首页判定通过|
+|字体与阅读层级|中英文混排、长标题、正文、对话、说明、表格与代码；系统字体可用及回退情形|字体类别符合[FE-UI-TYPOGRAPHY](#fe-ui-typography)，层级清晰，重要状态可读；已有固定字号不变；长表格与代码不靠压缩文字适配；建议参数在Q-FE-VISUAL确认前不作已通过的像素验收依据|检查实际渲染字体和浏览器实际表现；在已确认的支持系统/浏览器上核对混排、换行和溢出|
 |焦点、动态效果与反馈|键盘遍历、打开/关闭弹层、请求加载、减少动态效果偏好|焦点清楚、纯图标操作名称可取得；已定义弹窗焦点规则保持；减少动态效果时无非必要过渡且处理中状态仍可读；动效不改变提交/保存/轮询/Toast计时，错误不重复提示|复用8.1与8.2对应场景，进行键盘与辅助技术检查；分别开启/关闭减少动态效果并观察，计时与请求由浏览器记录核对|
-|响应式详情布局|视口1023、1024、1279、1280及更宽CSS px；左右栏不同展开组合|≥1280允许两侧；1024—1279至多一侧，若同时展开按5.2收左；<1024阻断页面业务操作并显示既定提示；后台运行继续且既有草稿保存保护仍在；自动布局不覆盖偏好|支持浏览器范围待[Q-FE-BASELINE](#q-fe-baseline)；逐尺寸截图与交互检查，不只检查CSS字符串|
-|正文与侧栏尺寸|展开目录200px；右栏默认420px、最小360px；拖动至上下限；长表格/代码/标题|右栏上限min(剩余空间一半,剩余空间−640px)，正文至少640px、内容列最大960px；溢出按5.2区域独立滚动；折叠与拖动不移动无关区域|人工测量和浏览器几何断言；各状态使用实际长内容|
+|响应式详情布局|视口1023、1024、1279、1280及更宽CSS px；左右栏不同展开组合|≥1280允许两侧；1024—1279至多一侧，若同时展开按5.2收左；<1024阻断页面业务操作并显示既定提示；后台运行继续且既有草稿保存保护仍在；自动布局不覆盖偏好|支持浏览器范围按第2.1节基线；逐尺寸观察与交互检查，不只检查CSS字符串|
+|正文与侧栏尺寸|展开目录200px；右栏默认420px、最小360px；拖动至上下限；长表格/代码/标题|右栏上限min(剩余空间一半,剩余空间−640px)，正文至少640px、填满中间栏并统一左右24px边界；溢出按5.2区域独立滚动；折叠与拖动不移动无关区域|人工测量和浏览器几何断言；各状态使用实际长内容|
 |筛选控件|36px高、8px圆角、14px字体、12px内边距，16px图标、至少28×28点击区；下拉280px上限|悬停/焦点不改尺寸；键盘焦点可辨；下拉上下翻转、顶部全选、长文省略Tooltip和内部滚动符合5.6；搜索/清除不遮文字或引发布局变动|鼠标与键盘逐态检查，窄宽可用布局下重复|
 |弹窗与Toast|模态遮罩、长正文、危险操作、加载、内联错误；Toast长文和多条队列|焦点、关闭、层级、换行、辅助技术和计时满足5.6；不只靠颜色表达；确认按钮加载宽度不变；推荐尺寸仍以[Q-FE-VISUAL](#q-fe-visual)记录建议属性|真实浏览器人工与辅助技术验证|
-|时间与展示|有效UTC毫秒值、跨本地时区、无效时间、内部对象ID和来源标签|按页面本地时间规则显示；异常时间“--”；不将内部ID当用户说明；来源/评论双状态可辨，历史快照不混当前评论|TC-UI-WB-06、TC-UI-DT-07/10/12；正文定位和全量计数受[FE-Q05](#fe-q05)/08阻塞|
-|输入与内容保护|Unicode码点边界、输入法组合输入、文本拖选、长内容、失败离开|遵守字段校验与页面触发，不把拖选当导航；失败与未知结果保留未确认输入；输入法提交细则尚未明确的部分见[Q-FE-COMPONENT](#q-fe-component)|浏览器操作与网络故障注入；不宣称卸载必定保存|
+|时间与展示|有效UTC毫秒值、跨本地时区、无效时间、内部对象ID和来源标签|按页面本地时间规则显示；异常时间“--”；不将内部ID当用户说明；来源/评论双状态可辨，历史快照不混当前评论|TC-UI-WB-06、TC-UI-DT-07/10/12；正文定位按选区共同规则，全量计数使用I37|
+|输入与内容保护|Unicode码点边界、输入法组合输入、文本拖选、长内容、失败离开|遵守字段校验与页面触发，不把拖选当导航；失败与未知结果保留未确认输入；IME组合期间不触发Enter搜索或提交，组合结束不隐式提交|浏览器操作与网络故障注入；不宣称卸载必定保存|
 
 ### 8.5 规格完成与实现验收
 
-当前文档为DRAFT。附录A影响路由、配置、历史容器、评论标记、锚点、交互细节、浏览器持久化及组件契约的未决事项解决，并与后端共同协议和验收闭合后，才能转为EFFECTIVE。已允许实现者决定的内部封装不要求提前虚构函数名。
+当前文档为DRAFT。路由、配置、历史容器、评论索引、选区、浏览器持久化及组件契约已有确认结论；尚未固定的视觉参数及第8章运行验收需分别闭合，不能因文档合并自动转为EFFECTIVE。已允许实现者决定的内部封装不要求提前虚构函数名。
 
 实现验收另需第5章所有页面/组件行为与第8章适用场景的浏览器证据，核心路径与真实后端串联，未知结果与失败保护符合约定，已确定视觉与支持平台要求满足。验收记录关联规格/实现版本、浏览器及视口、数据版本、执行方法和证据位置；文档核对不等于软件测试通过。
 
 
-## 附录A. 待确认事项
+## 附录A. 已确认结论索引与剩余待确认项
 
-|问题引用|需要确定的决定或事实|影响位置|已知条件与必须保留的约束|
+|问题引用|确认结论与当前状态|影响位置|必须保留的约束|
 |---|---|---|---|
-|<a id="fe-q01"></a>FE-Q01|确定工作台、详情及返回导航的实际路由和参数编码、状态恢复载体|[BND-WORKBENCH](#bnd-workbench)、[BND-DETAIL](#bnd-detail)入口与返回|主导航进入默认条件；详情返回恢复已提交条件、页码、滚动并刷新；浏览器返回行为须一致|
-|<a id="fe-q02"></a>FE-Q02|确定类型、模板、模式中文文案、模板目录及适用配置的前端取得方式和版本|[BND-CREATE](#bnd-create)、工作台/详情数据来源|NEW/CHANGE为已定业务枚举；一个适用模板自动选、多个不默认；后端[Q-01](WALL-E.V1_0.6.后端设计文档.md#q-01)提供正式模板内容，不能编造接口|
-|<a id="fe-q03"></a>FE-Q03|确定历史版本的承载容器、进入与退出导航形式|[DT-OP16](#dt-op16)、VERSION_VIEW、版本页签|只读快照，不带当前评论；退出回最新工作状态、不覆盖正文。尚无已确认容器与返回方式|
-|<a id="fe-q05"></a>FE-Q05|确定全文评论数量/区块标记/未解决数的数据来源，以及分页之外选中评论的定位加载方式|详情正文标记、评论列表、[DT-OP17](#dt-op17)—22、TC-UI-DT-12|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)仅分页结果，当前页数不等于全文数；不能假设已有全量统计接口或漏标其他页评论|
-|<a id="fe-q07"></a>FE-Q07|确定标题提交入口/快捷键、范围选择器呈现、新消息自动滚动及回到底部入口规则|[DT-OP27](#dt-op27)、范围选择与消息滚动|现有动作、范围枚举和轮询规则不变；加载更早消息必须保持阅读定位，不能自行添加快捷键|
-|<a id="fe-q08"></a>FE-Q08|确定编辑器选择事件与后端锚点/选区偏移算法的统一绑定|[BND-EDITOR](#bnd-editor)、评论创建/定位、Scope选择|SELECTION仅一个Block、唯一定位、保留原引用；算法正式定义在后端[Q-06-ANCHOR](WALL-E.V1_0.6.后端设计文档.md#q-06-anchor)/[Q-06-SCOPE](WALL-E.V1_0.6.后端设计文档.md#q-06-scope)|
-|<a id="fe-q10"></a>FE-Q10|确定数字分页按钮数量、省略号和间距|[BND-PAGINATION](#bnd-pagination)|固定20条、当前页/总页/总数、首尾及越界行为已定；不增加页容量选择、排序或自定义跳页|
-|<a id="q-fe-baseline"></a>Q-FE-BASELINE|确定前端框架/运行时/构建与测试工具版本、Milkdown/Crepe版本、支持浏览器以及安装启动和后端地址配置|2.1/2.3、编辑器、8.4|Milkdown+Crepe、非流式HTTP与轮询、单用户无Y.js为已定选择；不能自行换编辑器或通信协议|
-|<a id="q-fe-draft"></a>Q-FE-DRAFT|确定本地未确认草稿、侧栏偏好及卡片草稿的具体存储键/结构版本、容量、不可用和清理机制|7.4、详情5.5、[BND-CARDS](#bnd-cards)|卡片指定sessionStorage且requirement/message隔离；已有失败保留与恢复核实规则必须保留；不能依赖退出事件必达，也不能宣称未指定的跨刷新持久保证|
-|<a id="q-fe-component"></a>Q-FE-COMPONENT|确定当前缺少的组件受控输入/空值表示、选择/定位事件字段、选项配置结构与必要输入法行为|5.6 CREATE/EDITOR/CARDS/SUGGESTIONS及公共控件|五字段创建、完整编辑快照、整组回答及父级HTTP责任不变；普通内部函数和文件组织可由实现者决定，不因未命名额外阻塞|
-|<a id="q-fe-filter"></a>Q-FE-FILTER|统一通用搜索的匹配职责与手动清空触发规则，消除来源内冲突|[BND-FILTER](#bnd-filter)、工作台5.4、TC-UI-WB-02|业务明确完整REQ编号精确匹配、标题包含匹配；控件旧表又称全部默认模糊。公共清空区分已提交/草稿，子项却称删空一律查询。保留这两处冲突，不将选定一方冒充已确认|
-|<a id="q-fe-visual"></a>Q-FE-VISUAL|确认建议性视觉值是否转为固定设计参数，确定统一颜色、字号、行高、字重与间距参数|第5.1节[FE-UI-COLOR](#fe-ui-color)、[FE-UI-TYPOGRAPHY](#fe-ui-typography)、[FE-UI-LAYOUT](#fe-ui-layout)，[BND-CONFIRM](#bnd-confirm)、[BND-TOAST](#bnd-toast)，第8.4节|黑白灰主体、系统无衬线字体和公共交互原则已补入；新字号/行高/字重与间距档位为建议，40%遮罩、440px确认框、Toast顶部24px/最大480px仍为原建议；组件已有固定值及红色危险/失败、绿色成功图标保留，此项不授权改业务行为|
+|<a id="fe-q01"></a>FE-Q01|已确认；结论见[FE-02](#sync-fe-02)|[BND-WORKBENCH](#bnd-workbench)、[BND-DETAIL](#bnd-detail)入口与返回|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="fe-q02"></a>FE-Q02|已确认；结论见[FE-03](#sync-fe-03)|[BND-CREATE](#bnd-create)、工作台/详情数据来源|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="fe-q03"></a>FE-Q03|已确认；结论见[FE-04](#sync-fe-04)|[DT-OP16](#dt-op16)、VERSION_VIEW、版本页签|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="fe-q05"></a>FE-Q05|已确认；结论见[FE-05](#sync-fe-05)|详情正文标记、评论列表、[DT-OP17](#dt-op17)—22、TC-UI-DT-12|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="fe-q07"></a>FE-Q07|已确认；结论见[FE-06](#sync-fe-06)|[DT-OP27](#dt-op27)、范围选择与消息滚动|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="fe-q08"></a>FE-Q08|已确认；结论见[FE-07](#sync-fe-07)|[BND-EDITOR](#bnd-editor)、评论创建/定位、Scope选择|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="fe-q10"></a>FE-Q10|数字按钮、省略号、32px按钮及所列间距已定，见[FE-08](#sync-fe-08)及[FE-OPT-V1](#sync-fe-opt-v1)|[BND-PAGINATION](#bnd-pagination)|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="q-fe-baseline"></a>Q-FE-BASELINE|已确认；结论见[FE-01](#sync-fe-01)|2.1/2.3、编辑器、8.4|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="q-fe-draft"></a>Q-FE-DRAFT|已确认；结论见[FE-09](#sync-fe-09)|7.4、详情5.5、[BND-CARDS](#bnd-cards)|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="q-fe-component"></a>Q-FE-COMPONENT|已确认；结论见[FE-07](#sync-fe-07)、[FE-10](#sync-fe-10)|5.6 CREATE/EDITOR/CARDS/SUGGESTIONS及公共控件|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="q-fe-filter"></a>Q-FE-FILTER|已确认；结论见[FE-11](#sync-fe-11)|[BND-FILTER](#bnd-filter)、工作台5.4、TC-UI-WB-02|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="q-fe-visual"></a>Q-FE-VISUAL|暂定实施已允许；分页按[FE-OPT-V1](#sync-fe-opt-v1)、共享头部／正文／工具局部尺寸及标题排版按[FE-OPT-V2](#sync-fe-opt-v2)与对应页面／组件固定，其余未固定视觉值保留原边界，见[FE-12](#sync-fe-12)|第5.1节[FE-UI-COLOR](#fe-ui-color)、[FE-UI-TYPOGRAPHY](#fe-ui-typography)、[FE-UI-LAYOUT](#fe-ui-layout)，[BND-CONFIRM](#bnd-confirm)、[BND-TOAST](#bnd-toast)，第8.4节|40%遮罩、440px确认框、Toast顶部24px/最大480px及未固定字号/间距仍暂定；已固定局部尺寸不变。|
 
-共同业务、HTTP、模板、Markdown/Block身份、Scope、锚点和Patch缺口以[后端设计文档附录A](WALL-E.V1_0.6.后端设计文档.md#backend-issues)为唯一问题定义。前端不得自行填入与后端不一致的算法或参数。解决本附录事项后回写对应第2/5/7/8章，同步引用与验收，再删除已解决条目。
+共同业务、HTTP、模板、Markdown/Block身份、Scope、锚点和Patch缺口以[后端设计文档附录A](WALL-E.V1_0.6.后端设计文档.md#backend-issues)为唯一问题定义。前端不得自行填入与后端不一致的算法或参数。已解决项保留锚点并链接正文结论，不再重复声明待定；尚未确认部分继续保留，验收结果单独记录。

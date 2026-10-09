@@ -17,9 +17,9 @@ export function RequirementLifecycleControl(props:Readonly<{flow:RequirementLife
     catch{setError('变更已确认，实际详情暂时无法读取，请重试读取');}finally{pending.current=false;setBusy(false);}
   };
   return <div className="requirement-lifecycle-control">
-    <button type="button" disabled={props.blocked||active||state.phase==='CONFIRMED'||state.phase!=='UNKNOWN'&&props.writeReady===false} onClick={()=>setOpen(true)}>{state.phase==='UNKNOWN'?'确认生命周期变更结果':label}</button>
+    <button className="ui-button" type="button" disabled={props.blocked||active||state.phase==='CONFIRMED'||state.phase!=='UNKNOWN'&&props.writeReady===false} onClick={()=>setOpen(true)}>{state.phase==='UNKNOWN'?'确认生命周期变更结果':label}</button>
     {state.phase==='CONFIRMED'&&<p role="status">{label}已确认，{error?'详情尚未重新读取。':'正在读取实际详情。'}</p>}
-    {state.phase==='CONFIRMED'&&error&&<button type="button" disabled={props.blocked||active} onClick={()=>void execute(true)}>重新读取实际详情</button>}
+    {state.phase==='CONFIRMED'&&error&&<button className="ui-button" type="button" disabled={props.blocked||active} onClick={()=>void execute(true)}>重新读取实际详情</button>}
     {error&&<p role="alert" className="inline-error">{error}</p>}
     {state.error&&!open&&<p role="alert" className="inline-error">{state.error}</p>}
     <Confirmation open={open} title={`${label}？`} description={descriptions[props.flow.operation]} busy={active} confirmDisabled={props.blocked||state.phase!=='UNKNOWN'&&props.writeReady===false}

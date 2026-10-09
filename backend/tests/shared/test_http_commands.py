@@ -75,9 +75,14 @@ class HttpCommandTests(unittest.TestCase):
         self.assertEqual(updated['title'], '修改😀')
         self.assertEqual(self.envelope(self.client.patch(BASE, json={'title': '修改😀'}))['data']['updated_at'], updated['updated_at'])
         before = self.facts()
-        self.command('PATCH', BASE, {'title': '不应写入', 'initialization_mode': 'DESIGN'}, status=409)
+        self.command('PATCH', BASE, {'title': '不应写入', 'initialization_mode': 'DESIGN'}, status=422)
         self.assertEqual(self.facts(), before)
         self.assertEqual(self.envelope(self.client.get(BASE+'/current-document'))['data'], current)
+        initializing = self.seed_initializing()
+        before = self.facts()
+        for body in ({'initialization_mode': 'IDEATION'}, {'title': '不得部分更新', 'initialization_mode': 'DESIGN'}):
+            self.command('PATCH', initializing, body, status=422)
+        self.assertEqual(self.facts(), before)
 
     def test_start_renames_current_version_and_replays_original_201_data(self):
         target = self.seed_initializing()

@@ -104,9 +104,9 @@ export class WalleApi {
       for (const field of ['requirement_type', 'template_key', 'template_version', 'initialization_mode'] as const) require(value.requirement[field] === original![field]);
     });
   }, 201); }
-  prepareUpdateRequirement(identity: number, body: Readonly<{ title?: string; initialization_mode?: 'IDEATION' | 'DESIGN' }>) {
+  prepareUpdateRequirement(identity: number, body: Readonly<{ title: string }>) {
     return this.action('PATCH', target('requirements', identity), body, original => {
-      bodyFields(original!, [], ['title', 'initialization_mode']); require(Object.keys(original!).length > 0); return identified(models.requirement, identity);
+      bodyFields(original!, ['title'], []); return identified(models.requirement, identity);
     }, 200, false);
   }
   prepareCompleteInitialization(identity: number, version: number) { return this.action('POST', target('requirements', identity, '/complete-initialization'), { expected_content_version: id(version) }, original =>

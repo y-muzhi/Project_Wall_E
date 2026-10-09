@@ -1,3 +1,4 @@
+import {Icon} from './icon.tsx';
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { ToastStore, type Toast } from './toast-store.ts';
@@ -35,7 +36,7 @@ export function ToastViewport({ store }: { store: ToastStore }) {
     role={expiresAt === null ? (entry.type === 'error' ? 'alert' : 'status') : undefined}
     onMouseEnter={() => store.pause(entry.id, 'hover')} onMouseLeave={() => store.resume(entry.id, 'hover')}
     onFocusCapture={() => store.pause(entry.id, 'focus')} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) store.resume(entry.id, 'focus'); }}>
-    <span aria-hidden="true" className="toast-icon">{entry.type === 'success' ? '✓' : entry.type === 'error' ? '!' : 'i'}</span>
-    <span>{entry.message}</span><button type="button" className="icon-button" aria-label="关闭提示" disabled={expiresAt !== null} onClick={() => store.dismiss(entry.id)}>×</button>
+    <span aria-hidden="true" className="toast-icon"><Icon name={entry.type === 'success' ? 'success' : entry.type === 'error' ? 'error' : 'info'}/></span>
+    <span>{entry.message}</span><button type="button" className="ui-button icon-button" aria-label="关闭提示" disabled={expiresAt !== null} onClick={() => store.dismiss(entry.id)}><Icon name="close"/></button>
   </article>)}</div>, modal ?? document.body);
 }

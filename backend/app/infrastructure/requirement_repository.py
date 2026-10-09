@@ -61,7 +61,7 @@ class RequirementRepository:
 
     def update_attributes(self, identity: int, changes: dict[str, str], at: str) -> dict:
         require_write_transaction(self.connection)
-        if not changes or not set(changes) <= {'title', 'initialization_mode'}:
+        if not changes or not set(changes) <= {'title'}:
             raise ValueError('Only submitted mutable attributes may be written')
         fields = tuple(changes)
         result = self.connection.execute(

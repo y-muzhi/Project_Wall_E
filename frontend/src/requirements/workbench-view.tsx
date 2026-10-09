@@ -1,3 +1,4 @@
+import {REQUIREMENT_STATUS_LABELS} from '../shared/status-labels.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { MouseEvent } from 'react';
 import { RequirementWorkbench } from './workbench.ts';
@@ -9,8 +10,9 @@ import { MultiFilter, SearchInput } from '../shared/filter.tsx';
 import { Pagination } from '../shared/pagination.tsx';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { localTime } from '../shared/time.ts';
+import {PageHeader} from '../application/header.tsx';
 
-const statusOptions=[{value:'INITIALIZING',label:'初始化中'},{value:'ACTIVE',label:'进行中'},{value:'COMPLETED',label:'已完成'}] as const;
+const statusOptions=(['INITIALIZING','ACTIVE','COMPLETED'] as const).map(value=>({value,label:REQUIREMENT_STATUS_LABELS[value]}));
 const typeName=(value:'NEW'|'CHANGE')=>requirementCatalog.requirement_types.find(option=>option.value===value)!.label;
 function condition(query:WorkbenchQuery):string {
   return `关键词：${query.keyword||'无'}；状态：${query.status.length===3?'全部':query.status.map(value=>statusOptions.find(option=>option.value===value)!.label).join('、')}；类型：${query.requirement_type.length===2?'全部':query.requirement_type.map(typeName).join('、')}`;
@@ -55,16 +57,16 @@ export function WorkbenchView({workbench,creation,restoreScroll=null,openRequire
   };
   const phase=workbench.phase;
   return <main className="workbench" data-phase={phase}>
-    <header className="workbench-heading"><h1>需求工作台</h1></header>
+    <PageHeader><header className="workbench-heading" role="group" aria-label="工作台页头"><h1>需求工作台</h1></header></PageHeader>
     <div className="workbench-controls"><div><SearchInput value={draft} submitted={state.requested.keyword} placeholder="请输入需求编号或需求标题" draft={setDraft}
       submit={keyword=>query({...state.requested,keyword,page:1},true)} />{(searchError||state.field_error)&&<p className="inline-error" role="alert">! {searchError||state.field_error}</p>}</div>
       <MultiFilter name="需求状态" options={statusOptions} value={state.requested.status} change={status=>query({...state.requested,status,page:1})}/>
       <MultiFilter name="需求类型" options={requirementCatalog.requirement_types} value={state.requested.requirement_type} change={requirement_type=>query({...state.requested,requirement_type,page:1})}/>
-      <button type="button" className="primary" onClick={()=>setDrawer(true)}>新建需求</button>
+      <button type="button" className="ui-button primary" onClick={()=>setDrawer(true)}>新建需求</button>
     </div>
     {phase==='LOADING'&&<p className="list-notice" role="status">正在加载需求…</p>}
     {phase==='REFRESHING'&&<p className="list-notice" role="status">正在刷新，当前展示上次成功的查询结果。</p>}
-    {state.error&&!state.field_error&&<div className="list-notice inline-error" role="alert"><p>! {state.error}</p><button type="button" onClick={()=>{void workbench.refresh();}}>重试查询</button></div>}
+    {state.error&&!state.field_error&&<div className="list-notice inline-error" role="alert"><p>! {state.error}</p><button className="ui-button" type="button" onClick={()=>{void workbench.refresh();}}>重试查询</button></div>}
     {(phase==='REFRESHING'||phase==='REFRESH_ERROR')&&state.confirmed&&<p className="confirmed-condition">上次成功条件：{condition(state.confirmed)}</p>}
     {state.result&&<><div className="workbench-table-wrap"><table className="workbench-table"><colgroup><col className="number-column"/><col/><col className="type-column"/><col className="status-column"/><col className="time-column"/></colgroup>
       <thead><tr><th>需求编号</th><th>需求标题</th><th>需求类型</th><th>当前状态</th><th>更新时间</th></tr></thead>
@@ -74,7 +76,7 @@ export function WorkbenchView({workbench,creation,restoreScroll=null,openRequire
         <td title={typeName(row.requirement_type)}>{typeName(row.requirement_type)}</td><td><span className={'requirement-status status-'+row.status.toLowerCase()}>{statusOptions.find(option=>option.value===row.status)!.label}</span></td><td>{localTime(row.updated_at)}</td>
       </tr>)}</tbody></table></div>
       {!state.result.items.length&&<div className="workbench-empty"><p>{phase==='EMPTY'?'暂无需求':phase==='NO_MATCH'?'没有符合条件的需求':phase==='OUT_OF_RANGE'?'当前页无记录':'上次成功查询没有记录'}</p>
-        {phase==='EMPTY'&&<button type="button" onClick={()=>setDrawer(true)}>新建需求</button>}</div>}
+        {phase==='EMPTY'&&<button className="ui-button" type="button" onClick={()=>setDrawer(true)}>新建需求</button>}</div>}
       <Pagination value={state.result.pagination} loading={state.loading} change={page=>query({...state.requested,page})}/>
     </>}
     <CreateRequirementDrawer open={drawer} state={create} edit={value=>creation.edit(value)} create={()=>{void creation.submit();}} cancel={cancel}/>

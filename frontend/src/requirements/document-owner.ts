@@ -82,9 +82,8 @@ export class RequirementDocumentOwner{
       this.publish({detail:actual,error:null,manual:null});return;
     }
     const created=await this.makeLive(actual);if(this.closed){await this.retireLive(created);throw Error('Retired creation');}
-    // A newly appeared cache remains a fresh explicit recovery choice. Only
-    // the actual no-local server baseline can inherit the confirmed selection.
-    if(replaceSelected&&created.session?.recovery.canContinueServer)created.session.recovery.continueServerWithoutLocal();
+    // makeLive verifies recovery: an unchanged no-local baseline resumes by
+    // itself. A newly appeared cache or storage failure still requires a choice.
     this.live=created;if(previous)await this.retireLive(previous);this.publish({detail:actual,manual:created.session,error:null});
   }
   private revealLive():void{if(!this.live)return;this.live.host.hidden=false;this.live.host.inert=false;this.live.navigation.setVisible(true);this.live.navigation.refresh();

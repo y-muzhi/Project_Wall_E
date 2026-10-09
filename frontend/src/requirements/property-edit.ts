@@ -5,7 +5,7 @@ import type {DetailSnapshot} from './detail-read.ts';
 import {detailPermissions} from './permissions.ts';
 import {ordinaryInput} from '../shared/text.ts';
 
-export type RequirementProperty='title'|'initialization_mode';
+export type RequirementProperty='title';
 export type PropertyEditState=Readonly<{phase:'VIEW'|'EDITING'|'SUBMITTING'|'UNKNOWN'|'READING'|'OBSERVED'|'CONFIRMED';
   actual:Requirement;draft:string;error:string|null;error_code:string|null;receipt:Requirement|null;
   submitted:Readonly<{field:RequirementProperty;value:string}>|null}>;
@@ -20,6 +20,7 @@ export class RequirementPropertyEdit {
   private value:PropertyEditState;private readonly listeners=new Set<()=>void>();private disposed=false;
   private pending:Promise<boolean>|undefined;private pendingKind:'SAVE'|'READ'|undefined;private controller:AbortController|undefined;
   constructor(field:RequirementProperty,detail:DetailSnapshot,api:Api){
+    if(field!=='title')throw TypeError('Only title may be edited after creation');
     this.field=field;this.detail=capture(detail);this.api=api;this.check(detail);
     this.value=Object.freeze({phase:'VIEW',actual:this.detail.requirement,draft:this.detail.requirement[field],error:null,error_code:null,receipt:null,submitted:null});
   }
@@ -28,7 +29,7 @@ export class RequirementPropertyEdit {
   }
   getSnapshot=():PropertyEditState=>this.value;
   subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
-  get allowed():boolean{const p=detailPermissions({...this.detail,requirement:this.value.actual},true);return this.field==='title'?p.title:p.mode;}
+  get allowed():boolean{const p=detailPermissions({...this.detail,requirement:this.value.actual},true);return p.title;}
   private publish(changes:Partial<PropertyEditState>):void{if(this.disposed)return;this.value=Object.freeze({...this.value,...changes});for(const listener of this.listeners){try{listener();}catch(error){console.error('WALL-E property observer failed',error);}}}
   begin():boolean{
     if(this.disposed||this.pending||this.value.phase!=='VIEW'||!this.allowed)return false;
@@ -55,11 +56,10 @@ export class RequirementPropertyEdit {
     return this.run('SAVE',async()=>{
       if(!this.allowed){this.publish({error:'当前状态不允许修改此属性，请重新读取详情',error_code:'STATE_CONFLICT'});return false;}
       let value:string;
-      try{value=this.field==='title'?ordinaryInput(this.value.draft,'title',1,20,false):this.value.draft;
-        if(this.field==='initialization_mode'&&!['IDEATION','DESIGN'].includes(value))throw Error('请选择灵感模式或设计模式');
+      try{value=ordinaryInput(this.value.draft,'title',1,20,false);
       }catch(error){this.publish({error:error instanceof Error?error.message:'属性输入不合法',error_code:'INVALID_INPUT'});return false;}
       const submitted=Object.freeze({field:this.field,value});
-      const body=this.field==='title'?{title:value}:{initialization_mode:value as 'IDEATION'|'DESIGN'};
+      const body={title:value};
       let action:ReturnType<Api['prepareUpdateRequirement']>;
       try{action=this.api.prepareUpdateRequirement(this.value.actual.id,body);}
       catch{this.publish({error:'暂时无法准备保存，输入已保留',error_code:'INVALID_INPUT'});return false;}

@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {RequirementPropertyEdit} from '../src/requirements/property-edit.ts';
+import {detailPermissions} from '../src/requirements/permissions.ts';
 import {ApiUnknown,ApiRejected} from '../src/api/client.ts';
 const at='2026-10-06T02:00:00.000Z';
 const root={id:1,requirement_no:'REQ000001',title:'实际标题',requirement_type:'NEW',initialization_mode:'DESIGN',status:'INITIALIZING',document_work_state:'IDLE',
@@ -25,11 +26,13 @@ test('unknown PATCH matching GET remains observation and never resends; explicit
  assert.equal(p.flow.getSnapshot().phase,'OBSERVED');assert.equal(p.flow.getSnapshot().receipt,null);assert.equal(p.flow.getSnapshot().draft,'  新标题😀  ');assert.equal(p.f.submits,1);assert(!await p.flow.inspectUnknown());assert.equal(p.f.reads,1);
  assert(p.flow.continueEditing());p.f.fail=false;assert(await p.flow.save());assert.equal(p.f.prepares.length,2);assert.equal(p.f.submits,2);p.flow.dispose();
 });
-test('mode only initializing idle, cancelled edits do not prepare; same value is explicitly sent without other fields',async()=>{
- for(const actual of [{...root,status:'ACTIVE'},{...root,document_work_state:'GUIDE_ACTIVE'},{...root,status:'COMPLETED',completed_at:at}]){const p=fixture('initialization_mode',actual);assert(!p.flow.allowed);assert(!p.flow.begin());p.flow.dispose();}
- const p=fixture('initialization_mode');assert(p.flow.begin());p.flow.change('IDEATION');assert.equal(p.flow.getSnapshot().actual.initialization_mode,'DESIGN');assert(p.flow.cancel());assert.equal(p.f.prepares.length,0);
- p.flow.begin();p.flow.change('invalid');assert(!await p.flow.save());p.flow.change('DESIGN');assert(await p.flow.save());assert.deepEqual(p.f.prepares[0].body,{initialization_mode:'DESIGN'});p.flow.dispose();
+test('initialization mode is creation-only in every lifecycle and occupancy, never preparing or sending PATCH',async()=>{
+ for(const actual of [root,{...root,status:'ACTIVE'},{...root,document_work_state:'GUIDE_ACTIVE'},{...root,status:'COMPLETED',completed_at:at}]){
+  assert.equal(detailPermissions(detail(actual),true).mode,false);
+  assert.throws(()=>fixture('initialization_mode',actual),/Only title/);
+ }
 });
+
 test('known conflict and actual re-read retain intention but cannot edit completed state; malformed receipt stays unknown',async()=>{
  const p=fixture();p.flow.begin();p.flow.change('保留此输入');p.api.prepareUpdateRequirement=()=>({submit:async()=>{throw new ApiRejected('STATE_CONFLICT','状态冲突',null,'native-id',409);}});
  assert(!await p.flow.save());assert.equal(p.flow.getSnapshot().phase,'EDITING');p.flow.adoptDetail(detail({...root,status:'COMPLETED',completed_at:at}));assert.equal(p.flow.getSnapshot().draft,'保留此输入');assert(!p.flow.allowed);p.flow.change('不能继续改');assert.equal(p.flow.getSnapshot().draft,'保留此输入');assert(!await p.flow.save());assert(p.flow.cancel());p.flow.dispose();

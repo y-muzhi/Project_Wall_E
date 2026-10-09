@@ -68,7 +68,7 @@ export class RequirementSuggestionBatch{
    content=this.value.drafts[identity]??item.user_edited_content??item.proposed_markdown??JSON.stringify(item.proposed_data);
    try{if(item.patch_operation==='DELETE_BLOCK'||!content||[...content].length>100000)throw Error('Invalid edit');snapshotObject({content});
     if(item.patch_operation==='REPLACE_TABLE_ROW'){const row=JSON.parse(content);if(!row||typeof row!=='object'||Array.isArray(row)||Object.keys(row).length!==1||!Array.isArray(row.cells)||row.cells.length!==item.proposed_data!.cells.length||row.cells.some((cell:unknown)=>typeof cell!=='string'))throw Error('Invalid cells');}
-   }catch{this.publish({phase:'ERROR',error:'编辑内容不合法；表格行只允许原列数的 cells JSON，删除不能编辑',error_code:'INVALID_INPUT',item_errors:Object.freeze({...this.value.item_errors,[identity]:'请修正编辑内容后重试'})});return Promise.resolve(false);}
+   }catch{this.publish({phase:'ERROR',error:'编辑内容不合法；表格行须保持原列数并填写纯文本，删除操作不能编辑',error_code:'INVALID_INPUT',item_errors:Object.freeze({...this.value.item_errors,[identity]:'请修正编辑内容后重试'})});return Promise.resolve(false);}
   }
   return this.start({operation:'DECIDE',batch:this.value.batch!,current:this.value.detail.current,suggestion:item,decision,content});
  }

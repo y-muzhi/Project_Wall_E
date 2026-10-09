@@ -57,3 +57,11 @@ test('current visibility network failure remains a real failure after an obsolet
  const reopened=owner.refresh(),rejected=assert.rejects(reopened,/Current connection failure/);resolve(detail);await rejected;await flush();
  assert.equal(f.facts.parents,2);assert.equal(f.facts.adopts,0);assert.equal(owner.getSnapshot().error,'Current connection failure');owner.dispose();
 });
+
+test('local run history read does not reread/adopt detail, refresh messages or replace the selected run',async()=>{
+ const f=fixture();let messageReads=0;const list=f.api.listMessages;f.api.listMessages=async(...args)=>{messageReads++;return list(...args);};
+ const owner=new RequirementAiRead(detail,f.api,f.read,f.adopt,f.open,f.timing);await owner.receive({id:3,requirement_id:1});await flush();
+ const before={parents:f.facts.parents,adopts:f.facts.adopts,queries:f.facts.queries,messageReads,selected:owner.getSnapshot().selected,run:owner.getSnapshot().run};
+ assert(await owner.history.refresh({status:['FAILED']}));await flush();
+ assert.deepEqual({parents:f.facts.parents,adopts:f.facts.adopts,queries:f.facts.queries,messageReads,selected:owner.getSnapshot().selected,run:owner.getSnapshot().run},before);owner.dispose();
+});

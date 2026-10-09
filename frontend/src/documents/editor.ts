@@ -14,6 +14,7 @@ import { snapshotObject } from '../api/client.ts';
 import type {LocalDraftSnapshot} from './recovery-store.ts';
 import { TemplateHeadingLock, templateLockMessage } from './template-lock.ts';
 import type { InitializationTemplate } from './template-lock.ts';
+import {installFormatToolbar} from './format-toolbar.ts';
 
 export type EditorEvents = Readonly<{
   change?: (snapshot: EditedSnapshot) => void;
@@ -33,6 +34,7 @@ export class RequirementEditor {
   private readonly templateLock: TemplateHeadingLock | null;
   private accepted: EditorState; private readonly root: HTMLElement;
   private readonly removeListeners: (() => void)[] = [];
+  private formatToolbar:ReturnType<typeof installFormatToolbar>|null=null;
   private readonlyMode: boolean; private closed = false; private composing = false; private invalid = false; private editingTime: number;
   private constructor(crepe: Crepe, root: HTMLElement, document: DocumentReadModel, readonly: boolean, events: EditorEvents, templateLock: TemplateHeadingLock | null) {
     this.crepe = crepe; this.root = root; this.document = document; this.events = events; this.readonlyMode = readonly;
@@ -50,7 +52,13 @@ export class RequirementEditor {
     const listen = (name: string, listener: EventListener) => { root.addEventListener(name, listener); this.removeListeners.push(() => root.removeEventListener(name, listener)); };
     listen('compositionstart', () => { this.composing = true; this.notifyValidity(); });
     listen('compositionend', () => { this.composing = false; queueMicrotask(() => { if (!this.closed) this.flushLocal(); }); });
-    listen('focusout', event => { if (!root.contains((event as FocusEvent).relatedTarget as Node | null)) { this.flushLocal(); this.notify(() => this.events.blur?.()); } });
+    const focusout=(event:FocusEvent)=>{const from=event.target as Node|null,target=event.relatedTarget as Node|null;
+      // Body-mounted format controls are still part of this editor. Flush only
+      // when focus leaves both the owned document and its formatting surfaces.
+      if((root.contains(from)||this.formatToolbar?.contains(from))&&!root.contains(target)&&!this.formatToolbar?.contains(target)){this.flushLocal();this.notify(()=>this.events.blur?.());}
+    };
+    root.ownerDocument.addEventListener('focusout',focusout);this.removeListeners.push(()=>root.ownerDocument.removeEventListener('focusout',focusout));
+    if(this.session)this.formatToolbar=installFormatToolbar(root,this,message=>this.notify(()=>this.events.error?.(message)));
   }
   static async create(root: HTMLElement, input: DocumentReadModel, readonly = true, events: EditorEvents = {}, initializing: InitializationTemplate | null = null): Promise<RequirementEditor> {
     input = snapshotObject(input) as unknown as DocumentReadModel;
@@ -74,14 +82,16 @@ export class RequirementEditor {
   get loadedDocument(): DocumentReadModel { return this.document; }
   get valid(): boolean { return !this.closed && !this.invalid && !this.composing; }
   get readonly(): boolean { return this.readonlyMode; }
+  get formattingReady():boolean{return !this.closed&&!this.readonlyMode&&!this.composing;}
   action<T>(callback: (ctx: Ctx) => T): T { if (this.closed) throw new Error('Editor is closed'); return this.crepe.editor.action(callback); }
   setReadonly(readonly: boolean): void {
     if (this.closed) return;
     if (!readonly && !this.session) throw new TypeError('Current document is read only');
     this.readonlyMode = readonly; this.crepe.setReadonly(readonly);
+    this.formatToolbar?.update();
   }
   private notify(operation: () => void): void { try { operation(); } catch (error) { console.error('WALL-E editor observer failed', error); } }
-  private notifyValidity(): void { this.notify(() => this.events.validity?.(this.valid)); }
+  private notifyValidity(): void { this.formatToolbar?.update();this.notify(() => this.events.validity?.(this.valid)); }
   private select(ctx: Ctx): void {
     if (this.closed) return;
     let selection: SelectionEvent | null = null;
@@ -127,6 +137,7 @@ export class RequirementEditor {
       view.updateState(state);
       if (transaction.docChanged && !this.composing) this.capture(ctx, state);
       this.select(ctx);
+      this.formatToolbar?.update();
     } catch {
       this.invalid = true; this.notify(() => this.events.error?.('这次编辑无法完成，请保留当前内容并重试')); this.notifyValidity();
     }
@@ -159,6 +170,6 @@ export class RequirementEditor {
   }
   async destroy(): Promise<void> {
     if (this.closed) return; this.closed = true;
-    for (const remove of this.removeListeners) remove(); this.session?.dispose(); await this.crepe.destroy(); this.root.replaceChildren();
+    for (const remove of this.removeListeners) remove();this.formatToolbar?.destroy(); this.session?.dispose(); await this.crepe.destroy(); this.root.replaceChildren();
   }
 }

@@ -7,7 +7,7 @@ import type {LifecycleOperation} from './lifecycle.ts';
 import {ManualDraftStart} from '../documents/manual-start.ts';
 import {detailPermissions} from './permissions.ts';
 
-export type HeaderOwner='TITLE'|'MODE'|'LIFECYCLE'|'MANUAL';
+export type HeaderOwner='TITLE'|'LIFECYCLE'|'MANUAL';
 export type HeaderCommandState=Readonly<{detail:DetailSnapshot;lifecycle:RequirementLifecycle|null;manual:ManualDraftStart|null;revision:number;lifecycle_generation:number;manual_generation:number}>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 const signature=(detail:DetailSnapshot)=>JSON.stringify([detail.requirement.status,detail.requirement.document_work_state,detail.current.id,detail.current.content_version]);
@@ -16,14 +16,14 @@ const signature=(detail:DetailSnapshot)=>JSON.stringify([detail.requirement.stat
  * facts, not unsent input or an unknown original command. Never touches the
  * document editor, its local ledger, saves, cache, or business cancellation. */
 export class RequirementHeaderCommands {
-  readonly title:RequirementPropertyEdit;readonly mode:RequirementPropertyEdit;private readonly api:WalleApi;
+  readonly title:RequirementPropertyEdit;private readonly api:WalleApi;
   private value:HeaderCommandState;private closed=false;private adopting=false;private readonly listeners=new Set<()=>void>();
   private readonly propertyReleases:(()=>void)[];private lifecycleRelease:(()=>void)|undefined;private manualRelease:(()=>void)|undefined;
   private lifecycleSignature='';private manualSignature='';
   constructor(detail:DetailSnapshot,api:WalleApi){
     this.api=api;const actual=capture(detail);this.value=Object.freeze({detail:actual,lifecycle:null,manual:null,revision:0,lifecycle_generation:0,manual_generation:0});
-    this.title=new RequirementPropertyEdit('title',actual,api);this.mode=new RequirementPropertyEdit('initialization_mode',actual,api);
-    this.propertyReleases=[this.title.subscribe(()=>this.notify()),this.mode.subscribe(()=>this.notify())];this.adopt(actual);
+    this.title=new RequirementPropertyEdit('title',actual,api);
+    this.propertyReleases=[this.title.subscribe(()=>this.notify())];this.adopt(actual);
   }
   getSnapshot=():HeaderCommandState=>this.value;
   subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
@@ -32,13 +32,13 @@ export class RequirementHeaderCommands {
     for(const listener of this.listeners){try{listener();}catch(error){console.error('WALL-E header observer failed',error);}}
   }
   blockedFor(owner:HeaderOwner):boolean {
-    const ownPhase=owner==='TITLE'?this.title.getSnapshot().phase:owner==='MODE'?this.mode.getSnapshot().phase:owner==='LIFECYCLE'?this.value.lifecycle?.getSnapshot().phase:this.value.manual?.getSnapshot().phase;
+    const ownPhase=owner==='TITLE'?this.title.getSnapshot().phase:owner==='LIFECYCLE'?this.value.lifecycle?.getSnapshot().phase:this.value.manual?.getSnapshot().phase;
     // Multiple requests can become unknown through independent activity.
     // Reads/original recovery must not deadlock each other; new writes remain
     // blocked after returning to EDITING/READY.
     if(ownPhase&&['UNKNOWN','OBSERVED','CONFIRMED','STARTED'].includes(ownPhase))return false;
     const property=(flow:RequirementPropertyEdit)=>['SUBMITTING','UNKNOWN','READING','OBSERVED','CONFIRMED'].includes(flow.getSnapshot().phase);
-    return (owner!=='TITLE'&&property(this.title))||(owner!=='MODE'&&property(this.mode))||
+    return (owner!=='TITLE'&&property(this.title))||
       (owner!=='LIFECYCLE'&&!!this.value.lifecycle&&['SUBMITTING','READING','UNKNOWN','CONFIRMED'].includes(this.value.lifecycle.getSnapshot().phase))||
       (owner!=='MANUAL'&&!!this.value.manual&&['SUBMITTING','CHECKING','UNKNOWN','STARTED'].includes(this.value.manual.getSnapshot().phase));
   }
@@ -50,7 +50,7 @@ export class RequirementHeaderCommands {
     const actual=capture(detail),nextSignature=signature(actual),permissions=detailPermissions(actual,true);
     this.adopting=true;
     try{
-      this.title.adoptDetail(actual);this.mode.adoptDetail(actual);
+      this.title.adoptDetail(actual);
       let lifecycle=old.lifecycle,manual=old.manual;
       const protectedLife=lifecycle&&['SUBMITTING','READING','UNKNOWN'].includes(lifecycle.getSnapshot().phase);
       if(!protectedLife&&(!lifecycle||this.lifecycleSignature!==nextSignature||['ERROR','CONFIRMED'].includes(lifecycle.getSnapshot().phase))){
@@ -67,5 +67,5 @@ export class RequirementHeaderCommands {
     }finally{this.adopting=false;}this.notify();
   }
   dispose():void{if(this.closed)return;this.closed=true;for(const release of this.propertyReleases)release();this.lifecycleRelease?.();this.manualRelease?.();
-    this.title.dispose();this.mode.dispose();this.value.lifecycle?.dispose();this.value.manual?.dispose();this.listeners.clear();}
+    this.title.dispose();this.value.lifecycle?.dispose();this.value.manual?.dispose();this.listeners.clear();}
 }

@@ -10,13 +10,14 @@ type Api=Pick<WalleApi,'getRequirement'|'getCurrentDocument'|'getManualDraft'>;
 type Editor=Pick<RequirementEditor,'restoreLocal'|'setReadonly'>;
 type Autosave=Pick<ManualDraftAutosave,'state'|'restoreLocal'|'localSnapshot'>;
 type Cache=Pick<DraftRecoveryStore,'get'|'clearIfRevision'>;
-export type ManualRecoveryState=Readonly<{phase:'LOADING'|'NONE'|'AVAILABLE'|'COMPARE'|'ERROR'|'RESTORED'|'SERVER_SELECTED';
+export type ManualRecoveryState=Readonly<{phase:'LOADING'|'AVAILABLE'|'COMPARE'|'ERROR'|'RESTORED'|'SERVER_SELECTED';
   checking:boolean;local:LocalDraftSnapshot|null;server:DocumentReadModel|null;error:string|null;storage_error:boolean}>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 const pairSame=(a:Pick<DocumentReadModel,'markdown_content'|'block_state_json'>,b:Pick<DocumentReadModel,'markdown_content'|'block_state_json'>)=>
   a.markdown_content===b.markdown_content&&JSON.stringify(a.block_state_json)===JSON.stringify(b.block_state_json);
 
-/** Fresh actual manual session's explicit local choice. No HTTP mutation,
+/** Fresh actual manual session. A verified unchanged server baseline with no
+ * local snapshot resumes automatically; local recovery remains an explicit choice. No HTTP mutation,
  * guessed receipts, auto merge, cache deletion on 404, or server version
  * adoption from local content. Parent renders both snapshots for comparison. */
 export class ManualDraftRecovery {
@@ -61,8 +62,20 @@ export class ManualDraftRecovery {
       this.publish({phase:'ERROR',checking:false,server:saved,storage_error:true,error:'本地暂存不可读取；可以继续后端草稿，但跨刷新保护可能不足'});return true;
     }
     const cached=local.value===null?null:capture(local.value),same=this.sameLoaded(saved);
+    // Once local recovery content was discovered, its disappearance during a
+    // recheck is a change to reconcile, not proof that no choice was needed.
+    if(cached===null&&this.value.local!==null){
+      this.publish({phase:'ERROR',checking:false,server:saved,storage_error:false,error:'本地暂存已变化，原恢复内容仍保留，请对照并重新检查'});return false;
+    }
+    // There is no recovery choice when the local store was read successfully,
+    // no snapshot exists and the loaded draft is still the verified baseline.
+    // Do not apply this shortcut to storage errors or newer server versions.
+    if(cached===null&&same&&this.pendingOperation==='INSPECT'){
+      this.editor.setReadonly(false);
+      this.publish({checking:false,local:null,server:saved,storage_error:false,error:null,phase:'SERVER_SELECTED'});return true;
+    }
     this.publish({checking:false,local:cached,server:saved,storage_error:false,error:null,
-      phase:cached===null?(same?'NONE':'COMPARE'):cached.base_confirmed_version===saved.content_version&&same?'AVAILABLE':'COMPARE'});return true;
+      phase:cached!==null&&cached.base_confirmed_version===saved.content_version&&same?'AVAILABLE':'COMPARE'});return true;
   }
   inspect():Promise<boolean>{return this.run('INSPECT',()=>this.read());}
   restore():Promise<boolean>{
@@ -103,6 +116,6 @@ export class ManualDraftRecovery {
     this.editor.setReadonly(false);this.publish({phase:'SERVER_SELECTED'});return true;
   }
   get canContinueServer():boolean{return !this.disposed&&!this.pending&&this.confirmedFacts&&this.value.local===null&&this.value.server!==null&&this.sameLoaded(this.value.server)&&
-    (this.value.phase==='NONE'||this.value.phase==='ERROR'&&this.value.storage_error);}
+    this.value.phase==='ERROR'&&this.value.storage_error;}
   dispose():void{this.disposed=true;this.listeners.clear();}
 }

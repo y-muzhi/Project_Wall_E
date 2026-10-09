@@ -20,11 +20,40 @@ test('fresh actual manual session stays frozen until explicit same-base restore;
  const held=deferred();p.api.getManualDraft=()=>held.promise;const restoring=p.recovery.restore();assert.equal(p.recovery.restore(),restoring);assert(!await p.recovery.discardLocalConfirmed());await flush();assert.equal(p.f.restores,0);
  held.resolve({data:draft});assert(await restoring);assert.equal(p.f.restores,1);assert.deepEqual(p.f.clears,[]);assert.deepEqual(p.f.readonly,[true,false]);assert.equal(p.recovery.getSnapshot().phase,'RESTORED');p.recovery.dispose();
 });
-test('mounted subscribers receive settled no-local availability after the pending read clears',async()=>{
+test('verified unchanged draft without local content resumes automatically and does not restore or clear anything',async()=>{
  const p=fixture();p.f.local=null;const notifications=[];
  const release=p.recovery.subscribe(()=>notifications.push({phase:p.recovery.getSnapshot().phase,ready:p.recovery.canContinueServer}));
- assert(await p.recovery.inspect());assert.equal(notifications.at(-1).phase,'NONE');assert.equal(notifications.at(-1).ready,true);
- assert(p.recovery.continueServerWithoutLocal());release();p.recovery.dispose();
+ assert(await p.recovery.inspect());assert.equal(notifications.at(-1).phase,'SERVER_SELECTED');assert.equal(notifications.at(-1).ready,false);
+ assert.deepEqual(p.f.readonly,[true,false]);assert.equal(p.f.restores,0);assert.deepEqual(p.f.clears,[]);
+ assert.equal(p.recovery.getSnapshot().server.content_version,2);assert.equal(p.autosave.state.confirmed_version,2);
+ assert(!p.recovery.continueServerWithoutLocal());release();p.recovery.dispose();
+});
+
+test('no-local inspection stays locked until all reads settle, and duplicate inspection unlocks only once',async()=>{
+ const p=fixture();p.f.local=null;const held=deferred();p.api.getManualDraft=()=>held.promise;
+ const pending=p.recovery.inspect();assert.equal(p.recovery.inspect(),pending);await flush();assert.deepEqual(p.f.readonly,[true]);
+ held.resolve({data:draft});assert(await pending);assert.deepEqual(p.f.readonly,[true,false]);
+ assert(!await p.recovery.inspect());assert.deepEqual(p.f.readonly,[true,false]);p.recovery.dispose();
+});
+
+test('no-local content cannot bypass a changed server baseline or mismatching session',async()=>{
+ const p=fixture();p.f.local=null;p.f.server={...draft,content_version:3};assert(await p.recovery.inspect());
+ assert.equal(p.recovery.getSnapshot().phase,'COMPARE');assert.deepEqual(p.f.readonly,[true]);assert(!p.recovery.canContinueServer);p.recovery.dispose();
+ const q=fixture();q.f.local=null;q.f.root={...root,active_operation_id:9};assert(!await q.recovery.inspect());
+ assert.equal(q.recovery.getSnapshot().phase,'ERROR');assert.deepEqual(q.f.readonly,[true]);assert.deepEqual(q.f.clears,[]);q.recovery.dispose();
+});
+
+test('failed no-local inspection retries into automatic editing, but a disposed session never unlocks',async()=>{
+ const p=fixture();p.f.local=null;p.f.readError=true;assert(!await p.recovery.inspect());assert.deepEqual(p.f.readonly,[true]);
+ p.f.readError=false;assert(await p.recovery.inspect());assert.equal(p.recovery.getSnapshot().phase,'SERVER_SELECTED');assert.deepEqual(p.f.readonly,[true,false]);p.recovery.dispose();
+ const q=fixture();q.f.local=null;const held=deferred();q.api.getManualDraft=()=>held.promise;const pending=q.recovery.inspect();await flush();
+ q.recovery.dispose();held.resolve({data:draft});assert(!await pending);assert.deepEqual(q.f.readonly,[true]);
+});
+
+test('a previously discovered local snapshot disappearing during restore cannot be treated as automatic no-local recovery',async()=>{
+ const p=fixture();assert(await p.recovery.inspect());const known=p.recovery.getSnapshot().local;p.f.local=null;
+ assert(!await p.recovery.restore());assert.equal(p.recovery.getSnapshot().phase,'ERROR');assert.deepEqual(p.recovery.getSnapshot().local,known);
+ assert(!p.recovery.canContinueServer);assert.deepEqual(p.f.readonly,[true]);assert.deepEqual(p.f.clears,[]);assert.equal(p.f.restores,0);p.recovery.dispose();
 });
 test('version divergence keeps both snapshots for comparison without overwrite, deletion or local server-version adoption',async()=>{
  const p=fixture();p.f.server={...draft,content_version:3};assert(await p.recovery.inspect());assert.equal(p.recovery.getSnapshot().phase,'COMPARE');assert.equal(p.recovery.getSnapshot().local.base_confirmed_version,2);assert.equal(p.recovery.getSnapshot().server.content_version,3);

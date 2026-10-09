@@ -1,3 +1,4 @@
+import {Icon,BusyIndicator} from './icon.tsx';
 import { useId, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { registerModal, trapModalTab } from './modal.ts';
@@ -31,10 +32,10 @@ export function Confirmation(props: ConfirmationProps) {
   return createPortal(<dialog ref={dialog} className="confirmation" tabIndex={-1} aria-labelledby={title} aria-describedby={description}
     onKeyDown={trapModalTab}
     onCancel={event => { event.preventDefault(); if (!props.busy) props.cancel(); }}>
-    <header><h2 id={title}>{props.title}</h2><button type="button" className="icon-button" aria-label="关闭确认弹窗" disabled={props.busy} onClick={props.cancel}>×</button></header>
-    <div className="confirmation-content"><p id={description}>{props.description}</p>{props.error && <p role="alert" className="inline-error">! {props.error}</p>}</div>
-    <footer><button type="button" ref={cancel} disabled={props.busy} onClick={props.cancel}>{props.cancelLabel ?? '取消'}</button>
-      <button type="button" className={props.dangerous ? 'danger' : 'primary'} disabled={props.busy||props.confirmDisabled} onClick={props.confirm}
-        aria-busy={props.busy}><span className="busy-slot" aria-hidden="true">{props.busy ? '◌' : ''}</span>{props.confirmLabel ?? '确认'}</button></footer>
+    <header><h2 id={title}>{props.title}</h2><button type="button" className="ui-button icon-button" aria-label="关闭确认弹窗" disabled={props.busy} onClick={props.cancel}><Icon name="close"/></button></header>
+    <div className="confirmation-content"><p id={description}>{props.description}</p>{props.error && <p role="alert" className="inline-error">{props.error}</p>}</div>
+    <footer><button className="ui-button" type="button" ref={cancel} disabled={props.busy} onClick={props.cancel}>{props.cancelLabel ?? '取消'}</button>
+      <button type="button" className={'ui-button '+(props.dangerous ? 'danger' : 'primary')} disabled={props.busy||props.confirmDisabled} onClick={props.confirm}
+        aria-busy={props.busy}><BusyIndicator busy={props.busy}/>{props.confirmLabel ?? '确认'}</button></footer>
   </dialog>, document.body);
 }

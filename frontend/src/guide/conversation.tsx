@@ -22,7 +22,7 @@ function BatchView({owner,documents,toasts}:Readonly<{owner:NonNullable<ReturnTy
  * owners. Local view selection never cancels a Run or replaces an intention. */
 export function GuideConversation({owner,documents,toasts}:Readonly<{owner:RequirementConversation;documents:RequirementDocumentOwner;toasts:ToastStore}>){
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),read=useSyncExternalStore(owner.read.subscribe,owner.read.getSnapshot),document=useSyncExternalStore(documents.subscribe,documents.getSnapshot);
- const [showMessages,setShowMessages]=useState(false),batch=state.batch;
+ const [showMessages,setShowMessages]=useState(false),[scrollPort,setScrollPort]=useState<HTMLDivElement|null>(null),[scrollContent,setScrollContent]=useState<HTMLDivElement|null>(null),batch=state.batch;
  // Retry display when the actual editor/parser becomes available or changes.
  // This only creates DOM fragments and never adopts content as CURRENT.
  const renderMarkdown=useCallback((markdown:string)=>documents.previewMarkdown(markdown),[documents,document.navigation]);
@@ -30,11 +30,15 @@ export function GuideConversation({owner,documents,toasts}:Readonly<{owner:Requi
  // their drafts/unknown requests remain retained in the owner.
  useEffect(()=>setShowMessages(false),[batch]);
  return <section className="guide-conversation" aria-label="需求 AI 辅助区">
-  {batch&&<div className="conversation-view-switch"><button type="button" aria-pressed={!showMessages} onClick={()=>setShowMessages(false)}>修改建议</button><button type="button" aria-pressed={showMessages} onClick={()=>setShowMessages(true)}>对话与运行</button></div>}
+  {batch&&<div className="conversation-view-switch"><button className="ui-button" type="button" aria-pressed={!showMessages} onClick={()=>setShowMessages(false)}>修改建议</button><button className="ui-button" type="button" aria-pressed={showMessages} onClick={()=>setShowMessages(true)}>对话与运行</button></div>}
   <div className="conversation-suggestions" hidden={!batch||showMessages} inert={!batch||showMessages}>{batch&&<BatchView key={batch.batchId} owner={batch} documents={documents} toasts={toasts}/>}</div>
-  <div className="conversation-discussion" hidden={!!batch&&!showMessages} inert={!!batch&&!showMessages}>
-   <AiReadPanel owner={owner.read} structured={message=><CardMessage groups={owner.cards} message={message} busy={document.busy}/>} commands={()=><RunControls owner={owner.runs}/>} renderMarkdown={renderMarkdown}/>
-   <GuideComposer owner={owner.composer} documents={documents} review={read.run}/>
+  <div className="conversation-workspace" hidden={!!batch&&!showMessages} inert={!!batch&&!showMessages}>
+   <div className="conversation-reading-region">
+   <div className="conversation-discussion" ref={setScrollPort} role="region" aria-label="对话阅读区" tabIndex={0}>
+    <div className="conversation-content" ref={setScrollContent}><AiReadPanel scrollPort={scrollPort} scrollContent={scrollContent} owner={owner.read} structured={message=><CardMessage groups={owner.cards} message={message} busy={document.busy}/>} commands={()=><RunControls owner={owner.runs}/>} renderMarkdown={renderMarkdown}/></div>
+   </div>
+   </div>
+   <GuideComposer owner={owner.composer} documents={documents} review={read.run} viewingHistory={read.selection==='HISTORY'?read.selected:null}/>
   </div>
  </section>;
 }

@@ -1,3 +1,4 @@
+import {Icon} from '../shared/icon.tsx';
 import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
 import {editorViewCtx} from '@milkdown/kit/core';
 import type {ReactNode} from 'react';
@@ -9,24 +10,24 @@ import type {RequirementEditor} from '../documents/editor.ts';
 
 export function CommentList({comments,locate,actions,blocked=false,locateReady=true,changePage,retry}:Readonly<{comments:RequirementComments;locate(identity:number):boolean;actions?:(comment:CommentItem)=>ReactNode;blocked?:boolean;locateReady?:boolean;changePage?:(page:number)=>void;retry?:()=>void}>){
   const state=useSyncExternalStore(comments.subscribe,comments.getSnapshot),list=useRef<HTMLDivElement>(null),[locationError,setLocationError]=useState<string|null>(null);
-  const indicate=(identity:number)=>{if(blocked||!locateReady||!comments.ready)return;if(locate(identity)){comments.markLocated(identity);setLocationError(null);}else setLocationError('当前正文或评论位置无法定位，请刷新评论与详情。');};
+  const indicate=(identity:number)=>{if(blocked||!locateReady||!comments.ready)return;if(locate(identity)){comments.markLocated(identity);setLocationError(null);}else setLocationError('当前正文或评论位置无法定位，请重新读取评论及关联详情。');};
   useEffect(()=>{if(state.selected!==null&&!state.loading&&!state.error){const card=list.current?.querySelector<HTMLElement>('[data-comment-id="'+state.selected+'"]');card?.scrollIntoView({block:'nearest'});card?.focus({preventScroll:true});}},[state.selection_revision]);
   return <section className="comment-panel" aria-label="评论列表" aria-busy={state.loading}>
     {!state.active&&<p role="status">当前评论交互已暂停</p>}
     {state.loading&&!state.confirmed&&<p role="status">正在读取评论</p>}
-    {state.error&&<p role="alert">{state.error} <button type="button" disabled={blocked||state.loading||!state.active} onClick={()=>retry?retry():void comments.refresh()}>重试读取评论</button></p>}
+    {state.error&&<p role="alert">{state.error} <button className="ui-button" type="button" disabled={blocked||state.loading||!state.active} onClick={()=>retry?retry():void comments.refresh()}>重试读取评论</button></p>}
     <div ref={list}>{state.confirmed?.items.map(comment=>{
       const orphan=comment.anchor_status==='ORPHANED'||comment.location.status==='ORPHANED',quote='selected_text' in comment.anchor_ref?comment.anchor_ref.selected_text:comment.anchor_ref.block_markdown_snapshot;
       return <article tabIndex={-1} data-comment-id={comment.id} key={comment.id} aria-label={'评论：'+[...comment.content].slice(0,40).join('')} className={'comment-card'+(comment.status==='RESOLVED'?' is-resolved':'')+(state.selected===comment.id?' is-selected':'')} onClick={event=>{if(orphan||!(event.target instanceof Element)||event.target.closest('button,a,input,textarea,label,select')||window.getSelection()?.isCollapsed===false)return;indicate(comment.id);}}>
         <div className="comment-status"><span>{comment.status==='OPEN'?'未解决':'已解决'}</span><span>锚点：{comment.anchor_status==='ORPHANED'?'已失效':'有效'}</span><span>{orphan?'当前位置已失效':'当前可定位'}</span><time dateTime={comment.created_at}>{localTime(comment.created_at)}</time></div>
-        {orphan&&<p className="comment-orphan-warning"><span aria-hidden="true">⚠ </span><span>以下是创建评论时的历史引用，当前正文位置已失效。</span></p>}
+        {orphan&&<p className="comment-orphan-warning"><Icon name="warning"/><span>以下是创建评论时的历史引用，当前正文位置已失效。</span></p>}
         <blockquote className="comment-quote">{quote}</blockquote><p className="comment-content">{comment.content}</p>
-        <div className="comment-actions"><button type="button" disabled={blocked||!locateReady||orphan||!comments.ready} onClick={()=>indicate(comment.id)}>定位正文</button>{actions?.(comment)}</div>
+        <div className="comment-actions"><button className="ui-button" type="button" disabled={blocked||!locateReady||orphan||!comments.ready} onClick={()=>indicate(comment.id)}>定位正文</button>{actions?.(comment)}</div>
       </article>;
     })}</div>
-    {locationError&&<p role="alert">{locationError}</p>}
-    {state.confirmed?.pagination.total===0&&<p>暂无评论</p>}
-    {state.confirmed&&<Pagination value={state.confirmed.pagination} loading={blocked||state.loading||!state.active} change={page=>changePage?changePage(page):void comments.refresh(page)}/>}
+    {locationError&&<p role="alert">{locationError} <button className="ui-button" type="button" disabled={blocked||state.loading||!state.active} onClick={()=>retry?retry():void comments.refresh()}>重新读取评论与正文</button></p>}
+    {state.confirmed?.pagination.total===0&&<p className="panel-empty">暂无评论。可选择正式正文的文字或区块，再通过正文旁的评论入口添加。</p>}
+    {state.confirmed&&<Pagination compactSingle value={state.confirmed.pagination} loading={blocked||state.loading||!state.active} showLoadingStatus={false} change={page=>changePage?changePage(page):void comments.refresh(page)}/>}
   </section>;
 }
 
@@ -35,7 +36,7 @@ export function CommentList({comments,locate,actions,blocked=false,locateReady=t
 export function BlockCommentMarker({comments,blockId,blocked=false,select}:Readonly<{comments:RequirementComments;blockId:number;blocked?:boolean;select?:(identity:number)=>void}>){
   const state=useSyncExternalStore(comments.subscribe,comments.getSnapshot),block=state.confirmed?.index.blocks.find(row=>row.block_id===blockId);
   if(!block)return null;
-  return <button type="button" className="comment-marker" data-comment-block={blockId} disabled={blocked||!comments.ready} aria-label={block.open_count+'条未解决评论'} onClick={()=>select?select(block.comment_ids[0]!):void comments.select(block.comment_ids[0]!)}>评论 {block.open_count}</button>;
+  return <button type="button" className="ui-button comment-marker" data-comment-block={blockId} disabled={blocked||!comments.ready} aria-label={block.open_count+'条未解决评论'} onClick={()=>select?select(block.comment_ids[0]!):void comments.select(block.comment_ids[0]!)}>评论 {block.open_count}</button>;
 }
 
 /** Owned sibling overlay, outside ProseMirror/Markdown. The parent gives it

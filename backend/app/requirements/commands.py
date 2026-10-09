@@ -93,11 +93,8 @@ def update_requirement(database: Database, payload: object, *, clock: Callable[[
             code = None
             if current is None:
                 code = 'NOT_FOUND'
-            elif ('title' in request.changes and current['status'] not in ('INITIALIZING', 'ACTIVE') or
-                  'initialization_mode' in request.changes and current['status'] != 'INITIALIZING'):
+            elif current['status'] not in ('INITIALIZING', 'ACTIVE'):
                 code = 'STATE_CONFLICT'
-            elif 'initialization_mode' in request.changes and current['document_work_state'] != 'IDLE':
-                code = 'WORK_STATE_CONFLICT'
             if code is not None:
                 result = {'code': code, 'data': None, 'details': None}
             else:

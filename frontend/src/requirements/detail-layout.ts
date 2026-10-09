@@ -81,7 +81,7 @@ export interface ViewportActions { blockAndSave(): Promise<void>; readAfterSuppo
 export class DetailViewportGuard {
   private readonly actions: ViewportActions; private value: ViewportState;
   private active = false; private closed = false; private blocked: boolean; private generation = 0;
-  private width: number; private foreground = true;
+  private width: number; private pageSuspended = false;
   private save: Promise<void> = Promise.resolve(); private saveTicket = 0; private controller: AbortController | undefined;
   private readonly listeners = new Set<() => void>();
   constructor(width: number, actions: ViewportActions) {
@@ -98,20 +98,18 @@ export class DetailViewportGuard {
   viewport(width: number): void {
     this.width = dimension(width); this.updateAvailability();
   }
-  /** Visibility and geometry share one restoration barrier. A resize while
-   * hidden must never resume an editor or its polling before the tab returns. */
-  setForeground(foreground: boolean): void {
-    if (this.closed || foreground === this.foreground) return;
-    this.foreground = foreground; this.updateAvailability();
+  /** Actual document departure/BFCache restoration is distinct from ordinary
+   * focus or tab visibility. Neither focus nor visibility starts this barrier. */
+  suspendPage(): void {
+    if (this.closed || this.pageSuspended) return;
+    this.pageSuspended = true; this.updateAvailability();
   }
-  /** A visible window can regain focus without visibilitychange (for example
-   * after another desktop window). Reuse the same save/read barrier once. */
-  refreshAfterFocus(): void {
-    if (this.closed || !this.active || this.blocked || this.value.phase !== 'SUPPORTED') return;
-    this.enterBlocked(); this.restore();
+  resumePage(): void {
+    if (this.closed || !this.pageSuspended) return;
+    this.pageSuspended = false; this.updateAvailability();
   }
   private updateAvailability(): void {
-    const blocked = this.width < 1024 || !this.foreground; if (this.closed || blocked === this.blocked) return;
+    const blocked = this.width < 1024 || this.pageSuspended; if (this.closed || blocked === this.blocked) return;
     this.blocked = blocked; if (!this.active) { this.publish({phase: blocked ? 'BLOCKED' : 'SUPPORTED'}); return; }
     if (blocked) this.enterBlocked(); else this.restore();
   }

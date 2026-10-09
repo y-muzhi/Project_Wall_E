@@ -8,6 +8,17 @@ const current={id:2,requirement_id:1,document_type:'CURRENT',content_version:3,m
 const detail={requirement:{id:1,status:'ACTIVE',document_work_state:'IDLE'},current,activity:{kind:'IDLE'},comment_index:{}};
 const target={document_id:2,content_version:3,block_id:7,anchor_type:'BLOCK',selection:null,quote:'原引用'};
 const defer=()=>{let resolve;const promise=new Promise(yes=>resolve=yes);return {promise,resolve};};
+test('comment availability explains lifecycle gates without granting initialization or completed writes',async()=>{
+ for(const status of ['INITIALIZING','COMPLETED']){
+  const blocked={...detail,requirement:{...detail.requirement,status}},f=fixture(0);
+  const panel=new RequirementCommentPanel(blocked,f.api,async()=>blocked,f.adopt,async()=>{});
+  assert(!panel.writeReady);assert.match(panel.writeUnavailableReason,status==='INITIALIZING'?/完成初始化/:/重新激活/);
+  assert.equal(panel.create(target),null);panel.dispose();
+ }
+ const f=fixture(0),panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async()=>{});
+ assert.match(panel.writeUnavailableReason,/未就绪/);await panel.refresh();assert(panel.writeReady);assert.equal(panel.writeUnavailableReason,null);
+ panel.setView('MANUAL');assert.match(panel.writeUnavailableReason,/正式正文/);assert(!panel.writeReady);panel.dispose();
+});
 const flush=async()=>{for(let i=0;i<16;i++)await Promise.resolve();};
 function fixture(count=25){
  const facts={rows:Array.from({length:count},(_,i)=>item(i+1)),detail,reads:0,adopts:0,lists:0,drop:false};

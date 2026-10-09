@@ -23,12 +23,13 @@ const events: { kind: string; value: unknown }[] = [];
 function App() {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<readonly number[]>([0,1]);
+  const [filterDisabled,setFilterDisabled]=useState(false),[filterOptions,setFilterOptions]=useState(options);
   const [draft, setDraft] = useState('未提交草稿'), [submitted, setSubmitted] = useState('旧关键词');
   const [pagination, setPagination] = useState<PagePagination>({ page: 6, page_size: 20, total: 210, total_pages: 11 });
   Object.assign(window, { componentsProbe: {
     state: () => ({ open, busy, error, values, draft, submitted, pagination, events: [...events], toasts: store.getSnapshot() }),
     complete: (message: string | null) => { setBusy(false); setError(message); if (!message) setOpen(false); },
-    restoreFilters: setValues, restorePagination: setPagination,
+    restoreFilters: setValues, restorePagination: setPagination, setFilterDisabled, restoreFilterOptions:setFilterOptions,
     toast: (type: 'info' | 'success' | 'error', message: string) => store.push(type, message), advance,
     destroy: () => { store.dispose(); root.unmount(); },
   } });
@@ -38,7 +39,7 @@ function App() {
     </div>
     <div style={{ display: 'flex', gap: 16 }}><SearchInput value={draft} submitted={submitted} placeholder="诊断搜索" draft={setDraft}
       submit={value => { events.push({ kind: 'search', value }); setSubmitted(value); setDraft(value); }} />
-      <MultiFilter name="数字类型" options={options} value={values} change={(value, all) => { events.push({ kind: 'filter', value: { value, all } }); setValues(value); }} />
+      <MultiFilter name="数字类型" options={filterOptions} value={values} disabled={filterDisabled} change={(value, all) => { events.push({ kind: 'filter', value: { value, all } }); setValues(value); }} />
     </div>
     <Pagination value={pagination} loading={false} change={page => { events.push({ kind: 'page', value: page }); setPagination({ ...pagination, page }); }} />
     <Confirmation open={open} title="确认诊断操作" description={'确认焦点、关闭限制和内联错误。\n本组件不发业务请求。'} busy={busy} error={error}

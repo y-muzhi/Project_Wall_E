@@ -119,10 +119,8 @@ class UpdateRequirementInput:
 
 
 def update_requirement_input(payload: object) -> UpdateRequirementInput:
-    data = object_fields(payload, 'body', ('requirement_id', 'title', 'initialization_mode'), ('requirement_id',))
+    data = object_fields(payload, 'body', ('requirement_id', 'title'), ('requirement_id', 'title'))
     identity = requirement_id_input(data['requirement_id'])
-    if 'title' not in data and 'initialization_mode' not in data:
-        reject('body', 'REQUIRED', '至少提供title或initialization_mode一项')
     changes = {}
     if 'title' in data:
         changes['title'] = title(data['title'])
@@ -130,8 +128,6 @@ def update_requirement_input(payload: object) -> UpdateRequirementInput:
             changes['title'].encode('utf-8')
         except UnicodeEncodeError:
             reject('title', 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
-    if 'initialization_mode' in data:
-        changes['initialization_mode'] = strict_enum(data['initialization_mode'], 'initialization_mode', ('IDEATION', 'DESIGN'))
     return UpdateRequirementInput(identity, changes)
 
 

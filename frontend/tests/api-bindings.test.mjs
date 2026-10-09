@@ -136,6 +136,8 @@ test('invalid IDs and absent/misspelled request fields fail before allocating or
   let calls = 0; const service = api(async () => { calls++; return rejected(); }, () => { calls++; return KEY; });
   for (const id of [0, -1, 2 ** 53, '1', NaN]) assert.throws(() => service.prepareCancelGuide(id), TypeError);
   assert.throws(() => service.prepareUpdateRequirement(1, {}));
+  assert.throws(() => service.prepareUpdateRequirement(1, { initialization_mode: 'DESIGN' }));
+  assert.throws(() => service.prepareUpdateRequirement(1, { title: '不得部分修改', initialization_mode: 'DESIGN' }));
   assert.throws(() => service.prepareCreateRequirement({ ...create(), extra: 'x' }));
   assert.throws(() => service.prepareCreateRevision(1, { expected_content_version: 7 }));
   assert.throws(() => service.prepareCreateGuide(1, { ...guide, source: 'wrong' }));

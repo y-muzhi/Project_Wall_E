@@ -50,3 +50,23 @@ test('returning narrow during re-read aborts only owned read and ignores old com
   guard.viewport(1280);await settle();reads[1].resolve();await settle();assert.equal(guard.getSnapshot().phase,'SUPPORTED');
   guard.viewport(900);guard.viewport(1280);await settle();guard.dispose();assert(reads[2].signal.aborted);reads[2].resolve();await settle();assert.equal(guard.getSnapshot().phase,'RESTORING');
 });
+
+test('actual page restoration freezes once, waits for save and coalesces lifecycle events until real revalidation finishes',async()=>{
+  const save=deferred(),read=deferred();let saves=0,reads=0;
+  const guard=new DetailViewportGuard(1600,{blockAndSave(){saves++;return save.promise;},readAfterSupport(){reads++;return read.promise;}});
+  guard.activate();guard.resumePage();assert.equal(saves,0);assert.equal(guard.getSnapshot().phase,'SUPPORTED');
+  guard.suspendPage();guard.suspendPage();guard.resumePage();guard.resumePage();
+  assert.equal(saves,1);assert.equal(guard.getSnapshot().phase,'RESTORING');await settle();assert.equal(reads,0);
+  save.resolve();await settle();assert.equal(reads,1);guard.resumePage();assert.equal(saves,1);
+  read.resolve();await settle();assert.equal(guard.getSnapshot().phase,'SUPPORTED');guard.dispose();
+});
+
+test('page restoration respects narrow width and failed read stays blocked until explicit retry succeeds',async()=>{
+  const read=deferred();let saves=0,reads=0;
+  const guard=new DetailViewportGuard(1600,{blockAndSave(){saves++;return Promise.resolve();},readAfterSupport(){reads++;return reads===1?read.promise:Promise.resolve();}});
+  guard.activate();guard.suspendPage();guard.viewport(900);guard.resumePage();await settle();assert.equal(saves,1);assert.equal(reads,0);assert.equal(guard.getSnapshot().phase,'BLOCKED');
+  guard.viewport(1600);await settle();assert.equal(reads,1);
+  read.reject(Error('offline'));await settle();assert.equal(guard.getSnapshot().phase,'RESTORE_FAILED');
+  guard.resumePage();assert.equal(reads,1);assert.equal(guard.getSnapshot().phase,'RESTORE_FAILED');
+  guard.retry();await settle();assert.equal(reads,2);assert.equal(saves,1);assert.equal(guard.getSnapshot().phase,'SUPPORTED');guard.dispose();
+});

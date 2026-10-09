@@ -49,13 +49,16 @@ class RequirementCommandTests(unittest.TestCase):
             for table in ('revisions', 'idempotency_records', 'sequences', 'guide_runs', 'conversation_messages'):
                 self.assertEqual(connection.execute('SELECT count(*) FROM ' + table).fetchone()[0], 0)
 
-    def test_mode_and_both_fields_commit_together_with_exact_result(self):
-        self.assertEqual(self.update(initialization_mode='DESIGN')['data']['title'], '需求甲')
-        result = self.update(title='新标题', initialization_mode='IDEATION')
-        self.assertEqual(result['code'], 'UPDATED')
-        self.assertEqual(result['data']['initialization_mode'], 'IDEATION')
-        self.assertEqual(result['data']['title'], '新标题')
-        self.assertEqual(result['data']['updated_at'], LATER)
+    def test_mode_is_creation_only_and_mixed_patch_cannot_partially_change_title(self):
+        for status in ('INITIALIZING', 'ACTIVE', 'COMPLETED'):
+            with self.database.transaction(write=True) as connection:
+                connection.execute("UPDATE requirements SET status=?,completed_at=?", (status, TIME if status == 'COMPLETED' else None))
+            before = self.facts()
+            for fields in ({'initialization_mode': 'IDEATION'}, {'initialization_mode': 'DESIGN'}, {'title': '不得部分更新', 'initialization_mode': 'DESIGN'}):
+                result = self.update(**fields)
+                self.assertEqual(result['code'], 'INVALID_INPUT')
+                self.assertIsNone(result['data'])
+            self.assertEqual(self.facts(), before)
 
     def test_no_change_does_not_write_sql_or_consult_clock(self):
         before = self.facts()
@@ -65,7 +68,7 @@ class RequirementCommandTests(unittest.TestCase):
         with closing(sqlite3.connect(self.path)) as connection:
             connection.execute("CREATE TRIGGER test_no_update BEFORE UPDATE ON requirements BEGIN SELECT RAISE(ABORT,'must not update'); END")
             connection.commit()
-        for changes in ({'title': ' 需求甲 '}, {'initialization_mode': 'IDEATION'}, {'title': '需求甲', 'initialization_mode': 'IDEATION'}):
+        for changes in ({'title': ' 需求甲 '}, {'title': '需求甲'}):
             result = update_requirement(self.database, {'requirement_id': 1, **changes}, clock=forbidden_clock)
             self.assertEqual(result['code'], 'UPDATED')
             self.assertEqual(result['data']['updated_at'], TIME)
@@ -102,7 +105,7 @@ class RequirementCommandTests(unittest.TestCase):
         self.assertEqual(self.update(title='活动标题')['code'], 'UPDATED')
         before = self.facts()
         for fields in ({'initialization_mode': 'IDEATION'}, {'initialization_mode': 'DESIGN'}, {'title': '不得部分更新', 'initialization_mode': 'DESIGN'}):
-            self.assertEqual(self.update(**fields), {'code': 'STATE_CONFLICT', 'data': None, 'details': None})
+            self.assertEqual(self.update(**fields)['code'], 'INVALID_INPUT')
         self.assertEqual(self.facts(), before)
 
     def test_completed_rejects_title_mode_and_no_change_before_mutation(self):
@@ -110,7 +113,7 @@ class RequirementCommandTests(unittest.TestCase):
             connection.execute("UPDATE requirements SET status='COMPLETED',completed_at=?", (TIME,))
         before = self.facts()
         for fields in ({'title': '需求甲'}, {'title': '新标题'}, {'initialization_mode': 'IDEATION'}, {'title': '新标题', 'initialization_mode': 'DESIGN'}):
-            self.assertEqual(self.update(**fields)['code'], 'STATE_CONFLICT')
+            self.assertEqual(self.update(**fields)['code'], 'INVALID_INPUT' if 'initialization_mode' in fields else 'STATE_CONFLICT')
         self.assertEqual(self.facts(), before)
 
     def test_non_idle_blocks_mode_and_both_but_title_remains_permitted(self):
@@ -120,7 +123,7 @@ class RequirementCommandTests(unittest.TestCase):
                     connection.execute('UPDATE requirements SET document_work_state=?,active_operation_type=?,active_operation_id=88,state_started_at=?', (work, operation, TIME))
                 before = self.facts()
                 for fields in ({'initialization_mode': 'IDEATION'}, {'title': '不得部分更新', 'initialization_mode': 'DESIGN'}):
-                    self.assertEqual(self.update(**fields), {'code': 'WORK_STATE_CONFLICT', 'data': None, 'details': None})
+                    self.assertEqual(self.update(**fields)['code'], 'INVALID_INPUT')
                 self.assertEqual(self.facts(), before)
                 self.assertEqual(self.update(title='可改标题')['code'], 'UPDATED')
 
@@ -129,7 +132,7 @@ class RequirementCommandTests(unittest.TestCase):
             connection.execute("CREATE TRIGGER test_fail_write AFTER UPDATE ON requirements BEGIN SELECT RAISE(ABORT,'injected storage write failure'); END")
             connection.commit()
         before = self.facts()
-        self.assertEqual(self.update(title='新标题', initialization_mode='DESIGN'), {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None})
+        self.assertEqual(self.update(title='新标题'), {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None})
         self.assertEqual(self.facts(), before)
 
     def test_result_mapping_failure_after_actual_update_rolls_back_transaction(self):
@@ -172,7 +175,7 @@ class RequirementCommandTests(unittest.TestCase):
             return connection
         def competing_writer():
             with self.database.transaction(write=True) as connection:
-                connection.execute("UPDATE requirements SET status='ACTIVE'")
+                connection.execute("UPDATE requirements SET status='COMPLETED',completed_at=?", (TIME,))
                 held.set()
                 if not command_begins.wait(10):
                     raise RuntimeError('Command never attempted shared write lock')
@@ -180,11 +183,11 @@ class RequirementCommandTests(unittest.TestCase):
             future = pool.submit(competing_writer)
             self.assertTrue(held.wait(10))
             with patch.object(command_database, '_connect', traced_connect):
-                result = update_requirement(command_database, {'requirement_id': 1, 'title': '不得部分更新', 'initialization_mode': 'DESIGN'})
+                result = update_requirement(command_database, {'requirement_id': 1, 'title': '不得部分更新'})
             future.result(timeout=12)
         self.assertEqual(result, {'code': 'STATE_CONFLICT', 'data': None, 'details': None})
         current = get_requirement(self.database, 1)['data']
-        self.assertEqual((current['status'], current['title'], current['initialization_mode'], current['updated_at']), ('ACTIVE', '需求甲', 'IDEATION', TIME))
+        self.assertEqual((current['status'], current['title'], current['initialization_mode'], current['updated_at']), ('COMPLETED', '需求甲', 'IDEATION', TIME))
 
     def test_real_commit_with_lost_ack_keeps_fact_and_retry_is_no_change(self):
         class LostAckDatabase(Database):

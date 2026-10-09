@@ -32,5 +32,5 @@ test('unknown start is retained during actual manual occupancy, unsent title per
 test('known lifecycle conflict rebuilds baseline only after actual complete read; multiple unknowns do not mutually prevent recovery',async()=>{
  const p=api();p.prepareCompleteRequirement=()=>({submit:async()=>{throw new ApiRejected('CONTENT_VERSION_CONFLICT','版本冲突',null,'actual-id',409);}});const h=new RequirementHeaderCommands(detail(),p),old=h.getSnapshot().lifecycle;
  assert(!await old.submit());assert.equal(old.getSnapshot().phase,'ERROR');h.adopt(detail(root,2));assert.notEqual(h.getSnapshot().lifecycle,old);assert.equal(h.getSnapshot().lifecycle.getSnapshot().phase,'READY');h.dispose();
- const q=new RequirementHeaderCommands(detail(),api());q.title.begin();q.title.change('原意图');await q.title.save();await q.getSnapshot().manual.start();assert.equal(q.title.getSnapshot().phase,'UNKNOWN');assert(!q.blockedFor('TITLE'));assert(!q.blockedFor('MANUAL'));assert(q.blockedFor('MODE'));assert(q.blockedFor('LIFECYCLE'));q.dispose();
+ const q=new RequirementHeaderCommands(detail(),api());q.title.begin();q.title.change('原意图');await q.title.save();await q.getSnapshot().manual.start();assert.equal(q.title.getSnapshot().phase,'UNKNOWN');assert(!q.blockedFor('TITLE'));assert(!q.blockedFor('MANUAL'));assert.equal(q.mode,undefined);assert(q.blockedFor('LIFECYCLE'));q.dispose();
 });

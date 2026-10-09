@@ -15,7 +15,7 @@ export async function manualSessionProbe(api:WalleApi,identity:number){
   const read=async()=>{require(await reader.refresh());return reader.getSnapshot().confirmed!;};
   try{
     session=await ManualDraftSession.create(element,await read(),api,{cacheName:name,clock});const first=session;
-    require(await session.recovery.inspect());require(session.recovery.continueServerWithoutLocal()&&!session.getSnapshot().readonly);
+    require(await session.recovery.inspect());require(session.recovery.getSnapshot().phase==='SERVER_SELECTED'&&!session.getSnapshot().readonly);
     append(session,'会话窄屏保存实际内容');const saving=session.blockAndSave();require(session.editor.readonly&&session.getSnapshot().blocked);require(await saving);
     const v2=(await api.getManualDraft(identity)).data;require(v2.content_version===2&&v2.markdown_content.includes('会话窄屏保存实际内容'));
     require(session.revalidate(await read())&&session===first&&!session.editor.readonly);
@@ -32,7 +32,7 @@ export async function manualSessionProbe(api:WalleApi,identity:number){
     const lossApi=new Proxy(api,{get(target,key){const value=Reflect.get(target,key);if(typeof value!=='function')return value;
       if(key==='prepareSaveManualDraft')return (...args:Parameters<WalleApi['prepareSaveManualDraft']>)=>{const original=target.prepareSaveManualDraft(...args);return {submit:async()=>{saves++;const result=await original.submit();if(loseSave){loseSave=false;throw new ApiUnknown(true);}return result;}};};
       if(key==='getManualDraft')return async(...args:Parameters<WalleApi['getManualDraft']>)=>{const result=await target.getManualDraft(...args);if(loseRead){loseRead=false;readLosses++;throw new ApiUnknown(true);}return result;};return value.bind(target);}});
-    session=await ManualDraftSession.create(element,await read(),lossApi,{cacheName:name,clock});require(await session.recovery.inspect());require(session.recovery.continueServerWithoutLocal());
+    session=await ManualDraftSession.create(element,await read(),lossApi,{cacheName:name,clock});require(await session.recovery.inspect());require(session.recovery.getSnapshot().phase==='SERVER_SELECTED'&&!session.getSnapshot().readonly);
     append(session,'离开时原生保存成功但回执和复查丢失😀');loseSave=true;loseRead=true;const leave=await session.prepareLeave();require(!leave.saved&&leave.local_protected&&session.autosave.state.status==='UNKNOWN'&&session.editor.readonly);
     const local=session.autosave.localSnapshot,draftId=session.autosave.confirmedDocument.id;
     // Cold open is tracked before IDBOpenDBRequest resolves, and the actual

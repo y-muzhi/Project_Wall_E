@@ -66,10 +66,17 @@ try {
     return {passed:true,events:state.events,known_failure_retry:true,escape_and_close_restored_focus:true,scope:'Native shared Confirmation with explicitly controlled parent events; no business HTTP retry claim'};
   }`); assert.equal(report.confirmation.passed,true);
   report.filters = await code(`async (page) => {
-    await page.getByRole('button',{name:'数字类型：全部'}).click(); await page.getByLabel('一',{exact:true}).uncheck();
-    if (!await page.getByLabel('零',{exact:true}).isDisabled()) throw new Error('Last item not protected');
-    let state = await page.evaluate(()=>window.componentsProbe.state()); if (state.values.length!==1 || state.values[0]!==0 || typeof state.values[0]!=='number') throw new Error('Numeric zero lost');
-    await page.getByRole('button',{name:'一键全选'}).click(); if (!await page.getByRole('button',{name:'一键全选'}).isDisabled()) throw new Error('Repeated all allowed');
+    await page.getByRole('button',{name:'数字类型：全部'}).click();
+    if(await page.getByRole('checkbox').count()!==2||!await page.getByLabel('零',{exact:true}).isChecked()||!await page.getByLabel('一',{exact:true}).isChecked())throw Error('All concrete defaults missing');
+    await page.getByLabel('一',{exact:true}).uncheck();
+    let state=await page.evaluate(()=>window.componentsProbe.state());if(state.events.some(event=>event.kind==='filter'))throw Error('Draft applied early');
+    await page.mouse.click(5,5);state=await page.evaluate(()=>window.componentsProbe.state());
+    if(state.values.length!==1||state.values[0]!==0||typeof state.values[0]!=='number')throw Error('Numeric zero lost');
+    await page.getByRole('button',{name:'数字类型：零'}).click();await page.getByLabel('零',{exact:true}).uncheck();
+    if(await page.getByLabel('零',{exact:true}).isDisabled())throw Error('Empty selection blocked');
+    await page.mouse.click(5,5);state=await page.evaluate(()=>window.componentsProbe.state());
+    if(state.values.length!==2||state.events.filter(event=>event.kind==='filter').length!==2)throw Error('Empty did not apply all once');
+    await page.getByRole('button',{name:'数字类型：全部'}).click();
     await page.evaluate(()=>window.componentsProbe.restoreFilters([0])); await page.waitForFunction(()=>window.componentsProbe.state().values.length===1);
     await page.mouse.click(5,5); if (await page.locator('.filter-menu').count()) throw new Error('Outside did not close');
     await page.getByRole('button',{name:'清除',exact:true}).click(); const input=page.getByRole('textbox',{name:'诊断搜索'});

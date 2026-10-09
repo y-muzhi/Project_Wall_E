@@ -16,3 +16,6 @@ backend/resources/counting/v3/*.json whitespace=blank-at-eol,blank-at-eof,space-
 
 # User-provided design originals keep their exact source bytes in Git.
 docs/design/WALL-E.V1_0.6.*.md -text
+
+# Archived source copies retain the original SHA-256 and line-number baseline.
+docs/design/originals/** -text

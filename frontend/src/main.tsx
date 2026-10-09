@@ -5,8 +5,10 @@ import {ApiClient} from './api/client.ts';
 import {WalleApi} from './api/walle.ts';
 import {ApplicationRouter} from './application/router.ts';
 import {Application} from './application/app.tsx';
+import {installFocusFeedback} from './shared/focus-feedback.ts';
 import './shared/styles.css';
 
+installFocusFeedback(document);
 const container=document.getElementById('root')!;
 async function start(){
  // A private parser context validates documents before any detail editor exists.

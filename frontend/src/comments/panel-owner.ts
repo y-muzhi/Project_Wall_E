@@ -35,6 +35,15 @@ export class RequirementCommentPanel{
   subscribe=(callback:()=>void):(()=>void)=>{this.listeners.add(callback);return()=>this.listeners.delete(callback);};
   get blocked():boolean{return this.closed||this.value.view==='HISTORY'||this.value.suspended;}
   get writeReady():boolean{return !this.blocked&&!this.value.refreshing&&!this.value.needs_refresh&&this.value.view==='CURRENT'&&this.comments.ready&&detailPermissions(this.value.detail,true).comment_write;}
+  get writeUnavailableReason():string|null{
+    if(this.value.detail.requirement.status==='INITIALIZING')return '初始化中暂不支持新增评论；完成初始化后，需求进入进行中且文档空闲时可用。';
+    if(this.value.detail.requirement.status==='COMPLETED')return '需求已完成；重新激活且文档空闲后可新增评论。';
+    if(this.closed||this.value.suspended)return '当前评论操作已暂停。';
+    if(this.value.view!=='CURRENT')return '新增评论须回到正式正文，人工草稿和历史版本不支持。';
+    if(this.value.detail.requirement.document_work_state!=='IDLE')return '文档正在编辑或处理 AI 任务；恢复空闲后可新增评论。';
+    if(!this.writeReady)return '评论数据尚未就绪，请等待加载完成或刷新评论。';
+    return null;
+  }
   writable(flow:CommentCommand):boolean{
     if(!this.writeReady||!flow.allowed)return false;const intent=flow.intent;
     return intent.kind==='CREATE'?intent.target.document_id===this.value.detail.current.id&&intent.target.content_version===this.value.detail.current.content_version:

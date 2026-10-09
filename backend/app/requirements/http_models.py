@@ -56,7 +56,7 @@ class GetRequirementResponse:
 
 
 class UpdateRequirementRequest(CommandRequest):
-    body_fields = ('title', 'initialization_mode')
+    body_fields = ('title',)
     uses_key = False
     validate = staticmethod(update_requirement_input)
     normalize = staticmethod(lambda payload, validated: {'requirement_id': validated.requirement_id, **validated.changes})

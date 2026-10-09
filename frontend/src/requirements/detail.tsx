@@ -1,3 +1,4 @@
+import {REQUIREMENT_STATUS_LABELS,saveStatusLabel} from '../shared/status-labels.ts';
 import {useEffect,useLayoutEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import type {WalleApi} from '../api/walle.ts';
 import {RequirementDetailOwner} from './detail-owner.ts';
@@ -13,23 +14,28 @@ import {localTime} from '../shared/time.ts';
 
 function DocumentMount({host}:Readonly<{host:HTMLElement}>){const container=useRef<HTMLDivElement>(null);useLayoutEffect(()=>{container.current!.append(host);return()=>host.remove();},[host]);return <div className="detail-document-host" ref={container}/>;}
 function SaveStatus({owner}:Readonly<{owner:RequirementDetailOwner}>){
- const state=useSyncExternalStore(owner.documents.subscribe,owner.documents.getSnapshot);if(!state.manual)return <span>{state.mode==='HISTORY'?'历史版本 · 只读':'正式正文 · 只读'}</span>;return <ManualSaveStatus session={state.manual}/>;
+ const state=useSyncExternalStore(owner.documents.subscribe,owner.documents.getSnapshot);
+ const version=state.detail?.current.content_version,identity=state.mode==='HISTORY'?(state.revision?`历史版本 V${state.revision.version_no} · 来源正文 v${state.revision.source_content_version} · 只读`:'历史版本 · 只读'):state.mode==='MANUAL'?`人工草稿 · 基于正式正文 v${version}`:`正式正文 v${version} · 只读`;
+ const activity=state.detail?.activity,task=state.mode==='CURRENT'?(activity?.kind==='GUIDE'?(activity.run.status==='WAITING_USER'?'等待补充信息':'AI 运行中'):activity?.kind==='BATCH'?'建议待处理 · 尚未应用':null):null;
+ return <div className="document-view-status"><span>{identity}</span>{task&&<span className="task-state">{task}</span>}{state.manual&&<ManualSaveStatus session={state.manual} retained={state.mode==='HISTORY'}/>}</div>;
 }
-function ManualSaveStatus({session}:Readonly<{session:NonNullable<ReturnType<RequirementDetailOwner['documents']['getSnapshot']>['manual']>}>){
- const state=useSyncExternalStore(listener=>session.autosave.subscribe(()=>listener()),()=>session.autosave.state);const names={SAVED:'已保存',DIRTY:'未保存',SAVING:'保存中',RETRYING:'保存失败，正在重试',UNKNOWN:'保存结果待核实',VALIDATION_ERROR:'草稿校验失败',CONFLICT:'草稿版本冲突',CLOSED:'编辑已结束'} as const;
- return <span role="status">{names[state.status]}{state.status==='SAVED'?' · '+localTime(session.autosave.confirmedDocument.updated_at):''}</span>;
+function ManualSaveStatus({session,retained}:Readonly<{session:NonNullable<ReturnType<RequirementDetailOwner['documents']['getSnapshot']>['manual']>;retained:boolean}>){
+ const state=useSyncExternalStore(listener=>session.autosave.subscribe(()=>listener()),()=>session.autosave.state),manual=useSyncExternalStore(session.subscribe,session.getSnapshot);
+ const recovery=useSyncExternalStore(session.recovery.subscribe,session.recovery.getSnapshot),ending=useSyncExternalStore(session.ending.subscribe,session.ending.getSnapshot);
+ return <span role="status">{retained?'保留草稿：':''}{saveStatusLabel(state.status,manual.valid)}{manual.valid&&state.status==='SAVED'?' · '+localTime(state.saved_at):''}{!retained&&ending.phase==='EDITING'&&!['RESTORED','SERVER_SELECTED'].includes(recovery.phase)?recovery.checking?' · 正在检查草稿':recovery.local?' · 待处理恢复内容':' · 编辑恢复受阻':''}</span>;
 }
 function LoadedDetail({owner,host,back}:Readonly<{owner:RequirementDetailOwner;host:HTMLElement;back():void}>){
+ const [documentActionHost,setDocumentActionHost]=useState<HTMLDivElement|null>(null);
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),document=useSyncExternalStore(owner.documents.subscribe,owner.documents.getSnapshot),departure=useSyncExternalStore(owner.departure.subscribe,owner.departure.getSnapshot),regions=owner.regions!;
  const geometry=useSyncExternalStore(regions.layout.subscribe,regions.layout.getSnapshot),viewport=useSyncExternalStore(regions.viewport.subscribe,regions.viewport.getSnapshot),historical=owner.documents.historical;
  const supported=geometry.mode!=='BLOCKED'&&viewport.phase==='SUPPORTED',blocked=!supported||departure.phase!=='IDLE',actual=state.detail!,activity=actual.activity.kind==='GUIDE'?(actual.activity.run.status==='WAITING_USER'?'等待回复':'AI 运行中'):actual.activity.kind==='BATCH'?'待处理建议':null;
  useEffect(()=>{const protect=(event:BeforeUnloadEvent)=>{const session=owner.documents.getSnapshot().manual;if(session&&(session.autosave.state.status!=='SAVED'||!['EDITING','CLOSED'].includes(session.ending.getSnapshot().phase))){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',protect);return()=>window.removeEventListener('beforeunload',protect);},[owner]);
  return <div className="detail-product">
-  <DetailFrame layout={regions.layout} viewport={regions.viewport} title={actual.requirement.title} status={<span>{actual.requirement.status==='INITIALIZING'?'初始化中':actual.requirement.status==='ACTIVE'?'维护中':'已完成'} · 正文 v{actual.current.content_version}</span>}
-   actions={<><RequirementHeader commands={regions.header} ready={state.ready} blocked={blocked||document.busy} history={historical} refresh={owner.refresh} refreshRevisions={async()=>{if(!await owner.documents.revisions.refresh())throw Error('实际版本列表暂时无法读取');}} notifyConfirmed={owner.notifyConfirmed}/>
-    <button type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button><button type="button" disabled={blocked} onClick={()=>regions.layout.openTab('REVISIONS')}>版本记录</button></>}
-   outline={<OwnedDocumentOutline owner={owner.documents}/>}
-   document={<><OwnedDocumentControls owner={owner.documents} blocked={blocked} auxiliary={!regions.comments.writeReady||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
+  <DetailFrame layout={regions.layout} viewport={regions.viewport} title={actual.requirement.title} status={<div className="requirement-metadata"><span>{actual.requirement.requirement_no}</span><span>{actual.requirement.requirement_type==='NEW'?'需求新增':'需求改造'}</span><span className="requirement-state-badge" data-state={actual.requirement.status}>{REQUIREMENT_STATUS_LABELS[actual.requirement.status]}</span></div>}
+   actions={null} properties={<RequirementHeader documentActions={<div className="requirement-document-actions" ref={setDocumentActionHost}/>} commands={regions.header} ready={state.ready} blocked={blocked||document.busy} history={historical} refresh={owner.refresh} refreshRevisions={async()=>{if(!await owner.documents.revisions.refresh())throw Error('实际版本列表暂时无法读取');}} notifyConfirmed={owner.notifyConfirmed}
+    tools={<><dl className="requirement-property-summary"><dt>初始化模式</dt><dd>{actual.requirement.initialization_mode==='IDEATION'?'灵感模式':'设计模式'} · 创建后只读</dd></dl><button className="ui-button" type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button></>}/>}
+   outline={<OwnedDocumentOutline owner={owner.documents} heading={false}/>}
+   document={<><OwnedDocumentControls actionHost={documentActionHost} showSaveStatus={false} owner={owner.documents} blocked={blocked} auxiliary={document.mode!=='CURRENT'||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
     {state.error&&<p className="inline-error" role="alert">{state.error}</p>}<DocumentMount host={host}/></>}
    ai={<GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
    comments={<CommentPanel panel={regions.comments} documents={owner.documents}/>}
@@ -55,5 +61,5 @@ export function RequirementDetail({identity,api,back,ready}:Readonly<{identity:n
 }
 function DetailSurface({owner,host,back}:Readonly<{owner:RequirementDetailOwner;host:HTMLElement;back():void}>){
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot);if(owner.regions)return <LoadedDetail owner={owner} host={host} back={back}/>;
- return <main className="detail-initial-state" aria-busy={state.loading}><button type="button" onClick={()=>void owner.departure.request(back)}>返回需求工作台</button><h1>需求详情</h1>{state.loading?<p role="status">正在读取需求、正文与实际活动…</p>:state.error?<><p role="alert">{state.error}</p>{owner.read.getSnapshot().error_kind!=='MISSING'&&<button type="button" onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button>}</>:<p role="status">正在展示正式正文…</p>}<div hidden inert><DocumentMount host={host}/></div></main>;
+ return <main className="detail-initial-state" aria-busy={state.loading}><button className="ui-button" type="button" onClick={()=>void owner.departure.request(back)}>返回需求工作台</button><h1>需求详情</h1>{state.loading?<p role="status">正在读取需求、正文与实际活动…</p>:state.error?<><p role="alert">{state.error}</p>{owner.read.getSnapshot().error_kind!=='MISSING'&&<button className="ui-button" type="button" onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button>}</>:<p role="status">正在展示正式正文…</p>}<div hidden inert><DocumentMount host={host}/></div></main>;
 }
