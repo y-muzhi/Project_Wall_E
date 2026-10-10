@@ -11,7 +11,7 @@ export interface DetailFrameProps {
   activity: string | null; saveStatus: ReactNode; back(): void;
   readPanel(tab: DetailTab, signal: AbortSignal): Promise<void>;
 }
-const tabs = [{value:'AI',label:'AI 对话'},{value:'COMMENTS',label:'评论'},{value:'REVISIONS',label:'版本记录'}] as const;
+const tabs = [{value:'AI',label:'AI 对话'},{value:'COMMENTS',label:'评论'},{value:'REVISIONS',label:'文档记录'}] as const;
 
 /** Actual regions are supplied by the detail owner; no synthetic documents or
  * command permissions are created by this layout component. Hidden regions

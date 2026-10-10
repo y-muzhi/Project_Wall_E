@@ -4,6 +4,7 @@ import type {Command} from '@milkdown/kit/prose/state';
 import type {Node} from '@milkdown/kit/prose/model';
 import {listCommand} from './format-commands.ts';
 import {installEditorInteractions} from './editor-interactions.ts';
+import {createSingleSelect} from '../shared/single-select.ts';
 import {lift} from '@milkdown/kit/prose/commands';
 import {undo,redo} from '@milkdown/kit/prose/history';
 import {deleteRow,deleteColumn,deleteTable} from '@milkdown/kit/prose/tables';
@@ -51,10 +52,9 @@ export function installFormatToolbar(root:HTMLElement,owner:Owner,report:(messag
   };
   // Explicit callbacks retain each command's payload type.
   const formatLabel=document.createElement('label');formatLabel.textContent='样式';
-  const style=document.createElement('select');style.className='ui-input';style.setAttribute('aria-label','正文或标题级别');
-  for(let level=0;level<=6;level++){const option=document.createElement('option');option.value=String(level);option.textContent=level?`标题 ${level}`:'正文';style.append(option);}
-  style.addEventListener('change',()=>{const level=Number(style.value);run(ctx=>level?ctx.get(commandsCtx).get(wrapInHeadingCommand.key)(level):ctx.get(commandsCtx).get(turnIntoTextCommand.key)());});
-  formatLabel.append(style);common.append(formatLabel);
+  const styleConfig={label:'正文或标题级别',compact:true,options:Array.from({length:7},(_,level)=>({value:String(level),label:level?`标题 ${level}`:'正文'})),change:(value:string)=>{const level=Number(value);run(ctx=>level?ctx.get(commandsCtx).get(wrapInHeadingCommand.key)(level):ctx.get(commandsCtx).get(turnIntoTextCommand.key)());}};
+  const style=createSingleSelect(document,{...styleConfig,value:'0'});
+  formatLabel.append(style.element);common.append(formatLabel);
   button('加粗',ctx=>ctx.get(commandsCtx).get(toggleStrongCommand.key)(),'strong');
   button('斜体',ctx=>ctx.get(commandsCtx).get(toggleEmphasisCommand.key)(),'emphasis');
   button('删除线',ctx=>ctx.get(commandsCtx).get(toggleStrikethroughCommand.key)(),'strike_through');
@@ -95,13 +95,13 @@ export function installFormatToolbar(root:HTMLElement,owner:Owner,report:(messag
   let interactions:ReturnType<typeof installEditorInteractions>|null=null;
   function update(){
     const disabled=!owner.formattingReady;toolbar.setAttribute('aria-disabled',String(disabled));
-    style.disabled=disabled;linkButton.disabled=disabled;href.disabled=disabled;apply.disabled=disabled;more.disabled=disabled;
+    linkButton.disabled=disabled;href.disabled=disabled;apply.disabled=disabled;more.disabled=disabled;
     more.title=disabled?'请先恢复编辑或等待状态同步':'展开低频格式工具';
     owner.action(ctx=>{const view=ctx.get(editorViewCtx),state=view.state,selection=state.selection;
       let inTable=selection instanceof Object&&'node' in selection&&(selection.node as Node).type.name==='table';
       for(let depth=selection.$from.depth;depth>0;depth--)if(selection.$from.node(depth).type.name==='table')inTable=true;
       table.hidden=!inTable;
-      style.value=selection.$from.parent.type.name==='heading'?String(selection.$from.parent.attrs.level):'0';
+      style.update({...styleConfig,disabled,value:selection.$from.parent.type.name==='heading'?String(selection.$from.parent.attrs.level):'0'});
       for(const item of buttons){item.element.disabled=disabled||!item.command(ctx)(state,undefined,view);
         item.element.title=item.element.disabled?(disabled?'当前正文尚不可编辑，请先处理恢复提示或等待状态同步。':'当前选区不支持此操作，请选择合适的正文位置。'):(item.element.getAttribute('aria-label')??item.element.textContent??'')+(shortcuts[item.element.getAttribute('aria-label')??'']?`（${shortcuts[item.element.getAttribute('aria-label')??'']}）`:'');
         if(item.mark){const type=state.schema.marks[item.mark];const active=!!type&&(selection.empty?!!type.isInSet(state.storedMarks??selection.$from.marks()):state.doc.rangeHasMark(selection.from,selection.to,type));item.element.setAttribute('aria-pressed',String(active));}
@@ -109,5 +109,5 @@ export function installFormatToolbar(root:HTMLElement,owner:Owner,report:(messag
     });interactions?.update();
   }
   interactions=installEditorInteractions(root,owner,run,report);
-  update();return {update,contains:(target:globalThis.Node|null)=>!!target&&(toolbar.contains(target)||!!interactions?.contains(target)),destroy:()=>{document.removeEventListener('pointerdown',outside);interactions?.destroy();toolbar.remove();}};
+  update();return {update,contains:(target:globalThis.Node|null)=>!!target&&(toolbar.contains(target)||!!interactions?.contains(target)),destroy:()=>{document.removeEventListener('pointerdown',outside);style.destroy();interactions?.destroy();toolbar.remove();}};
 }

@@ -5,6 +5,7 @@ import { ToastStore } from '../../src/shared/toast-store.ts';
 import { ToastViewport } from '../../src/shared/toast.tsx';
 import { MultiFilter, SearchInput } from '../../src/shared/filter.tsx';
 import { Pagination } from '../../src/shared/pagination.tsx';
+import {SingleSelect} from '../../src/shared/single-select.tsx';
 import type { PagePagination } from '../../src/api/client.ts';
 import '../../src/shared/styles.css';
 
@@ -23,13 +24,15 @@ const events: { kind: string; value: unknown }[] = [];
 function App() {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<readonly number[]>([0,1]);
+  const [single,setSingle]=useState('ASK'),[singleDisabled,setSingleDisabled]=useState(false);
   const [filterDisabled,setFilterDisabled]=useState(false),[filterOptions,setFilterOptions]=useState(options);
   const [draft, setDraft] = useState('未提交草稿'), [submitted, setSubmitted] = useState('旧关键词');
   const [pagination, setPagination] = useState<PagePagination>({ page: 6, page_size: 20, total: 210, total_pages: 11 });
   Object.assign(window, { componentsProbe: {
-    state: () => ({ open, busy, error, values, draft, submitted, pagination, events: [...events], toasts: store.getSnapshot() }),
+    state: () => ({ open, busy, error, values, single, draft, submitted, pagination, events: [...events], toasts: store.getSnapshot() }),
     complete: (message: string | null) => { setBusy(false); setError(message); if (!message) setOpen(false); },
     restoreFilters: setValues, restorePagination: setPagination, setFilterDisabled, restoreFilterOptions:setFilterOptions,
+    restoreSingle:setSingle,setSingleDisabled,
     toast: (type: 'info' | 'success' | 'error', message: string) => store.push(type, message), advance,
     destroy: () => { store.dispose(); root.unmount(); },
   } });
@@ -42,6 +45,9 @@ function App() {
       <MultiFilter name="数字类型" options={filterOptions} value={values} disabled={filterDisabled} change={(value, all) => { events.push({ kind: 'filter', value: { value, all } }); setValues(value); }} />
     </div>
     <Pagination value={pagination} loading={false} change={page => { events.push({ kind: 'page', value: page }); setPagination({ ...pagination, page }); }} />
+    <div style={{width:260}}><SingleSelect label="单选诊断" value={single} disabled={singleDisabled}
+      options={[{value:'ASK',label:'提问'},{value:'BLOCKED',label:'暂不可用',disabled:true},{value:'REVIEW',label:'检查'},{value:'MODIFY',label:'修改'}]}
+      change={value=>{events.push({kind:'single',value});setSingle(value);}}/></div>
     <Confirmation open={open} title="确认诊断操作" description={'确认焦点、关闭限制和内联错误。\n本组件不发业务请求。'} busy={busy} error={error}
       confirmLabel="执行诊断" cancel={() => setOpen(false)} confirm={() => { events.push({ kind: 'confirm', value: true }); setBusy(true); }} />
     <ToastViewport store={store} />

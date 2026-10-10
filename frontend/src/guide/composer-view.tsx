@@ -6,6 +6,7 @@ import {guideTarget,reviewTarget} from './scope.ts';
 import {instructionFeedback} from './input-feedback.ts';
 import {isSendShortcut} from './send-shortcut.ts';
 import {Icon} from '../shared/icon.tsx';
+import {SingleSelect} from '../shared/single-select.tsx';
 const names={INITIALIZE:'继续初始化',ASK:'提问',REVIEW:'检查',MODIFY:'修改'} as const;
 const scopeNames={DOCUMENT:'整篇文档',SECTION:'当前章节',BLOCK:'当前区块',SELECTION:'当前选区'} as const;
 const quietSubscribe=()=>()=>{},empty=()=>null;
@@ -23,9 +24,11 @@ export function GuideComposer({owner,documents,review,viewingHistory=null}:Reado
   <div className="guide-composer-body">
   {viewingHistory!==null&&<p className="field-help">正在查看历史运行 #{viewingHistory}；{waiting?`此输入回复当前等待中的运行 #${waiting.id}。`:'此输入将对当前需求发起新操作，不回复历史运行。'}</p>}
   {waiting?<p>回复当前等待中的运行 #{waiting.id}；继续同一运行。</p>:<>
-   <details className="guide-composer-settings"><summary><span>{names[state.action]}</span><span className="scope-summary" title={'已采用：'+state.target.label}>{state.target.label}</span><span>操作设置</span></summary>
-   <label>AI 操作<select className="ui-input" aria-label="AI 操作" value={state.action} disabled={disabled} onChange={event=>owner.choose(event.target.value as typeof state.action)}>{!actions.some(action=>action===state.action)&&<option value={state.action} disabled>{names[state.action]}（当前不可用）</option>}{actions.map(action=><option key={action} value={action}>{names[action]}</option>)}</select></label>
-   <label>操作范围<select className="ui-input" aria-label="操作范围" value={state.target.scope.scope_type} disabled={disabled} onChange={event=>{const target=options.find(option=>option.kind===event.target.value)?.target;if(target)owner.select(target);else owner.rejectScope();}}>{options.map(option=><option key={option.kind} value={option.kind} disabled={!option.target}>{scopeNames[option.kind]}</option>)}</select></label>
+   <details className="guide-composer-settings"><summary aria-label="操作设置"><span>{names[state.action]}</span><span className="scope-summary" title={'已采用：'+state.target.label}>{state.target.label}</span><span className="guide-settings-trigger"><Icon name="settings"/><span>操作设置</span><span className="guide-settings-chevron"><Icon name="down"/></span></span></summary>
+   <label>AI 操作<SingleSelect label="AI 操作" value={state.action} disabled={disabled} change={value=>owner.choose(value as typeof state.action)} options={[
+    ...(!actions.some(action=>action===state.action)?[{value:state.action,label:names[state.action]+'（当前不可用）',disabled:true}]:[]),
+    ...actions.map(action=>({value:action,label:names[action]}))]}/></label>
+   <label>操作范围<SingleSelect label="操作范围" value={state.target.scope.scope_type} disabled={disabled} change={value=>{const target=options.find(option=>option.kind===value)?.target;if(target)owner.select(target);else owner.rejectScope();}} options={options.map(option=>({value:option.kind,label:scopeNames[option.kind],disabled:!option.target}))}/></label>
    <p className="field-help">已采用：{state.target.label} · 正文 v{state.target.content_version}</p>
    {state.target.scope.scope_type!=='DOCUMENT'&&!changed&&!chosen?.error&&!stale&&<p className="field-help">已采用当前范围，无需重复确认。</p>}
    {chosen?.error&&<p className="field-help" role="status">当前范围不可更新：{chosen.error}</p>}

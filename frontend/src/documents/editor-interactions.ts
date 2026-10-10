@@ -6,6 +6,7 @@ import {wrapInHeadingCommand,turnIntoTextCommand} from '@milkdown/kit/preset/com
 import {formatCommand,linkCommand,replaceSlash,slashMatch,validLink} from './format-commands.ts';
 import type {FormatAction,SlashMatch} from './format-commands.ts';
 import {selectionToolbarPosition} from './selection-toolbar-position.ts';
+import {createSingleSelect} from '../shared/single-select.ts';
 
 type Owner=Readonly<{action<T>(callback:(ctx:Ctx)=>T):T;formattingReady:boolean}>;
 type Run=(command:(ctx:Ctx)=>Command)=>boolean;
@@ -59,12 +60,12 @@ export function installEditorInteractions(root:HTMLElement,owner:Owner,run:Run,r
   });
   link.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeLink(true);update();}});
   const preserve=(element:HTMLElement)=>element.addEventListener('mousedown',event=>event.preventDefault());
-  const style=document.createElement('select');style.className='ui-input';style.setAttribute('aria-label','选区正文或标题级别');
-  // focusout fires before the native select receives focus. Keep this owned
-  // control mounted through that transition so its dropdown can actually open.
+  const styleConfig={label:'选区正文或标题级别',compact:true,options:Array.from({length:7},(_,level)=>({value:String(level),label:level?`标题 ${level}`:'正文'})),change:(value:string)=>{const level=Number(value);run(ctx=>level?ctx.get(commandsCtx).get(wrapInHeadingCommand.key)(level):ctx.get(commandsCtx).get(turnIntoTextCommand.key)());}};
+  const style=createSingleSelect(document,{...styleConfig,value:'0'});
+  // The shared popup is an owned descendant: mouse use retains the selection,
+  // and keyboard focus stays inside this floating toolbar.
   bubble.addEventListener('pointerdown',()=>{bubblePointerFocus=true;});
-  for(let level=0;level<=6;level++){const option=document.createElement('option');option.value=String(level);option.textContent=level?`标题 ${level}`:'正文';style.append(option);}
-  style.addEventListener('change',()=>{const level=Number(style.value);run(ctx=>level?ctx.get(commandsCtx).get(wrapInHeadingCommand.key)(level):ctx.get(commandsCtx).get(turnIntoTextCommand.key)());});bubble.append(style);
+  bubble.append(style.element);
   for(const [label,action,mark] of [['加粗','bold','strong'],['斜体','italic','emphasis'],['删除线','strike','strike_through'],['行内代码','inlineCode','inlineCode']] as const){
     const button=document.createElement('button');button.type='button';button.className='ui-button';button.textContent=label;button.setAttribute('aria-label',`选区${label}`);preserve(button);
     button.addEventListener('click',()=>run(ctx=>formatCommand(ctx,action)));bubble.append(button);buttons.push({element:button,action,mark});
@@ -94,9 +95,9 @@ export function installEditorInteractions(root:HTMLElement,owner:Owner,run:Run,r
     const action=option.item.action;dismissSlash();run(ctx=>replaceSlash(match,formatCommand(ctx,action)));
   }
   function update(){
-    if(!owner.formattingReady||root.closest('[hidden],[inert]')){hideSlash();bubble.hidden=true;closeLink();return;}
+    if(!owner.formattingReady||root.closest('[hidden],[inert]')){style.close();hideSlash();bubble.hidden=true;closeLink();return;}
     const editor=view(),state=editor.state,focused=document.activeElement;
-    if(pendingLink){if(state.doc!==pendingLink.doc)closeLink();else{hideSlash();bubble.hidden=true;position(link);return;}}
+    if(pendingLink){if(state.doc!==pendingLink.doc)closeLink();else{style.close();hideSlash();bubble.hidden=true;position(link);return;}}
     const next=slashMatch(state),changed=signature(next)!==signature(query);if(changed){active=0;dismissed='';}query=next;
     const focusInEditor=editor.hasFocus(),focusInBubble=bubblePointerFocus||!!focused&&bubble.contains(focused);
     if(next&&signature(next)!==dismissed&&focusInEditor){
@@ -106,12 +107,13 @@ export function installEditorInteractions(root:HTMLElement,owner:Owner,run:Run,r
       slash.replaceChildren(...options.map(item=>item.element));
       if(!options.length){const message=document.createElement('p');message.textContent='未找到匹配的插入类型';slash.append(message);}
       if(!options[active]?.enabled)active=Math.max(0,options.findIndex(item=>item.enabled));
-      slash.hidden=false;editor.dom.setAttribute('aria-haspopup','listbox');editor.dom.setAttribute('aria-controls',slash.id);position(slash);if(!slash.hidden)highlight();else hideSlash();bubble.hidden=true;
+      slash.hidden=false;editor.dom.setAttribute('aria-haspopup','listbox');editor.dom.setAttribute('aria-controls',slash.id);position(slash);if(!slash.hidden)highlight();else hideSlash();style.close();bubble.hidden=true;
     }else{
       hideSlash();const selection=state.selection;
       if(dismissedSelection&&(dismissedSelection.doc!==state.doc||dismissedSelection.from!==selection.from||dismissedSelection.to!==selection.to))dismissedSelection=null;
       bubble.hidden=!!dismissedSelection||!(selection instanceof TextSelection&&!selection.empty&&(focusInEditor||focusInBubble)&&state.doc.textBetween(selection.from,selection.to).trim());
-      if(!bubble.hidden){if(focused!==style)style.value=selection.$from.parent.type.name==='heading'?String(selection.$from.parent.attrs.level):'0';
+      if(bubble.hidden)style.close();
+      if(!bubble.hidden){style.update({...styleConfig,value:selection.$from.parent.type.name==='heading'?String(selection.$from.parent.attrs.level):'0'});
         for(const item of buttons){item.element.disabled=!owner.action(ctx=>formatCommand(ctx,item.action)(state,undefined,editor));const mark=item.mark&&state.schema.marks[item.mark];item.element.setAttribute('aria-pressed',String(!!mark&&state.doc.rangeHasMark(selection.from,selection.to,mark)));}
         position(bubble);
       }
@@ -148,5 +150,5 @@ export function installEditorInteractions(root:HTMLElement,owner:Owner,run:Run,r
     position(link);
   };
   root.addEventListener('keydown',keydown,true);document.addEventListener('pointerdown',outside);document.addEventListener('focusin',focus);document.addEventListener('scroll',reposition,true);browser.addEventListener('resize',reposition);
-  return {update,contains:(target:Node|null)=>!!target&&(bubble.contains(target)||slash.contains(target)||link.contains(target)),destroy:()=>{hideSlash();root.removeEventListener('keydown',keydown,true);document.removeEventListener('pointerdown',outside);document.removeEventListener('focusin',focus);document.removeEventListener('scroll',reposition,true);browser.removeEventListener('resize',reposition);slash.remove();bubble.remove();link.remove();}};
+  return {update,contains:(target:Node|null)=>!!target&&(bubble.contains(target)||slash.contains(target)||link.contains(target)),destroy:()=>{style.destroy();hideSlash();root.removeEventListener('keydown',keydown,true);document.removeEventListener('pointerdown',outside);document.removeEventListener('focusin',focus);document.removeEventListener('scroll',reposition,true);browser.removeEventListener('resize',reposition);slash.remove();bubble.remove();link.remove();}};
 }

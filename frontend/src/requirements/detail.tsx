@@ -11,6 +11,7 @@ import {GuideConversation} from '../guide/conversation.tsx';
 import {Confirmation} from '../shared/confirmation.tsx';
 import {ToastViewport} from '../shared/toast.tsx';
 import {localTime} from '../shared/time.ts';
+import {DocumentRecords} from './document-records.tsx';
 
 function DocumentMount({host}:Readonly<{host:HTMLElement}>){const container=useRef<HTMLDivElement>(null);useLayoutEffect(()=>{container.current!.append(host);return()=>host.remove();},[host]);return <div className="detail-document-host" ref={container}/>;}
 function SaveStatus({owner}:Readonly<{owner:RequirementDetailOwner}>){
@@ -39,8 +40,9 @@ function LoadedDetail({owner,host,back}:Readonly<{owner:RequirementDetailOwner;h
     {state.error&&<p className="inline-error" role="alert">{state.error}</p>}<DocumentMount host={host}/></>}
    ai={<GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
    comments={<CommentPanel panel={regions.comments} documents={owner.documents}/>}
-   revisions={<>{state.revisionSave&&<RevisionSaveControl flow={state.revisionSave} ready={state.ready&&state.revisionSave.allowed} blocked={blocked||historical} refreshActual={owner.refresh} saved={receipt=>owner.savedRevision(receipt)}/>}
-    <RevisionList flow={owner.documents.revisions} blocked={blocked||document.busy} open={summary=>void owner.openHistory(summary).catch(()=>undefined)}/></>}
+   revisions={<DocumentRecords active={supported&&geometry.right_open&&geometry.right_tab==='REVISIONS'} blocked={blocked||document.busy} revisions={owner.documents.revisions} history={regions.conversation.read.history} readRun={owner.readRunRecord}
+    versions={<>{state.revisionSave&&<RevisionSaveControl flow={state.revisionSave} ready={state.ready&&state.revisionSave.allowed} blocked={blocked||historical} refreshActual={owner.refresh} saved={receipt=>owner.savedRevision(receipt)}/>}
+     <RevisionList flow={owner.documents.revisions} blocked={blocked||document.busy} open={summary=>void owner.openHistory(summary).catch(()=>undefined)}/></>}/>}
    activity={activity} saveStatus={<SaveStatus owner={owner}/>} back={()=>void owner.departure.request(back)} readPanel={(tab,signal)=>owner.readPanel(tab,signal)}/>
   {departure.phase==='SAVING'&&<p className="detail-leave-status" role="status">正在保存草稿，确认后离开…</p>}
   <Confirmation open={departure.phase==='WARNING'} title="仍有未同步的编辑内容" description={departure.local_protected?'后端草稿仍保留，本地最新内容已暂存。可以继续编辑，或明确离开后在此浏览器恢复。':'后端草稿仍保留，但最新本地内容尚未确认能够跨页面恢复。请继续编辑或先复制需要的文字；明确离开可能丢失尚未同步内容。'} busy={false} dangerous confirmLabel="仍然离开" cancelLabel="继续编辑" error={departure.error} confirm={()=>owner.departure.confirmLeave()} cancel={()=>owner.departure.continueEditing()}/>

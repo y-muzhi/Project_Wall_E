@@ -6,6 +6,7 @@ import type {DetailSnapshot} from '../requirements/detail-read.ts';
 import {RevisionViewer} from './viewer.ts';
 import {Pagination} from '../shared/pagination.tsx';
 import {localTime} from '../shared/time.ts';
+import {RecordList} from '../shared/record-list.tsx';
 
 export function RevisionSaveControl(props:Readonly<{flow:RequirementRevisionSave;ready:boolean;blocked:boolean;refreshActual():Promise<DetailSnapshot>;saved(receipt:RevisionSummary):Promise<void>}>){
   const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),pending=useRef(false);
@@ -18,7 +19,7 @@ export function RevisionSaveControl(props:Readonly<{flow:RequirementRevisionSave
     }catch{setError(props.flow.getSnapshot().phase==='CONFIRMED'?'版本已保存，列表暂时无法读取，请重试读取':'实际详情读取失败，版本说明已保留');}
     finally{pending.current=false;setBusy(false);}
   };
-  return <section aria-label="保存手动版本">
+  return <section className="record-version-save" aria-label="保存手动版本">
     <label>版本说明（可选）<textarea className="ui-input" aria-label="版本说明（可选）" value={state.description} disabled={locked||!props.ready&&editable} readOnly={!editable} onChange={event=>props.flow.change(event.target.value)}/></label>
     {editable&&<button className="ui-button" type="button" disabled={locked||!props.ready||!props.flow.allowed} onClick={()=>void submit()}>保存版本</button>}
     {state.phase==='UNKNOWN'&&<button className="ui-button" type="button" disabled={locked} onClick={()=>void submit()}>重新确认保存版本</button>}
@@ -32,16 +33,10 @@ export function RevisionSaveControl(props:Readonly<{flow:RequirementRevisionSave
 
 export function RevisionList(props:Readonly<{flow:RequirementRevisions;blocked:boolean;open(summary:RevisionSummary):void}>){
   const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),list=state.list;
-  return <section aria-label="版本记录" aria-busy={state.loading}>
-    <header className="read-section-heading"><strong>版本记录</strong><span className="read-status" role="status">{state.loading?`正在读取第 ${state.page} 页…`:''}</span></header>
-    {!list&&!state.loading&&state.error&&<p role="alert" className="inline-error">{state.error} <button className="ui-button" type="button" onClick={()=>void props.flow.refresh()}>重试</button></p>}
-    {list&&<>{list.items.length===0&&<p>{list.pagination.total===0?'暂无版本记录。完成初始化后生成基线；进行中且正文空闲时，可填写版本说明保存手动版本。':'当前页暂无版本记录'}</p>}
-      <ol>{list.items.map(row=><li key={row.id}><strong>V{row.version_no}</strong> · {row.revision_type==='BASELINE'?'初始化基线':'手动版本'} · 来源正文 v{row.source_content_version}
-        <p className="revision-description">{row.description??'--'}</p><time dateTime={row.created_at}>{localTime(row.created_at)}</time>{' '}
-        <button className="ui-button" type="button" disabled={props.blocked||['EXITING','RESTORING'].includes(state.history.phase)} onClick={()=>props.open(row)}>查看 V{row.version_no}</button></li>)}</ol>
-      <Pagination value={list.pagination} compactSingle loading={state.loading} showLoadingStatus={false} error={state.error} change={page=>void props.flow.refresh(page)} retry={()=>void props.flow.refresh()}/>
-    </>}
-  </section>;
+  return <RecordList title="版本记录" total={list?.pagination.total??null} loading={state.loading} error={state.error} retry={()=>void props.flow.refresh()} retryDisabled={state.loading||props.blocked}
+   empty={list?.pagination.total?'当前页暂无版本记录':'暂无版本记录。完成初始化后生成基线；进行中且正文空闲时，可保存手动版本。'}
+   items={(list?.items??[]).map(row=>({id:row.id,title:<><span className="record-version-label">V{row.version_no}</span><span>{row.revision_type==='BASELINE'?'初始化基线':'手动版本'}</span></>,metadata:<><span>来源正文 v{row.source_content_version}</span><time dateTime={row.created_at}>{localTime(row.created_at)}</time></>,description:row.description??undefined,selected:state.history.requested?.id===row.id&&state.history.phase!=='CLOSED',disabled:props.blocked||['EXITING','RESTORING'].includes(state.history.phase),label:`查看 V${row.version_no}`,open:()=>props.open(row)}))}
+   footer={list&&(list.pagination.total_pages>1||list.pagination.page>1)&&<Pagination value={list.pagination} compactSingle loading={state.loading||props.blocked} showLoadingStatus={false} change={page=>void props.flow.refresh(page)}/>}/>;
 }
 
 export function RevisionDocument(props:Readonly<{snapshot:Revision;ready?(viewer:RevisionViewer):void}>){

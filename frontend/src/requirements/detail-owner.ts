@@ -78,6 +78,7 @@ export class RequirementDetailOwner{
   else if(!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
  }
  openComments=():void=>{if(this.supported){this.bindings?.layout.openTab('COMMENTS');this.sync();}};
+ readRunRecord=async(identity:number,signal:AbortSignal)=>{if(this.closed||signal.aborted)throw Error('Record view is unavailable');const run=(await this.api.getGuideRun(identity,signal)).data;if(this.closed||signal.aborted||run.requirement_id!==this.value.detail?.requirement.id)throw Error('Owned run record required');return run;};
  async openHistory(summary:RevisionSummary):Promise<void>{if(!this.supported)return;this.bindings!.layout.openTab('REVISIONS');await this.documents.openHistory(summary);this.sync();}
  async savedRevision(receipt:RevisionSummary):Promise<void>{if(receipt.requirement_id!==this.value.detail?.requirement.id)throw TypeError('Owned revision required');this.notifyConfirmed(receipt,`版本 V${receipt.version_no} 已保存`);if(!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
   if(this.closed)return;const actual=await this.refresh();
