@@ -14,7 +14,8 @@ export function ApplicationNavigation({current, navigate,headerHost,headerHeight
 }>) {
   const [wide, setWide] = useState(() => window.matchMedia(desktopNavigation).matches);
   const [collapsed,setCollapsed]=useState(restoredCollapsed);
-  const [open, setOpen] = useState(false), id = useId();
+  const [open, setOpen] = useState(false), [hint,setHint]=useState(false), id = useId();
+  const shortcut=navigator.userAgent.includes('Mac')?'⌘+Shift+S':'Ctrl+Shift+S';
   const toggle = useRef<HTMLButtonElement>(null), destination = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLDialogElement>(null), release = useRef<(() => void) | null>(null);
   const header=useRef<HTMLDivElement>(null);
@@ -51,6 +52,15 @@ export function ApplicationNavigation({current, navigate,headerHost,headerHeight
     navigate();
   };
   const fold=()=>{const next=!collapsed;setCollapsed(next);try{window.localStorage.setItem(collapsedKey,next?'1':'0');}catch{/* The current tab still retains this preference. */}};
+  const toggleNavigation=()=>{setHint(false);if(wide)fold();else if(open)close();else setOpen(true);};
+  useLayoutEffect(()=>{
+    const keydown=(event:KeyboardEvent)=>{
+      if(event.isComposing||event.altKey||!event.shiftKey||!(event.ctrlKey||event.metaKey)||event.key.toLowerCase()!=='s')return;
+      const modal=activeModal();if(modal&&modal!==drawer.current)return;
+      event.preventDefault();event.stopPropagation();if(!event.repeat)toggleNavigation();
+    };
+    window.addEventListener('keydown',keydown,true);return()=>window.removeEventListener('keydown',keydown,true);
+  },[wide,collapsed,open]);
   const navigation = <nav className={'application-navigation'+(wide&&collapsed?' is-collapsed':'')} aria-label="主导航" id={wide ? id : undefined}>
     <button ref={destination} type="button" className="ui-button application-navigation-item" aria-label="需求工作台" title="需求工作台" aria-current={current} onClick={visit}>
       <Icon name="workbench"/><span className="application-navigation-label">需求工作台</span>
@@ -59,10 +69,16 @@ export function ApplicationNavigation({current, navigate,headerHost,headerHeight
   return <>
     <div className="application-header" role="banner" ref={header}>
       <div className={'application-brand-zone'+(wide&&collapsed?' is-collapsed':'')}>
-      {!wide && <button ref={toggle} type="button" className="ui-button icon-button" aria-label="展开主导航" title="展开主导航"
-        aria-haspopup="dialog" aria-expanded={open} aria-controls={id} onClick={() => setOpen(true)}><Icon name="menu"/></button>}
-      <span className="application-brand">WALL-E</span><span className="application-brand-compact" aria-hidden="true">W</span>
-      {wide&&<button type="button" className="ui-button icon-button" aria-label={collapsed?'展开导航栏':'收起导航栏'} title={collapsed?'展开导航栏':'收起导航栏'} aria-expanded={!collapsed} aria-controls={id} onClick={fold}><Icon name={collapsed?'right':'left'}/></button>}
+      <span className="application-brand-lockup" hidden={!wide||collapsed}><span className="application-brand">WALL-E</span></span>
+      <span className="application-navigation-toggle-wrap" onMouseEnter={()=>setHint(true)} onMouseLeave={()=>setHint(false)}>
+        <button ref={toggle} type="button" className={'ui-button application-navigation-toggle'+(wide&&collapsed?' is-compact':'')}
+          aria-label={wide?(collapsed?'展开导航栏':'收起导航栏'):'展开主导航'} aria-keyshortcuts={shortcut.startsWith('⌘')?'Meta+Shift+S':'Control+Shift+S'} aria-describedby={hint?`${id}-hint`:undefined}
+          aria-haspopup={wide?undefined:'dialog'} aria-expanded={wide?!collapsed:open} aria-controls={id} onClick={toggleNavigation}
+          onFocus={()=>setHint(true)} onBlur={()=>setHint(false)} onKeyDown={event=>{if(event.key==='Escape')setHint(false);}}>
+          {wide&&collapsed&&<span className="application-toggle-brand application-brand-mark" aria-hidden="true">W</span>}<Icon name="sidebar"/>
+        </button>
+        <span id={`${id}-hint`} role="tooltip" className="application-navigation-tooltip" hidden={!hint}>显示/隐藏侧边栏<kbd>{shortcut}</kbd></span>
+      </span>
       </div><div className="application-page-header" ref={headerHost}/>
     </div>
     {wide ? navigation : <dialog ref={drawer} id={id} className="application-navigation-drawer" aria-label="主导航菜单" tabIndex={-1}

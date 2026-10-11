@@ -6,6 +6,7 @@ const shapes = {
   workbench: <><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6h11M6 6v7.5"/></>,
   outline: <><path d="M6 4h7M6 8h7M6 12h7"/>{[4,8,12].map(cy=><circle key={cy} cx="3" cy={cy} r=".7" fill="currentColor" stroke="none"/>)}</>,
   panel: <><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/></>,
+  sidebar: <><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M6 5v6"/></>,
   close: <path d="m4 4 8 8M12 4l-8 8"/>,
   search: <><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></>,
   up: <path d="m4 10 4-4 4 4"/>,
