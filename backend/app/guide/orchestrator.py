@@ -26,9 +26,10 @@ from backend.app.shared.http_errors import ERRORS
 from backend.app.shared.validation import InvalidInput
 from .context_builder import build_context, ContextLimitExceeded
 from .context_builder import assemble_input
-from .counted_context import CountedContext, compile_counted_candidate, counting_release
+from .counted_context import CountedContext, compile_counted_candidate, counting_release_for_function
 from .model_context import read_context
 from .trusted_output import produce_trusted_output
+from .response_display import persist_returned_response, response_text
 from .commands import persist_ai_result, fail_guide_run
 from .contracts import GUIDE_STATUSES, GUIDE_STEPS, TASK_ERROR_CODES, execute_guide_run_input, execute_guide_run_result
 
@@ -209,7 +210,7 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
             # bypasses either the before-count proof gate or final send gate.
             if context_compiler is not build_context or compatibility_check is None or counting_compatibility_check is None:
                 raise ConfigInvalid('Counted execution requires both compatibility gates')
-            release=await _native(counting_release,frozen_profile)
+            release=await _native(counting_release_for_function,frozen_profile,function)
             if await _native(counting_compatibility_check,frozen_profile,function,release) is not True:
                 raise ConfigInvalid('Same-model Chat framing compatibility is unavailable')
             counter=_AuditedCounter(database,process_lock,actual,function,resources,counting_counter,clock)
@@ -237,7 +238,9 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
                         input_tokens=wire.input_tokens,output_tokens=wire.output_tokens)
                 except ConfigInvalid:
                     await _native(_admission_failure,database,prepared['id'],clock)
-                    raise
+                    if response_text(wire.raw_response) is None:raise
+                    outcome=await _native(persist_returned_response,database,prepared['id'],process_lock=process_lock,clock=clock)
+                    return _result('AI_FINISHED',{'id':identity,'status':'COMPLETED','current_step':'FINISHED'},call_no)
             error_code = 'MODEL_ERROR'
             retryable = wire.retryable
             if wire.succeeded:
@@ -260,7 +263,13 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
                                 'current_step': 'WAITING_USER' if status == 'WAITING_USER' else 'FINISHED'}, call_no)
                         # Business state changes and storage/commit ambiguity
                         # never authorize an additional model request.
-                        return await fail(outcome['code'])
+                        if outcome['code'] not in ('OUTPUT_INVALID','PATCH_INVALID','TARGET_STALE'):
+                            return await fail(outcome['code'])
+            # Any actual assistant return is delivered once. Output formatting,
+            # repeated questions and rejected writes never cause paid retries.
+            if response_text(wire.raw_response) is not None:
+                outcome=await _native(persist_returned_response,database,prepared['id'],process_lock=process_lock,clock=clock)
+                return _result('AI_FINISHED',{'id':identity,'status':'COMPLETED','current_step':'FINISHED'},call_no)
             if not retryable or attempt == 3: return await fail(error_code)
             if counting_counter is None:
                 context = await _native(_retry_context, database, identity, resources, function, frozen_profile, context_compiler)

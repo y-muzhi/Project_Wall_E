@@ -218,7 +218,15 @@ def _scope(kind: str, reference: object) -> dict:
 
 def _guide_model(data: object, *, summary: bool) -> dict:
     fields = tuple(field for field in STATUS_FIELDS if not summary or field != 'final_result')
-    value = object_fields(data, 'read_model', fields, fields)
+    value = object_fields(data, 'read_model', fields if summary else (*fields,'returned_responses'), fields)
+    if not summary:
+        responses=value.get('returned_responses',[])
+        if type(responses) is not list:raise ValueError('Returned responses must be a list')
+        for response in responses:
+            object_fields(response,'returned_response',('llm_use_id','call_no','attempt_no','content'),('llm_use_id','call_no','attempt_no','content'))
+            for key in ('llm_use_id','call_no','attempt_no'):strict_integer(response[key],key)
+            if type(response['content']) is not str:raise ValueError('Returned content must be text')
+        value['returned_responses']=responses
     for field in ('id', 'requirement_id'):
         strict_integer(value[field], field)
     strict_enum(value['action_type'], 'action_type', ('INITIALIZE', 'ASK', 'REVIEW', 'MODIFY'))
@@ -291,6 +299,8 @@ def get_guide_run_result(connection, row, message, batches, *, catalog: Resource
     value['latest_assistant_message_id'] = None if message is None else message['id']
     if not summary:
         value['final_result'] = None
+        from .response_display import returned_responses
+        value['returned_responses']=returned_responses(connection,row['id']) if row['status'] in ('FAILED','CANCELLED') else []
     if not summary and row['status'] == 'COMPLETED':
         # D-005 C07 business result, never raw model output or a Prompt snapshot.
         effects = strict_json_object(row['final_result_json'], 'final_result_json')

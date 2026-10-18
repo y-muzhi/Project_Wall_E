@@ -36,6 +36,41 @@ class GetGuideRunResponse:
         return value, None
 
 
+class ListModelCallsResponse:
+    errors = GetGuideRunResponse.errors
+
+    @staticmethod
+    def project(data, request):
+        fields = ('id', 'requirement_id', 'action_type', 'status', 'current_step', 'trigger_message_id', 'program_processed', 'items')
+        value = object_fields(data, 'model_calls', fields, fields)
+        if value['id'] != request.guide_run_id or any(item['guide_run_id'] != value['id'] for item in value['items']):
+            raise ValueError('Calls must belong to the requested run')
+        return value, None
+
+
+@dataclass(frozen=True)
+class GetModelCallRequest:
+    llm_use_id: int
+
+    @classmethod
+    def parse(cls, request):
+        request_query(request)
+        return cls(decimal_integer(request.path_params['llm_use_id'], 'llm_use_id'))
+
+
+class GetModelCallResponse:
+    errors = GetGuideRunResponse.errors
+
+    @staticmethod
+    def project(data, request):
+        fields = ('call', 'requirement_id', 'action_type', 'prompt_reference', 'context_reference', 'sections',
+            'included_history_ids', 'budget_removed_history_ids', 'raw_request_json', 'preflight', 'context_strategy', 'selection_summary')
+        value = object_fields(data, 'model_call', fields, fields)
+        if value['call']['id'] != request.llm_use_id:
+            raise ValueError('Snapshot must belong to the requested call')
+        return value, None
+
+
 @dataclass(frozen=True)
 class CancelGuideRunRequest:
     payload: dict

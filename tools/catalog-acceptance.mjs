@@ -5,7 +5,7 @@ import { coverage, inspectSource } from './spec-audit.mjs';
 const root = resolve(import.meta.dirname, '..');
 const manifest = JSON.parse(readFileSync(resolve(root, 'docs/sources/manifest.json'), 'utf8'));
 const ledger = JSON.parse(readFileSync(resolve(root, 'docs/sources/reading-ledger.json'), 'utf8'));
-const path = resolve(root, 'docs/验收场景映射.md');
+const path = resolve(root, 'docs/traceability/验收场景映射.md');
 const prior = new Map();
 try {
   for (const row of readFileSync(path, 'utf8').split('\n').filter(line => line.startsWith('| frontend ') || line.startsWith('| backend '))) {

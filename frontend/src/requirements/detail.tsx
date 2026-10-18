@@ -40,7 +40,7 @@ function LoadedDetail({owner,host,back}:Readonly<{owner:RequirementDetailOwner;h
     {state.error&&<p className="inline-error" role="alert">{state.error}</p>}<DocumentMount host={host}/></>}
    ai={<GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
    comments={<CommentPanel panel={regions.comments} documents={owner.documents}/>}
-   revisions={<DocumentRecords active={supported&&geometry.right_open&&geometry.right_tab==='REVISIONS'} blocked={blocked||document.busy} revisions={owner.documents.revisions} history={regions.conversation.read.history} readRun={owner.readRunRecord}
+   revisions={<DocumentRecords modelCallApi={regions.conversation.modelCallApi} requirementId={actual.requirement.id} active={supported&&geometry.right_open&&geometry.right_tab==='REVISIONS'} blocked={blocked||document.busy} revisions={owner.documents.revisions} history={regions.conversation.read.history} readRun={owner.readRunRecord}
     versions={<>{state.revisionSave&&<RevisionSaveControl flow={state.revisionSave} ready={state.ready&&state.revisionSave.allowed} blocked={blocked||historical} refreshActual={owner.refresh} saved={receipt=>owner.savedRevision(receipt)}/>}
      <RevisionList flow={owner.documents.revisions} blocked={blocked||document.busy} open={summary=>void owner.openHistory(summary).catch(()=>undefined)}/></>}/>}
    activity={activity} saveStatus={<SaveStatus owner={owner}/>} back={()=>void owner.departure.request(back)} readPanel={(tab,signal)=>owner.readPanel(tab,signal)}/>

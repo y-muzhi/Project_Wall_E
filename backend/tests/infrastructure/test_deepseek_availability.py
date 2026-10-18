@@ -20,7 +20,7 @@ from backend.app.infrastructure.framing_probe import (
     build_plan, validate_plan, digest, MemoryProbeJournal, collect_observations)
 from backend.app.infrastructure.model_profile import ModelProfile, DEFAULT_PROFILE, DEEPSEEK_MODEL_ID
 from backend.app.infrastructure.practical_usage import validate_practical_usage
-from backend.app.infrastructure.resources import ConfigInvalid, ResourceCatalog
+from backend.app.infrastructure.resources import ConfigInvalid, ResourceCatalog, DEFAULT_ROOT, V2_ROOT
 from backend.app.infrastructure.local_credentials import read_local_credential
 from backend.tests.infrastructure import test_framing_probe as old_probe
 from backend.tests.infrastructure import test_tokenization as count_tcp
@@ -68,7 +68,7 @@ class AvailabilityPolicyTests(unittest.TestCase):
             target=Path(directory)/'admission.json';raw=json.dumps(value).encode();target.write_bytes(raw)
             with patch.object(admission,'ADMISSION_PATH',target),patch.object(admission,'ADMISSION_SHA256',hashlib.sha256(raw).hexdigest()):
                 self.assertTrue(admission.admitted())
-                function=ResourceCatalog().freeze('INITIALIZE','USER_INSTRUCTION')
+                function=ResourceCatalog(DEFAULT_ROOT,versioned_root=V2_ROOT).freeze('INITIALIZE','USER_INSTRUCTION')
                 self.assertTrue(admission.before_count(PROFILE,function,counting_release(PROFILE)))
                 target.write_bytes(raw+b' ')
                 self.assertFalse(admission.admitted())

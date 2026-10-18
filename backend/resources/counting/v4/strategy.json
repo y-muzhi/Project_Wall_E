@@ -1,0 +1,46 @@
+{
+  "schema_version": 4,
+  "strategy": "ark_exact_text_counts_deepseek_full_template_v4",
+  "status": "ADOPTED_BY_USER_BUDGET_APPROVAL",
+  "model": "deepseek-v4-1-flash-260910",
+  "schema_derivation": "root_reachable_local_defs_v1",
+  "count_endpoint": "https://ark.cn-beijing.volces.com/api/v3/tokenization",
+  "chat_roles": [
+    "system",
+    "user"
+  ],
+  "stream": false,
+  "tool_calling": false,
+  "framing_reserve_candidate": 1024,
+  "counted_texts": [
+    "system",
+    "input",
+    "user_input",
+    "source",
+    "template",
+    "history"
+  ],
+  "serialization": "json_utf8_ensure_ascii_false_compact_no_nan_frozen_field_order",
+  "budget": {
+    "total_tokens": 139264,
+    "input_tokens": 131072,
+    "output_tokens": 8192,
+    "prompt_tokens": 4096,
+    "current_user_tokens": 4096,
+    "source_tokens": 4096,
+    "history_tokens": 2048,
+    "template_tokens": 65536,
+    "counting": "conservative_utf8_bytes_pending_provider_proof"
+  },
+  "trim_order": [
+    "oldest_history_whole_message",
+    "optional_neighbor_whole_block"
+  ],
+  "production_enabled": false,
+  "model_version": "260910",
+  "provider_compatibility_proved": false,
+  "proof_requirement": "User approved full template and larger budgets on 2026-10-11. Retains exact counts, empirical 1024 framing reserve and actual-usage rejection; no universal compatibility proof or new real-call validation is claimed.",
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "decision": "TPL-001",
+  "function_manifest_sha256": "3d3d155fb4523d9491ba8a8c41768a95d96368080d0e2854890a27c9c1794d14"
+}

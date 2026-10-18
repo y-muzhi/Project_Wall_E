@@ -1,4 +1,4 @@
-"""APP-GUIDE-QUERY-C01 same-snapshot status references without audit/Prompt reads."""
+"""APP-GUIDE-QUERY-C01 status and returned assistant content; no Prompt reads."""
 from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.resources import ResourceCatalog

@@ -18,6 +18,7 @@ from .model_profile import ModelProfile
 from .process_lock import ProcessLock
 from .tokenization import ENDPOINT, measurement_summary
 from backend.app.documents.snapshot import _time
+from backend.app.guide.context_builder import restore_transport_input
 from backend.app.shared.validation import strict_integer, strict_json_object
 
 
@@ -65,7 +66,10 @@ class CountingJournal:
 
     def prepare(self, actual, function, profile, texts, at):
         _time(at);strict_integer(actual['run']['id'],'guide_run_id')
-        value=function.validate_input(strict_json_object(texts[1]))
+        wire = strict_json_object(texts[1])
+        from backend.app.guide.context_projection import projected, basis_from_actual
+        basis = basis_from_actual(actual, function, wire) if projected(function) else None
+        value=restore_transport_input(wire,function,basis=basis)
         record={'schema_version':1,'id':uuid4().hex,'phase':'PREPARED','at':at,
                 'guide_run_id':actual['run']['id'],'trigger_message_id':actual['user_input']['id'],
                 'owner_epoch':self.process_lock.owner_epoch,'endpoint':ENDPOINT,

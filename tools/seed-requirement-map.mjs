@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const output = resolve(root, 'docs/需求实现映射.md');
+const output = resolve(root, 'docs/traceability/需求实现映射.md');
 if (existsSync(output)) throw new Error('Mapping already exists. Edit incrementally; do not overwrite reviewed mappings.');
 const sources = JSON.parse(readFileSync(resolve(root, 'docs/sources/manifest.json'), 'utf8'));
 const known = {

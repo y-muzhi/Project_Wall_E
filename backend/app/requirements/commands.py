@@ -44,7 +44,7 @@ def create_requirement(executor: Idempotency, payload: object, *, catalog: Resou
         try:
             resources = catalog if catalog is not None else ResourceCatalog()
             template = resources.template(request.requirement_type, request.template_key, request.template_version)
-            function = resources.freeze('INITIALIZE', 'USER_INSTRUCTION')
+            function = resources.freeze('INITIALIZE', 'USER_INSTRUCTION', template_key=template.key, template_version=template.version)
         except TemplateInvalid:
             raise Rejected('TEMPLATE_INVALID') from None
         except ConfigInvalid:

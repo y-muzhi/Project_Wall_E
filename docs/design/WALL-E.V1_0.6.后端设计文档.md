@@ -1,6 +1,8 @@
 # WALL-E.V1_0.6 后端设计文档
 
-修订依据：[原始设计文档修改清单](../原始设计文档修改清单.md)及其中 D-001—D-015 的有效确认。沿用原章节、字段表、处理表、结果表和稳定编号；本次文档合并不表示测试通过。原始版本见 [归档](originals/WALL-E.V1_0.6.后端设计文档.md)。2026-10-09根据迭代UX-008同步创建后初始化模式只读；字段、能力、HTTP及验证去向见[本次合并记录](合并记录-2026-10-09.md)。
+修订依据：[原始设计文档修改清单](../archive/iterations/原始设计文档修改清单.md)及其中 D-001—D-015 的有效确认。沿用原章节、字段表、处理表、结果表和稳定编号；本次文档合并不表示测试通过。原始版本见 [归档](originals/WALL-E.V1_0.6.后端设计文档.md)。2026-10-16 按[本次合并与代码核查记录](../archive/merges/合并记录-2026-10-16.md)补齐已实施模板、上下文、返回展示、事实确认和只读调用接口；此前2026-10-09根据迭代UX-008同步创建后初始化模式只读；字段、能力、HTTP及验证去向见[本次合并记录](../archive/merges/合并记录-2026-10-09.md)。
+
+2026-10-18按[本次合并记录](../archive/merges/合并记录-2026-10-18.md)将一期结构精简、私有校验快照、提示词职责、调用详情扩展及模板v4合入原职责章节；二期／三期不作为当前实现，原始设计归档保持字节。
 
 ## 1. 文档说明与系统范围
 
@@ -12,10 +14,10 @@
 |系统名称|WALL-E|
 |规格类型|0→1初始规格|
 |目标软件版本|V1_0.6|
-|规格版本|1.0-draft-sync2|
+|规格版本|1.0-draft-sync4|
 |原始规格版本|1.0-draft；原字节归档在 originals/ 同名文件|
 |文档状态|DRAFT；已确认结论已合入，剩余待定及运行验收状态不因此改变|
-|最后更新时间|2026-10-09；合入UX-008创建后初始化模式只读；同步属性更新字段、处理、接口和验证定义，其他前端交互不新增后端契约|
+|最后更新时间|2026-10-18；合入CTX-002-A一期、TPL-003最终模板及单次真实Token观测；FLOW-005长期需求／答案等后续项仍待办，不改变完整验收状态|
 
 ### 1.2 目标与范围
 
@@ -24,7 +26,7 @@
 |系统目标|将用户的需求想法逐步形成可维护的 Markdown 需求正文，通过初始化、人工编辑、AI 问答与检查、经用户决策的修改建议、评论和历史版本维护同一需求的已确认内容。|
 |使用者与使用场景|单用户通过工作台和需求详情页维护需求；前端通过 HTTP 接口提交动作、读取资源和观察后台 AI 运行。|
 |运行与使用范围|HTTP 接口不设置身份认证；运行恢复以当前单进程实际运行集合为依据。单进程、本机文件数据库及启动配置见 [Q-BASELINE](#q-baseline)、[Q-08](#q-08)。|
-|本版本包含|需求生命周期；CURRENT 与独立 MANUAL_DRAFT；不可变 Revision；连续对话及整组卡片回答；GuideRun 与逐次 LLMUse；SuggestionBatch 及逐项决策；评论维护、定位与正文更新后的锚点重校验；37 个 HTTP 入口（原 I01—I36 加新增 I37）；后台推进及中断、超时恢复。|
+|本版本包含|需求生命周期；CURRENT 与独立 MANUAL_DRAFT；不可变 Revision；连续对话及整组卡片回答；GuideRun 与逐次 LLMUse；SuggestionBatch 及逐项决策；评论维护、定位与正文更新后的锚点重校验；39 个 HTTP 入口（I01—I37，加只读 I38／I39）；后台推进及中断、超时恢复。|
 |本版本明确排除|业务删除需求；评论回复与评论线程；恢复历史版本；人工重新挂载评论；流式模型展示；Tool Calling；多用户实时协作。ASK 和 REVIEW 不直接修改正文，MODIFY 必须经建议批次确认。|
 |已确认的输入依据|《Wall-E _V1_0.6_后端设计(2).md》第4、5章；《WALL-E_V1_0.6_API接口模块(1).md》第6.4、6.5节；《WALL-E_V1_0.6_前端模块(1).md》第6章中的调用与交互要求。三份文件共同约束 V1_0.6；文中“V1”指本版范围。|
 
@@ -662,7 +664,7 @@ card_key 在同组唯一；option_key 在同卡片唯一。卡片组1～5张，�
 |model_version|Text|可获得时记录|是|null|由所属APP能力修改；OBJ-GUIDE-V01～V07|
 |function_type|Text|本次真实调用采用的 FunctionType|否|无|不可修改；OBJ-GUIDE-V01～V07|
 |prompt_config|Text|本次实际使用的 Prompt Key 和版本|否|无|由所属APP能力修改；OBJ-GUIDE-V01～V07|
-|request_snapshot_json|JSON对象|实际发送给模型的请求及协议引用|否|无|由所属APP能力修改；敏感内容；OBJ-GUIDE-V01～V07；结构与版本按第4.7节，审计按第7.3节|
+|request_snapshot_json|JSON对象|实际发送的request、协议／Profile、计数依据；一期另有不进入messages的私有context_basis|否|无|由所属APP能力修改；敏感内容；OBJ-GUIDE-V01～V07；结构与版本按第4.7节，审计按第7.3节；只读接口不公开私有Basis或Profile|
 |parsed_output_json|JSON对象|成功解析为单一 JSON 对象但尚未完成业务校验的输出|是|null|由所属APP能力修改；敏感内容；OBJ-GUIDE-V01～V07；结构与版本按第4.7节，审计按第7.3节|
 |trusted_output_json|JSON对象|通过输出 Schema、业务规则、状态、Scope 和 Allowed Targets 校验后的结果|是|null|由所属APP能力修改；敏感内容；OBJ-GUIDE-V01～V07；结构与版本按第4.7节，审计按第7.3节|
 |input_summary|Text|便于排查的输入概述|否|无|由所属APP能力修改；OBJ-GUIDE-V01～V07|
@@ -2921,7 +2923,7 @@ REVIEW_RESULT只能用于MODIFY；历史检查结果只作来源，重新读取�
 |能力引用与名称|APP-GUIDE-CMD-C06 提交整组卡片|
 |处理目标|提交整组卡片的完整应用结果|
 |主要对象或过程|OBJ-GUIDE、OBJ-MSG、OBJ-REQ|
-|完成方式|接受后继续执行；本次只确认接受事务，最终状态由APP-GUIDE-QUERY-C01观察。|
+|完成方式|普通回答接受后继续；明确事实确认在接受事务内完成，响应仍为 CARDS_ACCEPTED／HTTP 202；以返回 GuideRun 状态和程序回执区分。|
 
 
 #### 4.2 输入与来源
@@ -2940,7 +2942,8 @@ REVIEW_RESULT只能用于MODIFY；历史检查结果只作来源，重新读取�
 |---|---|---|---|
 |P01；开始|幂等查重，加载来源消息/所属运行/需求；要求ASSISTANT且INTERACTION_CARDS；数据变化：无|INF-MSG-REP；INF-GUIDE-REP；INF-REQ-REP；SHR-IDEMPOTENCY|来源合法→P02；否则SOURCE_INVALID|
 |P02；来源合法|推导AVAILABLE；验证完整组、必答/跳过、选项唯一性、自定义回答与数量；任一错误整组拒绝；数据变化：无|SHR-CARDS；OBJ-MSG|全部合法→P03；已回答→CARD_ALREADY_ANSWERED；失效→CARD_EXPIRED；错误→INVALID_INPUT|
-|P03；答案合法|同事务新增唯一CARD_RESPONSE和后端可读摘要；INITIALIZE新建Run，其他动作继续原WAITING_USER运行；占用同步写入；数据变化：一条正式响应；只推进一个Run|INF-TX；INF-MSG-REP；INF-GUIDE-REP；INF-REQ-REP|CARDS_ACCEPTED|
+|P03；答案合法|同事务新增唯一CARD_RESPONSE和可读摘要；INITIALIZE新建Run，普通澄清进入RUNNING/PREPARING，明确事实确认进入P04；其他动作继续原WAITING_USER运行|INF-TX；INF-MSG-REP；INF-GUIDE-REP；INF-REQ-REP|普通回答→CARDS_ACCEPTED；事实确认→P04|
+|P04；INITIALIZE含明确事实CONFIRM|从已展示原卡解析选定变更，先检查整个集合再原子采用；更新CURRENT版本及锚点、保存程序回执，Run完成并释放占用。暂不确认／跳过不写正文；无法确定的声明保存答案及原因，正文不变；均不调模型|FLOW-004；confirmed_response.py；SHR-PATCH；模板／版本／权限及幂等保护|CARDS_ACCEPTED，guide_run=COMPLETED/FINISHED；存储失败整体回滚|
 
 
 **入口绑定的业务约束**
@@ -2962,7 +2965,7 @@ REVIEW_RESULT只能用于MODIFY；历史检查结果只作来源，重新读取�
 
 |结果名称或编码|含义或公共定义引用|返回数据|调用方可确认的完成范围|
 |---|---|---|---|
-|CARDS_ACCEPTED|成功|返回正式响应、运行id/status和ANSWERED状态；完整成功载荷见本节。|接受后继续执行；本次只确认接受事务，最终状态由APP-GUIDE-QUERY-C01观察。|
+|CARDS_ACCEPTED|成功|返回正式响应、运行id/status和ANSWERED状态；完整成功载荷见本节。|普通回答接受后继续；明确事实确认在接受事务内完成，响应仍为 CARDS_ACCEPTED／HTTP 202；以返回 GuideRun 状态和程序回执区分。|
 |CARD_ALREADY_ANSWERED|冲突|已存在正式响应，不覆盖已有答案；返回已有响应的安全引用|按处理路径终止；拒绝默认无业务变化，明确例外见4.5。|
 |CARD_EXPIRED|冲突|该组卡片已不再属于当前待回复流程|按处理路径终止；拒绝默认无业务变化，明确例外见4.5。|
 |SOURCE_INVALID|拒绝|来源不是有效助手卡片组|按处理路径终止；拒绝默认无业务变化，明确例外见4.5。|
@@ -2999,13 +3002,17 @@ REVIEW_RESULT只能用于MODIFY；历史检查结果只作来源，重新读取�
 
 schema_version必须为1。两个不同幂等键竞争同一消息由唯一回复约束兜底；响应已保存后模型失败，卡片仍ANSWERED，不准重提原组。
 
-采用 APP-EXEC-COMMON；参与Repository为 INF-GUIDE-REP、INF-MSG-REP、INF-REQ-REP。共同原子范围是4.3声明共同成立的全部变更；各步骤的占用和版本判断在实际提交事务内执行。
+采用 APP-EXEC-COMMON；参与Repository为 INF-GUIDE-REP、INF-MSG-REP、INF-REQ-REP；直接写入还参与 INF-DOC-REP 及评论锚点重校验。共同原子范围是4.3声明共同成立的全部变更；各步骤的占用和版本判断在实际提交事务内执行。
+
+<a id="sync-flow-004"></a>
+
+明确事实确认必须展示目标区块、章节、操作、原文和新内容，固定 confirm/defer、无自定义和推荐。兼容原完整声明与已展示的紧凑表格声明；不推断自然语言为补丁。表格确认只检查并替换选中行，表头、唯一键和目标行原文须匹配，非目标行保持当前原文。混合组全部答案一起保存，只采用明确确认的变更，集合冲突不得部分写入。完成后不自动续调模型；下一轮由用户主动发送。不得伪造 LLMUse 或补写历史已提交答案。
 
 #### 4.8 实现定位
 
 |所属模块或关键路径|关键入口或资源|承载内容|
 |---|---|---|
-|backend/app/guide/commands.py|submit_card_responses|APP-GUIDE-CMD-C06|
+|backend/app/guide/commands.py、confirmed_response.py|submit_card_responses、complete_confirmed_response|整组回答事务及程序直接确认写入|
 |backend/app/guide/contracts.py|submit_card_responses_input / submit_card_responses_result|应用输入输出；不含HTTP或ORM对象|
 
 
@@ -3219,11 +3226,11 @@ schema_version必须为1。两个不同幂等键竞争同一消息由唯一回�
 |步骤与进入条件|处理与数据变化|输入来源、调用或规则引用|后续步骤或结果|
 |---|---|---|---|
 |S01；后台取得运行|调用只读能力取得运行上下文和冻结资源；检查任务仍可执行；数据变化：无|APP-GUIDE-QUERY-C03；INF-FUNCTION|有效→S02；缺配置→APP-GUIDE-CMD-C08|
-|S02；上下文可组装|按冻结模板/输入Schema组装；按第4.7节裁剪及v3精确Tokenization＋1024余量预检，计数失败或超限不发Chat；计数独立审计，不占写事务|APP-GUIDE-QUERY-C03；INF-FUNCTION|通过→S03；失败→APP-GUIDE-CMD-C08|
+|S02；上下文可组装|保留完整程序事实，按冻结输入／投影Schema组装实际Wire及私有Basis；按第4.7节对应版本精确Tokenization＋1024余量预检，计数失败或超限不发Chat；计数独立审计，不占写事务|APP-GUIDE-QUERY-C03；INF-FUNCTION|通过→S03；失败→APP-GUIDE-CMD-C08|
 |S03；输入通过|每次Chat尝试重新计数并核对序列化身份；短事务记录LLMUse后再调Gateway；每真实请求一条审计；计数失败不发Chat|INF-TX；INF-GUIDE-REP；INF-MODEL|返回→S04；技术失败→S06|
-|S04；Provider返回|先留实际审计，再复核精确model、整数usage、各预算及0—1024封装差值；异常CONFIG_INVALID且不重试。通过才解析单JSON、校验Schema/分支/权限及事实证明；合格才写trusted_output|INF-FUNCTION；SHR-SCOPE；SHR-PATCH；INF-GUIDE-REP|合格→S05；不合格→S06|
+|S04；Provider返回|先留实际审计，复核model、usage、冻结预算和封装差值。完整合格的业务产物才写trusted_output；已有助手返回但不适合业务采用的内容，作为只读原文交付并完成，不吞掉返回、不伪造校验成功|INF-FUNCTION；SHR-SCOPE；SHR-PATCH；response_display.py|可信产物→S05；原文交付→AI_FINISHED；无助手返回→S06|
 |S05；完整可信结果|调用唯一业务提交能力，不在Orchestrator重复实现正文写入；数据变化：由下级能力负责|APP-GUIDE-CMD-C07|成功→AI_FINISHED或AI_WAITING_USER；终态冲突→AI_STOPPED；失败→S06|
-|S06；调用/解析/校验失败|重试前重检Run和占用；同call_no最多3次真实请求。只对可重试分类重新计数再执行S03；实际usage拒绝不可重试；其他失败或额度耗尽调用失败能力；数据变化：尝试审计；最后一次错误为Run最终错误|APP-GUIDE-CMD-C08；INF-GUIDE-REP|可重试→S03；已终态→AI_STOPPED；失败已记→AI_FAILED|
+|S06；尚无助手返回且调用失败|重检Run／占用和可重试分类，同call_no至多3次；收到助手内容后不因格式、重复或写入失败再调模型。无内容且不可重试或额度耗尽则记失败|APP-GUIDE-CMD-C08；INF-GUIDE-REP|可重试→S03；已终态→AI_STOPPED；失败已记→AI_FAILED|
 
 
 #### 4.4 结果与完成范围
@@ -3255,7 +3262,7 @@ V1非流式，无Tool Calling、无自动工具轮次。自动尝试上限属于
 |WAITING_USER|暂停，不自动过期；回复后新call_no并沿用冻结协议|APP-GUIDE-CMD-C02或C06|
 |服务启动遗留RUNNING|记中断失败，不重发模型|APP-GUIDE-CMD-C09|
 |15分钟无进展|执行超时终止并拒绝迟到写入|APP-GUIDE-CMD-C09|
-|可重试错误|网络暂时失败、超时、限流、服务端暂时失败、解析或输出校验失败共用至多3次真实请求|S06|
+|可重试错误|尚无助手返回时，网络暂时失败、超时、限流和服务端暂时失败共用至多3次真实请求|S06|
 |不可重试错误|认证、权限、余额、配额、模型未开通、输入超长、安全拒绝、取消、业务状态变化及v3计数/实际usage复核失败直接结束；见[正式模型规则](#sync-be-18)及[实用预算控制](#sync-be-19)|S06|
 |用户取消|PERSISTING前争用同一状态门禁|APP-GUIDE-CMD-C03|
 |已支付/已请求Provider|不能事务回滚Provider用量；保留LLMUse，不自动退款或补发|INF-MODEL|
@@ -3272,28 +3279,28 @@ V1非流式，无Tool Calling、无自动工具轮次。自动尝试上限属于
 
 |AI调用编号|FunctionType|ActionType|SourceType|输入Schema|输出Schema|ContextTemplate|产物|应用方式|
 |---|---|---|---|---|---|---|---|---|
-|<a id="app-guide-orch-c01-ai01"></a>APP-GUIDE-ORCH-C01-AI01|INITIALIZE_REQUIREMENT|INITIALIZE|USER_INSTRUCTION|INITIALIZE_INPUT@v1|INITIALIZE_OUTPUT@v1|INITIALIZE_CONTEXT@v2|已确认事实的文档补丁、文本或卡片|程序校验后应用；AI未知信息不能写为事实|
-|<a id="app-guide-orch-c01-ai02"></a>APP-GUIDE-ORCH-C01-AI02|ANSWER_REQUIREMENT|ASK|USER_INSTRUCTION|ASK_INPUT@v1|ASK_OUTPUT@v1|ASK_CONTEXT@v2|回答或澄清问题/卡片|只保存消息及Run结果|
-|<a id="app-guide-orch-c01-ai03"></a>APP-GUIDE-ORCH-C01-AI03|REVIEW_REQUIREMENT|REVIEW|USER_INSTRUCTION|REVIEW_INPUT@v1|REVIEW_OUTPUT@v1|REVIEW_CONTEXT@v2|轻量检查结果或澄清|只保存消息及Run结果，无独立检查对象|
-|<a id="app-guide-orch-c01-ai04"></a>APP-GUIDE-ORCH-C01-AI04|MODIFY_REQUIREMENT|MODIFY|USER_INSTRUCTION|MODIFY_INPUT@v1|MODIFY_OUTPUT@v1|MODIFY_CONTEXT@v2|非空建议批次、无修改说明或澄清|用户整批确认后应用|
-|<a id="app-guide-orch-c01-ai05"></a>APP-GUIDE-ORCH-C01-AI05|MODIFY_FROM_REVIEW|MODIFY|REVIEW_RESULT|MODIFY_FROM_REVIEW_INPUT@v1|MODIFY_OUTPUT@v1|MODIFY_FROM_REVIEW_CONTEXT@v2|以历史检查作依据重新生成建议|读取最新CURRENT，不执行旧检查中的Patch|
-|<a id="app-guide-orch-c01-ai06"></a>APP-GUIDE-ORCH-C01-AI06|MODIFY_FROM_COMMENT|MODIFY|COMMENT|MODIFY_FROM_COMMENT_INPUT@v1|MODIFY_OUTPUT@v1|MODIFY_FROM_COMMENT_CONTEXT@v2|在来源评论锚点授权范围内生成建议|用户整批确认后应用，不自动解决评论|
+|<a id="app-guide-orch-c01-ai01"></a>APP-GUIDE-ORCH-C01-AI01|INITIALIZE_REQUIREMENT|INITIALIZE|USER_INSTRUCTION|INITIALIZE_INPUT@v1|INITIALIZE_OUTPUT@v1|INITIALIZE_CONTEXT（版本见本节矩阵）|已确认事实的文档补丁、文本或卡片|程序校验后应用；AI未知信息不能写为事实|
+|<a id="app-guide-orch-c01-ai02"></a>APP-GUIDE-ORCH-C01-AI02|ANSWER_REQUIREMENT|ASK|USER_INSTRUCTION|ASK_INPUT@v1|ASK_OUTPUT@v1|ASK_CONTEXT（版本见本节矩阵）|回答或澄清问题/卡片|只保存消息及Run结果|
+|<a id="app-guide-orch-c01-ai03"></a>APP-GUIDE-ORCH-C01-AI03|REVIEW_REQUIREMENT|REVIEW|USER_INSTRUCTION|REVIEW_INPUT@v1|REVIEW_OUTPUT@v1|REVIEW_CONTEXT（版本见本节矩阵）|轻量检查结果或澄清|只保存消息及Run结果，无独立检查对象|
+|<a id="app-guide-orch-c01-ai04"></a>APP-GUIDE-ORCH-C01-AI04|MODIFY_REQUIREMENT|MODIFY|USER_INSTRUCTION|MODIFY_INPUT@v1|MODIFY_OUTPUT@v1|MODIFY_CONTEXT（版本见本节矩阵）|非空建议批次、无修改说明或澄清|用户整批确认后应用|
+|<a id="app-guide-orch-c01-ai05"></a>APP-GUIDE-ORCH-C01-AI05|MODIFY_FROM_REVIEW|MODIFY|REVIEW_RESULT|MODIFY_FROM_REVIEW_INPUT@v1|MODIFY_OUTPUT@v1|MODIFY_FROM_REVIEW_CONTEXT（版本见本节矩阵）|以历史检查作依据重新生成建议|读取最新CURRENT，不执行旧检查中的Patch|
+|<a id="app-guide-orch-c01-ai06"></a>APP-GUIDE-ORCH-C01-AI06|MODIFY_FROM_COMMENT|MODIFY|COMMENT|MODIFY_FROM_COMMENT_INPUT@v1|MODIFY_OUTPUT@v1|MODIFY_FROM_COMMENT_CONTEXT（版本见本节矩阵）|在来源评论锚点授权范围内生成建议|用户整批确认后应用，不自动解决评论|
 
 **Prompt与上下文**
 
 |字段|确定定义|
 |---|---|
-|Prompt标识|新运行FunctionType@v2；旧运行按原冻结版本；已使用资源不可原地修改，冻结版本缺失直接CONFIG_INVALID|
+|Prompt标识|按本节当前任务／模板版本矩阵冻结；已有运行恢复原版本，缺失直接CONFIG_INVALID，不原地改已用资源|
 |消息结构|非流式Chat Completions；System承载固定协议和不可信输入边界；System/User精确字段按本节固定资源及[上下文规则](#sync-be-17)|
 |事实解释顺序|后端状态/授权约束→CURRENT→本轮真实用户输入→少量历史消息。新用户变更意图可以提出修改CURRENT，不能因事实优先级被忽略；只有程序完成正文写入后才成为新正式事实。|
 |上下文最小事实|需求与CURRENT身份及content_version、固定模板、Scope、Allowed Targets、当前用户输入；MODIFY_FROM_REVIEW/COMMENT额外带来源快照|
 |局部读取|BLOCK读取目标、所属标题及相邻Block；读取权限可以大于修改权限；邻域左右各2块、历史最多10条；SECTION边界按SHR-SCOPE|
 |排除内容|人工草稿、未应用Suggestion、历史Revision正文、无关Comment、LLMUse原始记录、内部推理/运行日志、AI未选推荐|
 |清单|记录Document id/version、Block IDs、实际Message IDs、模板键版本、来源对象、ContextTemplate版本；LLMUse保存实际清单|
-|Token预算|总32768、输入24576、输出8192；System/当前输入/来源/模板各4096、历史2048；先删最老完整历史再删非必要邻域；必要事实不可裁剪|
+|Token预算|普通模板总32768／输入24576，完整模板总139264／输入131072；输出8192；具体分项及版本绑定见 BE-17／BE-19|
 |输出模式|一个JSON对象，schema_version整数；Schema Draft 2020-12；每层对象additionalProperties=false；response_type互斥分支|
-|输出处理|传输→单一JSON解析→输出Schema→业务状态/Scope/目标校验→对象有效性→APP-GUIDE-CMD-C07|
-|输出修复|不去围栏、不猜字段、不删未知字段、不自动补默认值；可在剩余尝试额度内把安全校验摘要追加到原协议，要求重生成完整对象|
+|输出处理|结构化业务产物按解析、Schema、状态／权限及证据校验后进入C07；不满足条件的实际助手返回交付只读原文，不执行业务操作|
+|输出修复|不猜字段、不补默认或删内容来伪造成功；收到助手返回后不为格式／重复／业务采用失败自动重试；原文保留|
 |AI安全|用户文本、评论和文档内容作为业务数据，不能改变系统权限或协议；模型对象ID须回查；模型SQL、命令、路径不直接执行；V1不暴露Tool或任意文件访问|
 |调用记录|每次真实请求对应LLMUse；快照不得含API Key；reasoning内容不进消息/final_result/trusted_output；原始响应脱敏范围见[Q-09](#q-09)|
 
@@ -3315,59 +3322,98 @@ V1非流式，无Tool Calling、无自动工具轮次。自动尝试上限属于
 
 <a id="sync-be-15"></a>
 
-**六类AI正式资源和v2版本关系**
+**六类 AI 资源与当前版本选择**
 
-新运行冻结 Function/Prompt/Context v2；十份输入/输出 Schema 和模板本身继续 v1。同运行继续恢复原冻结版本，旧 v1 运行不得改为 v2 或“最新”；缺失/签名不符 CONFIG_INVALID。完整资源位于 `backend/resources/v1`、`backend/resources/v2`，Manifest 校验全部内容。完整资源按下表及固定目录读取。
+当前新运行按以下矩阵冻结；版本同时指Function／Prompt／Context，不等同于模板、规范输入Schema或计数资源。resources/v8承载CTX-002-A一期，不启用二期长期需求／答案或按任务选取正文。
 
-| FunctionType | 输入 Schema（不改版本） | 输出 Schema（不改版本） | 新运行 Context / Prompt |
-| --- | --- | --- | --- |
-| INITIALIZE_REQUIREMENT | INITIALIZE_INPUT@v1 | INITIALIZE_OUTPUT@v1 | INITIALIZE_CONTEXT@v2 / INITIALIZE_REQUIREMENT@v2 |
-| ANSWER_REQUIREMENT | ASK_INPUT@v1 | ASK_OUTPUT@v1 | ASK_CONTEXT@v2 / ANSWER_REQUIREMENT@v2 |
-| REVIEW_REQUIREMENT | REVIEW_INPUT@v1 | REVIEW_OUTPUT@v1 | REVIEW_CONTEXT@v2 / REVIEW_REQUIREMENT@v2 |
-| MODIFY_REQUIREMENT | MODIFY_INPUT@v1 | MODIFY_OUTPUT@v1 | MODIFY_CONTEXT@v2 / MODIFY_REQUIREMENT@v2 |
-| MODIFY_FROM_REVIEW | MODIFY_FROM_REVIEW_INPUT@v1 | MODIFY_OUTPUT@v1 | MODIFY_FROM_REVIEW_CONTEXT@v2 / MODIFY_FROM_REVIEW@v2 |
-| MODIFY_FROM_COMMENT | MODIFY_FROM_COMMENT_INPUT@v1 | MODIFY_OUTPUT@v1 | MODIFY_FROM_COMMENT_CONTEXT@v2 / MODIFY_FROM_COMMENT@v2 |
+|需求固定模板|INITIALIZE|其他五类任务|初始化计数策略|其他任务计数策略|
+|---|---|---|---|---|
+|普通模板：NEW v1、CHANGE v1|v8|v8|counting/v9|counting/v9|
+|完整模板：new-requirement@v2／v3／v4|v9|v9|counting/v10|counting/v10|
 
-补齐互斥分支：INITIALIZE_TEXT 为 `{schema_version,response_type,message,confirmed_fact_patches}`，INITIALIZE_CARDS 另带 cards；ASK 最终 ANSWER，REVIEW 最终 REVIEW_RESULT 且带 review_result，MODIFY 为 NO_CHANGE 或非空 SUGGESTIONS（message/title/summary/suggestions）；非初始化任务可用 CLARIFY_TEXT/CLARIFY_CARDS 进入 WAITING_USER。`review_result` 必含 schema_version=1、summary、issues，具体 issue 结构引用 `REVIEW_OUTPUT.v1.json#/$defs/review_result` 的完整定义，不另编字段。所有层级拒绝未知字段，仍只接受单个完整 JSON，原分支持久化去向不变。
+resources/v3为完整模板和扩展预算（Function v3）；v4为历史稳定前缀（Function v4／v5）；v5为历史初始化推进（Function v6／v7）；v6／v7仅发布模板v3／最终v4；v8发布六任务的两套一期资源（Function v8／v9）。新规范输入为各任务CANONICAL_INPUT@v1，在旧规范对象上只增加section_lookup；传输输入Schema为各任务INPUT@v3，输出Schema保持原版。resources/v1—v8、counting/v1—v10按各自固定摘要校验，旧运行不能换成新默认；同一Run继续保持冻结协议，另建Run按需求固定模板重新选择。
 
-**确认依据**：D-005、D-010；[完整 v2 候选审查稿](../proposals/output-evidence-resources-v2-review.md)。**代码对应**：`infrastructure/resources.py::{ResourceCatalog,FrozenFunction}`、`backend/resources/v2/functions.v2.json`、`schemas/`、`contexts/`、`prompts/`、`guide/result_persistence.py`。
+新初始化Prompt先理解需求、使用场景、目标与边界，将完整模板作为组织框架；综合实际携带的正文、本轮回答和历史，只问缺口／具体冲突。目标、交付物、实现分工不拼成同一道互斥单选。message简述目的，不重复序列化cards；普通选择是澄清信息，不等于正文写入确认。C06明确事实确认由程序直接写入并结束，不要求模型重发相同补丁；完整声明和既有C07 USER TEXT证据路径保持。defer／跳过不写入，也不立即重复同一确认。这是生成指导，不是拦截显示返回的条件。
 
+旧v6／v7中重复card_text及确认后补丁的文字只保留用于历史恢复，不再作为新默认Prompt要求。FLOW-005的提示词同步及结构冗余由一期处理；最近10条窗口仍可能丢失早期背景，原始需求常驻、长期正式回答索引和任务读取策略仍待办，不承诺已解决所有重复提问。
+
+互斥业务分支保持：INITIALIZE_TEXT／INITIALIZE_CARDS，ASK的ANSWER，REVIEW的REVIEW_RESULT，MODIFY的NO_CHANGE／SUGGESTIONS，以及非初始化的CLARIFY_TEXT／CLARIFY_CARDS。结构、证据或业务校验失败的实际返回仍可读，不产生可执行业务权限，不为格式自动重试。
 
 <a id="sync-be-16"></a>
 
-**“已确认事实”和卡片文本等价证明**
+**已确认事实、卡片展示与业务采用边界**
 
 INITIALIZE 非空事实补丁不能仅凭用户消息包含关键词通过。程序按真实目标、完整章节、操作、完整原文及完整新正文构造固定“确认事实变更”声明，五种操作全部适用，表格行声明额外包含完整原表及实际行选择器。声明完整格式以已批准 [事实证据补充稿](../proposals/output-evidence-equivalence-v1.md)“一”为准，作为本条正式引用。
 
 证据仅接受两路：已实际读取 USER TEXT 的整条内容为完整声明；或真实 USER CARD_RESPONSE 对不可变原 CONFIRM 卡明确选择 confirm，该卡完整问题为声明＋固定确认问句、选项 confirm/defer、单选、自定义关闭、无推荐，并包含实际目标完整原块。defer、跳过、助手话语、未选推荐、截取短语、拼接消息不算确认。正式回答证据按整条摘要每 10000 码点连续分片、最多 10 片，顺序完整且同一实际 message_id；该消息必须在本次 Read Manifest。每项 Patch 分别证明，仍共同检查组合和事务采用。
 
-声明比较仅采用 SHR-TEXT 换行及外侧空白规范化；Patch 原字节、权限和选区外不变等检查不放宽。原 message 必须逐字等于固定 `card_text(cards)`：按卡片顺序列 card_key、question/context/card_type/required/selection_rule/custom_answer、全部 option 字段、完整 recommendation 或 null、全部 related_spec_context 完整原文；JSON 字符串转义、固定标签顺序及 LF 分隔。不得接收后替换 message、删字段或补默认来修成成功。超既有容量拒绝，短证据不降级采用。
+声明比较仅采用 SHR-TEXT 换行及外侧空白规范化；Patch 原字节、权限和选区外不变等检查不放宽。FLOW-003 已取消 message 与 card_text 的逐字等价展示门禁：message 可为简短说明，cards 独立展示，重复问题也不拦截；完整事实证据、范围和模板保护仍约束实际写入，短证据不能降级采用。原卡片内容不作为用户已确认事实，未识别返回仅展示原文。FLOW-004 的明确卡片确认由 C06 程序直接采用，C07 完整证据路径继续保留历史协议兼容。
 
-**确认依据**：D-010，完整算法与 v2 候选同时批准。**代码对应**：`guide/output_evidence.py::{fact_declaration,validate_fact_patches,card_text,validate_card_output}`、`trusted_output.py`、`result_persistence.py`、`backend/resources/v2/OUTPUT-EVIDENCE-EQUIVALENCE.v1.md`。此证明确认用户是否认可具体变更，不证明现实世界事实本身真实。
+**确认依据**：D-010，完整算法与 v2 候选同时批准。**代码对应**：`guide/output_evidence.py::{fact_declaration,validate_fact_patches}`、`trusted_output.py`、`result_persistence.py`、`backend/resources/v2/OUTPUT-EVIDENCE-EQUIVALENCE.v1.md`。此证明确认用户是否认可具体变更，不证明现实世界事实本身真实。
 
 
 <a id="sync-be-17"></a>
 
 **上下文字段、预算及传输Schema派生**
 
-完整 User 对象为 `schema_version,function_type,action_type,source_type,requirement,current_document,template,scope,allowed_targets,user_input,history,source,read_manifest`，字段和来源按固定输入 Schema；最多最近 10 条正式可读历史，左右各 2 个邻域块，禁止草稿、未采用建议、历史正文、无关评论、原始调用、推理及未选推荐进入事实。
+程序完整事实与模型输入分离。C03仍返回真实run、requirement、CURRENT及完整BlockState、模板、范围、原授权、用户输入、历史、来源和Read Manifest；Assembler保留旧规范字段`schema_version,function_type,action_type,source_type,requirement,current_document,template,scope,allowed_targets,user_input,history,source,read_manifest`，一期增加`section_lookup`。不得因为模型少收字段而删除程序所需的审计、权限、plain_text、版本或事实来源。
 
-预算总量 32768、输入 24576、输出 8192 token；System、当前用户输入、来源和模板分别最多 4096，历史最多 2048。仅先删最老完整历史消息，再删非必要完整邻域块；目标、祖先、必要来源、模板及当前输入不可裁剪。仍超限 CONTEXT_LIMIT_EXCEEDED，不发 Chat，不用模型大窗口替代业务预算。
+新运行采用`context_projection_v1`：System为冻结Prompt及派生输出Schema；User按下表固定顺序编码。校验不改变Wire键／数组顺序；计数、发送、审计和只读展示共用同一份实际文本。
 
-发送给模型的输出 Schema 仅移除根不可达本地 `$defs`，保留全部可达约束；动态/外部/递归或不支持的解析机制拒绝 CONFIG_INVALID。程序验证仍用完整签名 Schema，私有审计保存原 Schema 和派生 Schema 的独立 SHA-256、实际 System/User、协议和 Read Manifest。正式计数如何执行、余量如何承诺以 [BE-19](#sync-be-19) 为准；已冻结 Context 中的旧 `budget.counting` 标签保留为历史字节，不能把它当作当前运行的唯一计数策略，也不应原地改冻结资源。
+|顺序|传输字段|内容与约束|
+|---|---|---|
+|1|input_version|固定context_projection_v1|
+|2|task|function_type、action_type、source_type|
+|3|template|template_key、template_version及完整markdown_content；不缩写模板|
+|4|requirement|title、requirement_type、status、initialization_mode；不发送内部需求审计字段|
+|5|section_index|section_ref、实际heading_block_id、level、title、parent_ref；相同标题文字不合并身份|
+|6|document_context.read_blocks|原顺序block_id、block_type、section_ref、完整markdown_content；仅标题块另有heading_level，不重复plain_text或创建／修改元数据|
+|7|recent_history|实际携带的id、sequence_no、role、message_type、content、formal_responses，原顺序；不虚构长期记忆|
+|8|source|本次实际来源快照或null|
+|9|current_request|user_message_id、document_ref.id／content_version、content、formal_responses、scope、capability_groups、restricted_targets、已读锁定标题ID|
 
-**确认依据**：D-005、D-011、D-015。**代码对应**：`guide/{model_context,context_builder,counted_context}.py`、`infrastructure/schema_transport.py`、`backend/resources/v2/contexts/`、`backend/resources/counting/v3/strategy.json`。
+章节定位先由完整CURRENT的实际标题身份和层级生成，再仅保留已读块所需章节及祖先。祖先标题索引只是导航元数据，不代表读取其正文或获得写权限。普通候选操作按相同operations分组为`{block_ids,operations}`；selection_range非null或row_selectors非null的目标单列原限制，空行白名单`[]`不视为无限制。模型可提出变更目标是实际读取区块与原授权的交集；后台始终用原完整权限执行，模型声明不能授予权限。
 
+**私有程序校验快照ContextBasis**
+
+|字段|保存内容与用途|
+|---|---|
+|version|context_projection_v1，决定冻结投影／恢复算法|
+|canonical_input|本次规范输入，包含完整原权限、已读元数据、原文、正式消息、Read Manifest和实际section_lookup|
+|canonical_sha256、wire_sha256|分别绑定规范输入与固定序列化Wire；摘要本身不授予权限|
+|selection|existing_read_set_v1、实际已读block_ids、历史message_ids及soft_input_target；不是新的业务状态或长期需求表|
+
+Basis放在`request_snapshot_json.context_basis`外围，不进入`request.messages`、Profile.request或I38／I39原始请求。新请求不能仅从精简Wire还原完整权限：必须有匹配Basis，校验摘要并按该版本重新投影为相同Wire，再核对同一运行真实C03、计数回放、CURRENT版本、模板锁和用户确认。伪造Basis后重新计算摘要不能替代真实来源检查；缺失／篡改／配对错误不得产生业务采用凭证，已返回内容仍按FLOW-003展示。没有新增业务对象、数据库列或迁移，原对象仍是事实来源。
+
+历史v4—v7的`stable_prefix_v1`保持原还原器：正文／元数据数组、历史／引用数组严格配对，完整元数据及逐块权限仍在旧Wire中；更早协议按原字段顺序恢复。旧请求快照不能重建成新精简包，不建立供应方持续Session。
+
+一期保持原读取集合：历史仍先查询最多10条TEXT／正式CARD_RESPONSE，再按原顺序裁剪；正式回答保留问题、所选名称和填写，不回传全部未选说明或推荐。左右邻域各2块，原排除项保持。初始需求可能在查询阶段退出窗口；二期常驻需求、长期答案索引、技术投影表、任务选取及三期模板／正文深度去重仍未实施，见[后续方案](../iterations/pending/WALL-E.V1_0.6.Token消耗与上下文管理优化设计V1.md)。
+
+|预算项|普通模板|完整模板v2／v3／v4|
+|---|---:|---:|
+|输入，含经验余量|24576|131072|
+|输出预留|8192|8192|
+|输入加输出总量|32768|139264|
+|模板分项|4096|65536|
+|System／本轮输入／来源，各自|4096|4096|
+|历史分项|2048|2048|
+|经验封装余量|1024|1024|
+
+输入软目标仅观测：普通Function v8为16384；完整Function v9的DOCUMENT REVIEW为98304，其余为49152。超软目标但未超硬预算不增加业务阻断，不按字符估算精确token。仍按最老完整历史、非必要完整邻域依次裁剪，每次候选变化重新精确计数；模板、当前输入、授权目标及必要事实不可裁剪，仍超限不发Chat。本期不启用“三批计数”或跨请求计数缓存，不增加摘要／分类或补读模型调用。
+
+输出Schema只移除根不可达本地$defs，保留全部可达约束；程序仍用完整冻结Schema校验。模板与CURRENT中的重复原文目前都计入真实输入。稳定前缀不保证缓存命中，命中只读实际cached_tokens；实际用量、独立预检、软目标和字符量分别展示。
+
+**实现定位**：`guide/context_projection.py::{document_sections,project,make_basis,restore}`、`context_builder.py`、`counted_context.py`、`infrastructure/{audit_repository,counting_journal,resources}.py`及`guide/trusted_output.py`；正式采用仍由C06／C07及原事务保证执行。
 
 <a id="sync-be-19"></a>
 
 **正式实用预算控制及其保证边界**
 
-DeepSeek 正式新调用采用独立 counting/v3，模式 `exact_text_empirical_framing_v1`。每次候选和 Chat 尝试重新执行实际模型的 Tokenization，核对精确模型、六项文本回执和实际序列化身份；输入预检为 System＋完整 User 的实测 token 数＋1024 固定余量，原总/分项预算和裁剪不扩大。计数失败、未知、版本不符或超限不发 Chat，不回退字节估计或其他模型。计数等待不占 SQLite 写事务。
+DeepSeek 按冻结 Function 选择 counting/v3—v10 的对应策略，模式 `exact_text_empirical_framing_v1`。每次候选和 Chat 尝试重新执行实际模型的 Tokenization，核对精确模型、六项文本回执和实际序列化身份；输入预检为 System＋完整 User 的实测 token 数＋1024 固定余量，各版本预算和裁剪必须与冻结策略一致。计数失败、未知、版本不符或超限不发 Chat，不回退字节估计或其他模型。六项仍为System、完整User、本轮输入、来源、模板、历史；新计数v9／v10明确对应新Wire选择路径，本轮输入取current_request中的user_message_id／content／formal_responses，来源取source，模板取template，历史取recent_history。后四项与完整User重叠，不相加；旧六项不得偷偷改作需求记忆计数。计数等待不占SQLite写事务。
 
-**必须直接写明**：这一模式不保证发送前实际输入永不超过 24576；封装异常可能在已付费响应返回后才发现，事后拒绝不能追回费用。`provider_compatibility_proved` 始终为 false。不能将六次样本成功改写为通用封装上界证明，也不能把旧模型的 256 候选余量当新模型证明。
+**必须直接写明**：这一模式不保证发送前实际输入永不超过对应的 24576／131072 预算；封装异常可能在已付费响应返回后才发现，事后拒绝不能追回费用。`provider_compatibility_proved` 始终为 false。不能将六次样本成功改写为通用封装上界证明，也不能把旧模型的 256 候选余量当新模型证明。
 
-收到响应先保留实际调用审计，再复核精确 model、整数 usage、prompt≤24576、completion≤8192、total=prompt+completion≤32768，以及实际 prompt 减 System/User 文本计数的差值在 0—1024。缺失/不一致/越界按 CONFIG_INVALID 结束，不进入 C07、不自动重试；可信产物和最终采用再次复查。准入须独立固定配置绑定批准记录、策略和计划身份；环境布尔值或自动发现测试报告不能开放。旧 v1/v2 计数及其历史审计不原地改契约。
+收到响应先保留实际调用审计，再复核精确 model、整数 usage、prompt 不超过对应输入预算、completion≤8192、total=prompt+completion 不超过对应总预算，以及实际 prompt 减 System/User 文本计数的差值在 0—1024。缺失／不一致／越界记录准入失败，不进入 C07、不自动重试；已有助手内容仍按 FLOW-003 只读交付，保留失败审计；无助手内容则按失败结束。可信产物和最终采用再次复查。准入须独立固定配置绑定批准记录、策略和计划身份；环境布尔值或自动发现测试报告不能开放。旧 v1/v2 计数及其历史审计不原地改契约。
 
 **确认依据**：D-015 对 D-011/014 严格封装前提作出的明确变更；[实用预算补充稿](../proposals/deepseek-availability-v1.md)。**代码对应**：`guide/counted_context.py`、`infrastructure/{tokenization,production_ai,practical_usage}.py`、`guide/{orchestrator,trusted_output,result_persistence}.py`、`backend/resources/counting/v3/{strategy,admission}.json`。
 
@@ -4433,7 +4479,7 @@ data 同时含 page、page_size、total、total_pages，均为整数且不可空
 |status|Text|始终存在；不可为null|OBJ-GUIDE.status直接投影；RUNNING / WAITING_USER / COMPLETED / FAILED / CANCELLED|
 |current_step|Text|始终存在；不可为null|OBJ-GUIDE.current_step直接投影；本模块统一公开编码：PREPARING / CALLING_MODEL / VALIDATING / PERSISTING / WAITING_USER / FINISHED|
 |final_result|object|始终存在；可为null|本能力读取规则；安全结果摘要；仅 COMPLETED 时非空；公开投影，不直接返回模型结果 JSON|
-|final_result.summary|Text|父对象非 null 时必有；不可为null|本能力读取规则；结果摘要；仅经验证的可读结果摘要|
+|final_result.summary|Text|父对象非 null 时必有；不可为null|可读结果摘要；完成可能是原文交付，不代表业务校验成功|
 |final_result.assistant_message_id|Int|父对象非 null 时必有；可为null|本能力读取规则；结果助手消息 ID；无消息时 null|
 |final_result.current_document_version|Int|父对象非 null 时必有；可为null|本能力读取规则；本次写入的正文版本；本次未更新正文时 null，不代表当前最新版本|
 |final_result.suggestion_batch_id|Int|父对象非 null 时必有；可为null|本能力读取规则；本次生成的建议批次 ID；未生成批次时 null|
@@ -4457,6 +4503,11 @@ data 同时含 page、page_size、total、total_pages，均为整数且不可空
 |backend/app/guide/queries.py|get_guide_run|APP-GUIDE-QUERY-C01|
 |backend/app/guide/contracts.py|get_guide_run_input / get_guide_run_result|应用输入输出；不含HTTP或ORM对象|
 
+
+
+|补充字段|类型与出现条件|来源与约束|
+|---|---|---|
+|returned_responses|数组，始终存在，旧服务缺字段时前端按 []|仅 FAILED／CANCELLED 读取已有返回，其他状态为 []；各项 llm_use_id、call_no、attempt_no 为正整数，content 为字符串。按调用／尝试顺序，仅投影实际助手内容；不含Prompt／请求／密钥，不重发模型或修改历史状态|
 
 <a id="app-guide-query-c02"></a>
 ### APP-GUIDE-QUERY-C02 查询运行历史
@@ -4614,6 +4665,144 @@ data 同时含 page、page_size、total、total_pages，均为整数且不可空
 |backend/app/guide/contracts.py|get_model_context_input / get_model_context_result|应用输入输出；不含HTTP或ORM对象|
 
 
+<a id="app-guide-query-c04"></a>
+### APP-GUIDE-QUERY-C04 读取运行模型调用列表
+
+#### 4.1 能力说明
+
+|内容|确定定义|
+|---|---|
+|能力引用与名称|APP-GUIDE-QUERY-C04 读取运行模型调用列表|
+|处理目标|投影运行及逐次调用用量摘要|
+|主要对象或过程|现有 OBJ-GUIDE.GuideRun／LLMUse／Message 的只读投影；不新增持久业务对象|
+|完成方式|同步 READ_OK，不调用模型、计数或任何业务命令|
+
+#### 4.2 输入与来源
+
+|输入项|类型或结构引用|来源与用途|必须提供|可为null|缺失、默认及校验规则|
+|---|---|---|---|---|---|
+|guide_run_id|ID|调用参数；定位保存记录|是|否|1～9007199254740991 的整数；无默认，错误 INVALID_INPUT|
+
+#### 4.3 处理过程
+
+|步骤与进入条件|处理与数据变化|输入来源、调用或规则引用|后续步骤或结果|
+|---|---|---|---|
+|P01；开始|校验身份并打开普通读取事务，定位记录及归属；不修复数据库|INF-READ|不存在 NOT_FOUND；存在→P02|
+|P02；存在|投影运行及逐次调用用量摘要；所有字段来自同一读取；数据变化：无|model_calls.py|READ_OK；存储故障 STORAGE_UNAVAILABLE|
+
+#### 4.4 结果与完成范围
+
+|结果名称或编码|含义或公共定义引用|返回数据|调用方可确认的完成范围|
+|---|---|---|---|
+|READ_OK|读取成功|ModelCallsReadModel|只确认读取，不说明模型或业务执行成功|
+|INVALID_INPUT／NOT_FOUND|输入错误／记录不存在|data=null，按公共错误|不产生写入|
+|STORAGE_UNAVAILABLE／INTERNAL_ERROR|存储／未预期失败|data=null，安全错误|不伪造空列表或完成状态|
+
+#### 4.5 关键执行要求
+
+按 call_no、attempt_no、id 排序包含所有调用／尝试；列表不传输或在 Python 展开完整请求快照；program_processed只在无调用且存在程序回执时为true。用户消息／正文版本优先从保存Wire的current_request.user_message_id／document_ref.content_version读取，兼容旧request_metadata及旧user_input／current_document路径；缺失仍为null，不从当前状态猜测。
+禁止把密钥、Profile、原始 HTTP 认证或外围计数日志公开；不调用 Provider／Tokenization。无迁移，不改变历史运行状态。
+
+#### 4.8 实现定位
+
+|所属模块或关键路径|关键入口或资源|承载内容|
+|---|---|---|
+|backend/app/guide/model_calls.py|list_model_calls|只读查询和快照投影|
+|backend/app/guide/http_models.py、api.py|ListModelCallsResponse|HTTP 接入和响应映射|
+
+<a id="app-guide-query-c05"></a>
+### APP-GUIDE-QUERY-C05 读取模型调用详情
+
+#### 4.1 能力说明
+
+|内容|确定定义|
+|---|---|
+|能力引用与名称|APP-GUIDE-QUERY-C05 读取模型调用详情|
+|处理目标|解析保存的实际 Chat 请求和已有预检记录|
+|主要对象或过程|现有 OBJ-GUIDE.GuideRun／LLMUse／Message 的只读投影；不新增持久业务对象|
+|完成方式|同步 READ_OK，不调用模型、计数或任何业务命令|
+
+#### 4.2 输入与来源
+
+|输入项|类型或结构引用|来源与用途|必须提供|可为null|缺失、默认及校验规则|
+|---|---|---|---|---|---|
+|llm_use_id|ID|调用参数；定位保存记录|是|否|1～9007199254740991 的整数；无默认，错误 INVALID_INPUT|
+
+#### 4.3 处理过程
+
+|步骤与进入条件|处理与数据变化|输入来源、调用或规则引用|后续步骤或结果|
+|---|---|---|---|
+|P01；开始|校验身份并打开普通读取事务，定位记录及归属；不修复数据库|INF-READ|不存在 NOT_FOUND；存在→P02|
+|P02；存在|解析保存的实际 Chat 请求和已有预检记录；所有字段来自同一读取；数据变化：无|model_calls.py|READ_OK；存储故障 STORAGE_UNAVAILABLE|
+
+#### 4.4 结果与完成范围
+
+|结果名称或编码|含义或公共定义引用|返回数据|调用方可确认的完成范围|
+|---|---|---|---|
+|READ_OK|读取成功|ModelCallDetailReadModel|只确认读取，不说明模型或业务执行成功|
+|INVALID_INPUT／NOT_FOUND|输入错误／记录不存在|data=null，按公共错误|不产生写入|
+|STORAGE_UNAVAILABLE／INTERNAL_ERROR|存储／未预期失败|data=null，安全错误|不伪造空列表或完成状态|
+
+#### 4.5 关键执行要求
+
+原文分组与raw_request_json只取该次request_snapshot_json.request，不读取CURRENT重建；预检取外围counting，软目标仅投影Basis保存的必要标量，完整Basis及规范事实不公开。支持新section_index／document_context／recent_history／current_request及旧布局；缺失字段为null或已有空列表，恢复不了冻结预算不套用最新值。
+禁止把密钥、Profile、原始 HTTP 认证或外围计数日志公开；不调用 Provider／Tokenization。无迁移，不改变历史运行状态。
+
+#### 4.8 实现定位
+
+|所属模块或关键路径|关键入口或资源|承载内容|
+|---|---|---|
+|backend/app/guide/model_calls.py|get_model_call|只读查询和快照投影|
+|backend/app/guide/http_models.py、api.py|GetModelCallResponse|HTTP 接入和响应映射|
+
+
+<a id="modelcallreadmodels"></a>
+**读取模型：ModelCallsReadModel／ModelCallDetailReadModel**
+
+公共调用项 ModelCallSummary 的完整字段如下：
+
+|字段|类型／可空性|来源及含义|
+|---|---|---|
+|id、guide_run_id、call_no、attempt_no|正整数，不可空|LLMUse 调用身份、运行和尝试顺序|
+|model_name|字符串，不可空|本次保存的模型名称|
+|call_status|RUNNING／SUCCEEDED／FAILED／CANCELLED|传输状态，区别于运行和业务校验状态|
+|parse_status、validation_status|NOT_STARTED／SUCCEEDED／FAILED|原解析和业务校验事实，不因原文交付改成功|
+|started_at、ended_at|时间；ended_at 可空|保存的开始和结束时间，HTTP 按公共时间格式|
+|user_message_id、document_version|正整数或 null|仅从实际请求快照恢复；旧记录缺失不猜测|
+|input_tokens、output_tokens|非负安全整数或 null|保存的实际输入／输出用量；未知不是 0|
+|total_tokens|非负安全整数或 null|两项均可得且和可安全表示时求和，否则 null|
+|cached_tokens|非负安全整数或 null|输入用量的子集，不重复计入合计|
+|duration_ms|非负安全整数或 null|保存的调用耗时，不冒充整个运行墙钟耗时|
+
+
+|列表字段|完整结构与含义|
+|---|---|
+|id、requirement_id、action_type、status、current_step、trigger_message_id|运行保存值；trigger_message_id 可空，其余按现有运行枚举|
+|program_processed|boolean；无调用且已有程序回执，表示程序处理而未调用模型|
+|items|ModelCallSummary 数组，空数组合法，顺序固定，无分页|
+
+|详情字段|完整结构与含义|
+|---|---|
+|call|上述 ModelCallSummary|
+|requirement_id、action_type|所属需求及操作|
+|prompt_reference、context_reference|快照协议引用或 null|
+|sections|数组；各项为 key、title、content 字符串，characters 非负整数，item_count 非负整数或 null；按实际消息及 JSON 键顺序分组。characters 是紧凑 JSON／原文的 Unicode 字符长度，不是 token|
+|included_history_ids|实际历史ID数组：一期recent_history.id，稳定旧布局history_message_refs，更早history.id；不按当前窗口补齐|
+|budget_removed_history_ids|最后计数尝试明确记录的历史裁剪 ID 数组；缺记录不推断其他排除原因|
+|raw_request_json|保存的Chat请求对象或null；只取request，不公开外围Profile、凭据、context_basis或完整规范对象|
+|context_strategy|string或null；取实际Wire.input_version，一期为context_projection_v1；旧记录不猜测|
+|selection_summary|对象或null；一期诊断为下述五字段，非历史回填或新的业务状态|
+|selection_summary.read_blocks、history_messages|非负安全整数或null；只数实际Wire的document_context.read_blocks／recent_history|
+|selection_summary.soft_input_target|保存Basis.selection的软目标或null，不按当前策略重新生成|
+|selection_summary.count_attempts|保存counting.count_attempts的批次数或null，不等同Chat次数|
+|selection_summary.soft_target_exceeded|boolean或null；只有已保存预检与软目标均存在时比较，超软不新增阻断|
+|preflight|对象，固定 input_tokens、budget、counts 三字段|
+|preflight.input_tokens|已保存的预检输入候选，非负安全整数或 null，包含经验封装余量|
+|preflight.budget|按保存 release_sha256 恢复的冻结预算或 null；字段 total_tokens、input_tokens、output_tokens、prompt_tokens、current_user_tokens、source_tokens、history_tokens、template_tokens 为非负整数，counting 为字符串|
+|preflight.counts|固定6项数组：System、完整User、本轮输入、来源、模板、历史；各项非负整数或 null。后四项与完整User重叠，不相加、不转换成占比图|
+
+以上为现有审计数据的查询DTO，不增加业务对象或数据库列；新预检按保存的计数资源解释六类分项，不根据当前策略重算历史。旧非结构化 User 仍显示原文；不支持的未知 JSON 根字段保留在 raw_request_json，不伪造可读分组。
+
 <a id="app-msg-query-c01"></a>
 ### APP-MSG-QUERY-C01 查询对话消息
 
@@ -4725,7 +4914,7 @@ card_state的推导按SHR-CARDS与APP-GUIDE-CMD-C06：已有正式CARD_RESPONSE�
 
 ### 6.1 HTTP公共契约
 
-**公共契约：API-COM；适用范围：BND-REQ/DOC/REV/COMMENT/GUIDE/BATCH/MSG-API 的 I01—I37。**
+**公共契约：API-COM；适用范围：BND-REQ/DOC/REV/COMMENT/GUIDE/BATCH/MSG-API 的 I01—I39。**
 
 单用户、无认证，不构造未经定义的操作者身份。所有路径以`/api/v1`开头，资源名复数kebab-case，JSON字段snake_case，无尾斜杠；requirement_id是内部数字身份。媒体类型application/json。前端请求格式或业务失败均按以下规则处理。
 
@@ -4850,7 +5039,7 @@ card_state的推导按SHR-CARDS与APP-GUIDE-CMD-C06：已有正式CARD_RESPONSE�
 |BND-DOC-API|无，单用户|backend/app/documents/api.py :: doc_router|BND-DOC-API-I09,BND-DOC-API-I11,BND-DOC-API-I12,BND-DOC-API-I13,BND-DOC-API-I08,BND-DOC-API-I10|
 |BND-REV-API|无，单用户|backend/app/revisions/api.py :: rev_router|BND-REV-API-I26,BND-REV-API-I24,BND-REV-API-I25|
 |BND-COMMENT-API|无，单用户|backend/app/comments/api.py :: comment_router|BND-COMMENT-API-I29,BND-COMMENT-API-I30,BND-COMMENT-API-I31,BND-COMMENT-API-I32,BND-COMMENT-API-I33,BND-COMMENT-API-I27,BND-COMMENT-API-I28,BND-COMMENT-API-I37|
-|BND-GUIDE-API|无，单用户|backend/app/guide/api.py :: guide_router|BND-GUIDE-API-I14,BND-GUIDE-API-I15,BND-GUIDE-API-I17,BND-GUIDE-API-I18,BND-GUIDE-API-I34,BND-GUIDE-API-I16,BND-GUIDE-API-I19|
+|BND-GUIDE-API|无，单用户|backend/app/guide/api.py :: guide_router|BND-GUIDE-API-I14,BND-GUIDE-API-I15,BND-GUIDE-API-I17,BND-GUIDE-API-I18,BND-GUIDE-API-I34,BND-GUIDE-API-I16,BND-GUIDE-API-I19,BND-GUIDE-API-I38,BND-GUIDE-API-I39|
 |BND-BATCH-API|无，单用户|backend/app/suggestions/api.py :: batch_router|BND-BATCH-API-I21,BND-BATCH-API-I22,BND-BATCH-API-I23,BND-BATCH-API-I20|
 |BND-MSG-API|无，单用户|backend/app/messages/api.py :: message_router|BND-MSG-API-I36,BND-MSG-API-I35|
 
@@ -6422,6 +6611,56 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |请求解析、调用与响应转换|`backend/app/comments/api.py`|`get_comment_index_http`|
 |HTTP请求与响应结构|`backend/app/comments/http_models.py`|`GetCommentIndexRequest` / `GetCommentIndexResponse`|
 
+<a id="bnd-guide-api-i38"></a>
+#### BND-GUIDE-API-I38 读取运行模型调用列表
+
+|项目|确定定义|
+|---|---|
+|接口引用与名称|BND-GUIDE-API-I38 读取运行模型调用列表|
+|方法与路径|GET /api/v1/guide-runs/{guide_run_id}/model-calls|
+|用途与响应方式|只读 ModelCallsReadModel；一次性 JSON，无分页|
+|应用绑定|[APP-GUIDE-QUERY-C04](#app-guide-query-c04)|
+|认证及幂等|沿用单用户本机基线；无需 Idempotency-Key|
+
+|输入项|位置／类型|必须提供／可空／默认|映射与校验|
+|---|---|---|---|
+|guide_run_id|Path／integer|必传、不可空、无默认|规范十进制正整数；未知Query、非空Body拒绝；无Body不要求Content-Type|
+
+|结果|HTTP及响应映射|完成范围|
+|---|---|---|
+|READ_OK|200；success=true，data=ModelCallsReadModel，error=null，meta.request_id|查询成功；FAILED／CANCELLED 是资源状态，不改为查询失败|
+|INVALID_INPUT／NOT_FOUND／STORAGE_UNAVAILABLE／INTERNAL_ERROR|400／404／503／500；API-COM-ERROR|data=null，不回传诊断或伪造空结果|
+
+|实现定位|责任|
+|---|---|
+|guide/api.py、http_models.py|读取运行模型调用列表；绑定唯一只读能力|
+|guide/model_calls.py|快照与用量投影|
+
+<a id="bnd-guide-api-i39"></a>
+#### BND-GUIDE-API-I39 读取模型调用详情
+
+|项目|确定定义|
+|---|---|
+|接口引用与名称|BND-GUIDE-API-I39 读取模型调用详情|
+|方法与路径|GET /api/v1/model-calls/{llm_use_id}|
+|用途与响应方式|只读 ModelCallDetailReadModel；一次性 JSON，无分页|
+|应用绑定|[APP-GUIDE-QUERY-C05](#app-guide-query-c05)|
+|认证及幂等|沿用单用户本机基线；无需 Idempotency-Key|
+
+|输入项|位置／类型|必须提供／可空／默认|映射与校验|
+|---|---|---|---|
+|llm_use_id|Path／integer|必传、不可空、无默认|规范十进制正整数；未知Query、非空Body拒绝；无Body不要求Content-Type|
+
+|结果|HTTP及响应映射|完成范围|
+|---|---|---|
+|READ_OK|200；success=true，data=ModelCallDetailReadModel，error=null，meta.request_id|查询成功；FAILED／CANCELLED 是资源状态，不改为查询失败|
+|INVALID_INPUT／NOT_FOUND／STORAGE_UNAVAILABLE／INTERNAL_ERROR|400／404／503／500；API-COM-ERROR|data=null，不回传诊断或伪造空结果|
+
+|实现定位|责任|
+|---|---|
+|guide/api.py、http_models.py|读取模型调用详情；绑定唯一只读能力|
+|guide/model_calls.py|快照与用量投影|
+
 <a id="bnd-worker"></a>
 
 ### 6.4 BND-WORKER 后台执行与恢复入口
@@ -6568,7 +6807,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|
 |超时|连接10秒、读取180秒；无进展15分钟由运行恢复负责，等待用户不计入；SDK具体计时绑定见[Q-07](#q-07)|
 |真实请求次数|Gateway一次调用只发一次；SDK自动重试0；APP-GUIDE-ORCH-C01每call_no最多3次，包含首次请求；不允许网关嵌套放大|
-|可重试类别|网络暂时失败、超时、限流、服务端暂时失败、解析或输出校验失败共用3次额度；重试前重检Run与占用；间隔见[Q-07](#q-07)|
+|可重试类别|尚无助手返回时的网络暂时失败、超时、限流和服务端暂时失败共用3次额度；已有助手返回的格式／业务校验失败不重试；重试前重检Run与占用；间隔见[Q-07](#q-07)|
 |不可重试类别|认证、权限、余额、配额、模型未开通、输入超长、安全拒绝、取消、业务状态变化及v3计数/实际usage复核失败直接结束；不换模型绕过限制|
 |未知结果|超时或断开不证明供应方未执行；保留该真实请求LLMUse。再次尝试产生新attempt_no及独立记录，外部用量不作回滚|
 |调用记录|请求发送前先短事务提交本次LLMUse开始记录；保留实际配置快照、读取清单、传输/解析/校验状态、可取得用量及耗时；未知用量为null。reasoning不进入消息、final_result或trusted_output；脱敏与保留见[Q-09](#q-09)|
@@ -6596,7 +6835,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 
 `provider_request_id` 为 nullable Text，原值保存，最多 1024 码点，不转整数、不截断。费用字段为 nullable `cost`（定点十进制字符串）和 `cost_currency`；费用与币种成对存在或均 null，只依据供应方明确给出的计费事实，不根据 token、价格表或 cache 推算，不把未知填 0。当前网关没有取得费用，正常审计写入两者均 null；不能写成已实现自动计费统计。不得自拟金额小数位或币种。
 
-原始请求/响应保存前递归剔除认证字段及 reasoning/reasoning_content 等敏感推理字段，实际密钥及其可逆表示不得留存。非法 assistant.content 可私有诊断保存，不对外暴露。nullable raw_response_json/parsed_output_json 满 30 天后清空；必要请求快照、协议、Read Manifest、用量和可信结果长期保留，仍可能含敏感业务文本。只允许本机数据库权限主体读取，没有新增 HTTP 审计接口；备份须按同一保留策略管理，不能把在线清理描述成自动清理所有离线备份。
+原始请求/响应保存前递归剔除认证字段及 reasoning/reasoning_content 等敏感推理字段，实际密钥及其可逆表示不得留存。无法解析或采用的 assistant 返回依 FLOW-003 可只读展示，不执行其业务操作。nullable raw_response_json/parsed_output_json 满 30 天后清空；必要请求快照（一期含不发送给模型的私有ContextBasis）、协议、Read Manifest、用量和可信结果长期保留，仍可能含敏感业务文本。完整私有审计只允许本机数据库权限主体读取；I38／I39 仅公开规定的调用摘要与 request 快照投影，不公开外围配置或原始HTTP包；备份须按同一保留策略管理，不能把在线清理描述成自动清理所有离线备份。
 
 **确认依据**：D-005，公共决策稿 C。**代码对应**：迁移 001 的 llm_uses 列/费用配对 CHECK；`infrastructure/{audit_data,audit_repository,model_gateway}.py`、`guide/worker.py`。独立计数审计清理见 `infrastructure/counting_journal.py`。
 
@@ -6618,7 +6857,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|
 |依赖类型与范围|固定模板、Function、Prompt、输入/输出Schema及ContextTemplate资源；不是新的对外文件上传或消息队列|
 |模板身份|template_key+template_version共同定位；需求创建时校验类型适用性，创建后不替换；实际目录、完整骨架及锁定规则见[Q-01](#q-01)|
-|任务资源身份|新运行Function/Prompt/Context为v2，十份输入/输出Schema及模板自身仍v1；旧运行按原冻结版本恢复，不原地修改历史|
+|任务资源身份|按4.7矩阵：普通六任务v8，完整模板六任务v9；历史已注册v1—v7保持；一期传输Schema v3与私有CANONICAL_INPUT v1分离，输出Schema不变|
 |数据结构与编码|输出Schema使用Draft 2020-12，各层对象additionalProperties=false，单个JSON对象及互斥response_type；完整Prompt、输入和输出字段、预算及文件内容见[Q-02](#q-02)，不能仅用资源名代替协议|
 
 
@@ -6626,19 +6865,24 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 
 **正式模板和初始化结构锁**
 
-正式目录为 `templates/catalog.v1.json`，NEW 使用 `new-requirement@v1`，CHANGE 使用 `change-requirement@v1`；完整 Markdown 和锁定标题列表分别引用同目录模板 `.md/.json`，不得根据摘要重建模板。需求创建后 key/version 不变。INITIALIZING 锁定标题文本、级别、相对顺序和原 block_id，允许补写标题下内容；ACTIVE 解除结构锁。未知信息保持“待确认”，模板占位不构成业务事实。模板随固定资源发布并校验，不新增配置 HTTP 接口。
+当前创建目录为`backend/resources/v7/templates/catalog.v4.json`，NEW使用`new-requirement@v4`，CHANGE使用`change-requirement@v1`；历史NEW v1／v2／v3继续按保存身份解析，不作为当前NEW新建选项。TPL-003最终规则以冻结v2为基准，删除原首行H1文档总标题，其余原H2→H1、H3→H2；正文、表格、填写说明、占位符和标题文字／顺序保持。源模板与v4采用副本逐字节一致，85752 UTF-8字节、321区块、49个锁定标题（9个H1、40个H2）。先前保留总标题并下调正文的v3仅供历史恢复，不能作为当前采用规则。
 
-**确认依据**：D-004/005，D-010 保留原模板版本。**代码对应**：`backend/resources/v2/templates/`、`infrastructure/resources.py::ResourceCatalog.template`、`requirements/commands.py`、`documents/patch_application.py`、前端 `documents/template-lock.ts`。
+需求创建后key/version不变；编写模板以后修改不改变旧需求。INITIALIZING锁定标题文字、级别、相对顺序和原block_id，允许补写标题下内容；ACTIVE解除结构锁。未知保持待确认，模板占位不是事实；不根据摘要重建模板，不迁移已有正文。模板版本与Function版本独立，完整模板v2／v3／v4的新运行按4.7选v9，历史运行保持原冻结版本。
+
+**确认依据**：D-004／005、D-010、TPL-001／002及TPL-003用户最终更正。**代码对应**：`backend/resources/v7/templates/`及历史模板资源、`infrastructure/resources.py::ResourceCatalog.template`、`requirements/commands.py`、`documents/patch_application.py`与前端`requirements/catalog.ts`、`documents/template-lock.ts`。
 
 |技术操作|输入与范围|成功输出及保证|失败与完成范围|
 |---|---|---|---|
 |读取需求模板|创建输入的type、template_key、template_version|返回适用的固定模板；创建完整模板骨架，INITIALIZING期间锁定模板主结构，完成初始化后解除该结构锁定；未知事实保持未知，不删减必需结构|不存在或不适用TEMPLATE_INVALID；不回退另一模板|
 |冻结运行协议|程序依据ActionType、SourceType和初始化模式选择Function映射；引用4.7 AI01—AI06|冻结function_type、context_template_key/version及prompt_version；同Run继续沿用，用户重跑另建Run重新冻结|配置缺失或无效CONFIG_INVALID；模型不能改Function或权限|
 |恢复冻结资源|使用Run已记录的版本读取内容|同一版本内容不被原地替换；Builder依准确协议组装|缺失直接CONFIG_INVALID，不用“最新版本”替换|
-|解析与校验资源|依冻结Schema校验输入、单一JSON输出和业务分支|只有传输、解析、Schema和状态/Scope/目标/对象校验全部通过的产物进入C07|不去围栏、不猜字段、不删未知字段、不补默认值；按编排额度重生成或失败|
+|解析与校验资源|依冻结Schema校验输入和结构化业务分支|全部业务校验通过才进入C07；无法采用的实际返回只读交付|不猜字段或伪造成功，不因格式重调模型；收到返回即保留|
 
-完整资源位于[历史v1目录](../../backend/resources/v1/)和[正式v2目录](../../backend/resources/v2/)，新运行映射见[functions.v2.json](../../backend/resources/v2/functions.v2.json)，完整输入/输出定义见[v2 schemas目录](../../backend/resources/v2/schemas/)，上下文与Prompt见[contexts](../../backend/resources/v2/contexts/)及[prompts](../../backend/resources/v2/prompts/)；由ResourceCatalog和Manifest校验全部内容，缺失/签名不符CONFIG_INVALID；运行触发和交付机制属于BND-WORKER／[Q-08](#q-08)，不凭空增加消息队列或跨资源事务。
+完整历史与当前资源分别位于backend/resources/v1—v8；映射、输入／输出／传输 Schema、Prompt、Context 和计数策略均按4.7对应版本校验Manifest，不以“最新文件”替换历史冻结事实。
 
+<a id="sync-tpl-002"></a>
+
+服务启动时构造一次 ResourceCatalog，reload=False。前端目录更新不代表旧后端已加载；新前端携带新模板而旧后端未注册时返回 TEMPLATE_INVALID。加载新资源前确认无在途 AI 任务，按既有授权和启动流程协调服务版本；不得通过放宽模板校验、改用户正文或替用户创建来绕过。操作步骤见[运行说明](../operations/运行说明.md)。本次文档合并不执行服务更新。
 
 <a id="backend-acceptance"></a>
 
@@ -6727,7 +6971,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-REQ-CMD-C01-01 CREATED|APP-REQ-CMD-C01／4.3—4.6|空测试需求集合；title=“需求甲”、type=NEW、idea=“整理报销需求”、initialization_mode=IDEATION；模板取已确认且适用于NEW的固定资源（[Q-01](#q-01)）；结果变体取4.3中通向CREATED的明确条件|调用APP-REQ-CMD-C01；按产生CREATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Requirement、CURRENT id、GuideRun id；仅表示创建及接受AI任务；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-REQ-CMD-C01-02 TEMPLATE_INVALID|APP-REQ-CMD-C01／4.3—4.6|空测试需求集合；title=“需求甲”、type=NEW、idea=“整理报销需求”、initialization_mode=IDEATION；模板取已确认且适用于NEW的固定资源（[Q-01](#q-01)）；结果变体取4.3中通向TEMPLATE_INVALID的明确条件|调用APP-REQ-CMD-C01；按产生TEMPLATE_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|模板不存在或不适用于所选需求类型；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/requirements/test_create_requirement.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/requirements/test_create_requirement.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REQ-CMD-C02 修改需求**
@@ -6737,7 +6981,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-REQ-CMD-C02-01 UPDATED|APP-REQ-CMD-C02／4.3—4.6|F-A或F-I；title原为“需求甲”，分别提交“需求乙”、原值；合法仅title；结果变体取4.3中通向UPDATED的明确条件|调用APP-REQ-CMD-C02；按产生UPDATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回更新后的Requirement；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-REQ-CMD-C02-02 IMMUTABLE_MODE|APP-REQ-CMD-C02／4.2—4.5、OBJ-REQ.initialization_mode|INITIALIZING／ACTIVE／COMPLETED及各占用；记录原title、mode、updated_at及已存在运行快照|直接命令收到仅模式、同值模式、标题＋模式、缺title或null；合法标题另在不同占用下提交|非法输入INVALID_INPUT且事实不变；合法标题保持INITIALIZING／ACTIVE许可，同值不写updated_at；COMPLETED拒绝；不迁移旧数据|隔离应用／HTTP基础检查，既有实际检查见迭代V2第13—14节；本次未新执行|
 
-验证定位：`backend/tests/requirements/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/requirements/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REQ-CMD-C03 完成初始化**
@@ -6746,7 +6990,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REQ-CMD-C03-01 INITIALIZATION_COMPLETED|APP-REQ-CMD-C03／4.3—4.6|F-I，IDLE；CURRENT版本=3；expected_content_version=3；无BASELINE；结果变体取4.3中通向INITIALIZATION_COMPLETED的明确条件|调用APP-REQ-CMD-C03；按产生INITIALIZATION_COMPLETED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Requirement、baseline_revision和current_document身份/版本；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/requirements/test_initialization.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/requirements/test_initialization.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REQ-CMD-C04 完成需求**
@@ -6755,7 +6999,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REQ-CMD-C04-01 REQUIREMENT_COMPLETED|APP-REQ-CMD-C04／4.3—4.6|F-A，IDLE；CURRENT版本=3；expected_content_version=3；结果变体取4.3中通向REQUIREMENT_COMPLETED的明确条件|调用APP-REQ-CMD-C04；按产生REQUIREMENT_COMPLETED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Requirement；正文、版本记录不变；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/requirements/test_lifecycle.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/requirements/test_lifecycle.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REQ-CMD-C05 重新激活需求**
@@ -6764,7 +7008,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REQ-CMD-C05-01 REACTIVATED|APP-REQ-CMD-C05／4.3—4.6|F-A改为COMPLETED且completed_at=T0，IDLE；结果变体取4.3中通向REACTIVATED的明确条件|调用APP-REQ-CMD-C05；按产生REACTIVATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Requirement；CURRENT及其版本不变；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/requirements/test_lifecycle.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/requirements/test_lifecycle.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-DOC-CMD-C01 开始人工编辑**
@@ -6773,7 +7017,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-DOC-CMD-C01-01 DRAFT_STARTED|APP-DOC-CMD-C01／4.3—4.6|F-A，IDLE，CURRENT版本=3；expected_content_version=3；结果变体取4.3中通向DRAFT_STARTED的明确条件|调用APP-DOC-CMD-C01；按产生DRAFT_STARTED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回草稿和需求占用；编辑器改为读取草稿；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-DOC-CMD-C02 保存人工草稿**
@@ -6782,7 +7026,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-DOC-CMD-C02-01 DRAFT_SAVED|APP-DOC-CMD-C02／4.3—4.6|F-D；草稿版本=1；完整Markdown/BlockState成对变化；expected_content_version=1；结果变体取4.3中通向DRAFT_SAVED的明确条件|调用APP-DOC-CMD-C02；按产生DRAFT_SAVED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回后端确认的草稿和版本；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-DOC-CMD-C03 完成人工编辑**
@@ -6791,7 +7035,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-DOC-CMD-C03-01 DRAFT_COMPLETED|APP-DOC-CMD-C03／4.3—4.6|F-D；草稿最新已确认版本=2；expected_content_version=2；CURRENT版本=3；评论使用F-C；结果变体取4.3中通向DRAFT_COMPLETED的明确条件|调用APP-DOC-CMD-C03；按产生DRAFT_COMPLETED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回完整CURRENT；不自动创建Revision；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-DOC-CMD-C04 取消人工编辑**
@@ -6800,7 +7044,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-DOC-CMD-C04-01 DRAFT_CANCELLED|APP-DOC-CMD-C04／4.3—4.6|F-D；expected_content_version=1；分别测试匹配、陈旧和原请求重放；结果变体取4.3中通向DRAFT_CANCELLED的明确条件|调用APP-DOC-CMD-C04；按产生DRAFT_CANCELLED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回requirement_id、manual_draft_id及cancelled=true；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/documents/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REV-CMD-C01 保存手动版本**
@@ -6809,7 +7053,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REV-CMD-C01-01 REVISION_CREATED|APP-REV-CMD-C01／4.3—4.6|F-A，IDLE，已有BASELINE序号1；CURRENT版本=3；description=“人工版本”；结果变体取4.3中通向REVISION_CREATED的明确条件|调用APP-REV-CMD-C01；按产生REVISION_CREATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Revision摘要；CURRENT和评论不变；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/revisions/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/revisions/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-CMD-C01 创建评论**
@@ -6819,7 +7063,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-COMMENT-CMD-C01-01 COMMENT_CREATED|APP-COMMENT-CMD-C01／4.3—4.6|F-A，CURRENT版本=3；content=“请说明审批人”；分别BLOCK和唯一单Block选区锚点；结果变体取4.3中通向COMMENT_CREATED的明确条件|调用APP-COMMENT-CMD-C01；按产生COMMENT_CREATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Comment；CURRENT、区块状态、Revision不变；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-COMMENT-CMD-C01-02 ANCHOR_INVALID|APP-COMMENT-CMD-C01／4.3—4.6|F-A，CURRENT版本=3；content=“请说明审批人”；分别BLOCK和唯一单Block选区锚点；结果变体取4.3中通向ANCHOR_INVALID的明确条件|调用APP-COMMENT-CMD-C01；按产生ANCHOR_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|区块不存在、跨区块或选区不能唯一定位；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-CMD-C02 编辑评论**
@@ -6828,7 +7072,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-COMMENT-CMD-C02-01 COMMENT_UPDATED|APP-COMMENT-CMD-C02／4.3—4.6|F-C，未软删除；content由“请说明审批人”改为“请说明审批人与时限”；结果变体取4.3中通向COMMENT_UPDATED的明确条件|调用APP-COMMENT-CMD-C02；按产生COMMENT_UPDATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回当前Comment；不改正文或Revision；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-CMD-C03 解决评论**
@@ -6837,7 +7081,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-COMMENT-CMD-C03-01 COMMENT_UPDATED|APP-COMMENT-CMD-C03／4.3—4.6|F-C；分别OPEN、RESOLVED及ATTACHED/ORPHANED组合；结果变体取4.3中通向COMMENT_UPDATED的明确条件|调用APP-COMMENT-CMD-C03；按产生COMMENT_UPDATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回当前Comment；不改正文或Revision；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-CMD-C04 重新打开评论**
@@ -6846,7 +7090,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-COMMENT-CMD-C04-01 COMMENT_UPDATED|APP-COMMENT-CMD-C04／4.3—4.6|F-C；分别RESOLVED和已OPEN；resolved_at有值/null与状态一致；结果变体取4.3中通向COMMENT_UPDATED的明确条件|调用APP-COMMENT-CMD-C04；按产生COMMENT_UPDATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回当前Comment；不改正文或Revision；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-CMD-C05 删除评论**
@@ -6855,7 +7099,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-COMMENT-CMD-C05-01 COMMENT_UPDATED|APP-COMMENT-CMD-C05／4.3—4.6|F-C；分别未删和deleted_at=T0，保留原请求与幂等键；结果变体取4.3中通向COMMENT_UPDATED的明确条件|调用APP-COMMENT-CMD-C05；按产生COMMENT_UPDATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回当前Comment；不改正文或Revision；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_commands.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-CMD-C06 重校验评论锚点**
@@ -6864,7 +7108,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-COMMENT-CMD-C06-01 ANCHORS_UPDATED|APP-COMMENT-CMD-C06／4.3—4.6|F-C；开启正文写事务；准备原Block存在且可唯一定位、Block删除、选区重复，以及原Block重新可定位的快照；结果变体取4.3中通向ANCHORS_UPDATED的明确条件|调用APP-COMMENT-CMD-C06；按产生ANCHORS_UPDATED的步骤执行；有写事务时在各共同写入点另行注入存储失败|全部未删除评论与新正文对应；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_revalidate_anchors.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_revalidate_anchors.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-BATCH-CMD-C01 处理建议决策**
@@ -6874,7 +7118,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-BATCH-CMD-C01-01 SUGGESTION_DECIDED|APP-BATCH-CMD-C01／4.3—4.6|F-B；同一建议分别决定ACCEPTED、REJECTED、EDITED；EDITED使用符合该操作的内容；结果变体取4.3中通向SUGGESTION_DECIDED的明确条件|调用APP-BATCH-CMD-C01；按产生SUGGESTION_DECIDED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Suggestion和counts；CURRENT不变；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-BATCH-CMD-C01-02 PATCH_INVALID|APP-BATCH-CMD-C01／4.3—4.6|F-B；同一建议分别决定ACCEPTED、REJECTED、EDITED；EDITED使用符合该操作的内容；结果变体取4.3中通向PATCH_INVALID的明确条件|调用APP-BATCH-CMD-C01；按产生PATCH_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|编辑后内容不符合本建议操作的结构；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/suggestions/test_decision.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/suggestions/test_decision.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-BATCH-CMD-C02 完成建议批次**
@@ -6887,7 +7131,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-BATCH-CMD-C02-04 TARGET_STALE|APP-BATCH-CMD-C02／4.3—4.6|F-B；expected_content_version、CURRENT.content_version与base_content_version均为3；分别全拒绝、含接受、含编辑及保留一项PENDING；结果变体取4.3中通向TARGET_STALE的明确条件|调用APP-BATCH-CMD-C02；按产生TARGET_STALE的步骤执行；有写事务时在各共同写入点另行注入存储失败|目标不存在或原内容/权限不再匹配；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-BATCH-CMD-C02-05 PATCH_INVALID|APP-BATCH-CMD-C02／4.3—4.6|F-B；expected_content_version、CURRENT.content_version与base_content_version均为3；分别全拒绝、含接受、含编辑及保留一项PENDING；结果变体取4.3中通向PATCH_INVALID的明确条件|调用APP-BATCH-CMD-C02；按产生PATCH_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|Patch结构或组合不能合法应用；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/suggestions/test_complete.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/suggestions/test_complete.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-BATCH-CMD-C03 放弃建议批次**
@@ -6896,7 +7140,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-BATCH-CMD-C03-01 BATCH_DISCARDED|APP-BATCH-CMD-C03／4.3—4.6|F-B；PENDING批次；分别首次与原请求重复放弃；结果变体取4.3中通向BATCH_DISCARDED的明确条件|调用APP-BATCH-CMD-C03；按产生BATCH_DISCARDED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回批次和counts；CURRENT及来源Comment不变；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/suggestions/test_discard.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/suggestions/test_discard.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C01 创建AI运行**
@@ -6908,7 +7152,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-CMD-C01-03 SOURCE_INVALID|APP-GUIDE-CMD-C01／4.3—4.6|F-A或F-I，IDLE；CURRENT版本=3；action/source/scope按本能力4.2允许组合分别参数化；instruction=“检查当前需求”；结果变体取4.3中通向SOURCE_INVALID的明确条件|调用APP-GUIDE-CMD-C01；按产生SOURCE_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|来源不属于本需求或不是已完成REVIEW结果；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-CMD-C01-04 CONFIG_INVALID|APP-GUIDE-CMD-C01／4.3—4.6|F-A或F-I，IDLE；CURRENT版本=3；action/source/scope按本能力4.2允许组合分别参数化；instruction=“检查当前需求”；结果变体取4.3中通向CONFIG_INVALID的明确条件|调用APP-GUIDE-CMD-C01；按产生CONFIG_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|冻结协议资源缺失或无效；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_acceptance.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_acceptance.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C02 继续等待中的运行**
@@ -6917,7 +7161,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-GUIDE-CMD-C02-01 GUIDE_CONTINUED|APP-GUIDE-CMD-C02／4.3—4.6|F-G改为WAITING_USER且占用仍指该Run；instruction=“审批人为部门经理”；结果变体取4.3中通向GUIDE_CONTINUED的明确条件|调用APP-GUIDE-CMD-C02；按产生GUIDE_CONTINUED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回同一GuideRun id；继续使用冻结协议；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_acceptance.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_acceptance.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C03 取消AI运行**
@@ -6926,7 +7170,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-GUIDE-CMD-C03-01 GUIDE_CANCELLED|APP-GUIDE-CMD-C03／4.3—4.6|F-G；分别PREPARING、调用中及PERSISTING；取消后再请求一次；结果变体取4.3中通向GUIDE_CANCELLED的明确条件|调用APP-GUIDE-CMD-C03；按产生GUIDE_CANCELLED的步骤执行；有写事务时在各共同写入点另行注入存储失败|业务层不再采用输出；已保存消息和历史调用保留；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_cancel.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_cancel.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C04 重新运行失败任务**
@@ -6937,7 +7181,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-CMD-C04-02 SCOPE_INVALID|APP-GUIDE-CMD-C04／4.3—4.6|F-G改为FAILED并释放占用；来源、范围仍有效；重复失败运行保持原记录；结果变体取4.3中通向SCOPE_INVALID的明确条件|调用APP-GUIDE-CMD-C04；按产生SCOPE_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|原范围不能映射到当前正文；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-CMD-C04-03 SOURCE_INVALID|APP-GUIDE-CMD-C04／4.3—4.6|F-G改为FAILED并释放占用；来源、范围仍有效；重复失败运行保持原记录；结果变体取4.3中通向SOURCE_INVALID的明确条件|调用APP-GUIDE-CMD-C04；按产生SOURCE_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|评论或REVIEW来源已失效；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_retry.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_retry.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C05 从评论发起修改**
@@ -6947,7 +7191,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-CMD-C05-01 GUIDE_ACCEPTED|APP-GUIDE-CMD-C05／4.3—4.6|F-C，OPEN且未删，F-A/IDLE；分别可定位与无法定位来源；expected_content_version=3；结果变体取4.3中通向GUIDE_ACCEPTED的明确条件|调用APP-GUIDE-CMD-C05；按产生GUIDE_ACCEPTED的步骤执行；有写事务时在各共同写入点另行注入存储失败|返回Run；前端不可覆盖评论正文、来源或可写范围；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-CMD-C05-02 COMMENT_ORPHANED|APP-GUIDE-CMD-C05／4.3—4.6|F-C，OPEN且未删，F-A/IDLE；分别可定位与无法定位来源；expected_content_version=3；结果变体取4.3中通向COMMENT_ORPHANED的明确条件|调用APP-GUIDE-CMD-C05；按产生COMMENT_ORPHANED的步骤执行；有写事务时在各共同写入点另行注入存储失败|锚点失效，不创建消息和运行；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_comment_acceptance.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_comment_acceptance.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C06 提交整组卡片**
@@ -6959,7 +7203,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-CMD-C06-03 CARD_EXPIRED|APP-GUIDE-CMD-C06／4.3—4.6|F-K；完整覆盖所有card_key的responses；INITIALIZE已完成卡片组和其他动作WAITING_USER分别准备；结果变体取4.3中通向CARD_EXPIRED的明确条件|调用APP-GUIDE-CMD-C06；按产生CARD_EXPIRED的步骤执行；有写事务时在各共同写入点另行注入存储失败|该组卡片已不再属于当前待回复流程；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-CMD-C06-04 SOURCE_INVALID|APP-GUIDE-CMD-C06／4.3—4.6|F-K；完整覆盖所有card_key的responses；INITIALIZE已完成卡片组和其他动作WAITING_USER分别准备；结果变体取4.3中通向SOURCE_INVALID的明确条件|调用APP-GUIDE-CMD-C06；按产生SOURCE_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|来源不是有效助手卡片组；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_cards.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_cards.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C07 提交可信AI结果**
@@ -6969,7 +7213,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-CMD-C07-01 AI_RESULT_PERSISTED|APP-GUIDE-CMD-C07／4.3—4.6|F-G；4.7各分支的可信输出；Schema与完整产物按第4.7节冻结资源；状态、来源、版本按提交前真实值重检；结果变体取4.3中通向AI_RESULT_PERSISTED的明确条件|调用APP-GUIDE-CMD-C07；按产生AI_RESULT_PERSISTED的步骤执行；有写事务时在各共同写入点另行注入存储失败|业务结果完整提交；仅此结果可向用户展示正式产物；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-CMD-C07-02 OUTPUT_INVALID|APP-GUIDE-CMD-C07／4.3—4.6|F-G；4.7各分支的可信输出；Schema与完整产物按第4.7节冻结资源；状态、来源、版本按提交前真实值重检；结果变体取4.3中通向OUTPUT_INVALID的明确条件|调用APP-GUIDE-CMD-C07；按产生OUTPUT_INVALID的步骤执行；有写事务时在各共同写入点另行注入存储失败|输出分支、权限或内容校验不成立；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_result_persistence.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_result_persistence.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C08 记录运行失败**
@@ -6979,7 +7223,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-CMD-C08-01 RUN_FAILED|APP-GUIDE-CMD-C08／4.3—4.6|F-G及一条已开始未结束LLMUse；传入安全错误分类；另准备已终态Run；结果变体取4.3中通向RUN_FAILED的明确条件|调用APP-GUIDE-CMD-C08；按产生RUN_FAILED的步骤执行；有写事务时在各共同写入点另行注入存储失败|失败已持久化，允许用户重新运行；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-CMD-C08-02 RUN_FINAL_UNCHANGED|APP-GUIDE-CMD-C08／4.3—4.6|F-G及一条已开始未结束LLMUse；传入安全错误分类；另准备已终态Run；结果变体取4.3中通向RUN_FINAL_UNCHANGED的明确条件|调用APP-GUIDE-CMD-C08；按产生RUN_FINAL_UNCHANGED的步骤执行；有写事务时在各共同写入点另行注入存储失败|未覆盖已经形成的终态；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_fail.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_fail.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-CMD-C09 恢复中断与超时占用**
@@ -6989,7 +7233,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-CMD-C09-01 RECOVERED|APP-GUIDE-CMD-C09／4.3—4.6|独立准备RUNNING无本进程任务、RUNNING无进展15分钟、WAITING_USER、人工草稿、PENDING批次和终态占用组合；operation_time=T0+15分钟；结果变体取4.3中通向RECOVERED的明确条件|调用APP-GUIDE-CMD-C09；按产生RECOVERED的步骤执行；有写事务时在各共同写入点另行注入存储失败|已修复可确定的中断或终态占用；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-CMD-C09-02 RECOVERY_NO_CHANGE|APP-GUIDE-CMD-C09／4.3—4.6|独立准备RUNNING无本进程任务、RUNNING无进展15分钟、WAITING_USER、人工草稿、PENDING批次和终态占用组合；operation_time=T0+15分钟；结果变体取4.3中通向RECOVERY_NO_CHANGE的明确条件|调用APP-GUIDE-CMD-C09；按产生RECOVERY_NO_CHANGE的步骤执行；有写事务时在各共同写入点另行注入存储失败|等待用户、待处理批次和人工草稿原样保留；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_recovery.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_recovery.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-ORCH-C01 推进AI运行**
@@ -7001,7 +7245,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |TC-GUIDE-ORCH-C01-03 AI_STOPPED|APP-GUIDE-ORCH-C01／4.3—4.6|F-G；可控Gateway按场景返回合格、解析失败、校验失败、技术异常；记录每次真实请求与LLMUse；结果变体取4.3中通向AI_STOPPED的明确条件|调用APP-GUIDE-ORCH-C01；按产生AI_STOPPED的步骤执行；有写事务时在各共同写入点另行注入存储失败|取消或终态先获胜，没有迟到业务写入；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 |TC-GUIDE-ORCH-C01-04 AI_FAILED|APP-GUIDE-ORCH-C01／4.3—4.6|F-G；可控Gateway按场景返回合格、解析失败、校验失败、技术异常；记录每次真实请求与LLMUse；结果变体取4.3中通向AI_FAILED的明确条件|调用APP-GUIDE-ORCH-C01；按产生AI_FAILED的步骤执行；有写事务时在各共同写入点另行注入存储失败|运行失败并保留审计；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_orchestrator.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_orchestrator.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REQ-QUERY-C01 查询需求列表**
@@ -7010,7 +7254,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REQ-QUERY-C01-01 READ_OK|APP-REQ-QUERY-C01／4.3—4.6|F-A、F-I及F-L；对照存在与不存在id；结果变体取4.3中通向READ_OK的明确条件|调用APP-REQ-QUERY-C01；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|items含id、requirement_no、title、requirement_type、status、updated_at；分页放边界meta.pagination；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/requirements/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/requirements/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REQ-QUERY-C02 查询需求详情**
@@ -7019,7 +7263,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REQ-QUERY-C02-01 READ_OK|APP-REQ-QUERY-C02／4.3—4.6|F-A、F-I及F-L；对照存在与不存在id；结果变体取4.3中通向READ_OK的明确条件|调用APP-REQ-QUERY-C02；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|Requirement全部业务字段和活动类型/ID；不嵌套正文；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/requirements/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/requirements/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-DOC-QUERY-C01 读取当前正文**
@@ -7028,7 +7272,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-DOC-QUERY-C01-01 READ_OK|APP-DOC-QUERY-C01／4.3—4.6|F-A及F-D，CURRENT与草稿身份和版本不同；结果变体取4.3中通向READ_OK的明确条件|调用APP-DOC-QUERY-C01；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|id、requirement_id、document_type、markdown_content、block_state_json对象、content_version、created_at、updated_at；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/documents/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/documents/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-DOC-QUERY-C02 读取人工草稿**
@@ -7037,7 +7281,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-DOC-QUERY-C02-01 READ_OK|APP-DOC-QUERY-C02／4.3—4.6|F-A及F-D，CURRENT与草稿身份和版本不同；结果变体取4.3中通向READ_OK的明确条件|调用APP-DOC-QUERY-C02；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|与CURRENT同构的DocumentReadModel，document_type=MANUAL_DRAFT；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/documents/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/documents/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REV-QUERY-C01 查询版本列表**
@@ -7046,7 +7290,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REV-QUERY-C01-01 READ_OK|APP-REV-QUERY-C01／4.3—4.6|F-A；BASELINE序号1、MANUAL序号2及3，快照正文不同；结果变体取4.3中通向READ_OK的明确条件|调用APP-REV-QUERY-C01；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|id、requirement_id、version_no、revision_type、description、source_content_version、created_at；不返回正文；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/revisions/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/revisions/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-REV-QUERY-C02 读取版本快照**
@@ -7055,7 +7299,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-REV-QUERY-C02-01 READ_OK|APP-REV-QUERY-C02／4.3—4.6|F-A；BASELINE序号1、MANUAL序号2及3，快照正文不同；结果变体取4.3中通向READ_OK的明确条件|调用APP-REV-QUERY-C02；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|Revision字段；markdown_snapshot映射markdown_content，block_state_snapshot_json映射block_state_json对象；不含当前评论或当前正文；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/revisions/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/revisions/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-QUERY-C01 查询评论列表**
@@ -7064,7 +7308,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-COMMENT-QUERY-C01-01 READ_OK|APP-COMMENT-QUERY-C01／4.3—4.6|F-C；OPEN/RESOLVED、ATTACHED/ORPHANED及已软删除记录；列表超过20条；结果变体取4.3中通向READ_OK的明确条件|调用APP-COMMENT-QUERY-C01；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|未删除Comment字段；anchor_ref_json映射anchor_ref；每条可定位信息由SHR-ANCHOR只读计算；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-COMMENT-QUERY-C02 读取评论详情**
@@ -7073,7 +7317,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-COMMENT-QUERY-C02-01 READ_OK|APP-COMMENT-QUERY-C02／4.3—4.6|F-C；OPEN/RESOLVED、ATTACHED/ORPHANED及已软删除记录；列表超过20条；结果变体取4.3中通向READ_OK的明确条件|调用APP-COMMENT-QUERY-C02；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|Comment字段含deleted_at，anchor_ref解析为对象；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/comments/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/comments/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-BATCH-QUERY-C01 读取建议批次**
@@ -7082,7 +7326,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-BATCH-QUERY-C01-01 READ_OK|APP-BATCH-QUERY-C01／4.3—4.6|F-B；四种建议状态各有成员，order_no与id顺序刻意不同；结果变体取4.3中通向READ_OK的明确条件|调用APP-BATCH-QUERY-C01；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|SuggestionBatch字段、全部Suggestion与counts；counts由此次读取的明细推导；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/suggestions/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/suggestions/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-QUERY-C01 读取运行状态**
@@ -7091,7 +7335,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-GUIDE-QUERY-C01-01 READ_OK|APP-GUIDE-QUERY-C01／4.3—4.6|F-G；RUNNING/WAITING_USER/COMPLETED/FAILED/CANCELLED及不同action运行；内部上下文另外准备应排除的草稿、未采用建议和原始审计；结果变体取4.3中通向READ_OK的明确条件|调用APP-GUIDE-QUERY-C01；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|id、requirement_id、action_type、function_type、source_type/source_id、scope、status、current_step、安全final_result、suggestion_batch_id、最近助手消息id、安全错误、运行时间；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-QUERY-C02 查询运行历史**
@@ -7100,7 +7344,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-GUIDE-QUERY-C02-01 READ_OK|APP-GUIDE-QUERY-C02／4.3—4.6|F-G；RUNNING/WAITING_USER/COMPLETED/FAILED/CANCELLED及不同action运行；内部上下文另外准备应排除的草稿、未采用建议和原始审计；结果变体取4.3中通向READ_OK的明确条件|调用APP-GUIDE-QUERY-C02；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|运行摘要字段，同详情但排除完整final_result与所有LLMUse；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_history.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_history.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-GUIDE-QUERY-C03 读取模型业务上下文**
@@ -7109,7 +7353,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-GUIDE-QUERY-C03-01 READ_OK|APP-GUIDE-QUERY-C03／4.3—4.6|F-G；RUNNING/WAITING_USER/COMPLETED/FAILED/CANCELLED及不同action运行；内部上下文另外准备应排除的草稿、未采用建议和原始审计；结果变体取4.3中通向READ_OK的明确条件|调用APP-GUIDE-QUERY-C03；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|CURRENT快照、授权范围、所需模板/正式用户消息/当前来源；携带实际读取清单；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/guide/test_model_context.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/guide/test_model_context.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **APP-MSG-QUERY-C01 查询对话消息**
@@ -7118,7 +7362,7 @@ Body为JSON对象，允许的根字段仅为上表Body字段；嵌套字段完�
 |---|---|---|---|---|---|
 |TC-MSG-QUERY-C01-01 READ_OK|APP-MSG-QUERY-C01／4.3—4.6|F-M；消息序号1～45，包含TEXT、合法卡片与回答及结构损坏历史记录；结果变体取4.3中通向READ_OK的明确条件|调用APP-MSG-QUERY-C01；按产生READ_OK的步骤执行；有写事务时在各共同写入点另行注入存储失败|消息字段及解析后的结构化内容、卡片推导状态；无总数；损坏结构只用content降级并禁用卡片；data/details及持久后果采用本能力4.4；失败后不保留未声明的部分写入|应用自动化；多对象/版本/唯一性用8.2实际存储；外部模型采用可控响应|
 
-验证定位：`backend/tests/messages/test_queries.py`；完整场景按[验收场景映射](../验收场景映射.md)核对。
+验证定位：`backend/tests/messages/test_queries.py`；完整场景按[验收场景映射](../traceability/验收场景映射.md)核对。
 
 
 **HTTP接口场景**
@@ -7572,6 +7816,16 @@ TC-HTTP-Ixx-PARAM、BIND、ERROR、IDEM采用以下四组公共过程。Ixx仅�
 |<a id="tc-e2e-09"></a>TC-E2E-09 幂等与未知提交|API-COM-IDEMPOTENCY、INF-TX|创建需求、创建草稿、卡片提交和批次完成各独立准备；原键原输入|提交前失败、提交成功后丢响应、处理中重复和同键改输入；读取资源再重放|只一次业务效果；原成功数据重放但request_id新建；已知回滚与未知结果区分；不把404普遍当操作完成，软删评论由deleted_at确认|实际数据库与HTTP响应丢失注入；按SHR-IDEMPOTENCY及INF-DB确认机制验证|
 |<a id="tc-e2e-10"></a>TC-E2E-10 查询无副作用|全部Query、I01/I19/I24/I27/I35|F-L/F-M及损坏结构历史消息、孤立评论、终态占用|重复查询、分页和游标前翻；保存读取前后数据库快照|筛选/稳定顺序/总数或游标正确；不更新状态、锚点、updated_at或创建模型请求；损坏消息仅文本降级，卡片禁用|真实数据库读路径，查询前后业务数据集合一致|
 
+**本次合入规则的专项验收定义（执行状态见各轮 verification，不因合并重新通过）**
+
+|场景|输入与动作|预期结果|范围|
+|---|---|---|---|
+|TC-TPL-001|新完整模板、历史NEW v1、CHANGE v1及资源版本错配|源字节与50标题匹配；新建绑定v2，历史不迁移；前后目录不同不放宽校验|模板与资源专项|
+|TC-CTX-001|两预算六任务、旧运行、数组错位、裁剪与回放|版本正确、计数／发送／审计同文；位置配对严格；历史冻结可恢复|上下文专项|
+|TC-FLOW-003|简短说明卡片、重复题、非JSON、未知字段、截断及未确认写入|已有返回可读，不能写入不执行；格式不重试；解析失败审计保持|返回与ORCH专项|
+|TC-FLOW-004|明确CONFIRM、普通澄清、defer、混合组、旧原文、行变更、事务失败和重放|确认由程序原子采用且不调AI；普通澄清继续模型；失败无部分写入；只变目标行；幂等不重复|C06专项|
+|TC-OBS-001|I38/I39，多尝试、未知用量、旧快照及后续正文编辑|冻结快照一致，实际／缓存／预检含义正确；GET无写入／计数；失败／取消仍可读已有返回|只读接口专项|
+
 ### 8.2 关键技术保证验证
 
 |实际承诺|必须观察的证据|必要方法与完成判据|
@@ -7593,7 +7847,20 @@ Q-EVAL 的正式样本、独立参考预期、评审人、评分规则、阈值�
 
 Schema/权限/事实证明/采用与模型内容质量分别验证；当前实用准入仅表示按 [BE-19](#sync-be-19) 可发送，不能改写为严格兼容证明或效果合格。后续获准测试时，仅在 Markdown 中记录范围、命令、结果、失败原因、修复及未覆盖内容，不保存截图、JSON 报告、录像或原始日志；原验收的可观察行为与判定标准不因此降低；正常业务数据库和审计不作为测试报告删除。
 
-**确认依据**：D-005/011/014 的明确排除、D-015 的限定授权，以及用户关于测试产物的后续要求。**代码对应**：`tools/deepseek-observation.py` 的固定单轮入口、`backend/resources/counting/v3/admission.json`；[正式 AI 接入进度](../正式AI接入进度.md)是实施状态来源，不是新增评分标准。
+**确认依据**：D-005/011/014 的明确排除、D-015 的限定授权，以及用户关于测试产物的后续要求。**代码对应**：`tools/deepseek-observation.py` 的固定单轮入口、`backend/resources/counting/v3/admission.json`；[正式 AI 接入进度](../project/正式AI接入进度.md)是实施状态来源，不是新增评分标准。
+
+<a id="sync-ctx-002-a-verification"></a>
+
+**CTX-002-A一期相关验证与边界**
+
+|场景|确定要求|已有证据及未覆盖范围|
+|---|---|---|
+|TC-AI-CTX-A-01 同文精简|完整模板及每个已读块Markdown保留，审计元数据不进入Wire，重复标题及稀疏读取按实际身份定位|新投影11项、历史相关组合与最终18项定向复核见[离线专项](../verification/context-projection-phase-a-2026-10-18.md)；本次合并不重跑|
+|TC-AI-CTX-A-02 Basis与授权|缺失／篡改／错配、仅Wire无Basis或重算伪造摘要不授权；空行白名单／选区、模板锁和CURRENT版本保护保持|计数与实际发送同文、真实C03核对、C06直接确认及C07完整TEXT证明已覆盖；不是模型质量验收|
+|TC-AI-CTX-A-03 历史兼容|旧运行及旧请求按冻结版本恢复；详情不从当前正文回填；软目标不成为硬门禁|版本／读取专项与前端26项及构建记录；没有数据库迁移或本次服务更新|
+|TC-AI-CTX-A-04 单次真实观测|已存调用21保持相同模板、正文、10条历史和用户输入，独立以一期Function v9观测；最多1次计数＋1次Chat、无重试、不采用返回|[单次记录](../verification/context-projection-live-once-2026-10-18.md)：实际输入125842→55946，减少69896（55.54%）；输出1118、合计57064、缓存0、耗时19.787秒|
+
+上述真实观测的旧缓存为65536，本次为0；缓存包含在输入中，不据总输入降幅直接推断费用降幅。旧输出3635与新输出1118内容不同，总Token差不是固定结构节省率。只记录一个样本，不将其写成所有请求的节省保证、1024封装上界证明或Q-EVAL完成；未改变硬预算、资源准入及已消耗的一次性授权。二期／三期、真实浏览器和完整业务效果验收继续未覆盖。
 
 ### 8.3 AI程序验证与效果评测
 

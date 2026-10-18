@@ -14,9 +14,10 @@ from .message_repository import MessageRepository
 from .model_profile import ModelProfile
 from .requirement_repository import RequirementRepository
 from backend.app.documents.snapshot import _time
-from backend.app.guide.context_builder import assemble_input
+from backend.app.guide.context_builder import assemble_input, restore_transport_input
 from backend.app.guide.counted_context import CountedContext, verify_counting_evidence, counting_snapshot
 from backend.app.guide.model_context import read_context
+from backend.app.guide.initialization_protocol import NO_PROGRESS_MESSAGE
 from backend.app.shared.command_execution import Rejected
 from backend.app.shared.validation import MAX_SAFE_INTEGER, strict_integer, strict_json_object
 
@@ -30,10 +31,12 @@ def _owned(connection, run):
     return root
 
 
-def verify_actual_context(connection, run_id, function, supplied_input, system_text, manifest_json, catalog, *, counting=None, input_json=None, counting_summary=False, profile=None):
+def verify_actual_context(connection, run_id, function, supplied_input, system_text, manifest_json, catalog, *, counting=None, input_json=None, counting_summary=False, profile=None, basis=None):
     """Recheck exactly the real C03 facts and permitted whole-field trimming."""
     actual = read_context(connection,run_id,catalog)['data']
-    expected = assemble_input(actual,function);supplied = function.validate_input(supplied_input)
+    expected = assemble_input(actual,function)
+    try: supplied = restore_transport_input(supplied_input,function,basis=basis)
+    except ValueError: raise Rejected('SOURCE_INVALID') from None
     if any(supplied[key] != expected[key] for key in expected if key not in ('current_document','history','read_manifest')):
         raise Rejected('SOURCE_INVALID')
     expected_blocks = {item['metadata']['block_id']:item for item in expected['current_document']['read_blocks']}
@@ -77,7 +80,8 @@ class AuditRepository:
         if function != frozen or type(profile) is not ModelProfile: raise Rejected('CONFIG_INVALID')
         if run['updated_at'] > at or root['updated_at'] > at: raise ValueError('Attempt cannot precede persisted activity')
         counted=context.counting_evidence if type(context) is CountedContext else None
-        actual, supplied = verify_actual_context(self.connection,run_id,function,context.input,context.system,context.manifest_json,catalog,counting=counted,input_json=context.input_json,profile=profile)
+        basis = None if context.basis_json is None else strict_json_object(context.basis_json)
+        actual, supplied = verify_actual_context(self.connection,run_id,function,context.input,context.system,context.manifest_json,catalog,counting=counted,input_json=context.input_json,profile=profile,basis=basis)
         manifest = supplied['read_manifest']
         last = self.connection.execute('SELECT * FROM llm_uses WHERE guide_run_id=? ORDER BY call_no DESC,attempt_no DESC LIMIT 1',(run_id,)).fetchone()
         if call_no is None:
@@ -85,7 +89,7 @@ class AuditRepository:
             call_no = 1 if last is None else increment(last['call_no']);attempt_no = 1
             if last is not None:
                 old = strict_json_object(last['request_snapshot_json'])
-                old_input = strict_json_object(old['request']['messages'][1]['content'])
+                old_input = restore_transport_input(strict_json_object(old['request']['messages'][1]['content']),function,basis=old.get('context_basis'))
                 if old_input['user_input']['message_id'] == supplied['user_input']['message_id']: raise Rejected('STATE_CONFLICT')
         else:
             strict_integer(call_no,'call_no')
@@ -96,9 +100,13 @@ class AuditRepository:
                 raise Rejected('CONFIG_INVALID')
             attempt_no = last['attempt_no']+1
         snapshot = {'profile':profile.snapshot,'request':profile.request(context),
-            'protocol':{'function_type':function.function_type,'input_schema':function.input_schema,'output_schema':function.output_schema,
+            'protocol':{'function_type':function.function_type,'input_schema':function.model_input_schema,'output_schema':function.output_schema,
                 'context_template':function.context_template,'prompt':function.prompt_reference,'manifest_sha256':function.manifest_sha256}}
         if counted is not None:snapshot['counting']=counting_snapshot(counted)
+        if basis is not None:
+            from backend.app.guide.context_projection import projected
+            if not projected(function): raise Rejected('CONFIG_INVALID')
+            snapshot['context_basis'] = basis
         fields = {'id':entity_id(self.connection,EntityKind.LLM_USE),'guide_run_id':run_id,'call_no':call_no,'attempt_no':attempt_no,
             'provider':'volcengine','model_name':profile.model_name,'model_version':profile.model_version,'function_type':function.function_type,'prompt_config':function.prompt_reference,
             'request_snapshot_json':audit_json(snapshot,credentials=(profile.api_key,)),'parsed_output_json':None,'trusted_output_json':None,
@@ -191,14 +199,17 @@ class AuditRepository:
         self.connection.execute('UPDATE guide_runs SET updated_at=? WHERE id=? AND status=\'RUNNING\'',(at,run['id']))
         return parsed
 
-    def record_validation_failure(self, identity, at):
+    def record_validation_failure(self, identity, at, *, reason=None):
         require_write_transaction(self.connection);strict_integer(identity,'llm_use_id');_time(at)
         row = self.get(identity)
         if row is None: raise Rejected('NOT_FOUND')
         run = GuideRepository(self.connection).get(row['guide_run_id']);_owned(self.connection,run)
         if row['call_status']!='SUCCEEDED' or row['parse_status']!='SUCCEEDED' or row['validation_status']!='NOT_STARTED' or run['current_step']!='VALIDATING': raise Rejected('STATE_CONFLICT')
         if run['updated_at'] > at: raise ValueError('Validation cannot precede prior progress')
-        self.connection.execute("UPDATE llm_uses SET validation_status='FAILED',trusted_output_json=NULL,validation_error='输出未通过结构或业务校验',error_code='OUTPUT_INVALID',error_message='模型输出未能通过程序校验' WHERE id=?",(identity,))
+        if reason not in (None, NO_PROGRESS_MESSAGE):
+            raise ValueError('Only a fixed safe validation reason is permitted')
+        self.connection.execute("UPDATE llm_uses SET validation_status='FAILED',trusted_output_json=NULL,validation_error=?,error_code='OUTPUT_INVALID',error_message=? WHERE id=?",
+            (reason or '输出未通过结构或业务校验', reason or '模型输出未能通过程序校验', identity))
         self.connection.execute('UPDATE guide_runs SET updated_at=? WHERE id=? AND status=\'RUNNING\'',(at,run['id']))
         return self.get(identity)
 

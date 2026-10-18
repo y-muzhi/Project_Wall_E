@@ -85,44 +85,42 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         before=f.facts();self.assertEqual((await self.advance())['code'],'AI_STOPPED');self.assertEqual(f.facts(),before)
         self.assertEqual(len(self.server.receipts),1)
 
-    async def test_retry_rate_limit_then_unknown_output_field_then_success_same_call_exact_three_requests(self):
+    async def test_retry_rate_limit_then_display_unknown_output_field_without_third_request(self):
         self.queue({'error':{'code':'ServerOverloaded','message':'diagnostic'}},status=429)
         invalid={'schema_version':1,'response_type':'INITIALIZE_TEXT','message':'不可修复候选','confirmed_fact_patches':[],'reasoning':'unknown schema field'}
-        self.queue(invalid);self.queue()
+        self.queue(invalid)
         result=await self.advance();self.assertEqual(result['code'],'AI_FINISHED',result)
-        rows=self.attempts();self.assertEqual([(x['call_no'],x['attempt_no']) for x in rows],[(1,1),(1,2),(1,3)])
-        self.assertEqual((rows[0]['call_status'],rows[1]['validation_status'],rows[2]['validation_status']),('FAILED','FAILED','SUCCEEDED'))
-        self.assertIsNone(rows[1]['trusted_output_json']);self.assertEqual(self.delays,[2,5]);self.assertEqual(len(self.observed),3)
+        rows=self.attempts();self.assertEqual([(x['call_no'],x['attempt_no']) for x in rows],[(1,1),(1,2)])
+        self.assertEqual((rows[0]['call_status'],rows[1]['validation_status']),('FAILED','FAILED'))
+        self.assertIsNone(rows[1]['trusted_output_json']);self.assertEqual(self.delays,[2]);self.assertEqual(len(self.observed),2)
         self.assertNotIn('reasoning',json.loads(rows[1]['parsed_output_json']))
         self.assertIn('reasoning',json.loads(json.loads(rows[1]['raw_response_json'])['choices'][0]['message']['content']))
 
-    async def test_all_three_fail_last_failure_run_error_no_fourth_send_or_business(self):
+    async def test_disconnect_retries_then_fenced_return_is_displayed_without_another_send(self):
         self.queue(behavior='disconnect')
         self.queue(raw=json.dumps(wire.envelope(choices=[{'message':{'role':'assistant','content':'```json\n{}\n```'},'finish_reason':'stop'}])).encode())
-        self.queue({'error':{'code':'RateLimitExceeded.EndpointRPMExceeded','message':'diagnostic'}},status=429)
-        result=await self.advance();self.assertEqual(result['code'],'AI_FAILED',result)
-        self.assertEqual(result['details'],{'guide_run_id':self.fixture.run,'error_code':'MODEL_ERROR'})
-        rows=self.attempts();self.assertEqual(len(rows),3);self.assertEqual(rows[1]['parse_status'],'FAILED')
-        self.assertTrue(all(x['trusted_output_json'] is None for x in rows));self.assertEqual(self.delays,[2,5])
-        self.assertEqual(len(self.observed),3);self.assertEqual(self.fixture.row('requirements',self.fixture.req)['document_work_state'],'IDLE')
+        result=await self.advance();self.assertEqual(result['code'],'AI_FINISHED',result)
+        rows=self.attempts();self.assertEqual(len(rows),2);self.assertEqual(rows[1]['parse_status'],'FAILED')
+        self.assertTrue(all(x['trusted_output_json'] is None for x in rows));self.assertEqual(self.delays,[2])
+        self.assertEqual(len(self.observed),2);self.assertEqual(self.fixture.row('requirements',self.fixture.req)['document_work_state'],'IDLE')
         with self.fixture.database.transaction() as connection:
-            self.assertEqual(connection.execute("SELECT count(*) FROM conversation_messages WHERE role='ASSISTANT'").fetchone()[0],0)
+            self.assertEqual(connection.execute("SELECT content FROM conversation_messages WHERE role='ASSISTANT'").fetchone()[0],'```json\n{}\n```')
 
     async def test_authentication_is_one_attempt_without_retry_or_provider_details_leak(self):
         self.queue({'error':{'code':'AuthenticationError','message':'sensitive '+self.fixture.profile.api_key}},status=401)
         result=await self.advance();self.assertEqual(result['code'],'AI_FAILED');self.assertEqual(len(self.observed),1);self.assertEqual(self.delays,[])
         self.assertNotIn('sensitive',str(result));self.assertNotIn(self.fixture.profile.api_key,str(self.attempts()))
 
-    async def test_successful_http_content_filter_is_not_retried_or_adopted(self):
+    async def test_successful_http_refusal_is_displayed_without_retry_or_business_adoption(self):
         value=wire.envelope(choices=[{'message':{'role':'assistant','content':'{}','refusal':'policy'},'finish_reason':'content_filter'}])
         self.queue(raw=json.dumps(value).encode());result=await self.advance()
-        self.assertEqual(result['code'],'AI_FAILED');self.assertEqual(result['details']['error_code'],'OUTPUT_INVALID')
+        self.assertEqual(result['code'],'AI_FINISHED')
         self.assertEqual(len(self.observed),1);self.assertEqual(self.delays,[]);self.assertEqual(self.attempts()[0]['parse_status'],'FAILED')
 
-    async def test_all_output_parse_failures_preserve_three_attempts_and_final_output_invalid(self):
-        for _ in range(3):self.queue(raw=json.dumps(wire.envelope(choices=[{'message':{'role':'assistant','content':'[]'},'finish_reason':'stop'}])).encode())
-        result=await self.advance();self.assertEqual(result['details']['error_code'],'OUTPUT_INVALID')
-        self.assertEqual([x['parse_status'] for x in self.attempts()],['FAILED']*3);self.assertEqual(len(self.observed),3)
+    async def test_output_parse_failure_is_displayed_after_one_attempt(self):
+        self.queue(raw=json.dumps(wire.envelope(choices=[{'message':{'role':'assistant','content':'[]'},'finish_reason':'stop'}])).encode())
+        result=await self.advance();self.assertEqual(result['code'],'AI_FINISHED')
+        self.assertEqual([x['parse_status'] for x in self.attempts()],['FAILED']);self.assertEqual(len(self.observed),1)
 
     async def test_production_budget_failure_records_real_run_no_attempt_or_external_request(self):
         result=await self.advance(context_compiler=build_context)

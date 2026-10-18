@@ -6,7 +6,7 @@
 
 实际产品 `frontend/index.html`、`src/main.tsx`、`application/app.tsx/router.ts` 使用同一正式 WalleApi。隐藏只读 Crepe 提供来源方言解析上下文，不作为业务正文。工作台、新建需求、完整 RequirementDetail、主导航、历史项与站内返回接通；按同一浏览器条目恢复已提交查询、页码、滚动并刷新。详情先调用实际离开保存控制器，浏览器 popstate 先恢复原历史条目再请求离开；保存失败保留原 URL 与同一编辑会话，用户可以继续编辑或明确离开。抽屉模态阻断页面点击，浏览器返回保护未提交输入和原请求。
 
-实际 Vite 根配置与 build/dev/preview 命令已写入。正式 Python 主入口服务实际编译的 index 与 assets，同时保留原 37 API、单进程锁及恢复生命周期；只开放 assets 子树和页面路由，不吞 API 404，不提供源码、数据库或环境文件。缺构建先拒绝，缺库仍不自动初始化。factory 默认保持 API 模式，只有明确 frontend_directory 时加入 SPA。安装、初始化、构建、启动和停止见 [运行说明](../运行说明.md)。
+实际 Vite 根配置与 build/dev/preview 命令已写入。正式 Python 主入口服务实际编译的 index 与 assets，同时保留原 37 API、单进程锁及恢复生命周期；只开放 assets 子树和页面路由，不吞 API 404，不提供源码、数据库或环境文件。缺构建先拒绝，缺库仍不自动初始化。factory 默认保持 API 模式，只有明确 frontend_directory 时加入 SPA。安装、初始化、构建、启动和停止见 [运行说明](../operations/运行说明.md)。
 
 [最终前端验证](frontend-2026-10-06T10-57-15-342Z.json)：258 项测试、完整 TypeScript、锁定依赖与 development 条件自动链接验证通过。新增六个路由端口测试覆盖原工作台条目、失败保存、异步离开、创建保护、刷新来源与非法 ID。
 

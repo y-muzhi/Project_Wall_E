@@ -5,6 +5,13 @@ import {guideRun} from '../src/api/models.ts';
 const at='2026-10-06T04:00:00.000Z',detail={requirement:{id:1},current:{id:2,requirement_id:1,document_type:'CURRENT'},activity:{kind:'IDLE'}};
 function run(id=3,status='FAILED'){return guideRun({id,requirement_id:1,action_type:'ASK',function_type:'ANSWER_REQUIREMENT',source_type:'USER_INSTRUCTION',source_id:null,scope:{scope_type:'DOCUMENT',scope_ref:null},status,current_step:status==='RUNNING'?'PREPARING':'FINISHED',final_result:null,suggestion_batch_id:null,latest_assistant_message_id:null,error_code:status==='FAILED'?'CONFIG_INVALID':null,error_message:status==='FAILED'?'配置缺失':null,cancel_reason:null,retry_of_guide_run_id:null,created_at:at,started_at:at,waiting_user_at:null,ended_at:status==='FAILED'?at:null,updated_at:at});}
 const flush=async()=>{for(let i=0;i<120;i++)await Promise.resolve();};
+test('opening an idle requirement restores the latest actual failed run and its original returns without sending',async()=>{
+ const f=fixture();const content='{"message":"已收到答案","cards":{"cards":[]},"extra":"全部保留"}';
+ f.facts.run=guideRun({...f.facts.run,returned_responses:[{llm_use_id:13,call_no:1,attempt_no:1,content}]});
+ const owner=new RequirementAiRead(detail,f.api,f.read,f.adopt,f.open,f.timing);owner.setVisible(true);await flush();
+ assert.equal(owner.getSnapshot().selected,3);assert.equal(owner.getSnapshot().run.status,'FAILED');
+ assert.equal(owner.getSnapshot().run.returned_responses[0].content,content);assert.equal(f.facts.opens,0);owner.dispose();
+});
 function fixture(){const facts={run:run(),queries:0,parents:0,adopts:0,opens:0,drop:false,queryDrop:false};const timing={schedule:()=>()=>{}};
  const api={getGuideRun:async()=>{facts.queries++;if(facts.queryDrop)throw Error('Network');return {data:facts.run};},listMessages:async()=>{if(facts.drop)throw Error('Messages');return {data:{items:[]},meta:{pagination:{page_size:20,has_more:false,next_cursor:null}}};},listGuideRuns:async()=>({data:{items:[(({final_result,...row})=>row)(facts.run)]},meta:{pagination:{page:1,page_size:20,total:1,total_pages:1}}})};
  const read=async()=>{facts.parents++;return detail;},adopt=async()=>{facts.adopts++;},open=()=>{facts.opens++;};return {facts,api,timing,read,adopt,open};}

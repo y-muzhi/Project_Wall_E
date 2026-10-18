@@ -58,6 +58,6 @@ class SubmitCardResponsesResponse:
         fields = ('response_message', 'guide_run', 'card_state')
         value = object_fields(data, 'data', fields, fields)
         message, run = message_read_model(value['response_message']), guide_run_accepted(value['guide_run'])
-        if value['card_state'] != 'ANSWERED' or run['status'] != 'RUNNING' or run['current_step'] != 'PREPARING' or message['reply_to_message_id'] != request.payload['message_id'] or message['message_type'] != 'CARD_RESPONSE' or message['guide_run_id'] != run['id'] or message['requirement_id'] != run['requirement_id'] or message['structured_content'] != {'schema_version': request.payload['schema_version'], 'responses': request.payload['responses']}:
+        if value['card_state'] != 'ANSWERED' or (run['status'], run['current_step']) not in (('RUNNING', 'PREPARING'), ('COMPLETED', 'FINISHED')) or message['reply_to_message_id'] != request.payload['message_id'] or message['message_type'] != 'CARD_RESPONSE' or message['guide_run_id'] != run['id'] or message['requirement_id'] != run['requirement_id'] or message['structured_content'] != {'schema_version': request.payload['schema_version'], 'responses': request.payload['responses']}:
             raise ValueError('Formal answer result contradicts its accepted request')
         return {'response_message': message, 'guide_run': run, 'card_state': 'ANSWERED'}, None

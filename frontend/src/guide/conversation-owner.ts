@@ -16,6 +16,7 @@ const retained=(phase:string)=>['SUBMITTING','READING','UNKNOWN','CONFIRMED'].in
  * requests keep their owner through history selection, hidden views and new
  * actual activity; no refresh or competing button replaces that request. */
 export class RequirementConversation{
+ get modelCallApi():Pick<WalleApi,'listModelCalls'|'getModelCall'>{return this.api;}
  readonly read:RequirementAiRead;readonly composer:RequirementGuideComposer;readonly runs:RequirementRunActions;readonly cards:RequirementCardGroups;
  private value:ConversationState;private readonly listeners=new Set<()=>void>();private readonly releases:(()=>void)[]=[];private readonly batches=new Map<number,{owner:RequirementSuggestionBatch;release:()=>void}>();
  private readonly api:WalleApi;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private closed=false;private reconciling=false;private again=false;private runSignature='';private visibility=0;private batchRead='';

@@ -10,8 +10,22 @@ from .http_models import ListGuideRunsRequest, ListGuideRunsResponse
 from .http_models import CreateGuideRunRequest, CreateGuideRunResponse, ContinueGuideRunRequest, ContinueGuideRunResponse
 from .http_models import ModifyFromCommentRequest, ModifyFromCommentResponse
 from .http_models import RetryGuideRunRequest, RetryGuideRunResponse
+from . import model_calls
+from .http_models import ListModelCallsResponse, GetModelCallRequest, GetModelCallResponse
 
 guide_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
+
+
+@guide_router.get('/guide-runs/{guide_run_id}/model-calls')
+async def list_model_calls_http(request: Request):
+    return await read_http(request, GetGuideRunRequest, ListModelCallsResponse,
+        lambda runtime, parsed: model_calls.list_model_calls(runtime.database, parsed.guide_run_id))
+
+
+@guide_router.get('/model-calls/{llm_use_id}')
+async def get_model_call_http(request: Request):
+    return await read_http(request, GetModelCallRequest, GetModelCallResponse,
+        lambda runtime, parsed: model_calls.get_model_call(runtime.database, parsed.llm_use_id))
 
 
 @guide_router.get('/guide-runs/{guide_run_id}')

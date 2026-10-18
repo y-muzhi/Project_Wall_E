@@ -69,7 +69,7 @@ function main() {
       source.anchors.forEach(a => out.push(`| ${a.line} | ${a.id} |`));
       out.push('');
     }
-    writeFileSync(resolve(root, 'docs/设计来源索引.md'), out.join('\n') + '\n');
+    writeFileSync(resolve(root, 'docs/sources/设计来源索引.md'), out.join('\n') + '\n');
     console.log(JSON.stringify(sources.map(({ key, version, lineCount, hash, headings, anchors }) => ({ key, version, lineCount, hash, headings: headings.length, anchors: anchors.length })), null, 2));
     return;
   }

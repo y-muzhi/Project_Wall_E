@@ -20,9 +20,14 @@ from backend.tests.guide import test_cards as cards
 from backend.tests.guide import test_retry as retries
 
 
+def historical_catalog():
+    """D-010 fixtures explicitly deploy v1/v2; new defaults are tested separately."""
+    return ResourceCatalog(DEFAULT_ROOT, versioned_root=V2_ROOT)
+
+
 class VersionedResourceTests(unittest.TestCase):
     def test_all_new_freezes_v2_both_versions_restore_exactly_no_fallback(self):
-        catalog=ResourceCatalog();old=ResourceCatalog(DEFAULT_ROOT)
+        catalog=historical_catalog();old=ResourceCatalog(DEFAULT_ROOT)
         for name,action,source,key in EXPECTED:
             with self.subTest(function=name):
                 latest=catalog.freeze(action,source)
@@ -30,14 +35,15 @@ class VersionedResourceTests(unittest.TestCase):
                     (name,'v2',name+'@v2',key+'_CONTEXT@v2',V2_MANIFEST_SHA256))
                 self.assertEqual(catalog.restore(name,'v1'),old.freeze(action,source))
                 self.assertEqual(catalog.restore(name,'v2',prompt_version='v2',context_template=key+'_CONTEXT@v2'),latest)
-                for version in ('v3','latest',None):
+                for version in ('v4','latest',None):
                     with self.assertRaises(ConfigInvalid):catalog.restore(name,version)
                 with self.assertRaises(ConfigInvalid):catalog.restore(name,'v1',prompt_version='v2')
                 with self.assertRaises(ConfigInvalid):catalog.restore(name,'v2',context_template=key+'_CONTEXT@v1')
 
     def test_schema_template_signature_and_budget_preserved_all_six(self):
-        catalog=ResourceCatalog();old=ResourceCatalog(DEFAULT_ROOT)
-        self.assertEqual(catalog.frontend_catalog,old.frontend_catalog)
+        catalog=historical_catalog();old=ResourceCatalog(DEFAULT_ROOT)
+        self.assertEqual([entry for entry in catalog.frontend_catalog['templates'] if entry['template_key'] == 'change-requirement'],
+                         [entry for entry in old.frontend_catalog['templates'] if entry['template_key'] == 'change-requirement'])
         for kind,key in (('NEW','new-requirement'),('CHANGE','change-requirement')):
             self.assertEqual(catalog.template(kind,key,'v1'),old.template(kind,key,'v1'))
         for _,action,source,_ in EXPECTED:
@@ -59,7 +65,7 @@ class VersionedResourceTests(unittest.TestCase):
     def test_tamper_missing_file_and_manifest_refuse_without_v1_fallback(self):
         with tempfile.TemporaryDirectory(prefix='walle-v2-frozen-') as directory:
             target=Path(directory)/'v2';shutil.copytree(V2_ROOT,target)
-            self.assertEqual(ResourceCatalog(versioned_root=target).freeze('ASK','USER_INSTRUCTION').version,'v2')
+            self.assertEqual(ResourceCatalog(DEFAULT_ROOT,versioned_root=target).freeze('ASK','USER_INSTRUCTION').version,'v2')
             prompt=target/'prompts/ANSWER_REQUIREMENT.v2.md';original=prompt.read_bytes()
             for content in (original+b'changed',None):
                 if content is None:prompt.unlink()
@@ -79,7 +85,7 @@ class VersionedResourceTests(unittest.TestCase):
 class VersionedAcceptanceTests(unittest.TestCase):
     def fixture(self,cls):
         fixture=cls();fixture.setUp();self.addCleanup(fixture.doCleanups)
-        fixture.catalog=ResourceCatalog()
+        fixture.catalog=historical_catalog()
         return fixture
 
     def test_actual_new_creation_freezes_v2_and_real_c03_matches_no_provider(self):
@@ -98,7 +104,7 @@ class VersionedAcceptanceTests(unittest.TestCase):
     def test_actual_old_waiting_continuation_preserves_v1_and_c03(self):
         fixture=acceptance.AcceptanceTests();fixture.setUp();self.addCleanup(fixture.doCleanups)
         identity=fixture.waiting();old=fixture.row('guide_runs',identity)
-        fixture.catalog=ResourceCatalog()
+        fixture.catalog=historical_catalog()
         result=fixture.resume();self.assertEqual(result['code'],'GUIDE_CONTINUED',result)
         current=fixture.row('guide_runs',identity)
         for field in ('function_type','prompt_version','context_template_key','context_template_version'):
@@ -122,7 +128,7 @@ class VersionedAcceptanceTests(unittest.TestCase):
     def test_actual_formal_response_to_immutable_old_initialize_card_creates_v2_run(self):
         fixture=cards.CardSubmissionTests();fixture.setUp();self.addCleanup(fixture.doCleanups)
         fixture.initialize_cards_fixture();old=fixture.row('conversation_messages',11)
-        fixture.catalog=ResourceCatalog()
+        fixture.catalog=historical_catalog()
         result=fixture.submit();self.assertEqual(result['code'],'CARDS_ACCEPTED',result)
         identity=result['data']['guide_run']['id'];new=fixture.row('guide_runs',identity)
         self.assertEqual((new['prompt_version'],new['context_template_version']),('v2','v2'))

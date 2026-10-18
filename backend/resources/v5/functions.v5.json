@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "proposal": false,
+  "functions": [
+    {
+      "function_type": "INITIALIZE_REQUIREMENT",
+      "version": "v6",
+      "action_type": "INITIALIZE",
+      "source_type": "USER_INSTRUCTION",
+      "input_schema": "INITIALIZE_INPUT@v1",
+      "output_schema": "INITIALIZE_OUTPUT@v1",
+      "context_template": "INITIALIZE_CONTEXT@v6",
+      "prompt": "INITIALIZE_REQUIREMENT@v6"
+    },
+    {
+      "function_type": "INITIALIZE_REQUIREMENT",
+      "version": "v7",
+      "action_type": "INITIALIZE",
+      "source_type": "USER_INSTRUCTION",
+      "input_schema": "INITIALIZE_INPUT@v1",
+      "output_schema": "INITIALIZE_OUTPUT@v1",
+      "context_template": "INITIALIZE_CONTEXT@v7",
+      "prompt": "INITIALIZE_REQUIREMENT@v7"
+    }
+  ]
+}

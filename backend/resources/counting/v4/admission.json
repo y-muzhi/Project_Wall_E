@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "decision": "TPL-001",
+  "status": "ENABLED_BY_USER_BUDGET_APPROVAL",
+  "user_instruction": "完整原文，提高AI预算",
+  "approved_on": "2026-10-11",
+  "base_admission_sha256": "ae136a0472f9a1ddb27c40564198deb6364d7bde6fe538e82351a41c5f3b4957",
+  "release_sha256": "a48f2244cc6407ea6d8690b4766ec1cb65913e5d6d53ff4d70793d999f84ddee",
+  "function_manifest_sha256": "3d3d155fb4523d9491ba8a8c41768a95d96368080d0e2854890a27c9c1794d14",
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "model": "deepseek-v4-1-flash-260910",
+  "provider_compatibility_proved": false,
+  "validation_status": "IMPLEMENTED_NOT_VERIFIED",
+  "paid_observation_authorized": false
+}

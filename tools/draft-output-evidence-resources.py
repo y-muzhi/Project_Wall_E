@@ -44,7 +44,7 @@ files['manifest.json']=(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').e
 if TARGET.exists():
     actual={path.relative_to(TARGET).as_posix():path.read_bytes() for path in TARGET.rglob('*') if path.is_file()}
     if actual!=files:
-        if sys.argv[1:]!=['--refresh-unapproved'] or (ROOT/'docs/output-evidence-adoption-v2.json').exists():
+        if sys.argv[1:]!=['--refresh-unapproved'] or (ROOT/'docs/decisions/adoptions/output-evidence-adoption-v2.json').exists():
             raise RuntimeError('Existing candidate differs; review it instead of silently overwriting')
         prior=json.loads(actual['manifest.json'])
         if prior['status']!='PROPOSED' or set(actual)!=set(files) or any(len(actual[entry['path']])!=entry['bytes'] or hashlib.sha256(actual[entry['path']]).hexdigest()!=entry['sha256'] for entry in prior['files']):

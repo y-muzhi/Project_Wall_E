@@ -1,6 +1,6 @@
 # D-015 正式 AI 可用性专项记录
 
-日期：2026-10-08。基于 master `087c309` 的本批改动。用户已确认实用预算方案、限定一轮观测及 AI 离线专项；批准原文、边界和精确输入身份见 [D-015 采用记录](../deepseek-availability-adoption-v1.json)。不恢复完整验收或浏览器/Windows 崩溃专项。
+日期：2026-10-08。基于 master `087c309` 的本批改动。用户已确认实用预算方案、限定一轮观测及 AI 离线专项；批准原文、边界和精确输入身份见 [D-015 采用记录](../decisions/adoptions/deepseek-availability-adoption-v1.json)。不恢复完整验收或浏览器/Windows 崩溃专项。
 
 ## 已完成的检查
 

@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "status": "APPROVED",
+  "decision": "CTX-001",
+  "version": "v4",
+  "function_versions": [
+    "v4",
+    "v5"
+  ],
+  "approved_on": "2026-10-11",
+  "user_instruction": "写迭代文档，然后更改代码部分",
+  "base_manifest_sha256s": [
+    "b30923bccfa873fce9fa7e45c74bae399e0051d6ca873b21346677f4cd36d905",
+    "3d3d155fb4523d9491ba8a8c41768a95d96368080d0e2854890a27c9c1794d14"
+  ],
+  "transport_layout": "stable_prefix_v1",
+  "validation_status": "IMPLEMENTED_NOT_VERIFIED",
+  "files": [
+    {
+      "path": "contexts/ASK_CONTEXT.v4.json",
+      "bytes": 1417,
+      "sha256": "440fa5f6fe8214a11b456ddf3f3150815fa1a25bb31f9b9a2d72cb15995e3e53"
+    },
+    {
+      "path": "contexts/ASK_CONTEXT.v5.json",
+      "bytes": 1420,
+      "sha256": "6356751ef46c0c08f6d4d3dddb98a6902ae80bf13d1d410374ddb3c3c97e0b84"
+    },
+    {
+      "path": "contexts/INITIALIZE_CONTEXT.v4.json",
+      "bytes": 1453,
+      "sha256": "b9678b228dee9683922e06f0aa14c9e77ed64f7ca039c70864820efec586ad25"
+    },
+    {
+      "path": "contexts/INITIALIZE_CONTEXT.v5.json",
+      "bytes": 1456,
+      "sha256": "024b3e273f5491240d52873855fc7b7be87fc18117e5b2fc818a5659eb203223"
+    },
+    {
+      "path": "contexts/MODIFY_CONTEXT.v4.json",
+      "bytes": 1429,
+      "sha256": "a10bd951ff053d59caf5b3f35d76c0dad542dd76040caf09715ca2dfca0b30f3"
+    },
+    {
+      "path": "contexts/MODIFY_CONTEXT.v5.json",
+      "bytes": 1432,
+      "sha256": "d5d8fcdedc5dd3a25be35345145569b47ac502921a050a209c76b733a1d27831"
+    },
+    {
+      "path": "contexts/MODIFY_FROM_COMMENT_CONTEXT.v4.json",
+      "bytes": 1448,
+      "sha256": "c40e16ff525d1cde0491ce126b6025c8faa0139805b2c14986fe5117f9f4c6db"
+    },
+    {
+      "path": "contexts/MODIFY_FROM_COMMENT_CONTEXT.v5.json",
+      "bytes": 1451,
+      "sha256": "180f197d21b1f59f4c8117be7a8b924e0642ec43c54d1f11a292dda892613899"
+    },
+    {
+      "path": "contexts/MODIFY_FROM_REVIEW_CONTEXT.v4.json",
+      "bytes": 1450,
+      "sha256": "a0aa0d4bbdb0e191b55f7157be9691cc7c05181b52d28fe3ad27c37b3bd1eccc"
+    },
+    {
+      "path": "contexts/MODIFY_FROM_REVIEW_CONTEXT.v5.json",
+      "bytes": 1453,
+      "sha256": "9e3b89fe5df6b86095c814a8dce8e52bc317b692d0789d0289ec63e5cb9af65e"
+    },
+    {
+      "path": "contexts/REVIEW_CONTEXT.v4.json",
+      "bytes": 1429,
+      "sha256": "93a35c5544f21ad2c032b4de8bd3690be6e1d55da972661c979369e3df809ac3"
+    },
+    {
+      "path": "contexts/REVIEW_CONTEXT.v5.json",
+      "bytes": 1432,
+      "sha256": "2932e9d34b35bab09332d8f56062e2159cff90d2323e942c6347c3f892e06d8c"
+    },
+    {
+      "path": "functions.v4.json",
+      "bytes": 4060,
+      "sha256": "3cd5d2543576ce77cccdb25d168e24853d537f9d8856e33cf05fd22e0458d114"
+    },
+    {
+      "path": "prompts/ANSWER_REQUIREMENT.v4.md",
+      "bytes": 4095,
+      "sha256": "2b19fe1c2b94fb07eecd4f0a40ba90ff07a7ec752eb19e28ad99c7a9e2f829f3"
+    },
+    {
+      "path": "prompts/ANSWER_REQUIREMENT.v5.md",
+      "bytes": 4095,
+      "sha256": "2eb104af30794b342c950a0b3b56b183e2099cf86fba1cbba0f350a43c273745"
+    },
+    {
+      "path": "prompts/INITIALIZE_REQUIREMENT.v4.md",
+      "bytes": 6480,
+      "sha256": "4cda2f48f03d62dd34e82b180cb0fb8541d3814ec603f111f491358309fc206c"
+    },
+    {
+      "path": "prompts/INITIALIZE_REQUIREMENT.v5.md",
+      "bytes": 6480,
+      "sha256": "0fb05fd77a8349c36ec7e516de31f2aa7c267645830e041a5a31dfbe154c210c"
+    },
+    {
+      "path": "prompts/MODIFY_FROM_COMMENT.v4.md",
+      "bytes": 4156,
+      "sha256": "84f3fe2f48083b503747cf8c0404c048778cdc09789e71908b6ff8167349d177"
+    },
+    {
+      "path": "prompts/MODIFY_FROM_COMMENT.v5.md",
+      "bytes": 4156,
+      "sha256": "0ae4f21e7f9685116be2b201f230c58a6c69042f3fdb38474544841415993192"
+    },
+    {
+      "path": "prompts/MODIFY_FROM_REVIEW.v4.md",
+      "bytes": 4139,
+      "sha256": "66526f7fdbfb5bfb3bc4e2639f335a01f091985abc309cae202ced73f1d9ec31"
+    },
+    {
+      "path": "prompts/MODIFY_FROM_REVIEW.v5.md",
+      "bytes": 4139,
+      "sha256": "2a99bf1c7e9245bd11502a8c8406aa6ce3f715d0764ef42d715d676c06e17106"
+    },
+    {
+      "path": "prompts/MODIFY_REQUIREMENT.v4.md",
+      "bytes": 4156,
+      "sha256": "580d333c68fea5bcfd0efb5083203070beef38cd647723f11a556b935adbe16b"
+    },
+    {
+      "path": "prompts/MODIFY_REQUIREMENT.v5.md",
+      "bytes": 4156,
+      "sha256": "7dbc1d581523afd579640639b84ea0a0fdcdfb1c792776be5d1af9405be3b441"
+    },
+    {
+      "path": "prompts/REVIEW_REQUIREMENT.v4.md",
+      "bytes": 4134,
+      "sha256": "e4cff377561642aca0bc08ea5db8b6e4fcf6e180eb4ae5a5bb54cdb0d38ff25a"
+    },
+    {
+      "path": "prompts/REVIEW_REQUIREMENT.v5.md",
+      "bytes": 4134,
+      "sha256": "4b248e846501f39b138db4129c93aa6bca6d9535c6742547faf03357275bcc1c"
+    },
+    {
+      "path": "schemas/ASK_INPUT.v2.json",
+      "bytes": 46547,
+      "sha256": "96c01c263b57924f6073201a5ff97134710448b276c0adfdc4ea1e909d277f00"
+    },
+    {
+      "path": "schemas/INITIALIZE_INPUT.v2.json",
+      "bytes": 46572,
+      "sha256": "49126e2ce16c0c895e6680b7b44d31486e15ab1fe288245c146513f1dec3c4c0"
+    },
+    {
+      "path": "schemas/MODIFY_FROM_COMMENT_INPUT.v2.json",
+      "bytes": 46592,
+      "sha256": "befea716b7bdef70946ef1b2673b6156fbe447adb0454e72c8756b680d8577bd"
+    },
+    {
+      "path": "schemas/MODIFY_FROM_REVIEW_INPUT.v2.json",
+      "bytes": 46594,
+      "sha256": "6e732b1d4ca959dad6dfa5a9f9a87094c3e920d7c795b045850262b3f39dcde6"
+    },
+    {
+      "path": "schemas/MODIFY_INPUT.v2.json",
+      "bytes": 46556,
+      "sha256": "557da4b5448e610173791a55c09c574f1b30a4225fd2e8c627ca5bb7ef1e0641"
+    },
+    {
+      "path": "schemas/REVIEW_INPUT.v2.json",
+      "bytes": 46556,
+      "sha256": "e74dcecc5bba4e2e0398a179cf36d252e9a6eb69e009a33722301e26492a7272"
+    }
+  ]
+}

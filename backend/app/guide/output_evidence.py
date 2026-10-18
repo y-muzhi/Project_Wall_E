@@ -11,6 +11,7 @@ from backend.app.documents.patch_application import preview_patches
 from backend.app.documents.patch_validation import validate_bundle
 from backend.app.documents.snapshot import validate_template_lock
 from backend.app.infrastructure.message_repository import MessageRepository
+from backend.app.infrastructure.resources import V3_MANIFEST_SHA256, V4_MANIFEST_SHA256, V5_MANIFEST_SHA256, V8_MANIFEST_SHA256
 from backend.app.messages.cards import decode_cards, decode_responses, validate_cards, formal_answer_text
 from backend.app.shared.validation import normalize_text
 
@@ -43,19 +44,19 @@ def card_text(cards):
     return '\n\n'.join(groups)
 
 
+def _require_proof_protocol(protocol):
+    if (protocol.version not in ('v2', 'v3', 'v4', 'v5', 'v6', 'v7', 'v8', 'v9')
+            or protocol.version == 'v3' and protocol.manifest_sha256 != V3_MANIFEST_SHA256
+            or protocol.version in ('v4', 'v5') and protocol.manifest_sha256 != V4_MANIFEST_SHA256
+            or protocol.version in ('v6', 'v7') and (protocol.manifest_sha256 != V5_MANIFEST_SHA256 or protocol.action_type != 'INITIALIZE')
+            or protocol.version in ('v8', 'v9') and protocol.manifest_sha256 != V8_MANIFEST_SHA256):
+        raise OutputEvidenceInvalid('该版本的卡片等价与事实采用保证尚未闭合')
+
+
 def validate_card_output(snapshot, manifest, output, protocol):
-    if protocol.version != 'v2':raise OutputEvidenceInvalid('旧版卡片等价保证尚未闭合')
-    cards=validate_cards(output['cards'],protocol)
-    text=card_text(cards)
-    if len(text)>100000 or output['message'] != text:
-        raise OutputEvidenceInvalid('卡片原message必须与完整结构逐字等价')
-    read=set(manifest['block_ids'])
-    for card in cards['cards']:
-        for related in card['related_spec_context']:
-            target=snapshot.by_id.get(related['block_id'])
-            if target is None or related['block_id'] not in read or related['content_snapshot'] != target[0].markdown:
-                raise OutputEvidenceInvalid('卡片只能引用实际读取的完整原区块')
-    return cards
+    # Kept as a compatibility helper for historical callers. It only selects
+    # the structured renderer; failure falls back to the original response.
+    return validate_cards(output['cards'],protocol)
 
 
 def fact_declaration(snapshot, checked):
@@ -107,7 +108,7 @@ def validate_fact_patches(connection, *, requirement_id, snapshot, authority, ou
     if protocol.action_type != 'INITIALIZE':raise OutputEvidenceInvalid('事实采用仅限INITIALIZE')
     facts=output['confirmed_fact_patches']
     if not facts:return None
-    if protocol.version != 'v2':raise OutputEvidenceInvalid('旧版非空事实采用证明尚未闭合')
+    _require_proof_protocol(protocol)
     checked=validate_bundle(snapshot,[item['patch'] for item in facts],authority)
     validate_template_lock(snapshot,template,tuple(locked_heading_ids))
     messages=MessageRepository(connection)

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const migration = 'backend/app/infrastructure/migrations/003_manual_edit_sources.sql';
-const record = 'docs/manual-edit-source-adoption-v1.json';
+const record = 'docs/decisions/adoptions/manual-edit-source-adoption-v1.json';
 if (existsSync(resolve(root, migration)) || existsSync(resolve(root, record))) throw new Error('Frozen adoption already exists; do not overwrite');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const approved = ['docs/proposals/manual-edit-source-v1.md', 'docs/proposals/manual-edit-source-v1.sql'].map(path => ({ path, sha256: digest(readFileSync(resolve(root, path))) }));

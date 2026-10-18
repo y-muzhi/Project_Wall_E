@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const migration = 'backend/app/infrastructure/migrations/004_manual_identity_proofs.sql';
-const record = 'docs/manual-identity-adoption-v1.json';
+const record = 'docs/decisions/adoptions/manual-identity-adoption-v1.json';
 if ([migration, record].some(path => existsSync(resolve(root, path)))) throw new Error('Adoption already exists; preserve frozen bytes');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const approved = ['docs/proposals/manual-identity-receipts-v1.md', 'docs/proposals/manual-identity-receipts-v1.sql'].map(path => ({ path, sha256: digest(readFileSync(resolve(root, path))) }));

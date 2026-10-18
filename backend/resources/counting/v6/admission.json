@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "decision": "CTX-001",
+  "status": "ENABLED_BY_USER_CONTEXT_APPROVAL",
+  "approved_on": "2026-10-11",
+  "user_instruction": "写迭代文档，然后更改代码部分",
+  "base_admission_sha256": "f22f99842e68f82d416a9ad0888cf654ba5751c931b84c01b8a42163792da504",
+  "release_sha256": "95d7c8836813bc30bce88e9953b5372b6035362bb4084f90ee92ff0ee16579d1",
+  "function_manifest_sha256": "8e0800c8c2ddaf704d18e3a94246bf7af9c64e9a107288399b060e37cb8e77b4",
+  "function_version": "v5",
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "model": "deepseek-v4-1-flash-260910",
+  "provider_compatibility_proved": false,
+  "validation_status": "IMPLEMENTED_NOT_VERIFIED",
+  "paid_observation_authorized": false
+}

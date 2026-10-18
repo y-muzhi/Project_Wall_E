@@ -1,8 +1,9 @@
-"""Real audited output -> sealed internal receipt, without business adoption.
+"""Real audited output -> receipt for structured business processing.
 
 Only this transaction produces validation SUCCEEDED. It re-reads original raw
 assistant content, frozen Schema and actual C03 facts; scrubbed parsed audit
 JSON is never a repaired candidate. Receipts are not an HTTP input type.
+An unavailable receipt never prevents the separate original-response display.
 """
 from dataclasses import dataclass, field
 import json
@@ -21,11 +22,11 @@ from backend.app.infrastructure.model_profile import ModelProfile
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.practical_usage import validate_practical_usage
 from backend.app.infrastructure.resources import ResourceCatalog, ProtocolInvalid, ConfigInvalid
-from backend.app.messages.cards import CardsInvalid
+from backend.app.messages.cards import CardsInvalid, validate_cards
 from backend.app.shared.command_execution import Rejected, operation_time
 from backend.app.shared.validation import strict_integer, strict_json_object
 from .context_builder import BuiltContext
-from .output_evidence import OutputEvidenceInvalid, validate_card_output, validate_fact_patches
+from .output_evidence import OutputEvidenceInvalid, validate_fact_patches
 
 _SEAL=object()
 
@@ -77,13 +78,15 @@ def audited_context(connection, row, catalog, profile):
         raise Rejected('CONFIG_INVALID')
     request_snapshot=strict_json_object(row['request_snapshot_json'])
     if 'counting' in request_snapshot and type(request_snapshot['counting']) is not dict:raise Rejected('CONFIG_INVALID')
-    protocol={'function_type':function.function_type,'input_schema':function.input_schema,'output_schema':function.output_schema,
+    protocol={'function_type':function.function_type,'input_schema':function.model_input_schema,'output_schema':function.output_schema,
         'context_template':function.context_template,'prompt':function.prompt_reference,'manifest_sha256':function.manifest_sha256}
     try:
         stored_profile=ModelProfile.from_snapshot(request_snapshot.get('profile'))
     except ConfigInvalid:
         raise Rejected('CONFIG_INVALID') from None
-    if set(request_snapshot) not in ({'profile','request','protocol'},{'profile','request','protocol','counting'}) or stored_profile.profile_id != profile.profile_id or request_snapshot['protocol'] != protocol:
+    from .context_projection import projected
+    fields = {'profile','request','protocol'} | ({'context_basis'} if projected(function) else set())
+    if set(request_snapshot) not in (fields, fields | {'counting'}) or stored_profile.profile_id != profile.profile_id or request_snapshot['protocol'] != protocol:
         raise Rejected('CONFIG_INVALID')
     request=request_snapshot['request']
     if type(request) is not dict:raise Rejected('SOURCE_INVALID')
@@ -94,12 +97,12 @@ def audited_context(connection, row, catalog, profile):
     supplied=strict_json_object(content)
     context=BuiltContext(system,content,row['context_manifest_json'],len(content.encode('utf-8')),(),())
     if canonical_input(request) != canonical_input(profile.request(context)):raise Rejected('CONFIG_INVALID')
-    actual,supplied=verify_actual_context(connection,run['id'],function,supplied,system,row['context_manifest_json'],catalog,counting=request_snapshot.get('counting'),input_json=content,counting_summary=True,profile=profile)
+    actual,supplied=verify_actual_context(connection,run['id'],function,supplied,system,row['context_manifest_json'],catalog,counting=request_snapshot.get('counting'),input_json=content,counting_summary=True,profile=profile,basis=request_snapshot.get('context_basis'))
     return run,root,function,actual,supplied
 
 
 def validate_business_output(connection, *, output, function, actual, supplied, catalog):
-    """All six tasks, original fields, current source and whole-bundle checks."""
+    """Validate actionable structure/writes; display has no such prerequisite."""
     current=actual['current_document'];run=actual['run'];root=actual['requirement']
     sources=DocumentSources(connection,root['id'],catalog)
     snapshot=validate_snapshot(current['markdown_content'],current['block_state_json'],sources)
@@ -108,7 +111,9 @@ def validate_business_output(connection, *, output, function, actual, supplied, 
     authority=restore_authority(snapshot,run['action_type'],run['scope_type'],reference,run['allowed_targets_json'])
     branch=output['response_type']
     if branch in ('INITIALIZE_CARDS','CLARIFY_CARDS'):
-        validate_card_output(snapshot,manifest,output,function)
+        # Structure determines whether controls can be rendered. Display never
+        # requires duplicated prose, source quotes, or a new question.
+        validate_cards(output['cards'],function)
     if function.action_type in ('ASK','REVIEW') and supplied['allowed_targets']:
         raise OutputEvidenceInvalid('只读任务不允许写权限')
     if function.action_type == 'INITIALIZE':
@@ -119,17 +124,6 @@ def validate_business_output(connection, *, output, function, actual, supplied, 
         if any(item['target_ref']['block_id'] not in manifest['block_ids'] for item in output['suggestions']):
             raise OutputEvidenceInvalid('建议目标须在实际读取范围')
         preview_patches(snapshot,output['suggestions'],authority)
-    elif branch == 'REVIEW_RESULT':
-        issues=output['review_result']['issues'];keys=[item['issue_key'] for item in issues]
-        if len(keys) != len(set(keys)):raise OutputEvidenceInvalid('检查项键必须唯一')
-        read=set(manifest['block_ids'])
-        for issue in issues:
-            if not set(issue['block_ids']) <= read:raise OutputEvidenceInvalid('检查只能引用实际读取区块')
-            evidence=issue['evidence']
-            if not evidence:
-                if issue['category'] != 'MISSING':raise OutputEvidenceInvalid('非缺失项须逐字原文证据')
-            elif not _review_quote(snapshot,issue['block_ids'],evidence):
-                raise OutputEvidenceInvalid('检查证据必须在所引实际原文')
     return output
 
 

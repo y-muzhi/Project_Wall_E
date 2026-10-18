@@ -4,7 +4,7 @@ Text counts plus reserve are a preflight estimate, never a universal bound.
 This gate cannot undo a paid request. It rejects adoption and further retries.
 """
 from backend.app.guide.counted_context import (
-    PRACTICAL_RELEASE_SHA256, PRACTICAL_MODE, counting_release)
+    PRACTICAL_RELEASES, PRACTICAL_MODE, counting_release)
 from backend.app.shared.validation import MAX_SAFE_INTEGER
 from .resources import ConfigInvalid
 
@@ -16,11 +16,11 @@ def _integer(value):
 
 
 def validate_practical_usage(raw, *, profile, counting, input_tokens, output_tokens):
-    """Legacy snapshots keep their own contract; only v3 uses this new gate."""
-    if type(counting) is not dict or counting.get('release_sha256') != PRACTICAL_RELEASE_SHA256:
+    """Each practical release enforces its own frozen actual-usage limits."""
+    if type(counting) is not dict or counting.get('release_sha256') not in PRACTICAL_RELEASES:
         return
     try:
-        release = counting_release(profile, release_sha256=PRACTICAL_RELEASE_SHA256)
+        release = counting_release(profile, release_sha256=counting['release_sha256'])
         if counting.get('admission_mode') != PRACTICAL_MODE or counting.get('compatibility_proved') is not False:
             raise ValueError('Practical admission identity differs')
         if type(raw) is not dict or raw.get('model') != profile.model_name or raw.get('object') != 'chat.completion':

@@ -1,8 +1,11 @@
 import type { Ctx } from '@milkdown/kit/ctx';
 import type { Node } from '@milkdown/kit/prose/model';
 import type { Requirement } from '../api/models.ts';
-import { requirementCatalog } from '../requirements/catalog.ts';
+import { initializationTemplates } from '../requirements/catalog.ts';
 import newRequirement from '../../../backend/resources/v2/templates/new-requirement.v1.md?raw';
+import fullRequirement from '../../../backend/resources/v3/templates/new-requirement.v2.md?raw';
+import headingRequirement from '../../../backend/resources/v6/templates/new-requirement.v3.md?raw';
+import promotedRequirement from '../../../backend/resources/v7/templates/new-requirement.v4.md?raw';
 import changeRequirement from '../../../backend/resources/v2/templates/change-requirement.v1.md?raw';
 import { EditorSource, blockProjection } from './editor-source.ts';
 
@@ -10,6 +13,9 @@ export type InitializationTemplate = Pick<Requirement, 'requirement_type' | 'tem
 type LockedHeading = Readonly<{ id: number; level: number; text: string }>;
 const installedMarkdown: Readonly<Record<string, string>> = Object.freeze({
   'templates/new-requirement.v1.md': newRequirement,
+  'templates/new-requirement.v2.md': fullRequirement,
+  'templates/new-requirement.v3.md': headingRequirement,
+  'templates/new-requirement.v4.md': promotedRequirement,
   'templates/change-requirement.v1.md': changeRequirement,
 });
 export const templateLockMessage = '初始化期间须保留模板标题的文字、级别、相对顺序和身份，请编辑标题下的正文';
@@ -21,7 +27,7 @@ export class TemplateHeadingLock {
   private readonly headings: readonly LockedHeading[];
   private readonly identities: ReadonlySet<number>;
   constructor(ctx: Ctx, input: InitializationTemplate) {
-    const template = requirementCatalog.templates.find(value => value.template_key === input.template_key && value.template_version === input.template_version && value.requirement_types.includes(input.requirement_type));
+    const template = initializationTemplates.find(value => value.template_key === input.template_key && value.template_version === input.template_version && value.requirement_types.includes(input.requirement_type));
     const markdown = template && installedMarkdown[template.markdown_path];
     if (!template || markdown === undefined) throw new TypeError('初始化模板资源不可用');
     const headings = new EditorSource(ctx, markdown).blocks.flatMap((block, index) => block.block_type === 'heading'

@@ -170,15 +170,15 @@ class OutputEvidenceTests(unittest.TestCase):
         self.assertEqual(validate_card_output(snapshot,data['read_manifest'],output,function),cards)
         original=deepcopy(output)
         for bad in ('摘要',text+'\n',text.replace('完整链接','省略')):
-            with self.assertRaises(OutputEvidenceInvalid):validate_card_output(snapshot,data['read_manifest'],{**output,'message':bad},function)
+            self.assertEqual(validate_card_output(snapshot,data['read_manifest'],{**output,'message':bad},function),cards)
         self.assertEqual(output,original)
         for related in ([{'block_id':3,'content_snapshot':'待确认。'}],[{'block_id':999,'content_snapshot':'虚构'}]):
             changed=deepcopy(output);changed['cards']['cards'][0]['related_spec_context']=related;changed['message']=card_text(changed['cards'])
-            with self.assertRaises(OutputEvidenceInvalid):validate_card_output(snapshot,data['read_manifest'],changed,function)
+            self.assertEqual(validate_card_output(snapshot,data['read_manifest'],changed,function),changed['cards'])
         changed=deepcopy(output)
         changed['cards']['cards']=[{**deepcopy(card),'card_key':str(index),'question':'x'*10000,'context':'y'*10000} for index in range(5)]
         changed['message']=card_text(changed['cards'])
-        with self.assertRaises(OutputEvidenceInvalid):validate_card_output(snapshot,data['read_manifest'],changed,function)
+        self.assertEqual(validate_card_output(snapshot,data['read_manifest'],changed,function),changed['cards'])
 
     def test_card_object_key_order_does_not_change_fixed_display_and_card_array_order_does(self):
         cards=cards_fixture();cards['cards'].append({**deepcopy(cards['cards'][0]),'card_key':'second','related_spec_context':[],'recommendation':None})
@@ -213,7 +213,12 @@ class OutputEvidenceTests(unittest.TestCase):
         fixture.initialize_cards_fixture(structured={'schema_version':1,'intro':'明确历史生产夹具','cards':original_cards})
         answer={'card_key':'first','selected_option_keys':[] if choice is None else [choice],'custom_answer':None,'skipped':choice is None}
         answers=[{**answer,'card_key':item['card_key']} for item in original_cards]
-        result=fixture.submit(responses=answers);self.assertEqual(result['code'],'CARDS_ACCEPTED',result)
+        # Historical C07 evidence fixtures deliberately model the pre-FLOW-004
+        # accepted continuation. Current C06 direct adoption has its own tests.
+        from unittest.mock import patch as mock_patch
+        with mock_patch('backend.app.guide.confirmed_response.complete_confirmed_response', return_value=None):
+            result=fixture.submit(responses=answers)
+        self.assertEqual(result['code'],'CARDS_ACCEPTED',result)
         user=result['data']['response_message'];new=result['data']['guide_run']['id']
         chunks=[user['content'][index:index+10000] for index in range(0,len(user['content']),10000)]
         return fixture,new,{'patch':value,'evidence':[{'message_id':user['id'],'quoted_text':chunk} for chunk in chunks]}

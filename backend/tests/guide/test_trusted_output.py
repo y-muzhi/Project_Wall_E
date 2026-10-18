@@ -19,7 +19,7 @@ from backend.app.guide.queries import get_model_context
 from backend.app.guide.trusted_output import produce_trusted_output,require_receipt,TrustedOutput
 from backend.app.infrastructure.audit_repository import AuditRepository
 from backend.app.infrastructure.database import CommitOutcomeUnknown
-from backend.app.infrastructure.resources import ResourceCatalog
+from backend.app.infrastructure.resources import ResourceCatalog, DEFAULT_ROOT, V2_ROOT
 from backend.app.shared.command_execution import Rejected
 from backend.app.shared.time import utc_milliseconds
 from backend.tests.infrastructure import test_audit_repository as audit
@@ -47,7 +47,7 @@ class TrustedOutputTests(unittest.TestCase):
     def v2(self,instruction='实际新v2用户输入'):
         fixture=self.fixture
         self.assertEqual(commands.cancel_guide_run(fixture.executor,{'guide_run_id':fixture.run,'idempotency_key':creation.OTHER},clock=lambda:creation.INSTANT)['code'],'GUIDE_CANCELLED')
-        fixture.catalog=ResourceCatalog()
+        fixture.catalog=ResourceCatalog(DEFAULT_ROOT,versioned_root=V2_ROOT)
         result=commands.create_guide_run(fixture.executor,{'requirement_id':fixture.req,'expected_content_version':1,'action_type':'INITIALIZE','instruction':instruction,
             'scope_type':'DOCUMENT','source_type':'USER_INSTRUCTION','idempotency_key':acceptance.KEY},catalog=fixture.catalog,clock=lambda:creation.INSTANT)
         self.assertEqual(result['code'],'GUIDE_ACCEPTED',result);fixture.run=result['data']['guide_run']['id']
@@ -91,12 +91,12 @@ class TrustedOutputTests(unittest.TestCase):
         self.assertEqual(receipt.prompt_version,'v2');self.assertEqual(receipt.output,value)
         self.assertEqual(self.fixture.row('llm_uses',identity)['validation_status'],'SUCCEEDED')
 
-    def test_actual_v2_inconsistent_card_message_is_failed_not_repaired(self):
+    def test_actual_v2_card_summary_is_accepted_without_rewriting(self):
         self.v2();cards=cards_fixture();cards['cards'][0]['related_spec_context']=[]
         value={'schema_version':1,'response_type':'INITIALIZE_CARDS','message':'不等价摘要','cards':cards,'confirmed_fact_patches':[]}
-        identity=self.candidate(value);self.assertIsNone(self.produce(identity))
+        identity=self.candidate(value);self.assertEqual(self.produce(identity).output,value)
         self.assertEqual(json.loads(self.fixture.row('llm_uses',identity)['raw_response_json'])['choices'][0]['message']['content'],json.dumps(value,ensure_ascii=False))
-        self.assertIsNone(self.fixture.row('llm_uses',identity)['trusted_output_json'])
+        self.assertEqual(json.loads(self.fixture.row('llm_uses',identity)['trusted_output_json']),value)
 
     def test_actual_cancel_and_version_change_win_without_trusted_or_reopened_run(self):
         identity=self.candidate();fixture=self.fixture

@@ -173,6 +173,7 @@ class GuideWorker:
             elif code == 'GUIDE_ACCEPTED':
                 identity = data['guide_run']['id'] if 'guide_run' in data else data['id']
             elif code == 'CARDS_ACCEPTED':
+                if data['guide_run']['status'] != 'RUNNING': return
                 identity = data['guide_run']['id']
             elif code in ('GUIDE_CONTINUED', 'GUIDE_RETRY_ACCEPTED'):
                 identity = data['id']

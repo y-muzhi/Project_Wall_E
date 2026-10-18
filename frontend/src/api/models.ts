@@ -86,10 +86,12 @@ function checkRun(row: Model<ReturnType<typeof shape<typeof runFields>>>) {
 }
 export const guideSummary = checked(shape(runFields), checkRun);
 const finalResult = shape({ summary: nonempty, assistant_message_id: nullable(id), current_document_version: nullable(id), suggestion_batch_id: nullable(id) });
-export const guideRun = checked(shape({ ...runFields, final_result: nullable(finalResult) }), row => {
+const decodeGuideRun = checked(shape({ ...runFields, final_result: nullable(finalResult), returned_responses: array(shape({llm_use_id:id,call_no:id,attempt_no:id,content:text}),Number.MAX_SAFE_INTEGER) }), row => {
   checkRun(row); require((row.status === 'COMPLETED') === (row.final_result !== null));
   if (row.final_result !== null) require(row.final_result.suggestion_batch_id === row.suggestion_batch_id);
 });
+// An old server may omit the additional read-only response projection.
+export const guideRun = (value:unknown) => decodeGuideRun(value!==null&&typeof value==='object'&&!Array.isArray(value)&&!('returned_responses' in value)?{...value,returned_responses:[]}:value);
 export const guideAccepted = shape({ id, requirement_id: id, status: choices(runStatuses), current_step: choices(runSteps) });
 export type GuideRun = Model<typeof guideRun>;
 export type GuideSummary = Model<typeof guideSummary>;

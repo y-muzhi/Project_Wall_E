@@ -1,0 +1,47 @@
+{
+  "schema_version": 6,
+  "strategy": "ark_exact_text_counts_deepseek_stable_prefix_v6",
+  "status": "ADOPTED_BY_USER_CONTEXT_APPROVAL",
+  "model": "deepseek-v4-1-flash-260910",
+  "schema_derivation": "root_reachable_local_defs_v1",
+  "count_endpoint": "https://ark.cn-beijing.volces.com/api/v3/tokenization",
+  "chat_roles": [
+    "system",
+    "user"
+  ],
+  "stream": false,
+  "tool_calling": false,
+  "framing_reserve_candidate": 1024,
+  "counted_texts": [
+    "system",
+    "input",
+    "user_input",
+    "source",
+    "template",
+    "history"
+  ],
+  "serialization": "json_utf8_ensure_ascii_false_compact_stable_prefix_v1",
+  "budget": {
+    "total_tokens": 139264,
+    "input_tokens": 131072,
+    "output_tokens": 8192,
+    "prompt_tokens": 4096,
+    "current_user_tokens": 4096,
+    "source_tokens": 4096,
+    "history_tokens": 2048,
+    "template_tokens": 65536,
+    "counting": "conservative_utf8_bytes_pending_provider_proof"
+  },
+  "trim_order": [
+    "oldest_history_whole_message",
+    "optional_neighbor_whole_block"
+  ],
+  "production_enabled": false,
+  "model_version": "260910",
+  "provider_compatibility_proved": false,
+  "proof_requirement": "User approved context packaging on 2026-10-11. Unchanged exact counting, budgets, 1024 empirical reserve and actual-usage gates. No new paid observation or compatibility proof.",
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "decision": "CTX-001",
+  "function_manifest_sha256": "8e0800c8c2ddaf704d18e3a94246bf7af9c64e9a107288399b060e37cb8e77b4",
+  "function_version": "v5"
+}

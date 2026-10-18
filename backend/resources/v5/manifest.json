@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "status": "APPROVED",
+  "decision": "FLOW-002",
+  "version": "v5",
+  "function_versions": [
+    "v6",
+    "v7"
+  ],
+  "approved_on": "2026-10-11",
+  "user_instruction": "解决一下这个问题，记得写进迭代文档",
+  "base_manifest_sha256": "8e0800c8c2ddaf704d18e3a94246bf7af9c64e9a107288399b060e37cb8e77b4",
+  "validation_status": "IMPLEMENTED_NOT_VERIFIED",
+  "files": [
+    {
+      "path": "contexts/INITIALIZE_CONTEXT.v6.json",
+      "bytes": 1510,
+      "sha256": "a84f1601cd4dee84fe009ca1fef7342474add5a62f94407c30f5ae5c57c76e93"
+    },
+    {
+      "path": "contexts/INITIALIZE_CONTEXT.v7.json",
+      "bytes": 1513,
+      "sha256": "d7c131dd15be47a8ad0a88a273c264b072af877c674744fd35943ad154ab3eb0"
+    },
+    {
+      "path": "functions.v5.json",
+      "bytes": 764,
+      "sha256": "100f20f326332d2a81a67f704a0c804f32a171c4e97add4bcda97bb1ca6b29ae"
+    },
+    {
+      "path": "prompts/INITIALIZE_REQUIREMENT.v6.md",
+      "bytes": 6168,
+      "sha256": "0bcc289180901ddf5b5df1fbea6d0be9039bc9bf9aadc15d3fa955a5e4ecbd06"
+    },
+    {
+      "path": "prompts/INITIALIZE_REQUIREMENT.v7.md",
+      "bytes": 6168,
+      "sha256": "c20978a04677879f38c7511321be703112f5374dc35e14ce2e3f598f6c579699"
+    }
+  ]
+}

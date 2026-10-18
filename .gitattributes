@@ -19,3 +19,6 @@ docs/design/WALL-E.V1_0.6.*.md -text
 
 # Archived source copies retain the original SHA-256 and line-number baseline.
 docs/design/originals/** -text
+
+# Classified adoption records retain their approved bytes after relocation.
+docs/decisions/adoptions/** -text

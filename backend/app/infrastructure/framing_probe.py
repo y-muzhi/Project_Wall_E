@@ -18,7 +18,7 @@ from .resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid, FUNCTION
 from .schema_transport import compact, function_schema
 from .tokenization import TokenizationGateway, TokenCounts, restore_measurement, integer, measurement_summary
 from backend.app.documents.snapshot import _time
-from backend.app.guide.context_builder import BuiltContext
+from backend.app.guide.context_builder import BuiltContext, serialize_input, restore_transport_input
 from backend.app.guide.counted_context import counting_release, release_identity, DEEPSEEK_RELEASE_SHA256
 from backend.app.shared.validation import strict_json_object
 from backend.app.shared.time import utc_milliseconds
@@ -49,7 +49,7 @@ def build_plan(inputs, *, catalog=None, profile=None):
                 if manifest[field] != {'key':key,'version':version}: raise ValueError('Case frozen protocol')
             transport = function_schema(function)
             system = function.prompt+'\n'+transport.schema_json
-            encoded = compact({key:value[key] for key in function.context_policy['field_order']})
+            encoded = serialize_input(value,function)
             texts = (system, encoded, *(compact(value[key]) for key in ('user_input','source','template','history')))
             cases.append({'function_type':function.function_type,'version':function.version,'input_json':encoded,
                 'system':system,'schema':transport.evidence,'manifest_sha256':function.manifest_sha256,
@@ -81,10 +81,12 @@ def build_plan(inputs, *, catalog=None, profile=None):
 
 def validate_plan(plan, *, catalog=None):
     try:
+        resources = ResourceCatalog() if catalog is None else catalog
         inputs = [{'function_type':case['function_type'],'version':case['version'],
-                   'input':strict_json_object(case['input_json'])} for case in plan['cases']]
+                   'input':restore_transport_input(strict_json_object(case['input_json']),
+                       resources.restore(case['function_type'], case['version']))} for case in plan['cases']]
         selected = ModelProfile.from_snapshot(plan['profile'])
-        rebuilt = build_plan(inputs,catalog=catalog,profile=selected)
+        rebuilt = build_plan(inputs,catalog=resources,profile=selected)
         if canonical_input(plan) != canonical_input(rebuilt): raise ValueError('Plan changed')
         return rebuilt
     except (ValueError,TypeError,KeyError,UnicodeError) as error:
@@ -124,8 +126,9 @@ class MemoryProbeJournal:
         self.records[name] = strict_json_object(audit_json(value, credentials=(profile.api_key,)))
 
 
-def _texts(case):
-    value = strict_json_object(case['input_json'])
+def _texts(case, *, catalog=None):
+    resources = ResourceCatalog() if catalog is None else catalog
+    value = restore_transport_input(strict_json_object(case['input_json']), resources.restore(case['function_type'], case['version']))
     return (case['system'],case['input_json'],*(compact(value[key]) for key in ('user_input','source','template','history')))
 
 
@@ -184,7 +187,7 @@ async def collect_observations(plan, profile, path, *, authorized_plan_sha256=No
     for index,case in enumerate(plan['cases'],1):
         active = None
         try:
-            texts = _texts(case)
+            texts = _texts(case, catalog=catalog)
             journal.write(f'{index:02d}-count-prepared',{'at':now(),'phase':'PREPARED','plan_sha256':digest(plan),
                 'request':{'model':profile.model_name,'text':list(texts)}},profile)
             active = f'{index:02d}-count-finished';report['count_adapter_invocations'] += 1
@@ -196,7 +199,8 @@ async def collect_observations(plan, profile, path, *, authorized_plan_sha256=No
             if any(value>budget[limit] for value,limit in zip((counts[0],counts[2],counts[3],counts[4],counts[5]),
                     ('prompt_tokens','current_user_tokens','source_tokens','template_tokens','history_tokens'))) or counts[0]+counts[1]+plan['framing_reserve_candidate']>budget['input_tokens'] or counts[0]+counts[1]+plan['framing_reserve_candidate']+budget['output_tokens']>budget['total_tokens']:
                 raise ConfigInvalid('Exact fixture exceeds unchanged candidate budgets')
-            value = strict_json_object(case['input_json'])
+            resources = ResourceCatalog() if catalog is None else catalog
+            value = restore_transport_input(strict_json_object(case['input_json']), resources.restore(case['function_type'], case['version']))
             context = BuiltContext(case['system'],case['input_json'],compact(value['read_manifest']),
                 sum(case['text_bytes'][:2]),(),())
             request = profile.request(context)

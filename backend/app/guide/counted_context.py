@@ -16,7 +16,7 @@ from backend.app.infrastructure.schema_transport import compact, function_schema
 from backend.app.infrastructure.tokenization import TokenCounts, integer, restore_measurement, measurement_summary
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.shared.validation import strict_json_object
-from .context_builder import BuiltContext, ContextLimitExceeded, assemble_input
+from .context_builder import BuiltContext, ContextLimitExceeded, assemble_input, serialize_input
 
 RELEASE_PATH = Path(__file__).resolve().parents[2] / 'resources/counting/v1/strategy.json'
 RELEASE_SHA256 = 'fbfc01bf6411111f3012e5362218ca1ae76ce6676be5089370f3a3607980b908'
@@ -25,12 +25,44 @@ DEEPSEEK_RELEASE_SHA256 = 'cdf8453b1e3a5e5ecb9a7919413a2385c45cd8c7ba22cd8b1e8a7
 PRACTICAL_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v3/strategy.json'
 PRACTICAL_RELEASE_SHA256 = '959f40c40ecff1b93bad62589a62bbd24c40fc215dce7cc6c44b863744e071ba'
 PRACTICAL_MODE = 'exact_text_empirical_framing_v1'
+EXPANDED_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v4/strategy.json'
+EXPANDED_RELEASE_SHA256 = 'a48f2244cc6407ea6d8690b4766ec1cb65913e5d6d53ff4d70793d999f84ddee'
+LAYOUT_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v5/strategy.json'
+LAYOUT_RELEASE_SHA256 = '965af55992f7a9ff648dbae672a1827a96c0dfa36d73662472f4e94d3d03e405'
+FULL_LAYOUT_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v6/strategy.json'
+FULL_LAYOUT_RELEASE_SHA256 = '95d7c8836813bc30bce88e9953b5372b6035362bb4084f90ee92ff0ee16579d1'
+PROGRESSION_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v7/strategy.json'
+PROGRESSION_RELEASE_SHA256 = '6d6c61d9238324680343b6f26fef74a4a3dde7864478bbe45dfcb8d401f84f13'
+FULL_PROGRESSION_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v8/strategy.json'
+FULL_PROGRESSION_RELEASE_SHA256 = 'f4ee45fd1af5000f670d1712a3e0c6080ad31cae99a00628e0153010cfaea5e9'
+PROJECTION_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v9/strategy.json'
+PROJECTION_RELEASE_SHA256 = '64057f4547543a8726351e30f02256984ca30d98a013b57c49f1090fe21236d1'
+FULL_PROJECTION_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v10/strategy.json'
+FULL_PROJECTION_RELEASE_SHA256 = 'acccd8979c83e486896ed49883da36bc88d93eb27f614c9421d6e1eae86fd2a1'
+PRACTICAL_RELEASES = frozenset({PRACTICAL_RELEASE_SHA256, EXPANDED_RELEASE_SHA256,
+    LAYOUT_RELEASE_SHA256, FULL_LAYOUT_RELEASE_SHA256,
+    PROGRESSION_RELEASE_SHA256, FULL_PROGRESSION_RELEASE_SHA256,
+    PROJECTION_RELEASE_SHA256, FULL_PROJECTION_RELEASE_SHA256})
 
 
 def release_identity(profile=None, *, release_sha256=None):
     if profile is not None and type(profile) is not ModelProfile:
         raise ConfigInvalid('Counting release requires a frozen model profile')
     if profile is not None and profile.profile_id == DEFAULT_PROFILE:
+        if release_sha256 == PROJECTION_RELEASE_SHA256:
+            return PROJECTION_RELEASE_PATH, PROJECTION_RELEASE_SHA256
+        if release_sha256 == FULL_PROJECTION_RELEASE_SHA256:
+            return FULL_PROJECTION_RELEASE_PATH, FULL_PROJECTION_RELEASE_SHA256
+        if release_sha256 == PROGRESSION_RELEASE_SHA256:
+            return PROGRESSION_RELEASE_PATH, PROGRESSION_RELEASE_SHA256
+        if release_sha256 == FULL_PROGRESSION_RELEASE_SHA256:
+            return FULL_PROGRESSION_RELEASE_PATH, FULL_PROGRESSION_RELEASE_SHA256
+        if release_sha256 == LAYOUT_RELEASE_SHA256:
+            return LAYOUT_RELEASE_PATH, LAYOUT_RELEASE_SHA256
+        if release_sha256 == FULL_LAYOUT_RELEASE_SHA256:
+            return FULL_LAYOUT_RELEASE_PATH, FULL_LAYOUT_RELEASE_SHA256
+        if release_sha256 == EXPANDED_RELEASE_SHA256:
+            return EXPANDED_RELEASE_PATH, EXPANDED_RELEASE_SHA256
         if release_sha256 in (None, PRACTICAL_RELEASE_SHA256):
             return PRACTICAL_RELEASE_PATH, PRACTICAL_RELEASE_SHA256
         if release_sha256 == DEEPSEEK_RELEASE_SHA256:
@@ -65,6 +97,25 @@ class CountedContext(BuiltContext):
         return strict_json_object(self.counting_json)
 
 
+def counting_digest_for_function(profile, function):
+    selected = {'v3': EXPANDED_RELEASE_SHA256, 'v4': LAYOUT_RELEASE_SHA256, 'v5': FULL_LAYOUT_RELEASE_SHA256,
+        'v6': PROGRESSION_RELEASE_SHA256, 'v7': FULL_PROGRESSION_RELEASE_SHA256,
+        'v8': PROJECTION_RELEASE_SHA256, 'v9': FULL_PROJECTION_RELEASE_SHA256}
+    return release_identity(profile, release_sha256=selected.get(function.version))[1]
+
+
+def counting_release_for_function(profile, function):
+    """Choose by frozen Function, never by request fields or mutable defaults."""
+    digest = counting_digest_for_function(profile, function)
+    return counting_release(profile, release_sha256=digest)
+
+
+def candidate_texts(value, function, system):
+    from .context_projection import projected, counting_parts
+    parts = counting_parts(value, function) if projected(function) else tuple(compact(value[key]) for key in ('user_input', 'source', 'template', 'history'))
+    return (system, serialize_input(value, function), *parts)
+
+
 async def compile_counted_candidate(context, function: FrozenFunction, profile: ModelProfile, *, counter):
     """Private candidate boundary: injected counter never grants Chat permission.
 
@@ -74,12 +125,12 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
     """
     if type(function) is not FrozenFunction or type(profile) is not ModelProfile:
         raise ConfigInvalid('Frozen Function and model are required')
-    release = counting_release(profile)
+    release = counting_release_for_function(profile, function)
     reserve = release['framing_reserve_candidate']
     if type(reserve) is not int or reserve < 0:
         raise ConfigInvalid('This model has no admitted Chat framing reserve')
     model = profile.model_name
-    digest = release_identity(profile)[1]
+    digest = counting_digest_for_function(profile, function)
     policy = function.context_policy
     if policy['budget'] != release['budget'] or policy['trim_order'] != release['trim_order']:
         raise ConfigInvalid('Counting cannot override the approved context budgets')
@@ -103,8 +154,8 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
     while True:
         # Validation and exact ordering are repeated after every whole-item cut.
         function.validate_input(value)
-        encoded = compact({key: value[key] for key in policy['field_order']})
-        texts = (system, encoded, *(compact(value[key]) for key in ('user_input', 'source', 'template', 'history')))
+        encoded = serialize_input(value, function)
+        texts = candidate_texts(value, function, system)
         result = await counter.count(profile, texts)
         hashes = tuple(hashlib.sha256(text.encode('utf-8')).hexdigest() for text in texts)
         if type(result) is not TokenCounts or result.model != model or result.text_sha256 != hashes or len(result.counts) != len(texts):
@@ -123,7 +174,7 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
                     'compatibility_proved': False, 'framing_reserve_candidate': release['framing_reserve_candidate'],
                     'schema': transport.evidence, 'counted_texts': release['counted_texts'],
                     'count_attempts': attempts, 'input_tokens_candidate': input_tokens}
-        if digest == PRACTICAL_RELEASE_SHA256:
+        if digest in PRACTICAL_RELEASES:
             evidence['admission_mode'] = PRACTICAL_MODE
         # Count calls have separate identities; audit overflow cannot silently
         # discard their history or authorize Chat. Credentials remain private.
@@ -143,9 +194,11 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
             removed_neighbors.append(identity); update_manifest(); continue
         if exceeds_input:
             raise ContextLimitExceeded('Required context exceeds its approved token budget')
+        from .context_projection import projected, make_basis
+        basis = compact(make_basis(value, function)) if projected(function) else None
         return CountedContext(system, encoded, compact(value['read_manifest']),
                               len(system.encode('utf-8'))+len(encoded.encode('utf-8')),
-                              tuple(removed_history), tuple(removed_neighbors), input_tokens, evidence_json)
+                              tuple(removed_history), tuple(removed_neighbors), input_tokens, evidence_json, basis_json=basis)
 
 
 def counting_snapshot(evidence):
@@ -165,12 +218,14 @@ def verify_counting_evidence(actual, function, *, system, input_json, manifest_j
         digest=evidence.get('release_sha256')
         release=counting_release(profile,release_sha256=digest);policy=function.context_policy
         if digest!=release_identity(profile,release_sha256=digest)[1]:raise ValueError('Counting release missing')
+        if function.version in ('v4', 'v5', 'v6', 'v7', 'v8', 'v9') and digest != counting_digest_for_function(profile, function):raise ValueError('Counting release does not belong to this layout')
+        if release.get('decision') in ('CTX-001', 'FLOW-002', 'CTX-002-A') and (release.get('function_version') != function.version or release.get('function_manifest_sha256') != function.manifest_sha256):raise ValueError('Layout counting identity differs from the actual Function')
         reserve=release['framing_reserve_candidate']
         model=MODEL_ID if profile is None else profile.model_name
         if type(reserve) is not int or reserve < 0:raise ValueError('Model-specific framing reserve is unavailable')
         if policy['budget']!=release['budget'] or policy['trim_order']!=release['trim_order']:raise ValueError('Counting policy')
         fields={'release_sha256','strategy','compatibility_proved','framing_reserve_candidate','schema','counted_texts','count_attempts','input_tokens_candidate'}
-        if digest==PRACTICAL_RELEASE_SHA256:
+        if digest in PRACTICAL_RELEASES:
             fields.add('admission_mode')
             if evidence.get('admission_mode')!=PRACTICAL_MODE:raise ValueError('Practical admission identity differs')
         if type(evidence) is not dict or set(evidence)!=fields | ({'audit_format'} if summary else set()):raise ValueError('Counting fields')
@@ -187,8 +242,8 @@ def verify_counting_evidence(actual, function, *, system, input_json, manifest_j
         if type(attempts) is not list or not attempts or len(attempts)>1+len(value['history'])+len(optional):raise ValueError('Count attempts')
         for index,attempt in enumerate(attempts):
             if type(attempt) is not dict or set(attempt)!={'attempt_no','removed_history_ids','removed_neighbor_ids','measurement'} or type(attempt['attempt_no']) is not int or attempt['attempt_no']!=index+1 or compact(attempt['removed_history_ids'])!=compact(removed_history) or compact(attempt['removed_neighbor_ids'])!=compact(removed_neighbors):raise ValueError('Count cut sequence')
-            encoded=compact({key:value[key] for key in policy['field_order']})
-            texts=(system,encoded,*(compact(value[key]) for key in ('user_input','source','template','history')))
+            encoded=serialize_input(value,function)
+            texts=candidate_texts(value,function,system)
             counts=restore_measurement(attempt['measurement'],texts,raw_required=not summary,expected_model=model).counts
             if any(count>budget[limit] for count,limit in zip((counts[0],counts[2],counts[3],counts[4]),('prompt_tokens','current_user_tokens','source_tokens','template_tokens'))):raise ValueError('Required count overflow')
             total=counts[0]+counts[1]+reserve

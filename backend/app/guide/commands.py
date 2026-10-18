@@ -88,7 +88,7 @@ def create_guide_run(executor: Idempotency, payload: object, *, catalog=None, cl
         try:
             resources = catalog if catalog is not None else ResourceCatalog()
             _review_source(connection, resources, request)
-            function = resources.freeze(request.action_type, request.source_type)
+            function = resources.freeze(request.action_type, request.source_type, template_key=root['template_key'], template_version=root['template_version'])
             template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
         except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
         sources = DocumentSources(connection, root['id'], resources)
@@ -185,7 +185,7 @@ def submit_card_responses(executor: Idempotency, payload: object, *, catalog=Non
             current = current_at_version(connection, root['id'], messages.current_identity(root['id'])[0]['content_version'])
             if current['updated_at'] > at: raise ValueError('Answer cannot precede actual document activity')
             try:
-                function = resources.freeze('INITIALIZE', 'USER_INSTRUCTION')
+                function = resources.freeze('INITIALIZE', 'USER_INSTRUCTION', template_key=root['template_key'], template_version=root['template_version'])
                 template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
             except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
             sources = DocumentSources(connection, root['id'], resources)
@@ -202,6 +202,13 @@ def submit_card_responses(executor: Idempotency, payload: object, *, catalog=Non
             function.validate_allowed_targets({'schema_version': 1, 'targets': scope.targets_json})
             run = guides.accept(guide_id, root, response, function, scope, function.validate_read_manifest(manifest), at, trigger_type='CARD_RESPONSE')
             root = requirements.occupy_guide(root['id'], guide_id, at)
+            from .confirmed_response import complete_confirmed_response
+            completed = complete_confirmed_response(connection, cards=cards, answers=answers,
+                snapshot=snapshot, scope=scope, template=template, sources=sources, current=current,
+                root=root, run=run, at=at, catalog=resources)
+            if completed is not None:
+                run = completed
+                root = requirements.get(root['id'])
         else:
             _owned_guide(connection, root, source)
             run = guides.continue_run(guide_id, response, at, trigger_type='CARD_RESPONSE')
@@ -243,7 +250,7 @@ def modify_from_comment(executor: Idempotency, payload: object, *, catalog=None,
         reference = {'block_id': comment['block_id']} | ({} if kind == 'BLOCK' else comment['anchor_ref'])
         scope = resolve_scope(snapshot, 'MODIFY', kind, reference)
         try:
-            function = resources.freeze('MODIFY', 'COMMENT')
+            function = resources.freeze('MODIFY', 'COMMENT', template_key=root['template_key'], template_version=root['template_version'])
             template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
         except (ConfigInvalid, TemplateInvalid): raise Rejected('CONFIG_INVALID') from None
         guide_id, message_id = entity_id(connection, EntityKind.GUIDE_RUN), entity_id(connection, EntityKind.MESSAGE)
@@ -281,7 +288,7 @@ def retry_guide_run(executor: Idempotency, payload: object, *, catalog=None, clo
         if message is None or message['requirement_id'] != root['id'] or message['role'] != 'USER' or message['message_type'] not in ('TEXT', 'CARD_RESPONSE'): raise Rejected('SOURCE_INVALID')
         try:
             resources = catalog if catalog is not None else ResourceCatalog()
-            function = resources.freeze(previous['action_type'], previous['source_type'])
+            function = resources.freeze(previous['action_type'], previous['source_type'], template_key=root['template_key'], template_version=root['template_version'])
             template = resources.template(root['requirement_type'], root['template_key'], root['template_version'])
             projected = project_message(messages, root, message, function, resources)
             if message['message_type'] == 'CARD_RESPONSE' and projected['structured_content'] is None: raise Rejected('SOURCE_INVALID')

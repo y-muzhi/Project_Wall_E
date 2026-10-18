@@ -3,7 +3,7 @@
 This release cannot prove Provider token compatibility. The conservative gate
 is enforced, including the complete System schema; it never calls a Provider.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 
 from backend.app.infrastructure.resources import FrozenFunction, ProtocolInvalid
@@ -31,6 +31,7 @@ class BuiltContext:
     input_bytes: int
     removed_history_ids: tuple[int, ...]
     removed_neighbor_ids: tuple[int, ...]
+    basis_json: str | None = field(default=None, repr=False, kw_only=True)
 
     @property
     def input(self):
@@ -62,6 +63,84 @@ def assemble_input(context, function: FrozenFunction):
         'user_input': {'message_id': user['id'], 'content': user['content'], 'formal_responses': user['structured_content']},
         'history': [{key: item[key] for key in ('id', 'sequence_no', 'role', 'message_type', 'content')} | {'formal_responses': item['structured_content']} for item in context['history']],
         'source': context['source'], 'read_manifest': manifest}
+    if function.context_policy.get('transport_layout') == 'context_projection_v1':
+        from .context_projection import document_sections
+        value['section_lookup'] = document_sections(parsed, metadata, set(scope['read_block_ids']))
+    return function.validate_input(value)
+
+
+def transport_input(value, function: FrozenFunction):
+    """Serialize one validated snapshot according to its frozen transport.
+
+    Old protocols retain their exact field order. New content arrays and their
+    metadata arrays are derived together, after each whole-item trim. Phase A
+    instead retains omitted facts in a separate private basis.
+    """
+    policy = function.context_policy
+    if policy.get('transport_layout') == 'context_projection_v1':
+        from .context_projection import project
+        function.validate_input(value)
+        wire = project(value)
+        function.validate_transport_input(wire)
+        return wire
+    if policy.get('transport_layout') is None:
+        return {key: value[key] for key in policy['field_order']}
+    if policy['transport_layout'] != 'stable_prefix_v1' or function.transport_input_schema_json is None:
+        raise ValueError('Unsupported frozen transport layout')
+    function.validate_input(value)
+    document, template, user = value['current_document'], value['template'], value['user_input']
+    wire = {key: value[key] for key in ('schema_version', 'function_type', 'action_type', 'source_type')}
+    wire.update({
+        'template': {key: template[key] for key in ('template_key', 'template_version', 'markdown_content')},
+        'current_document': {'read_blocks': [
+            {key: block[key] for key in ('markdown_content', 'plain_text', 'heading_level')}
+            for block in document['read_blocks']]},
+        'history': [{key: message[key] for key in ('role', 'message_type', 'content', 'formal_responses')}
+            for message in value['history']],
+        'user_input': {key: user[key] for key in ('content', 'formal_responses')},
+        'source': value['source'],
+        'request_metadata': {
+            'requirement': value['requirement'],
+            'current_document': {key: document[key] for key in ('id', 'content_version')},
+            'locked_heading_block_ids': template['locked_heading_block_ids'],
+            'read_block_metadata': [block['metadata'] for block in document['read_blocks']],
+            'history_message_refs': [{key: message[key] for key in ('id', 'sequence_no')} for message in value['history']],
+            'user_message_id': user['message_id'],
+            'scope': value['scope'], 'allowed_targets': value['allowed_targets'],
+            'read_manifest': value['read_manifest']}})
+    function.validate_transport_input(wire)
+    return {key: wire[key] for key in policy['field_order']}
+
+
+def serialize_input(value, function: FrozenFunction) -> str:
+    return _serialize(transport_input(value, function))
+
+
+def restore_transport_input(wire, function: FrozenFunction, *, basis=None):
+    """Restore canonical facts for all existing authorization/evidence gates."""
+    if function.context_policy.get('transport_layout') == 'context_projection_v1':
+        from .context_projection import restore
+        return restore(wire, function, basis)
+    if function.context_policy.get('transport_layout') is None:
+        return function.validate_input(wire)
+    if function.context_policy['transport_layout'] != 'stable_prefix_v1' or function.transport_input_schema_json is None:
+        raise ValueError('Unsupported frozen transport layout')
+    wire = function.validate_transport_input(wire)
+    metadata = wire['request_metadata']
+    blocks, block_metadata = wire['current_document']['read_blocks'], metadata['read_block_metadata']
+    history, refs = wire['history'], metadata['history_message_refs']
+    if len(blocks) != len(block_metadata) or len(history) != len(refs):
+        raise ValueError('Transport content and identity arrays must pair exactly')
+    value = {key: wire[key] for key in ('schema_version', 'function_type', 'action_type', 'source_type')}
+    value.update({
+        'requirement': metadata['requirement'],
+        'current_document': {**metadata['current_document'], 'read_blocks': [
+            {**block, 'metadata': block_metadata[index]} for index, block in enumerate(blocks)]},
+        'template': {**wire['template'], 'locked_heading_block_ids': metadata['locked_heading_block_ids']},
+        'scope': metadata['scope'], 'allowed_targets': metadata['allowed_targets'],
+        'user_input': {**wire['user_input'], 'message_id': metadata['user_message_id']},
+        'history': [{**message, **refs[index]} for index, message in enumerate(history)],
+        'source': wire['source'], 'read_manifest': metadata['read_manifest']})
     return function.validate_input(value)
 
 
@@ -90,7 +169,7 @@ def build_context(context, function: FrozenFunction) -> BuiltContext:
         value['read_manifest']['message_ids'] = [identity for identity in context['read_manifest']['message_ids'] if identity in ids]
         value['read_manifest']['block_ids'] = [item['metadata']['block_id'] for item in value['current_document']['read_blocks']]
     def size():
-        return len(system.encode('utf-8'))+_bytes(value)
+        return len(system.encode('utf-8'))+len(serialize_input(value, function).encode('utf-8'))
     while value['history'] and (_bytes(value['history']) > budget['history_tokens'] or size() > budget['input_tokens']):
         removed_history.append(value['history'].pop(0)['id']); update_manifest()
     while optional and size() > budget['input_tokens']:
@@ -100,5 +179,8 @@ def build_context(context, function: FrozenFunction) -> BuiltContext:
     if size() > budget['input_tokens'] or size()+budget['output_tokens'] > budget['total_tokens']:
         raise ContextLimitExceeded('Required context exceeds its approved conservative budget')
     function.validate_input(value)
-    ordered = {field: value[field] for field in policy['field_order']}
-    return BuiltContext(system, _serialize(ordered), _serialize(value['read_manifest']), size(), tuple(removed_history), tuple(removed_neighbors))
+    basis = None
+    if policy.get('transport_layout') == 'context_projection_v1':
+        from .context_projection import make_basis
+        basis = _serialize(make_basis(value, function))
+    return BuiltContext(system, serialize_input(value, function), _serialize(value['read_manifest']), size(), tuple(removed_history), tuple(removed_neighbors), basis_json=basis)

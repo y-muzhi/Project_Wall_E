@@ -1,6 +1,8 @@
 # 前端实施边界
 
-已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。实际根入口 `index.html` / `src/main.tsx` / `application` 已连接工作台、新建需求和完整详情，所有业务读取及写入使用正式 API。`npm run build` 进行 TypeScript 检查及实际 Vite 生产构建；正式运行及开发模式见 [运行说明](../docs/运行说明.md)。根页面浏览器验证使用 `node tools/verify-product-browser.mjs`，与下述各历史诊断探针分开记录。
+2026-10-18收口状态：当前前端规格sync12；请求详情移除重复上下文概览，保留请求上下文与Token明细，采用正式系统文案。见[版本收口](../docs/project/V1_0.6版本收口.md)。最近UI修订仅有静态与Vite模块读取检查，生产dist本轮未重建；下文均为历史实施及专项范围，不能据此声明当前版本全量验收通过。
+
+已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。实际根入口 `index.html` / `src/main.tsx` / `application` 已连接工作台、新建需求和完整详情，所有业务读取及写入使用正式 API。`npm run build` 进行 TypeScript 检查及实际 Vite 生产构建；正式运行及开发模式见 [运行说明](../docs/operations/运行说明.md)。根页面浏览器验证使用 `node tools/verify-product-browser.mjs`，与下述各历史诊断探针分开记录。
 
 在项目根运行：
 

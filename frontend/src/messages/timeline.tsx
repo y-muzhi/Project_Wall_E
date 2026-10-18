@@ -5,6 +5,7 @@ import {conversationTime} from '../shared/time.ts';
 import {Icon} from '../shared/icon.tsx';
 import type {RequirementMessages} from './read.ts';
 import {MessageContent} from './content.tsx';
+import {ModelReturnContent} from './model-return.tsx';
 import type {MessageMarkdownRenderer} from './content.tsx';
 import {captureMessageAnchor as anchor,restoreMessageAnchor as restore} from './scroll-position.ts';
 import type {MessageAnchor as Anchor} from './scroll-position.ts';
@@ -16,7 +17,7 @@ const sameReply=(left:MessageReply|undefined,right:MessageReply|undefined)=>left
  * Valid cards use their real owner's question view and readable error fallback.
  * Fetching older windows preserves the native visible message, including a
  * user scroll that happens while the request is pending. */
-export function MessageTimeline({messages,structured,renderMarkdown,reply,scrollPort,scrollContent}:Readonly<{scrollPort?:HTMLElement|null;scrollContent?:HTMLElement|null;messages:RequirementMessages;structured?:(message:Message)=>ReactNode;renderMarkdown?:MessageMarkdownRenderer;reply?:MessageReply}>){
+export function MessageTimeline({messages,structured,requestRecord,renderMarkdown,reply,scrollPort,scrollContent}:Readonly<{scrollPort?:HTMLElement|null;scrollContent?:HTMLElement|null;messages:RequirementMessages;structured?:(message:Message)=>ReactNode;requestRecord?:(message:Message)=>ReactNode;renderMarkdown?:MessageMarkdownRenderer;reply?:MessageReply}>){
  const state=useSyncExternalStore(messages.subscribe,messages.getSnapshot),root=useRef<HTMLDivElement>(null),content=useRef<HTMLDivElement>(null),position=useRef<Anchor|null>(null),stable=useRef<Anchor|null>(null),seen=useRef(0),[unread,setUnread]=useState(false);
  const currentReply=useRef(reply),replyGeneration=useRef(0);currentReply.current=reply;
  const [replySelection,setReplySelection]=useState<ReplySelection|null>(null),selectedReply=replySelection&&sameReply(replySelection.target,reply)?replySelection:null;
@@ -87,11 +88,12 @@ export function MessageTimeline({messages,structured,renderMarkdown,reply,scroll
    {state.items?.map(message=><article key={message.id} tabIndex={-1} data-message-id={message.id} data-message-sequence={message.sequence_no} className={'conversation-message '+(message.role==='USER'?'from-user':'from-assistant')+(selectedReply?.phase==='LOCATED'&&selectedReply.target.message_id===message.id?' is-reply-target':'')}>
     {message.role==='USER'?<span className="sr-only">用户消息</span>:<header><span className="ai-message-avatar" role="img" aria-label="AI 助手"><Icon name="robot"/></span></header>}
     <div className="message-body">
-    {message.message_type==='TEXT'?<MessageContent content={message.content} {...(renderMarkdown?{render:renderMarkdown}:{})}/>:
+    {message.message_type==='TEXT'?(message.role==='ASSISTANT'?<ModelReturnContent content={message.content} {...(renderMarkdown?{render:renderMarkdown}:{})}/>:<MessageContent content={message.content} {...(renderMarkdown?{render:renderMarkdown}:{})}/>):
      (message.message_type!=='INTERACTION_CARDS'||message.structured_content===null||message.card_state===null||!structured)&&<p className="message-content">{message.content}</p>}
     {message.message_type==='INTERACTION_CARDS'&&message.structured_content===null&&<p role="status">历史问题结构无法读取，保留可读内容。</p>}
     {message.structured_content!==null&&structured?.(message)}
     </div>
+    {requestRecord?.(message)}
     <footer className="message-time"><time dateTime={message.created_at}>{conversationTime(message.created_at)}</time></footer>
    </article>)}
    </div>

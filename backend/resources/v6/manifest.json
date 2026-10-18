@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "status": "APPROVED",
+  "decision": "TPL-003",
+  "version": "v6",
+  "approved_on": "2026-10-18",
+  "base_manifest_sha256": "3d3d155fb4523d9491ba8a8c41768a95d96368080d0e2854890a27c9c1794d14",
+  "template_source": {
+    "path": "docs/templates/统一需求规格说明_完整模板_重构版.md",
+    "sha256": "db8274fd525d5da109aa46890bd6fd70f48f4941d812d34f689c4e6264eae235",
+    "bytes": 85914
+  },
+  "heading_change": {
+    "document_title": "PRESERVE_H1",
+    "body_heading_delta": 1
+  },
+  "files": [
+    {
+      "path": "templates/catalog.v3.json",
+      "bytes": 7098,
+      "sha256": "53e690c4cd753e2a1b6d2f470829da82cb474e13503b48be32f586a002707a3c"
+    },
+    {
+      "path": "templates/new-requirement.v3.json",
+      "bytes": 4308,
+      "sha256": "ba9b976811d46067a21c501f487ef8d79e84807669f3dbc710ad8c4e944c07d2"
+    },
+    {
+      "path": "templates/new-requirement.v3.md",
+      "bytes": 85914,
+      "sha256": "db8274fd525d5da109aa46890bd6fd70f48f4941d812d34f689c4e6264eae235"
+    }
+  ]
+}

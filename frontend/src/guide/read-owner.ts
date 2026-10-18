@@ -72,6 +72,8 @@ export class RequirementAiRead{
    do{this.dirty=false;if(!alive())throw Error('AI view is hidden or retired');const actual=await this.readActual();if(!alive())throw Error('AI read was hidden');
     if(actual.requirement.id!==this.value.detail.requirement.id)throw TypeError('Owned actual detail required');await this.adoptActual(actual);if(!alive())throw Error('AI adoption was hidden');this.adopt(actual);
     const results=await Promise.all([this.messages.refresh(),this.history.refresh()]);if(!alive())throw Error('AI resources were hidden');if(results.some(ok=>!ok))throw Error('会话或运行记录暂时无法读取，已确认内容仍保留');
+    const latest=this.history.getSnapshot().confirmed?.items[0];
+    if(this.value.selected===null&&latest?.status==='FAILED')this.select(latest,'ACCEPTED');
    }while(this.dirty);this.publish({error:null});
   }).catch(error=>{if(alive())this.publish({error:error instanceof Error?error.message:'实际AI状态暂时无法读取，已确认内容仍保留'});throw error;}).finally(()=>{if(this.pending===pending)this.pending=undefined;this.publish({refreshing:false});if(!this.closed&&this.value.visible&&generation!==this.visibilityGeneration)void this.refresh().catch(()=>undefined);});
   this.pending=pending;this.pendingGeneration=generation;this.publish({refreshing:true});return pending;

@@ -52,7 +52,9 @@ test('requirement occupancy/completion is exact and read never repairs malformed
     r => r.document_work_state = 'GUIDE_ACTIVE', r => r.active_operation_id = 2, r => r.completed_at = at, r => r.status = 'COMPLETED']);
 });
 test('guide functions, safe errors, independent final-result version and exact history are validated', () => {
-  assert.deepEqual(models.guideRun(run()), run());
+  assert.deepEqual(models.guideRun(run()), {...run(),returned_responses:[]});
+  const returned={...run(),returned_responses:[{llm_use_id:13,call_no:1,attempt_no:1,content:'截断返回，不是 JSON'}]};
+  assert.deepEqual(models.guideRun(returned).returned_responses,returned.returned_responses);
   const completed = run(); Object.assign(completed, { status: 'COMPLETED', current_step: 'FINISHED', ended_at: at,
     final_result: { summary: '完成', assistant_message_id: 10, current_document_version: 7, suggestion_batch_id: null } });
   assert.equal(models.guideRun(completed).final_result.current_document_version, 7);

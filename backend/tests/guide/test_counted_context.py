@@ -14,7 +14,7 @@ from backend.app.guide.counted_context import compile_counted_candidate, countin
 from backend.app.infrastructure.audit_data import AuditCapacityExceeded
 from backend.app.infrastructure.message_repository import MessageRepository
 from backend.app.infrastructure.model_profile import ModelProfile, MODEL_ID
-from backend.app.infrastructure.resources import ConfigInvalid, ResourceCatalog
+from backend.app.infrastructure.resources import ConfigInvalid, ResourceCatalog, DEFAULT_ROOT, V2_ROOT
 from backend.app.infrastructure.schema_transport import compact, function_schema
 from backend.app.infrastructure.tokenization import TokenCounts
 from backend.tests.guide import test_model_context as contexts
@@ -71,7 +71,7 @@ class CountedContextTests(unittest.IsolatedAsyncioTestCase):
         result.input['read_manifest']['block_ids'].clear(); self.assertEqual(result.input['read_manifest'], data['read_manifest'])
 
     async def test_v2_real_run_uses_its_frozen_original_protocol_and_same_candidate(self):
-        h=self.helper; h.catalog=ResourceCatalog(); created=h.create(idempotency_key='00000000-0000-4000-8000-000000000991')['data']
+        h=self.helper; h.catalog=ResourceCatalog(DEFAULT_ROOT,versioned_root=V2_ROOT); created=h.create(idempotency_key='00000000-0000-4000-8000-000000000991')['data']
         data=h.read(created['guide_run_id'])['data']; function=h.catalog.freeze('INITIALIZE','USER_INSTRUCTION')
         self.assertEqual(function.version,'v2'); result=await self.compile(data,function)
         self.assertEqual(result.input['read_manifest']['prompt']['version'],'v2')

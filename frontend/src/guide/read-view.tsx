@@ -10,6 +10,8 @@ import type {MessageMarkdownRenderer} from '../messages/content.tsx';
 import type {RequirementAiRead} from './read-owner.ts';
 import type {RequirementRunHistory} from './history.ts';
 import {RecordList} from '../shared/record-list.tsx';
+import {ModelReturnContent} from '../messages/model-return.tsx';
+import {RequestCallRecord} from './model-call-view.tsx';
 export const statuses={RUNNING:'运行中',WAITING_USER:'等待回复',COMPLETED:'已完成',FAILED:'失败',CANCELLED:'已取消'} as const;
 export const actions={INITIALIZE:'初始化',ASK:'提问',REVIEW:'检查',MODIFY:'修改'} as const;
 const steps={PREPARING:'正在准备',CALLING_MODEL:'正在调用模型',VALIDATING:'正在校验结果',PERSISTING:'正在提交结果',WAITING_USER:'等待补充信息',FINISHED:'运行结束'} as const;
@@ -30,19 +32,27 @@ export function RunRecordSummary({run}:Readonly<{run:GuideRun}>){
   {run.status==='FAILED'&&<p role="alert" className="inline-error">{failure(run)}</p>}{run.status==='CANCELLED'&&<p>本次运行已取消。</p>}
   {run.final_result&&<details className="run-result"><summary>查看运行结果摘要</summary><p className="run-summary">{run.final_result.summary}</p></details>}</>;
 }
+export function ReturnedResponses({run}:Readonly<{run:GuideRun}>){
+ return <>{run.returned_responses.map(response=><section key={response.llm_use_id} className="returned-model-response" aria-label={`模型返回 ${response.call_no}.${response.attempt_no}`}>
+  <p><strong>模型返回 · 调用 {response.call_no} · 第 {response.attempt_no} 次</strong></p>
+  <ModelReturnContent content={response.content}/>
+ </section>)}</>;
+}
 /** Read surfaces are independent of command/card/batch owners. A failed
  * connection keeps the last actual status and never produces FAILED. */
 export function AiReadPanel({owner,structured,commands,renderMarkdown,scrollPort,scrollContent}:Readonly<{scrollPort?:HTMLElement|null;scrollContent?:HTMLElement|null;owner:RequirementAiRead;structured?:(message:Message)=>ReactNode;commands?:(run:GuideRun)=>ReactNode;renderMarkdown?:MessageMarkdownRenderer}>){
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),run=state.run;
+ const messages=useSyncExternalStore(owner.messages.subscribe,owner.messages.getSnapshot);
  return <section className="ai-read-panel" aria-label="AI 对话">
   <header className="read-section-heading conversation-read-status"><span className="sr-only">会话状态</span><span className="read-status" role="status">{state.refreshing?'正在同步会话状态…':''}</span></header>
   {state.error&&<p role="alert" className="inline-error">{state.error} <button className="ui-button" type="button" disabled={!state.visible||state.refreshing} onClick={()=>void owner.refresh().catch(()=>undefined)}>重试读取 AI 状态</button></p>}
   {state.selected!==null&&<section aria-label="当前查看的 AI 运行" className="run-status" aria-busy={state.querying}>
    <div className="run-status-context"><strong>{state.selection==='HISTORY'?'历史运行详情':'当前任务'}</strong><span>#{state.selected}</span></div>
    {!run&&<p role="status">正在读取运行状态…</p>}
-   {run&&<><RunRecordSummary run={run}/>{commands?.(run)}</>}
+   {run&&<><RunRecordSummary run={run}/>{commands?.(run)}{!messages.items?.some(message=>message.role==='USER'&&message.guide_run_id===run.id)&&<RequestCallRecord runId={run.id}/>}</>}
    {state.connection_error&&<p role="alert" className="inline-error">运行连接异常，保留最后确认状态。<button className="ui-button" type="button" disabled={!state.visible||state.querying} onClick={()=>owner.readRun()}>重读运行</button></p>}
   </section>}
-  <MessageTimeline {...(scrollPort!==undefined?{scrollPort}:{})} {...(scrollContent!==undefined?{scrollContent}:{})} messages={owner.messages} {...(run?.latest_assistant_message_id?{reply:{message_id:run.latest_assistant_message_id,guide_run_id:run.id}}:{})} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/>
+  <MessageTimeline {...(scrollPort!==undefined?{scrollPort}:{})} {...(scrollContent!==undefined?{scrollContent}:{})} messages={owner.messages} requestRecord={message=>message.role==='USER'&&message.guide_run_id!==null?<RequestCallRecord runId={message.guide_run_id} messageId={message.id}/>:null} {...(run?.latest_assistant_message_id?{reply:{message_id:run.latest_assistant_message_id,guide_run_id:run.id}}:{})} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/>
+  {run?.status==='FAILED'&&<section role="status" className="run-response-notice"><p className="inline-error">本次运行失败：{failure(run)}</p><ReturnedResponses run={run}/></section>}
  </section>;
 }

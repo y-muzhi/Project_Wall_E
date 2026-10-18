@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "status": "APPROVED",
+  "decision": "TPL-001",
+  "version": "v3",
+  "base_manifest_sha256": "b30923bccfa873fce9fa7e45c74bae399e0051d6ca873b21346677f4cd36d905",
+  "template_source": {
+    "path": "docs/templates/统一需求规格说明_完整模板_重构版.md",
+    "sha256": "235d0d986817f06555e36358db50629ebf5a66abab968397bde7a765bdbaf168",
+    "bytes": 85865
+  },
+  "budget": {
+    "total_tokens": 139264,
+    "input_tokens": 131072,
+    "output_tokens": 8192,
+    "prompt_tokens": 4096,
+    "current_user_tokens": 4096,
+    "source_tokens": 4096,
+    "history_tokens": 2048,
+    "template_tokens": 65536,
+    "counting": "conservative_utf8_bytes_pending_provider_proof"
+  },
+  "files": [
+    {
+      "path": "contexts/ASK_CONTEXT.v3.json",
+      "sha256": "e34407d8d6adc30f95975f365706fb73eeabefe1cea19b03acaa6ab46535171e",
+      "bytes": 1386
+    },
+    {
+      "path": "contexts/INITIALIZE_CONTEXT.v3.json",
+      "sha256": "03f80813e9913051617fb0bbf13e406ee3d1428ff27215f4158a6170ef39f47d",
+      "bytes": 1415
+    },
+    {
+      "path": "contexts/MODIFY_CONTEXT.v3.json",
+      "sha256": "21320dc17fdbaef0ada8c566c59173cf92163cf45e96e121168f0f66440aff1c",
+      "bytes": 1395
+    },
+    {
+      "path": "contexts/MODIFY_FROM_COMMENT_CONTEXT.v3.json",
+      "sha256": "46865b6714982426020e4f091e0e42cc5bd59ed250d0b344a9fdbf04476bee40",
+      "bytes": 1401
+    },
+    {
+      "path": "contexts/MODIFY_FROM_REVIEW_CONTEXT.v3.json",
+      "sha256": "7f7197f8ef22218d5e45e24e08cc4d5e16fc07ba32d128bac4d3272fc1c848b2",
+      "bytes": 1404
+    },
+    {
+      "path": "contexts/REVIEW_CONTEXT.v3.json",
+      "sha256": "300291ef09f2a842a26729defada54a36e0ff3fa1e6a5f9007058f3f86e13de2",
+      "bytes": 1395
+    },
+    {
+      "path": "functions.v3.json",
+      "sha256": "e85dae19048f43567a34e3e8603cec986e4db801278de6e6858ac98343826ea2",
+      "bytes": 2064
+    },
+    {
+      "path": "prompts/ANSWER_REQUIREMENT.v3.md",
+      "sha256": "4b9beea7d42704ceaa1688c7af555cecb89198be37e00352f816d81fb6963d74",
+      "bytes": 3345
+    },
+    {
+      "path": "prompts/INITIALIZE_REQUIREMENT.v3.md",
+      "sha256": "13980d446ca732487795f3c5bfb6ab60a9abdff97efcbd8ee52f2858db54f7c5",
+      "bytes": 5730
+    },
+    {
+      "path": "prompts/MODIFY_FROM_COMMENT.v3.md",
+      "sha256": "9ff2fb0922e5e2bd1978b4d5f82b781ebaf3c08c17c7f56c88162d1d7bf092dd",
+      "bytes": 3406
+    },
+    {
+      "path": "prompts/MODIFY_FROM_REVIEW.v3.md",
+      "sha256": "91f4fd44dd9f75c56e1698af03f051b29b4c20ea2a04c0b271e638d370bd725e",
+      "bytes": 3389
+    },
+    {
+      "path": "prompts/MODIFY_REQUIREMENT.v3.md",
+      "sha256": "58181ff9786940c8e5f9a821f861e4736605b26f652c7577181596369def2b4d",
+      "bytes": 3406
+    },
+    {
+      "path": "prompts/REVIEW_REQUIREMENT.v3.md",
+      "sha256": "d9479f92b23a2d5eb22e908a265eacdebfe6523d0ddfb5f1b3df3ab9db61dcfa",
+      "bytes": 3384
+    },
+    {
+      "path": "templates/catalog.v2.json",
+      "sha256": "4a7e6ef23f49bfdfaffbbf0256955775c114d41bbc7f1105124da6f212f6e8c1",
+      "bytes": 7098
+    },
+    {
+      "path": "templates/new-requirement.v2.json",
+      "sha256": "8adc051030d22389e13a0ba2a2c7be92435ad3cd02b66f0364a12b1ab5a871af",
+      "bytes": 4308
+    },
+    {
+      "path": "templates/new-requirement.v2.md",
+      "sha256": "235d0d986817f06555e36358db50629ebf5a66abab968397bde7a765bdbaf168",
+      "bytes": 85865
+    }
+  ]
+}

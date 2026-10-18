@@ -8,6 +8,7 @@ import type { ApiSuccess, JsonObject } from './client.ts';
 import { array, checked, shape, id, require, distinct } from './decoding.ts';
 import type { Decoder } from './decoding.ts';
 import * as models from './models.ts';
+import {modelCalls,modelCallDetail} from './model-calls.ts';
 
 export type ApiAction<T> = Readonly<{ submit: (signal?: AbortSignal) => Promise<ApiSuccess<T>> }>;
 export type RequirementFilters = Readonly<{ keyword?: string; status?: readonly (typeof models.requirementStatuses[number])[];
@@ -81,6 +82,8 @@ export class WalleApi {
   listComments(identity: number, page = 1, signal?: AbortSignal) { return this.page(target('requirements', identity, '/comments'), owned(models.commentItem, identity), [['page', String(page)]], page, signal); }
   getComment(identity: number, signal?: AbortSignal) { return this.single(target('comments', identity), identified(models.comment, identity), signal); }
   getGuideRun(identity: number, signal?: AbortSignal) { return this.single(target('guide-runs', identity), identified(models.guideRun, identity), signal); }
+  listModelCalls(identity:number,signal?:AbortSignal){return this.single(target('guide-runs',identity,'/model-calls'),identified(modelCalls,identity),signal);}
+  getModelCall(identity:number,signal?:AbortSignal){return this.single(target('model-calls',identity),checked(modelCallDetail,value=>require(value.call.id===identity)),signal);}
   listGuideRuns(identity: number, filters: GuideFilters = {}, signal?: AbortSignal) { return this.page(target('requirements', identity, '/guide-runs'), owned(models.guideSummary, identity), query(filters), filters.page ?? 1, signal); }
   getBatch(identity: number, signal?: AbortSignal) { return this.single(target('suggestion-batches', identity), identified(models.batch, identity), signal); }
   getCommentIndex(identity: number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/comment-index'), owned(models.commentIndex, identity), signal); }
@@ -163,7 +166,7 @@ export class WalleApi {
     const answers = models.responses(original);
     return checked(shape({ response_message: models.message, guide_run: models.guideAccepted,
       card_state: value => { require(value === 'ANSWERED'); return 'ANSWERED' as const; } }), value => {
-      require(value.guide_run.status === 'RUNNING' && value.guide_run.current_step === 'PREPARING' && value.response_message.message_type === 'CARD_RESPONSE' && value.response_message.reply_to_message_id === identity);
+      require((value.guide_run.status === 'RUNNING' && value.guide_run.current_step === 'PREPARING' || value.guide_run.status === 'COMPLETED' && value.guide_run.current_step === 'FINISHED') && value.response_message.message_type === 'CARD_RESPONSE' && value.response_message.reply_to_message_id === identity);
       require(value.response_message.guide_run_id === value.guide_run.id && value.response_message.requirement_id === value.guide_run.requirement_id);
       const formal = models.responses(value.response_message.structured_content);
       require(JSON.stringify(formal.responses.map(item => [item.card_key, item.selected_option_keys, item.skipped])) === JSON.stringify(answers.responses.map(item => [item.card_key, item.selected_option_keys, item.skipped])));

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "decision": "FLOW-002",
+  "status": "ENABLED_BY_USER_FLOW_APPROVAL",
+  "approved_on": "2026-10-11",
+  "user_instruction": "解决一下这个问题，记得写进迭代文档",
+  "base_admission_sha256": "42c894b46677f366813f696a95e4e9793329e74a6d9ed33fed46aedbefe1279a",
+  "release_sha256": "6d6c61d9238324680343b6f26fef74a4a3dde7864478bbe45dfcb8d401f84f13",
+  "function_manifest_sha256": "c0ff704851851481ad3870aa548510cae8fe9ee0afbf36f3be40f4506a15bef8",
+  "function_version": "v6",
+  "admission_mode": "exact_text_empirical_framing_v1",
+  "model": "deepseek-v4-1-flash-260910",
+  "provider_compatibility_proved": false,
+  "validation_status": "IMPLEMENTED_NOT_VERIFIED",
+  "paid_observation_authorized": false
+}

@@ -10,7 +10,7 @@ from backend.app.guide import commands
 from backend.app.guide.context_builder import assemble_input
 from backend.app.guide.queries import get_model_context
 from backend.app.infrastructure.identifiers import EntityKind, entity_id, message_sequence
-from backend.app.infrastructure.resources import ResourceCatalog
+from backend.app.infrastructure.resources import ResourceCatalog, DEFAULT_ROOT, V2_ROOT
 from backend.tests.guide.test_model_context import ModelContextTests, CommentModelContextTests
 from backend.tests.requirements import test_create_requirement as creation
 
@@ -39,7 +39,7 @@ def cases():
         helper.assertEqual(value['code'],'GUIDE_ACCEPTED',value)
         return value['data']['guide_run']['id']
     try:
-        helper.catalog=ResourceCatalog()
+        helper.catalog=ResourceCatalog(DEFAULT_ROOT,versioned_root=V2_ROOT)
         helper.created=helper.create(idempotency_key='00000000-0000-4000-8000-000000000991',initial_idea=TEXT)['data']
         helper.req=helper.created['requirement']['id'];helper.run=helper.created['guide_run_id']
         capture(helper.run,'INITIALIZE');helper.activate()
@@ -63,7 +63,7 @@ def cases():
         if not helper.doCleanups():raise RuntimeError('Native framing fixture cleanup failed')
     comment=CommentModelContextTests();comment.setUp()
     try:
-        comment.catalog=ResourceCatalog();comment.assertEqual(comment.make_comment(content=TEXT)['code'],'COMMENT_CREATED')
+        comment.catalog=ResourceCatalog(DEFAULT_ROOT,versioned_root=V2_ROOT);comment.assertEqual(comment.make_comment(content=TEXT)['code'],'COMMENT_CREATED')
         accepted=comment.modify();comment.assertEqual(accepted['code'],'GUIDE_ACCEPTED',accepted)
         capture(accepted['data']['id'],'MODIFY','COMMENT',comment)
     finally:

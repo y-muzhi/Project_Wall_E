@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { inspectSource, coverage } from './spec-audit.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const path = resolve(root, 'docs/需求实现映射.md');
+const path = resolve(root, 'docs/traceability/需求实现映射.md');
 const sources = JSON.parse(readFileSync(resolve(root, 'docs/sources/manifest.json'), 'utf8')).map(inspectSource);
 const ledger = JSON.parse(readFileSync(resolve(root, 'docs/sources/reading-ledger.json'), 'utf8'));
 for (const source of sources) if (!coverage(source.lineCount, ledger[source.key]).complete) throw new Error('Complete source reading is required');
