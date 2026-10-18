@@ -1525,7 +1525,7 @@ ACTIVE 人工完成导致 Markdown 正文实际变化时写内部 `document_chan
 
 成功保存提高 next_block_id 时，内部 `manual_block_allocation_ranges` 原子保存 `[旧 next,新 next)` 和服务器操作时间；`manual_block_origins` 保存实际出现的新块不可变创建事实。新 ID 的创建时间取服务器首次接受其分配区间的时间，不采用客户端自报时间。区间已分配但此前未出现在保存快照的 ID，后续可在同草稿撤销恢复时首次登记；不展开大区间，也不允许范围外或其他会话身份。已有创建事实不变，恢复后的最近修改事实按本次真实保存推导。
 
-区间、出生证明、正文、BlockState 和版本同事务提交；失败全回滚，未知结果先读取事实。完成/取消同事务清临时证明并关闭持久会话；CURRENT/Revision 继续通过保留的会话证明来源。旧草稿无法证明既有分配历史时拒绝升级，不按 ID、时间或相似正文猜历史。前端权威回执接续遵循 [FE-07](WALL-E.V1_0.6.前端设计文档.md#sync-fe-07)。
+区间、出生证明、正文、BlockState 和版本同事务提交；失败全回滚，未知结果先读取事实。完成/取消同事务清临时证明并关闭持久会话；CURRENT/Revision 继续通过保留的会话证明来源。旧草稿无法证明既有分配历史时拒绝升级，不按 ID、时间或相似正文猜历史。前端权威回执接续遵循 [FE-07](WALL-E.前端设计文档_V_1.0.md#sync-fe-07)。
 
 **确认依据**：D-009；[身份回执补充稿](../proposals/manual-identity-receipts-v1.md)。**代码对应**：`documents/manual_identity.py::ManualIdentityProofs`、`documents/commands.py`、迁移 004；前端 `documents/edited-snapshot.ts`。
 
@@ -3387,7 +3387,7 @@ Basis放在`request_snapshot_json.context_basis`外围，不进入`request.messa
 
 历史v4—v7的`stable_prefix_v1`保持原还原器：正文／元数据数组、历史／引用数组严格配对，完整元数据及逐块权限仍在旧Wire中；更早协议按原字段顺序恢复。旧请求快照不能重建成新精简包，不建立供应方持续Session。
 
-一期保持原读取集合：历史仍先查询最多10条TEXT／正式CARD_RESPONSE，再按原顺序裁剪；正式回答保留问题、所选名称和填写，不回传全部未选说明或推荐。左右邻域各2块，原排除项保持。初始需求可能在查询阶段退出窗口；二期常驻需求、长期答案索引、技术投影表、任务选取及三期模板／正文深度去重仍未实施，见[后续方案](../iterations/pending/WALL-E.V1_0.6.Token消耗与上下文管理优化设计V1.md)。
+一期保持原读取集合：历史仍先查询最多10条TEXT／正式CARD_RESPONSE，再按原顺序裁剪；正式回答保留问题、所选名称和填写，不回传全部未选说明或推荐。左右邻域各2块，原排除项保持。初始需求可能在查询阶段退出窗口；二期常驻需求、长期答案索引、技术投影表、任务选取及三期模板／正文深度去重仍未实施，见[后续方案](../iterations/pending/WALL-E.Token消耗与上下文管理优化设计V1_V_1.0.md)。
 
 |预算项|普通模板|完整模板v2／v3／v4|
 |---|---:|---:|
@@ -7923,7 +7923,7 @@ Prompt、模型、Schema、上下文或采用逻辑变化后，重新执行受�
 |<a id="q-baseline"></a>Q-BASELINE|已确认；结论见[BE-01](#sync-be-01)|2.1/2.3、6.1、7.1、BND-WORKER|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-db"></a>Q-DB|已确认；结论见[BE-02](#sync-be-02)|7.1/7.2、所有Command及8.2|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-id"></a>Q-ID|已确认；结论见[BE-03](#sync-be-03)|SHR-ID、对象创建、INF-DB|既有业务条件与验收要求保留；设计决定不等于已验证。|
-|<a id="q-01"></a>Q-01|已确认；结论见[BE-06](#sync-be-06)|INF-TEMPLATE、APP-REQ-CMD-C01、AI01、前端[FE-Q02](WALL-E.V1_0.6.前端设计文档.md#fe-q02)|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="q-01"></a>Q-01|已确认；结论见[BE-06](#sync-be-06)|INF-TEMPLATE、APP-REQ-CMD-C01、AI01、前端[FE-Q02](WALL-E.前端设计文档_V_1.0.md#fe-q02)|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-02"></a>Q-02|已确认；结论见[BE-15](#sync-be-15)、[BE-16](#sync-be-16)|4.7 AI01—AI06、C07、INF-FUNCTION|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-02-context"></a>Q-02-CONTEXT|已确认；结论见[BE-17](#sync-be-17)、[BE-19](#sync-be-19)|APP-GUIDE-QUERY-C03、ORCH S02、4.7上下文|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-03"></a>Q-03|已确认；结论见[BE-04](#sync-be-04)|SHR-IDEMPOTENCY、6.1、INF-DB/TX|既有业务条件与验收要求保留；设计决定不等于已验证。|
@@ -7932,7 +7932,7 @@ Prompt、模型、Schema、上下文或采用逻辑变化后，重新执行受�
 |<a id="q-06"></a>Q-06|已确认；结论见[BE-07](#sync-be-07)|SHR-BLOCK、OBJ-DOC、INF-DB、AI与编辑器|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-06-identity"></a>Q-06-IDENTITY|已确认；结论见[BE-07](#sync-be-07)、[BE-09](#sync-be-09)|SHR-BLOCK、人工编辑、初始化和补丁采用|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-06-scope"></a>Q-06-SCOPE|已确认；结论见[BE-10](#sync-be-10)|SHR-SCOPE、APP-GUIDE-CMD-C01、QUERY-C03、AI04—06|既有业务条件与验收要求保留；设计决定不等于已验证。|
-|<a id="q-06-anchor"></a>Q-06-ANCHOR|已确认；结论见[BE-11](#sync-be-11)|SHR-ANCHOR、APP-COMMENT-CMD-C01/C06、I27/I29/I34、前端[FE-Q08](WALL-E.V1_0.6.前端设计文档.md#fe-q08)|既有业务条件与验收要求保留；设计决定不等于已验证。|
+|<a id="q-06-anchor"></a>Q-06-ANCHOR|已确认；结论见[BE-11](#sync-be-11)|SHR-ANCHOR、APP-COMMENT-CMD-C01/C06、I27/I29/I34、前端[FE-Q08](WALL-E.前端设计文档_V_1.0.md#fe-q08)|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-06-patch"></a>Q-06-PATCH|已确认；结论见[BE-12](#sync-be-12)|SHR-PATCH、APP-BATCH-CMD-C01/C02、C07|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-07"></a>Q-07|正式模型及实用计数准入已确认；不具备通用封装严格上界证明，见[BE-18](#sync-be-18)、[BE-19](#sync-be-19)|INF-MODEL/PROFILE、ORCH、8.2|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-08"></a>Q-08|已确认；结论见[BE-05](#sync-be-05)|BND-WORKER、APP-GUIDE-CMD-C09、2.3|既有业务条件与验收要求保留；设计决定不等于已验证。|

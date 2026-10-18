@@ -11,7 +11,7 @@
 
 ## 1. 视觉方向：OpenAI 风格黑白灰
 
-原前端设计文档 [FE-UI-PRINCIPLES](WALL-E.V1_0.6.前端设计文档.md#fe-ui-principles) 已定方向："以黑、白和中性灰为主的简洁界面，参考 OpenAI 风格"。本迭代将该方向落为可施工的确定规则：
+原前端设计文档 [FE-UI-PRINCIPLES](WALL-E.前端设计文档_V_1.0.md#fe-ui-principles) 已定方向："以黑、白和中性灰为主的简洁界面，参考 OpenAI 风格"。本迭代将该方向落为可施工的确定规则：
 
 |规则编号|确定规则|
 |---|---|

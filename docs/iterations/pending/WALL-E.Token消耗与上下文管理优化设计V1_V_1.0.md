@@ -14,7 +14,7 @@
 
 ## 1. 目标与结论
 
-2026-10-18实施与合并边界：用户确认只做一期后授权改造代码，新增[CTX-002-A独立实施记录](../../archive/iterations/WALL-E.V1_0.6.上下文Token一期实施迭代V1.md)。本方案中二期／三期内容继续作为后续设计；下文“本轮设计”及当时测算／未执行记录指2026-10-16设计轮，不代表后续全部代码状态。
+2026-10-18实施与合并边界：用户确认只做一期后授权改造代码，新增[CTX-002-A独立实施记录](../../archive/iterations/WALL-E.上下文Token一期实施迭代V1_V_1.0.md)。本方案中二期／三期内容继续作为后续设计；下文“本轮设计”及当时测算／未执行记录指2026-10-16设计轮，不代表后续全部代码状态。
 
 把完整的系统执行上下文，与实际发送给模型的输入分开。后台保存完整身份、权限、版本和审计事实；模型接收完成本轮任务所需的正文、需求背景、用户正式回答及简洁范围说明。
 
@@ -481,11 +481,11 @@ Token验收：实际调用前需另有明确的有限调用范围；用相同业
 
 ## 20. 项目内依据
 
-- [FLOW-005排查](WALL-E.V1_0.6.初始化提示词与上下文重复提问排查V1.md)：初始需求退出历史窗口、Prompt冲突及原始调用证据。
+- [FLOW-005排查](WALL-E.初始化提示词与上下文重复提问排查V1_V_1.0.md)：初始需求退出历史窗口、Prompt冲突及原始调用证据。
 - [当前设计索引](../../design/README.md)与[最近合并核查](../../archive/merges/合并记录-2026-10-16.md)：已实施规则和待办边界。
-- [CTX-001原布局](../../archive/iterations/WALL-E.V1_0.6.上下文封装与缓存迭代V1.md)：稳定前缀及原配对还原合同。
-- [FLOW-003](../../archive/iterations/WALL-E.V1_0.6.模型返回直接展示迭代V1.md)、[FLOW-004](../../archive/iterations/WALL-E.V1_0.6.事实确认直接写入迭代V1.md)：返回可读与程序确认职责。
-- [模型请求展示迭代](../../archive/iterations/WALL-E.V1_0.6.AI请求上下文与Token展示迭代V1.md)：现有I38／I39、快照与用量语义。
+- [CTX-001原布局](../../archive/iterations/WALL-E.上下文封装与缓存迭代V1_V_1.0.md)：稳定前缀及原配对还原合同。
+- [FLOW-003](../../archive/iterations/WALL-E.模型返回直接展示迭代V1_V_1.0.md)、[FLOW-004](../../archive/iterations/WALL-E.事实确认直接写入迭代V1_V_1.0.md)：返回可读与程序确认职责。
+- [模型请求展示迭代](../../archive/iterations/WALL-E.AI请求上下文与Token展示迭代V1_V_1.0.md)：现有I38／I39、快照与用量语义。
 - [输入组装源码](../../../backend/app/guide/context_builder.py)、[业务上下文读取](../../../backend/app/guide/model_context.py)、[计数组装](../../../backend/app/guide/counted_context.py)：现有字段、历史查询及裁剪顺序。
 - [审计准备](../../../backend/app/infrastructure/audit_repository.py)、[可信结果校验](../../../backend/app/guide/trusted_output.py)：当前还原与身份绑定，不能只删字段的原因。
 

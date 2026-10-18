@@ -1,10 +1,10 @@
 # WALL-E.V1_0.6 前端设计文档
 
-2026-10-18继续合入[UX-033上下文说明](../archive/iterations/WALL-E.V1_0.6.上下文信息通俗化迭代V1.md)，最终修订为sync12：移除重复概览，统一正式系统文案；后端协议及上下文策略不变。
+2026-10-18继续合入[UX-033上下文说明](../archive/iterations/WALL-E.上下文信息通俗化迭代V1_V_1.0.md)，最终修订为sync12：移除重复概览，统一正式系统文案；后端协议及上下文策略不变。
 
 2026-10-18按[本次合并记录](../archive/merges/合并记录-2026-10-18.md)合入CTX-002-A一期及TPL-003最终模板；此前2026-10-16合并见[历史记录](../archive/merges/合并记录-2026-10-16.md)。FLOW-005长期需求／答案及二／三期仍待办，本次不执行产品测试或服务更新。
 
-修订依据：[原始设计文档修改清单](../archive/iterations/原始设计文档修改清单.md)及其中 D-001—D-015 的有效确认。沿用原章节、字段表、处理表、结果表和稳定编号；本次文档合并不表示测试通过。原始版本见 [归档](originals/WALL-E.V1_0.6.前端设计文档.md)。2026-10-09按用户授权接入[前端优化方案V1](../archive/iterations/WALL-E.V1_0.6.前端优化方案V1.md)，具体采用规则见[FE-OPT-V1](#sync-fe-opt-v1)。后续迭代UX-001—019的最终规则已按用户本次授权合入各页面、组件和验收章节，去向及代码一致性核对见[2026-10-09合并记录](../archive/merges/合并记录-2026-10-09.md)。2026-10-11继续合入[迭代V3](../archive/iterations/WALL-E.V1_0.6.迭代优化V3文档.md) UX-020—031最终规则，覆盖历史被替代的表现；逐项去向见[本次合并记录](../archive/merges/合并记录-2026-10-11.md)。
+修订依据：[原始设计文档修改清单](../archive/iterations/原始设计文档修改清单.md)及其中 D-001—D-015 的有效确认。沿用原章节、字段表、处理表、结果表和稳定编号；本次文档合并不表示测试通过。原始版本见 [归档](originals/WALL-E.V1_0.6.前端设计文档.md)。2026-10-09按用户授权接入[前端优化方案V1](../archive/iterations/WALL-E.前端优化方案V1_V_1.0.md)，具体采用规则见[FE-OPT-V1](#sync-fe-opt-v1)。后续迭代UX-001—019的最终规则已按用户本次授权合入各页面、组件和验收章节，去向及代码一致性核对见[2026-10-09合并记录](../archive/merges/合并记录-2026-10-09.md)。2026-10-11继续合入[迭代V3](../archive/iterations/WALL-E.迭代优化V3文档_V_1.0.md) UX-020—031最终规则，覆盖历史被替代的表现；逐项去向见[本次合并记录](../archive/merges/合并记录-2026-10-11.md)。
 
 ## 1. 文档说明与系统范围
 
@@ -44,14 +44,14 @@
 
 |术语|含义或定义引用|
 |---|---|
-|CURRENT／当前正文|后端 [OBJ-DOC](WALL-E.V1_0.6.后端设计文档.md#obj-doc) 的正式事实源；初始化阶段仍是 CURRENT。|
-|MANUAL_DRAFT／人工草稿|后端 [OBJ-DOC](WALL-E.V1_0.6.后端设计文档.md#obj-doc) 的独立文档实例；编辑器自动保存到该实例。|
+|CURRENT／当前正文|后端 [OBJ-DOC](WALL-E.后端设计文档_V_1.0.md#obj-doc) 的正式事实源；初始化阶段仍是 CURRENT。|
+|MANUAL_DRAFT／人工草稿|后端 [OBJ-DOC](WALL-E.后端设计文档_V_1.0.md#obj-doc) 的独立文档实例；编辑器自动保存到该实例。|
 |本地未确认快照|编辑器当前内容中尚未被服务端确认保存的完整 Markdown 与区块状态。|
 |content_version|后端文档内容版本；CURRENT 与草稿分别计数，不是 Revision.version_no。|
 |已提交查询条件|实际发起工作台查询的条件，与用户尚未提交的搜索输入分开保存。|
-|GuideRun|后端 [OBJ-GUIDE](WALL-E.V1_0.6.后端设计文档.md#obj-guide)；前端读取运行进度并取得可见消息或建议引用。|
+|GuideRun|后端 [OBJ-GUIDE](WALL-E.后端设计文档_V_1.0.md#obj-guide)；前端读取运行进度并取得可见消息或建议引用。|
 |卡片本地选择|仅浏览器未提交输入；只有后端 CARD_RESPONSE 是正式回答。|
-|版本快照|后端 [OBJ-REV](WALL-E.V1_0.6.后端设计文档.md#obj-rev)；只读历史内容，不混入当前评论。|
+|版本快照|后端 [OBJ-REV](WALL-E.后端设计文档_V_1.0.md#obj-rev)；只读历史内容，不混入当前评论。|
 
 ### 1.5 稳定引用与实现定位
 
@@ -90,9 +90,9 @@
 
 |规则|适用范围|正式定义与前端约束|
 |---|---|---|
-|身份、文本、时间、版本|所有页面和请求|《WALL-E.V1_0.6.后端设计文档.md》[SHR-ID](WALL-E.V1_0.6.后端设计文档.md#shr-id)、[SHR-TEXT](WALL-E.V1_0.6.后端设计文档.md#shr-text)、[SHR-TIME](WALL-E.V1_0.6.后端设计文档.md#shr-time)、[SHR-CONCURRENCY](WALL-E.V1_0.6.后端设计文档.md#shr-concurrency)；前端不把需求编号当内部 ID，不截断定位原文，不混用文档版本与历史版本号。|
-|HTTP解析、结果与幂等|所有服务端请求|后端第6.1节 [API-COM-REQUEST](WALL-E.V1_0.6.后端设计文档.md#api-com-request)、[API-COM-RESPONSE](WALL-E.V1_0.6.后端设计文档.md#api-com-response)、[API-COM-ERROR](WALL-E.V1_0.6.后端设计文档.md#api-com-error)、[API-COM-IDEMPOTENCY](WALL-E.V1_0.6.后端设计文档.md#api-com-idempotency)。相同动作重试保持原键和原输入，新动作使用新键。|
-|业务结构|正文、卡片、建议、评论和运行|后端 [OBJ-DOC](WALL-E.V1_0.6.后端设计文档.md#obj-doc)、[OBJ-MSG](WALL-E.V1_0.6.后端设计文档.md#obj-msg)、[OBJ-BATCH](WALL-E.V1_0.6.后端设计文档.md#obj-batch)、[OBJ-COMMENT](WALL-E.V1_0.6.后端设计文档.md#obj-comment)、[OBJ-GUIDE](WALL-E.V1_0.6.后端设计文档.md#obj-guide) 及对应应用读取模型。传输 JSON 对象不能替换成转义 JSON 文本；[I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21) 的表格行 edited_content 按该入口明确使用 JSON 文本。|
+|身份、文本、时间、版本|所有页面和请求|《WALL-E.V1_0.6.后端设计文档.md》[SHR-ID](WALL-E.后端设计文档_V_1.0.md#shr-id)、[SHR-TEXT](WALL-E.后端设计文档_V_1.0.md#shr-text)、[SHR-TIME](WALL-E.后端设计文档_V_1.0.md#shr-time)、[SHR-CONCURRENCY](WALL-E.后端设计文档_V_1.0.md#shr-concurrency)；前端不把需求编号当内部 ID，不截断定位原文，不混用文档版本与历史版本号。|
+|HTTP解析、结果与幂等|所有服务端请求|后端第6.1节 [API-COM-REQUEST](WALL-E.后端设计文档_V_1.0.md#api-com-request)、[API-COM-RESPONSE](WALL-E.后端设计文档_V_1.0.md#api-com-response)、[API-COM-ERROR](WALL-E.后端设计文档_V_1.0.md#api-com-error)、[API-COM-IDEMPOTENCY](WALL-E.后端设计文档_V_1.0.md#api-com-idempotency)。相同动作重试保持原键和原输入，新动作使用新键。|
+|业务结构|正文、卡片、建议、评论和运行|后端 [OBJ-DOC](WALL-E.后端设计文档_V_1.0.md#obj-doc)、[OBJ-MSG](WALL-E.后端设计文档_V_1.0.md#obj-msg)、[OBJ-BATCH](WALL-E.后端设计文档_V_1.0.md#obj-batch)、[OBJ-COMMENT](WALL-E.后端设计文档_V_1.0.md#obj-comment)、[OBJ-GUIDE](WALL-E.后端设计文档_V_1.0.md#obj-guide) 及对应应用读取模型。传输 JSON 对象不能替换成转义 JSON 文本；[I21](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i21) 的表格行 edited_content 按该入口明确使用 JSON 文本。|
 |视觉与结果反馈|页面和组件|本文第5.1节及 [BND-CONFIRM](#bnd-confirm)、[BND-TOAST](#bnd-toast)；页面特殊状态在各页面5.5节定义。|
 
 
@@ -110,7 +110,7 @@
 
 ### 2.3 运行配置与生命周期
 
-需求类型、模式中文及模板适用关系从resources/v7/templates/catalog.v4.json随构建打包取得；当前NEW模板v4、CHANGE v1，历史NEW v1／v2／v3按保存身份兼容。见[正式配置](#sync-fe-03)及后端[模板资源](WALL-E.V1_0.6.后端设计文档.md#sync-be-06)，不另增模板配置 HTTP 接口。
+需求类型、模式中文及模板适用关系从resources/v7/templates/catalog.v4.json随构建打包取得；当前NEW模板v4、CHANGE v1，历史NEW v1／v2／v3按保存身份兼容。见[正式配置](#sync-fe-03)及后端[模板资源](WALL-E.后端设计文档_V_1.0.md#sync-be-06)，不另增模板配置 HTTP 接口。
 
 进入详情先读取需求和 CURRENT，再依工作占用读取草稿、运行或建议批次。重新进入路由、从小于1024px恢复支持宽度、真实pagehide后的pageshow恢复时重新核对服务端状态；普通window.focus／blur和标签页visibilitychange不触发详情冻结或整页重读。人工草稿原有隐藏时保存已变更内容及编辑器真正离焦保存保留；页面离开、侧栏切换或折叠不取消后台任务。人工草稿的保存、离开保护和本地未确认快照恢复由 [BND-DETAIL](#bnd-detail) 定义，不能把卸载事件当作必定保存成功的保证。
 
@@ -124,7 +124,7 @@
 |规则|适用范围|确定表现与正式归属|页面差异|
 |---|---|---|---|
 |业务结果|全部页面|接受AI任务与最终成功分开显示；业务许可及契约采用后端对应APP、BND|各操作明确读取、刷新及保留范围。|
-|文本与时间|页面与输入组件|普通文本、Markdown和定位片段见后端[SHR-TEXT](WALL-E.V1_0.6.后端设计文档.md#shr-text)；UTC转换浏览器本地时间，普通记录YYYY-MM-DD HH:mm、对话消息MM-DD HH:mm|异常显示--，不改变排序；对话time.datetime仍保留完整服务器时间|
+|文本与时间|页面与输入组件|普通文本、Markdown和定位片段见后端[SHR-TEXT](WALL-E.后端设计文档_V_1.0.md#shr-text)；UTC转换浏览器本地时间，普通记录YYYY-MM-DD HH:mm、对话消息MM-DD HH:mm|异常显示--，不改变排序；对话time.datetime仍保留完整服务器时间|
 |确认|需确认的破坏性或提交操作|采用[BND-CONFIRM](#bnd-confirm)；组件只产生用户意图，父页面调用接口|确认对象与后果由每个DT-OP指定。|
 |反馈|字段、区域与全局结果|字段错误就近展示；确认内失败留在弹窗；其他已确认结果按[BND-TOAST](#bnd-toast)，不重复同一错误|列表与详情的复查、重试分别见5.4、5.5。|
 |通用筛选与分页|工作台与存在分页的列表|[BND-FILTER](#bnd-filter)、[BND-PAGINATION](#bnd-pagination)受控输入和意图输出，父页面请求|匹配与分页算法由后端Query正式定义。|
@@ -138,7 +138,7 @@
 
 WALL-E采用白色内容、中性支持表面与蓝色交互强调的简洁界面，参考OpenAI的清晰排版与克制表达，并吸收Anthropic的阅读节奏和柔和层级。正文、对话内容与当前操作承担主要视觉权重；不复制品牌标志、专有字体或营销页布局，不以黑白配色、粗框或重复标题代替层级。以下原则适用于工作台、详情页及公共组件；页面已明确的业务条件、布局尺寸、保存时序和键盘规则继续由对应条目定义。
 
-视觉参考为[OpenAI Design Guidelines／Typography](https://openai.com/brand/)。该指南描述的OpenAI Sans具有几何感、圆润特征与清晰的字重层级。本项目采用下文的系统字体方案；本文配色、字号及交互规则属于用户授权的WALL-E方案，不作为两家公司官方产品组件规范；公开资料的适用边界及分析见[迭代V3第9.1节](../archive/iterations/WALL-E.V1_0.6.迭代优化V3文档.md#91-来源事实及适用范围)。
+视觉参考为[OpenAI Design Guidelines／Typography](https://openai.com/brand/)。该指南描述的OpenAI Sans具有几何感、圆润特征与清晰的字重层级。本项目采用下文的系统字体方案；本文配色、字号及交互规则属于用户授权的WALL-E方案，不作为两家公司官方产品组件规范；公开资料的适用边界及分析见[迭代V3第9.1节](../archive/iterations/WALL-E.迭代优化V3文档_V_1.0.md#91-来源事实及适用范围)。
 
 |原则|适用范围|设计要求|页面差异与边界|
 |---|---|---|---|
@@ -209,7 +209,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 
 |内容|确定定义|
 |---|---|
-|采用依据|用户授权Codex自行确定优化方案中的8项待确认表现契约，随后要求按方案修改代码并仅做基础测试；授权与选择理由见[优化方案第1.4节](../archive/iterations/WALL-E.V1_0.6.前端优化方案V1.md)|
+|采用依据|用户授权Codex自行确定优化方案中的8项待确认表现契约，随后要求按方案修改代码并仅做基础测试；授权与选择理由见[优化方案第1.4节](../archive/iterations/WALL-E.前端优化方案V1_V_1.0.md)|
 |统一文案|需求状态为初始化中、进行中、已完成；需求状态及八类草稿保存状态各维护一份共享映射。刷新名称说明真实读取责任，未知结果重查和命令专属恢复不合并成通用刷新|
 |公共视觉与图标|配色采用[FE-UI-COLOR](#fe-ui-color)当前蓝色交互与语义色，替代V1纯中性灰表现；共享内联SVG常规16px，AI头像28px、导航22px依局部定义；静态加载位和可访问名称保留|
 |控件样式|原生按钮和输入通过显式ui-button/ui-input接入共享样式；全局保留字体/盒模型、焦点兜底、accent-color与无障碍规则。搜索输入焦点在容器外显示一次轮廓，图标按钮保持各自焦点，不增加容器Tab停靠|
@@ -220,7 +220,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 |对话滚动|conversation-discussion只承载消息及卡片阅读；运行列表已移至文档记录。GuideComposer独立固定底部、上限55%、输入内部滚动，发送在其滚动之外；近底80px、消息锚点与回复定位保持|
 |主导航|按FE-OPT-V2共享顶部和独立应用导航；68px常态顶部包含品牌区与页面头宿主，真实需求身份来自详情已读资源，不另行请求／推算；原路由及离开保护保持|
 |尺寸边界|正文填满中间栏，左24px／右8px，取消960px限宽居中；编辑器至少640px，侧栏尺寸及1024／1280断点保持；工作台分页位置按UX-026、公共尺寸按BND-PAGINATION|
-|实现与检查|实现定位及24项去向见[优化方案第9节](../archive/iterations/WALL-E.V1_0.6.前端优化方案V1.md)；已完成类型检查、生产构建与43项相关基础测试。未执行完整视觉/浏览器验收，不新增截图、JSON报告或真实AI调用，结果仅记录Markdown|
+|实现与检查|实现定位及24项去向见[优化方案第9节](../archive/iterations/WALL-E.前端优化方案V1_V_1.0.md)；已完成类型检查、生产构建与43项相关基础测试。未执行完整视觉/浏览器验收，不新增截图、JSON报告或真实AI调用，结果仅记录Markdown|
 
 除本节明确固定的页头分组间距与分页取值外，D-004中的其他视觉建议继续保留暂定属性，不批量关闭Q-FE-VISUAL。设计采用、代码实施与完整运行验收分别记录。
 
@@ -230,7 +230,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 
 |内容|确定定义|
 |---|---|
-|采用依据|用户逐轮要求实施UX-001—019；最终采用以[迭代优化V2](../archive/iterations/WALL-E.V1_0.6.迭代优化V2文档.md)第16.5、17.2、18.2、20.1、22.1、24.1（开合由25.2覆盖）、25.2、26.2—26.3（焦点／定位由27.2覆盖）、27.2为准；合并去向见[记录](../archive/merges/合并记录-2026-10-09.md)|
+|采用依据|用户逐轮要求实施UX-001—019；最终采用以[迭代优化V2](../archive/iterations/WALL-E.迭代优化V2文档_V_1.0.md)第16.5、17.2、18.2、20.1、22.1、24.1（开合由25.2覆盖）、25.2、26.2—26.3（焦点／定位由27.2覆盖）、27.2为准；合并去向见[记录](../archive/merges/合并记录-2026-10-09.md)|
 |鼠标按下|普通按钮中性灰反馈，主要／危险按钮按[FE-UI-COLOR](#fe-ui-color)当前语义色；内容链接按下可下划线，无新增外框。工作台标题链接保持深色无下划线，整行承担浅蓝反馈|
 |输入聚焦|普通输入／文本域保留单一边框，非错误字段聚焦#365edc；鼠标不叠装饰外轮廓，错误边框优先。单选与多选入口按公共组件定义|
 |输入方式|文档级捕获pointerdown切换鼠标/触控表现；未处于组合输入且不带Alt/Ctrl/Meta的Tab、Enter、Space、Esc、方向、Home/End、PageUp/Down切回键盘表现；普通字符及IME不自行切换。初始以键盘表现兜底，覆盖body下的Portal弹窗与Toast|
@@ -272,7 +272,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 |进入方式|Project Wall-E 主导航；从需求详情返回|
 |应用壳与布局|采用[FE-OPT-V2](#sync-fe-opt-v2)独立固定顶栏与主导航；工作台填满剩余内容列，margin:0、常规内边距24px／<1280px时16px，不使用1600px居中限制。桌面导航200px／64px开合不改变查询或离开保护|
 |路由|/requirements；/ 进入工作台。路由和返回状态见[页面导航](#sync-fe-02)；接口 URL 不作为页面路由|
-|首次查询|[BND-REQ-API-I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) → [APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)|
+|首次查询|[BND-REQ-API-I01](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i01) → [APP-REQ-QUERY-C01](WALL-E.后端设计文档_V_1.0.md#app-req-query-c01)|
 |新建组件|[BND-CREATE](#bnd-create)，定义见 [BND-CREATE](#bnd-create)／5.6|
 |搜索筛选组件|[BND-FILTER](#bnd-filter)，定义见 [BND-FILTER](#bnd-filter)／5.6|
 |分页组件|[BND-PAGINATION](#bnd-pagination)，定义见 [BND-PAGINATION](#bnd-pagination)／5.6|
@@ -296,8 +296,8 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 |---|---|---|---|---|
 |WB-HEADER|共享固定顶部|单次页面标题|页面配置|共用68px常态页头，内容区不重复显示标题|
 |WB-QUERY|内容操作区|关键词、状态、类型、新建按钮|需求类型配置、受控筛选值|沿用本节顺序；搜索筛选复用[BND-FILTER](#bnd-filter)|
-|WB-LIST|需求表格|编号、标题、类型、状态、更新时间|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) 的 data.items|标题与真实链接始终深色无下划线；整行hover／键盘链接焦点#f5f8ff、active#edf2ff，键盘焦点轮廓保持，无持久业务选中；拖选／复制不当导航|
-|WB-PAGE|分页区|页码、每页条数、总数及翻页操作|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) 的 meta.pagination|统计与翻页整体靠表格右下，同宽容器左右内缩12px；距表格16px、下4px、组间20px／换行12px；每页20条。窄窗统计与按钮换行靠右，加载独占下一行靠右；不改变其他分页|
+|WB-LIST|需求表格|编号、标题、类型、状态、更新时间|[I01](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i01) 的 data.items|标题与真实链接始终深色无下划线；整行hover／键盘链接焦点#f5f8ff、active#edf2ff，键盘焦点轮廓保持，无持久业务选中；拖选／复制不当导航|
+|WB-PAGE|分页区|页码、每页条数、总数及翻页操作|[I01](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i01) 的 meta.pagination|统计与翻页整体靠表格右下，同宽容器左右内缩12px；距表格16px、下4px、组间20px／换行12px；每页20条。窄窗统计与按钮换行靠右，加载独占下一行靠右；不改变其他分页|
 |WB-CREATE|新建需求抽屉|五项表单、取消、创建需求|[BND-CREATE](#bnd-create)|从右侧展开，固定600px|
 
 **列表展示与分页规则**
@@ -344,7 +344,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 
 |页面数据|来源|请求时机与参数|刷新后处理|离开与返回|
 |---|---|---|---|---|
-|列表、总数、页码|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01)|首次进入、提交关键词、筛选变化、翻页及详情返回；发送已提交条件|同时替换列表与对应分页信息，不能混用不同次响应|从详情返回恢复已提交条件、页码、滚动位置并重新查询|
+|列表、总数、页码|[I01](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i01)|首次进入、提交关键词、筛选变化、翻页及详情返回；发送已提交条件|同时替换列表与对应分页信息，不能混用不同次响应|从详情返回恢复已提交条件、页码、滚动位置并重新查询|
 |搜索输入文字|页面本地值|编辑时更新，不发请求|提交时去首尾空格；与已提交关键词分开保存|详情返回恢复已提交关键词，不把未提交文字当筛选条件|
 |状态选项|RequirementStatus|初始化时建立编码与中文文案映射|全勾或空选提交为不筛选，不发送 status，部分选中发送完整值数组|主导航进入默认全选|
 |类型选项|随构建打包的resources/v7/templates/catalog.v4.json|页面加载读取固定资源，不发模板配置HTTP请求|NEW显示“需求新增”，CHANGE显示“需求改造”；值与接口配置一致|主导航进入默认全选|
@@ -398,7 +398,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 |3|Enter、搜索图标或筛选变更|关键词提交时 trim；筛选关闭确认后使用完整已提交选择，checkbox仅改草稿；查询条件变化设为第一页|全勾／空选均省略字段；与已提交含义相同不查询|
 |4|清除关键词|手动删空仅改草稿；点击清除先清草稿，仅已提交关键词非空时取消已生效条件|实际清除时只查询一次，保留其他筛选，回第一页|
 |5|翻页|校验目标页码；保留已提交关键词和筛选|不因翻页重新提交输入框草稿|
-|6|发出查询|冻结条件，分配递增请求序号；有历史结果时显示刷新状态|[I01](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i01) → [APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)|
+|6|发出查询|冻结条件，分配递增请求序号；有历史结果时显示刷新状态|[I01](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i01) → [APP-REQ-QUERY-C01](WALL-E.后端设计文档_V_1.0.md#app-req-query-c01)|
 |7|最新请求成功|同时更新 items、分页、成功条件快照；按列表状态表显示结果|只使用后端排序，不按格式化时间再排序|
 |8|最新请求失败|按字段错误或查询失败展示；保留当前输入、条件和最后成功结果|允许重试，失败不映射为 total=0|
 |9|旧请求迟到|忽略其数据、错误及完成通知|不覆盖新结果，也不能关闭新请求的加载状态|
@@ -430,7 +430,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 |STORAGE_UNAVAILABLE / INTERNAL_ERROR / 网络失败|列表区查询失败提示|保留最后成功结果及其查询条件|重试当前已提交条件|
 |旧查询结果或旧错误|不显示|忽略|不重试旧查询|
 
-公共错误编码与 HTTP 映射引用 《WALL-E.V1_0.6.后端设计文档.md》6.1 [API-COM-ERROR](WALL-E.V1_0.6.后端设计文档.md#api-com-error)；此处只定义页面反馈。
+公共错误编码与 HTTP 映射引用 《WALL-E.V1_0.6.后端设计文档.md》6.1 [API-COM-ERROR](WALL-E.后端设计文档_V_1.0.md#api-com-error)；此处只定义页面反馈。
 
 
 #### 5.5 特殊状态与生命周期
@@ -474,7 +474,7 @@ D-004 允许按建议先实现并保留暂定属性，不代表全部建议已�
 |构造编号|[BND-DETAIL](#bnd-detail)|
 |页面路由|/requirements/:id；:id 为规范十进制正安全整数内部 requirement_id，不是 REQ 展示编号|
 |主要代码|frontend/src/requirements/detail.tsx :: RequirementDetail|
-|首次读取|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03) 需求、[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08) 正文；根据工作状态和活动对象引用读取 [I10](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i10) 草稿、[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16) 运行或 [I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20) 批次|
+|首次读取|[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03) 需求、[I08](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i08) 正文；根据工作状态和活动对象引用读取 [I10](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i10) 草稿、[I16](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i16) 运行或 [I20](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i20) 批次|
 |本页使用组件|[BND-EDITOR](#bnd-editor)、[BND-CARDS](#bnd-cards)、[BND-SUGGESTIONS](#bnd-suggestions)、[BND-CONFIRM](#bnd-confirm)、[BND-TOAST](#bnd-toast)、[BND-PAGINATION](#bnd-pagination)、[BND-RECORD-LIST](#bnd-record-list)|
 |分区实现|大纲、标题编辑、AI对话、评论、文档记录及其版本／运行是本页子区域；其代码映射列于 [BND-DETAIL](#bnd-detail)／5.5 实现定位，不因有一个按钮或展示项就新增独立构造|
 
@@ -805,12 +805,12 @@ Requirement 为 `ACTIVE` 时：
 
 |区域编号|区域|内容及组件|数据来源|显示条件|
 |---|---|---|---|---|
-|DT-TOOLBAR|共享固定需求工作栏|返回、单次居中标题、编号／类型／生命周期／正文身份与保存状态；右侧AI助手、实际业务动作和更多（含标题编辑及只读模式）|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)、[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)、活动对象|需求加载成功；具体操作条件见[BND-DETAIL](#bnd-detail)／5.4|
+|DT-TOOLBAR|共享固定需求工作栏|返回、单次居中标题、编号／类型／生命周期／正文身份与保存状态；右侧AI助手、实际业务动作和更多（含标题编辑及只读模式）|[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03)、[I08](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i08)、活动对象|需求加载成功；具体操作条件见[BND-DETAIL](#bnd-detail)／5.4|
 |DT-OUTLINE|左侧大纲|常驻标题及收起入口、可折叠真实标题树、当前章节高亮；关闭时正文内展开入口|当前展示的文档快照|大纲展开且支持当前视口布局|
-|DT-DOCUMENT|中间文档区|[BND-EDITOR](#bnd-editor)、区块辅助栏、来源浮层和评论标记|正式阅读 [I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)；人工编辑 [I10](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i10)；历史快照 [I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)|对应快照已读取成功|
-|DT-AI|AI对话页签|独立消息／卡片阅读、底部固定输入、当前运行状态、[BND-CARDS](#bnd-cards)、[BND-SUGGESTIONS](#bnd-suggestions)，不再含运行历史列表|[I35](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i35)、[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)、[I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20)|选中AI对话|
-|DT-COMMENTS|评论页签|评论列表、引用、双状态标签、编辑和处理操作|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)、[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28)|选中评论；正文标记使用全量计数来源见 [FE-Q05](#fe-q05)|
-|DT-REVISIONS|文档记录页签|版本／运行子页共用[BND-RECORD-LIST](#bnd-record-list)；版本保存及只读快照入口，运行只读详情及返回列表|版本[I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24)／[I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)，运行[I19](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i19)／[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)|选中文档记录；内部标识REVISIONS保持|
+|DT-DOCUMENT|中间文档区|[BND-EDITOR](#bnd-editor)、区块辅助栏、来源浮层和评论标记|正式阅读 [I08](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i08)；人工编辑 [I10](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i10)；历史快照 [I25](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i25)|对应快照已读取成功|
+|DT-AI|AI对话页签|独立消息／卡片阅读、底部固定输入、当前运行状态、[BND-CARDS](#bnd-cards)、[BND-SUGGESTIONS](#bnd-suggestions)，不再含运行历史列表|[I35](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i35)、[I16](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i16)、[I20](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i20)|选中AI对话|
+|DT-COMMENTS|评论页签|评论列表、引用、双状态标签、编辑和处理操作|[I27](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i27)、[I28](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i28)|选中评论；正文标记使用全量计数来源见 [FE-Q05](#fe-q05)|
+|DT-REVISIONS|文档记录页签|版本／运行子页共用[BND-RECORD-LIST](#bnd-record-list)；版本保存及只读快照入口，运行只读详情及返回列表|版本[I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24)／[I25](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i25)，运行[I19](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i19)／[I16](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i16)|选中文档记录；内部标识REVISIONS保持|
 
 
 
@@ -826,18 +826,18 @@ Requirement 为 `ACTIVE` 时：
 
 |页面数据|来源接口|请求时机与参数来源|更新条件|本地保留与防覆盖|
 |---|---|---|---|---|
-|标题、状态、工作状态、活动引用|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)|进入详情；requirement_id 来自页面入口|属性、生命周期、人工编辑、运行或批次状态变化后|以服务端确认状态控制操作；不按按钮点击直接改变业务状态|
-|CURRENT|[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)|首次进入；初始化完成一轮、人工编辑完成、建议批次应用后|后端确认正文可能变化时重新读取|文本与 block_state_json、content_version 同一快照保存|
-|MANUAL_DRAFT|[I10](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i10)|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03) 显示 MANUAL_EDITING 时恢复；保存冲突或结果未知时复查|保存成功更新后端确认版本|已确认快照、编辑器最新内容、待发快照分别保存|
-|GuideRun|[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03) 活动引用、创建/继续/重试返回的运行 ID|非停止状态可见页面每1秒轮询；失败退避2/5/10/30秒|保留最后确认状态；查询失败不等于运行 FAILED|
-|对话消息|[I35](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i35)|首次进入 AI 页签；运行产生新消息；用户请求更早消息|按 before_sequence_no 读取更早消息；首批最新20条|按 id 去重，按 sequence_no 升序；切页签不清空会话|
-|SuggestionBatch|[I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20)|活动类型为建议批次；单项决策、完成或放弃后|采用后端单项结果和 counts|不能用本地未提交决策计算已处理成功数量|
-|评论列表|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)|评论页签加载、分页、评论写入或 CURRENT 更新后|刷新受影响列表及正文评论标记|当前页数不等于全文评论数；全文索引及跨页定位采用[I37](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i37)|
-|全文评论索引|[I37](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i37)|首次加载当前正文；评论写入、CURRENT更新及跨页定位复查时|仅与相同CURRENT身份及版本配对；并发变化重查，不重排或插入目标评论|total_count为全部未删；open_count含无法定位的OPEN；正文标记只计OPEN且location.status=ATTACHED；按索引顺序计算I27页码|
-|单条评论|[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28)|已知评论 ID 的定位、状态恢复或错误复查|与列表中的同 ID 合并|不改变原 created_at 排序|
-|运行记录列表／只读详情|[I19](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i19)／[I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)|文档记录运行子页进入、关闭确认筛选、翻页及返回列表；所选详情仅可见时读取|列表采用原查询／分页；详情RUNNING按原策略轮询、隐藏停止|保留筛选和已查看项；校验需求归属，不选择当前AI任务或重新加载正文|
-|Revision 列表|[I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24)|打开文档记录的版本子页、分页、保存版本或完成初始化后|使用返回总数、页码及列表|切页签可保留最后结果，再按操作刷新|
-|Revision 快照|[I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)|用户点击一个 revision_id|每次打开对应快照|与 CURRENT 和草稿缓存分开，不展示当前评论|
+|标题、状态、工作状态、活动引用|[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03)|进入详情；requirement_id 来自页面入口|属性、生命周期、人工编辑、运行或批次状态变化后|以服务端确认状态控制操作；不按按钮点击直接改变业务状态|
+|CURRENT|[I08](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i08)|首次进入；初始化完成一轮、人工编辑完成、建议批次应用后|后端确认正文可能变化时重新读取|文本与 block_state_json、content_version 同一快照保存|
+|MANUAL_DRAFT|[I10](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i10)|[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03) 显示 MANUAL_EDITING 时恢复；保存冲突或结果未知时复查|保存成功更新后端确认版本|已确认快照、编辑器最新内容、待发快照分别保存|
+|GuideRun|[I16](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i16)|[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03) 活动引用、创建/继续/重试返回的运行 ID|非停止状态可见页面每1秒轮询；失败退避2/5/10/30秒|保留最后确认状态；查询失败不等于运行 FAILED|
+|对话消息|[I35](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i35)|首次进入 AI 页签；运行产生新消息；用户请求更早消息|按 before_sequence_no 读取更早消息；首批最新20条|按 id 去重，按 sequence_no 升序；切页签不清空会话|
+|SuggestionBatch|[I20](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i20)|活动类型为建议批次；单项决策、完成或放弃后|采用后端单项结果和 counts|不能用本地未提交决策计算已处理成功数量|
+|评论列表|[I27](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i27)|评论页签加载、分页、评论写入或 CURRENT 更新后|刷新受影响列表及正文评论标记|当前页数不等于全文评论数；全文索引及跨页定位采用[I37](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i37)|
+|全文评论索引|[I37](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i37)|首次加载当前正文；评论写入、CURRENT更新及跨页定位复查时|仅与相同CURRENT身份及版本配对；并发变化重查，不重排或插入目标评论|total_count为全部未删；open_count含无法定位的OPEN；正文标记只计OPEN且location.status=ATTACHED；按索引顺序计算I27页码|
+|单条评论|[I28](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i28)|已知评论 ID 的定位、状态恢复或错误复查|与列表中的同 ID 合并|不改变原 created_at 排序|
+|运行记录列表／只读详情|[I19](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i19)／[I16](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i16)|文档记录运行子页进入、关闭确认筛选、翻页及返回列表；所选详情仅可见时读取|列表采用原查询／分页；详情RUNNING按原策略轮询、隐藏停止|保留筛选和已查看项；校验需求归属，不选择当前AI任务或重新加载正文|
+|Revision 列表|[I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24)|打开文档记录的版本子页、分页、保存版本或完成初始化后|使用返回总数、页码及列表|切页签可保留最后结果，再按操作刷新|
+|Revision 快照|[I25](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i25)|用户点击一个 revision_id|每次打开对应快照|与 CURRENT 和草稿缓存分开，不展示当前评论|
 |类型、模板、模式中文文案|随构建打包的resources/v7/templates/catalog.v4.json|创建表单及详情展示|NEW新建v4、CHANGE v1；历史NEW v1／v2／v3按保存资源恢复|NEW“需求新增”、CHANGE“需求改造”；IDEATION“灵感模式”、DESIGN“设计模式”；完整适用关系见[正式配置](#sync-fe-03)|
 
 **进入与恢复步骤**
@@ -869,13 +869,13 @@ Requirement 为 `ACTIVE` 时：
 
 **全文评论统计和跨页定位**
 
-全文统计和正文区块标记使用新增只读 I37 `GET /api/v1/requirements/{requirement_id}/comment-index`；I27 继续分页读取完整评论内容，I28 继续读取单条。I37 绑定同一 CURRENT 身份和版本，返回全部未删除评论的索引，不将当前页数量当全文数量。`total_count` 统计全部未删评论；`open_count` 统计其中 OPEN 评论，包括当前无法定位者；正文标记仅计入 OPEN 且当前 `location.status=ATTACHED` 的评论。点击标记按索引的评论顺序计算 I27 页码，加载后核实目标确实在页内；并发变化时重新读取索引和页面，不擅自重排或把目标插到列表顶部。后端字段和错误以 [BE-23](WALL-E.V1_0.6.后端设计文档.md#sync-be-23) 为准。
+全文统计和正文区块标记使用新增只读 I37 `GET /api/v1/requirements/{requirement_id}/comment-index`；I27 继续分页读取完整评论内容，I28 继续读取单条。I37 绑定同一 CURRENT 身份和版本，返回全部未删除评论的索引，不将当前页数量当全文数量。`total_count` 统计全部未删评论；`open_count` 统计其中 OPEN 评论，包括当前无法定位者；正文标记仅计入 OPEN 且当前 `location.status=ATTACHED` 的评论。点击标记按索引的评论顺序计算 I27 页码，加载后核实目标确实在页内；并发变化时重新读取索引和页面，不擅自重排或把目标插到列表顶部。后端字段和错误以 [BE-23](WALL-E.后端设计文档_V_1.0.md#sync-be-23) 为准。
 
 **确认依据**：D-004，公共决策稿 D 中明确批准的新增 I37。**代码对应**：`frontend/src/comments/read.ts`、`panel-owner.ts`、`locate.ts`；`backend/app/comments/{api,queries,contracts}.py`。
 
 #### 5.4 操作与结果反馈
 
-每项操作包含触发、输入、处理步骤、调用能力、结果和验证。表中的“成功”指对应请求已得到服务端确认；异步运行的最终结果另外读取 [I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)。结果未知时的资源复查统一见 [BND-DETAIL](#bnd-detail)／5.5 导航、异常与退出：保留原请求，幂等重放必须使用原键和原输入；改变输入或版本属于新的动作。
+每项操作包含触发、输入、处理步骤、调用能力、结果和验证。表中的“成功”指对应请求已得到服务端确认；异步运行的最终结果另外读取 [I16](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i16)。结果未知时的资源复查统一见 [BND-DETAIL](#bnd-detail)／5.5 导航、异常与退出：保留原请求，幂等重放必须使用原键和原输入；改变输入或版本属于新的动作。
 
 
 <a id="dt-op01"></a>
@@ -886,14 +886,14 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|正文工具栏或 AI 对话输入区；输入普通文本；INITIALIZING 且 IDLE|
 |操作对象/范围|当前需求|
-|输入与请求|普通文本使用 action_type=INITIALIZE、source_type=USER_INSTRUCTION，并携带当前 CURRENT 版本；卡片走 [DT-OP02](#dt-op02) 的 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)|
-|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c01)|
+|输入与请求|普通文本使用 action_type=INITIALIZE、source_type=USER_INSTRUCTION，并携带当前 CURRENT 版本；卡片走 [DT-OP02](#dt-op02) 的 [I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)|
+|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
 |1 触发与检查|用户提交普通文本，或一次性提交1～5张卡片的整组响应|
 |2 准备并提交|提交期间禁止重复发送；请求被接受后读取消息与运行；本轮结束后刷新 CURRENT 和需求状态|
-|3 已确认成功|保存真实用户消息并创建新的 INITIALIZE GuideRun；本轮可信结果可以更新 CURRENT。卡片整组提交使用 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)，同一组只创建一个新运行。|
+|3 已确认成功|保存真实用户消息并创建新的 INITIALIZE GuideRun；本轮可信结果可以更新 CURRENT。卡片整组提交使用 [I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)，同一组只创建一个新运行。|
 |4 明确失败或取消|失败不写入不可信正文；卡片提交事务失败时保留本地草稿|
 
 
@@ -906,7 +906,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|AI 对话内 [BND-CARDS](#bnd-cards) 的整组提交按钮；卡片为 AVAILABLE；INITIALIZE 为初始化空闲状态，其他动作须属于当前 WAITING_USER 运行|
 |操作对象/范围|当前卡片组|
 |输入与请求|message_id 为原助手卡片消息；schema_version=1，responses 覆盖全部 card_key|
-|调用接口与能力|[BND-MSG-API-I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)（提交整组卡片）→ [APP-GUIDE-CMD-C06](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c06)|
+|调用接口与能力|[BND-MSG-API-I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)（提交整组卡片）→ [APP-GUIDE-CMD-C06](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c06)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -924,8 +924,8 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|AI 对话普通文本发送入口；当前存在 AVAILABLE 卡片|
 |操作对象/范围|当前对话|
-|输入与请求|初始化空闲时 [I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14) 创建 INITIALIZE；ASK/REVIEW/MODIFY 等待时 [I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15) 继续原运行|
-|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c01)；等待回复时改用 [BND-GUIDE-API-I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15)（继续等待中的运行）→ [APP-GUIDE-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c02)|
+|输入与请求|初始化空闲时 [I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14) 创建 INITIALIZE；ASK/REVIEW/MODIFY 等待时 [I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15) 继续原运行|
+|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c01)；等待回复时改用 [BND-GUIDE-API-I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15)（继续等待中的运行）→ [APP-GUIDE-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c02)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -943,7 +943,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|详情更多中只读显示创建时模式；不提供修改按钮、下拉表单或MODE请求所有者；所有生命周期均不可修改|
 |操作对象／范围|已存在Requirement.initialization_mode、已有运行mode_snapshot与历史数据保持原值|
 |输入与请求|创建时仍主动选择IDEATION／DESIGN；详情不发送模式更新。I04只接受必填title，携带模式（同值或与title混合）整体422／VALIDATION_FAILED；应用层非法字段为INVALID_INPUT|
-|调用接口与能力|只读来自[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)；标题修改继续[DT-OP27](#dt-op27)。编号保留供旧引用定位，不是可执行的模式写操作|
+|调用接口与能力|只读来自[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03)；标题修改继续[DT-OP27](#dt-op27)。编号保留供旧引用定位，不是可执行的模式写操作|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -960,7 +960,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|详情工具栏“完成初始化”；INITIALIZING 且 IDLE|
 |操作对象/范围|当前需求|
 |输入与请求|expected_content_version 取已确认 CURRENT.content_version|
-|调用接口与能力|[BND-REQ-API-I05](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i05)（完成初始化）→ [APP-REQ-CMD-C03](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c03)|
+|调用接口与能力|[BND-REQ-API-I05](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i05)（完成初始化）→ [APP-REQ-CMD-C03](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c03)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -979,7 +979,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|AI 对话操作选择及输入区；ACTIVE 或 COMPLETED，且文档为 IDLE|
 |操作对象/范围|DOCUMENT、SECTION、BLOCK、SELECTION|
 |输入与请求|action_type=ASK；instruction 为用户问题；scope_type/scope_ref 来自本次明确选择；source_type=USER_INSTRUCTION；expected_version 为 CURRENT 版本|
-|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c01)|
+|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -998,7 +998,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|详情工具栏“完成需求”；ACTIVE 且文档为 IDLE|
 |操作对象/范围|当前 Requirement|
 |输入与请求|expected_version 取已确认 CURRENT 版本|
-|调用接口与能力|[BND-REQ-API-I06](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i06)（完成需求）→ [APP-REQ-CMD-C04](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c04)|
+|调用接口与能力|[BND-REQ-API-I06](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i06)（完成需求）→ [APP-REQ-CMD-C04](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c04)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1017,7 +1017,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|详情工具栏“重新激活”；COMPLETED 且文档为 IDLE|
 |操作对象/范围|当前 Requirement|
 |输入与请求|requirement_id 来自当前页面，幂等键属于本次确认动作|
-|调用接口与能力|[BND-REQ-API-I07](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i07)（重新激活需求）→ [APP-REQ-CMD-C05](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c05)|
+|调用接口与能力|[BND-REQ-API-I07](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i07)（重新激活需求）→ [APP-REQ-CMD-C05](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c05)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1036,7 +1036,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|AI 对话操作选择及范围选择；ACTIVE 且 IDLE|
 |操作对象/范围|DOCUMENT、SECTION、BLOCK、SELECTION|
 |输入与请求|action_type=REVIEW；instruction、scope_type/scope_ref、expected_version 和 source_type=USER_INSTRUCTION|
-|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c01)|
+|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1055,7 +1055,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|已保存 REVIEW 结果对应的修改入口；ACTIVE + IDLE，已有可用的 REVIEW 结果|
 |操作对象/范围|原 Scope 或用户重新选择 Scope|
 |输入与请求|action_type=MODIFY；source_type=REVIEW_RESULT；source_id 引用来源运行；instruction 与本次选择范围、当前正文版本一起发送|
-|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c01)|
+|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1074,12 +1074,12 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|AI 对话修改入口；ACTIVE 且 IDLE|
 |操作对象/范围|DOCUMENT、SECTION、BLOCK、SELECTION|
 |输入与请求|action_type=MODIFY；instruction、Scope、expected_version；source_type=USER_INSTRUCTION|
-|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c01)|
+|调用接口与能力|[BND-GUIDE-API-I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14)（创建AI运行）→ [APP-GUIDE-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
 |1 触发与检查|选择范围并提交修改要求|
-|2 准备并提交|先显示并确认目标范围；接受后跟踪运行；等待时显示追问，有建议时加载 [I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20) 并交给 [BND-SUGGESTIONS](#bnd-suggestions)|
+|2 准备并提交|先显示并确认目标范围；接受后跟踪运行；等待时显示追问，有建议时加载 [I20](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i20) 并交给 [BND-SUGGESTIONS](#bnd-suggestions)|
 |3 已确认成功|信息不足时等待；充分时生成 SuggestionBatch|
 |4 明确失败或取消|无需修改时只返回消息|
 
@@ -1092,8 +1092,8 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|[BND-SUGGESTIONS](#bnd-suggestions) 中接受、拒绝、编辑后接受；SUGGESTION_REVIEWING|
 |操作对象/范围|Suggestion|
-|输入与请求|suggestion_id、decision；EDITED 时提交 edited_content；实际枚举与条件按 [I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21)|
-|调用接口与能力|[BND-BATCH-API-I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21)（处理建议决策）→ [APP-BATCH-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-batch-cmd-c01)|
+|输入与请求|suggestion_id、decision；EDITED 时提交 edited_content；实际枚举与条件按 [I21](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i21)|
+|调用接口与能力|[BND-BATCH-API-I21](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i21)（处理建议决策）→ [APP-BATCH-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-batch-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1112,7 +1112,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|[BND-SUGGESTIONS](#bnd-suggestions) 固定操作区“完成本批修改”；SUGGESTION_REVIEWING|
 |操作对象/范围|SuggestionBatch|
 |输入与请求|batch_id；expected_content_version 取批次 base_content_version|
-|调用接口与能力|[BND-BATCH-API-I22](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i22)（完成建议批次）→ [APP-BATCH-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-batch-cmd-c02)|
+|调用接口与能力|[BND-BATCH-API-I22](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i22)（完成建议批次）→ [APP-BATCH-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-batch-cmd-c02)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1131,7 +1131,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|[BND-SUGGESTIONS](#bnd-suggestions) 固定操作区“放弃本批建议”；SUGGESTION_REVIEWING|
 |操作对象/范围|SuggestionBatch|
 |输入与请求|batch_id 和本次动作幂等键|
-|调用接口与能力|[BND-BATCH-API-I23](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i23)（放弃建议批次）→ [APP-BATCH-CMD-C03](WALL-E.V1_0.6.后端设计文档.md#app-batch-cmd-c03)|
+|调用接口与能力|[BND-BATCH-API-I23](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i23)（放弃建议批次）→ [APP-BATCH-CMD-C03](WALL-E.后端设计文档_V_1.0.md#app-batch-cmd-c03)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1150,7 +1150,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|文档记录的版本子页中的保存版本入口；ACTIVE 且 IDLE|
 |操作对象/范围|当前完整文档|
 |输入与请求|description 可选；expected_version 取当前 CURRENT 版本|
-|调用接口与能力|[BND-REV-API-I26](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i26)（保存手动版本）→ [APP-REV-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-rev-cmd-c01)|
+|调用接口与能力|[BND-REV-API-I26](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i26)（保存手动版本）→ [APP-REV-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-rev-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1168,8 +1168,8 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|版本记录列表中的版本条目；Requirement 存在|
 |操作对象/范围|Revision|
-|输入与请求|revision_id 来自 [I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24) 的条目|
-|调用接口与能力|[BND-REV-API-I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)（读取版本快照）→ [APP-REV-QUERY-C02](WALL-E.V1_0.6.后端设计文档.md#app-rev-query-c02)|
+|输入与请求|revision_id 来自 [I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24) 的条目|
+|调用接口与能力|[BND-REV-API-I25](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i25)（读取版本快照）→ [APP-REV-QUERY-C02](WALL-E.后端设计文档_V_1.0.md#app-rev-query-c02)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1188,7 +1188,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|正文 Block 或单 Block Selection 的添加评论入口；ACTIVE 且 IDLE。不可用时评论面板及区块辅助栏显示状态原因；选区入口另需同Block有效文字选择，不因提示而放宽后端条件|
 |操作对象/范围|Block 或单 Block Selection|
 |输入与请求|expected_content_version、content、anchor_type、block_id；SELECTION 额外传 selection；引用快照由后端确认|
-|调用接口与能力|[BND-COMMENT-API-I29](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i29)（创建评论）→ [APP-COMMENT-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-comment-cmd-c01)|
+|调用接口与能力|[BND-COMMENT-API-I29](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i29)（创建评论）→ [APP-COMMENT-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-comment-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1207,7 +1207,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|OPEN 评论卡片的编辑入口；ACTIVE、IDLE、评论为 OPEN|
 |操作对象/范围|当前 Comment|
 |输入与请求|仅发送 content；评论 ID 来自该卡片，不提交新锚点|
-|调用接口与能力|[BND-COMMENT-API-I30](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i30)（编辑评论）→ [APP-COMMENT-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-comment-cmd-c02)|
+|调用接口与能力|[BND-COMMENT-API-I30](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i30)（编辑评论）→ [APP-COMMENT-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-comment-cmd-c02)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1226,7 +1226,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|OPEN 评论卡片“解决”；ACTIVE、IDLE、评论为 OPEN|
 |操作对象/范围|当前 Comment|
 |输入与请求|comment_id 和动作幂等键|
-|调用接口与能力|[BND-COMMENT-API-I31](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i31)（解决评论）→ [APP-COMMENT-CMD-C03](WALL-E.V1_0.6.后端设计文档.md#app-comment-cmd-c03)|
+|调用接口与能力|[BND-COMMENT-API-I31](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i31)（解决评论）→ [APP-COMMENT-CMD-C03](WALL-E.后端设计文档_V_1.0.md#app-comment-cmd-c03)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1245,7 +1245,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|RESOLVED 评论卡片“重新打开”；ACTIVE、IDLE、评论为 RESOLVED|
 |操作对象/范围|当前 Comment|
 |输入与请求|comment_id 和动作幂等键|
-|调用接口与能力|[BND-COMMENT-API-I32](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i32)（重新打开评论）→ [APP-COMMENT-CMD-C04](WALL-E.V1_0.6.后端设计文档.md#app-comment-cmd-c04)|
+|调用接口与能力|[BND-COMMENT-API-I32](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i32)（重新打开评论）→ [APP-COMMENT-CMD-C04](WALL-E.后端设计文档_V_1.0.md#app-comment-cmd-c04)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1264,7 +1264,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|未删除评论卡片的删除入口；ACTIVE、IDLE、评论未删除|
 |操作对象/范围|当前 Comment|
 |输入与请求|comment_id 和动作幂等键|
-|调用接口与能力|[BND-COMMENT-API-I33](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i33)（删除评论）→ [APP-COMMENT-CMD-C05](WALL-E.V1_0.6.后端设计文档.md#app-comment-cmd-c05)|
+|调用接口与能力|[BND-COMMENT-API-I33](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i33)（删除评论）→ [APP-COMMENT-CMD-C05](WALL-E.后端设计文档_V_1.0.md#app-comment-cmd-c05)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1283,7 +1283,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|OPEN + ATTACHED 评论卡片“让 AI 修改”；ACTIVE、IDLE、评论为 `OPEN + ATTACHED`|
 |操作对象/范围|评论锚点|
 |输入与请求|comment_id、当前 expected_content_version；不发送自拟 Scope 或复制的评论正文|
-|调用接口与能力|[BND-GUIDE-API-I34](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i34)（从评论发起修改）→ [APP-GUIDE-CMD-C05](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c05)|
+|调用接口与能力|[BND-GUIDE-API-I34](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i34)（从评论发起修改）→ [APP-GUIDE-CMD-C05](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c05)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1302,7 +1302,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|详情工具栏人工编辑入口；INITIALIZING 或 ACTIVE，且文档工作状态为 IDLE|
 |操作对象/范围|Current Document|
 |输入与请求|expected_version 取当前 CURRENT.content_version|
-|调用接口与能力|[BND-DOC-API-I09](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i09)（开始人工编辑）→ [APP-DOC-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-doc-cmd-c01)|
+|调用接口与能力|[BND-DOC-API-I09](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i09)（开始人工编辑）→ [APP-DOC-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-doc-cmd-c01)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1321,7 +1321,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|[BND-EDITOR](#bnd-editor) 内容变化后的定时或失焦事件；MANUAL_EDITING|
 |操作对象/范围|MANUAL_DRAFT|
 |输入与请求|expected_version 取后端已确认草稿版本；markdown_content 与 block_state_json 来自同一编辑快照|
-|调用接口与能力|[BND-DOC-API-I11](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i11)（保存人工草稿）→ [APP-DOC-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-doc-cmd-c02)|
+|调用接口与能力|[BND-DOC-API-I11](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i11)（保存人工草稿）→ [APP-DOC-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-doc-cmd-c02)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1340,7 +1340,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|编辑状态工具栏“完成”；MANUAL_EDITING，且最新草稿已保存|
 |操作对象/范围|MANUAL_DRAFT|
 |输入与请求|expected_version 取最后一次保存成功后的草稿版本|
-|调用接口与能力|[BND-DOC-API-I12](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i12)（完成人工编辑）→ [APP-DOC-CMD-C03](WALL-E.V1_0.6.后端设计文档.md#app-doc-cmd-c03)|
+|调用接口与能力|[BND-DOC-API-I12](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i12)（完成人工编辑）→ [APP-DOC-CMD-C03](WALL-E.后端设计文档_V_1.0.md#app-doc-cmd-c03)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1359,7 +1359,7 @@ Requirement 为 `ACTIVE` 时：
 |入口与条件|编辑状态工具栏“取消”；MANUAL_EDITING|
 |操作对象/范围|MANUAL_DRAFT|
 |输入与请求|expected_version 取最后确认的草稿版本|
-|调用接口与能力|[BND-DOC-API-I13](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i13)（取消人工编辑）→ [APP-DOC-CMD-C04](WALL-E.V1_0.6.后端设计文档.md#app-doc-cmd-c04)|
+|调用接口与能力|[BND-DOC-API-I13](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i13)（取消人工编辑）→ [APP-DOC-CMD-C04](WALL-E.后端设计文档_V_1.0.md#app-doc-cmd-c04)|
 
 |步骤|页面处理与可观察结果|
 |---|---|
@@ -1377,7 +1377,7 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|INITIALIZING 或 ACTIVE；详情右侧更多内的标题编辑入口；历史、窗口暂停及原请求保护仍约束操作|
 |请求输入|title；去首尾空格后1～20字符，不允许换行|
-|调用接口与能力|[BND-REQ-API-I04](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i04)（修改需求属性）→ [APP-REQ-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c02)|
+|调用接口与能力|[BND-REQ-API-I04](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i04)（修改需求属性）→ [APP-REQ-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c02)|
 |处理顺序|进入标题编辑并保留原值；提交期间显示保存中；成功回显后端标题；失败保留当前输入。标题操作不改变正文与版本。取消编辑恢复原值。|
 |补充规则|显式“保存/取消”按钮，不新增标题提交快捷键；见[标题交互](#sync-fe-06)|
 |代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP27|
@@ -1385,7 +1385,7 @@ Requirement 为 `ACTIVE` 时：
 |步骤|页面处理与结果|
 |---|---|
 |1 编辑|从当前确认标题初始化输入；校验去首尾空格后1～20字符、无换行。|
-|2 提交|仅传title到[I04](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i04)，显示保存中并禁止重复保存。|
+|2 提交|仅传title到[I04](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i04)，显示保存中并禁止重复保存。|
 |3 成功|回显返回的标题并退出标题编辑，正文和版本保持原值。|
 |4 失败或取消|失败保留编辑输入并显示错误；用户主动取消则恢复已确认标题。|
 
@@ -1398,15 +1398,15 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|GuideRun=WAITING_USER；AI 输入区|
 |请求输入|当前 guide_run_id、instruction、动作幂等键|
-|调用接口与能力|[BND-GUIDE-API-I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15)（继续等待中的运行）→ [APP-GUIDE-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c02)|
+|调用接口与能力|[BND-GUIDE-API-I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15)（继续等待中的运行）→ [APP-GUIDE-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c02)|
 |处理顺序|保留输入并显示发送中；接受后使用同一运行 ID 恢复轮询，读取正式用户消息；失败保留文字；不另建运行。|
-|补充规则|卡片回复改用 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)，普通文本不能自动转换成选项|
+|补充规则|卡片回复改用 [I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)，普通文本不能自动转换成选项|
 |代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP28|
 
 |步骤|页面处理与结果|
 |---|---|
 |1 输入|确认当前为WAITING_USER，保留待发送文字并校验。|
-|2 提交|使用当前guide_run_id调用[I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15)，显示发送中并防重复。|
+|2 提交|使用当前guide_run_id调用[I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15)，显示发送中并防重复。|
 |3 成功|读取正式消息，在同一运行上恢复轮询；原卡片是否失效以服务端为准。|
 |4 失败|保留输入；状态冲突时重新读取运行，不能另建运行来规避。|
 
@@ -1419,7 +1419,7 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|当前可取消运行；PERSISTING 阶段不可取消|
 |请求输入|当前 guide_run_id、动作幂等键|
-|调用接口与能力|[BND-GUIDE-API-I17](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i17)（取消AI运行）→ [APP-GUIDE-CMD-C03](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c03)|
+|调用接口与能力|[BND-GUIDE-API-I17](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i17)（取消AI运行）→ [APP-GUIDE-CMD-C03](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c03)|
 |处理顺序|提交时禁重复取消；成功读取运行及需求，显示已取消并退出处理中；如后端已进入提交阶段，保持跟踪直到结果确定。|
 |补充规则|收起面板或切换页签不调用本接口|
 |代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP29|
@@ -1427,7 +1427,7 @@ Requirement 为 `ACTIVE` 时：
 |步骤|页面处理与结果|
 |---|---|
 |1 检查|读取当前运行状态及阶段，PERSISTING时显示不可取消。|
-|2 提交|允许取消时调用[I17](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i17)，当前取消入口显示处理中。|
+|2 提交|允许取消时调用[I17](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i17)，当前取消入口显示处理中。|
 |3 成功|读取运行和需求，显示已取消，按已确认工作状态恢复操作。|
 |4 失败或竞态|若已进入提交阶段则等待最终结果；请求失败保留原运行状态。|
 
@@ -1440,7 +1440,7 @@ Requirement 为 `ACTIVE` 时：
 |---|---|
 |入口与条件|原运行 FAILED，当前需求允许原动作且 IDLE|
 |请求输入|失败运行 guide_run_id、动作幂等键|
-|调用接口与能力|[BND-GUIDE-API-I18](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i18)（重新运行失败任务）→ [APP-GUIDE-CMD-C04](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c04)|
+|调用接口与能力|[BND-GUIDE-API-I18](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i18)（重新运行失败任务）→ [APP-GUIDE-CMD-C04](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c04)|
 |处理顺序|点击重新运行后等待新运行 ID；成功跟踪新运行，旧运行保留失败记录；失败保留原错误摘要与重试入口。|
 |补充规则|来源或范围失效时显示具体错误，不能拿旧正文或旧建议直接重试应用|
 |代码与验证|frontend/src/requirements/detail.tsx :: RequirementDetail；frontend/tests/detail-read.test.mjs；frontend/tests/detail-layout.test.mjs；frontend/tests/departure.test.mjs；完整操作见验收场景映射；TC-UI-DT-OP30|
@@ -1448,7 +1448,7 @@ Requirement 为 `ACTIVE` 时：
 |步骤|页面处理与结果|
 |---|---|
 |1 触发|从FAILED运行的重新运行入口发起，保留失败摘要和原运行ID。|
-|2 提交|调用[I18](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i18)；后端重新校验当前状态、来源和范围。|
+|2 提交|调用[I18](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i18)；后端重新校验当前状态、来源和范围。|
 |3 成功|使用返回的新运行ID跟踪处理，原运行仍保留FAILED。|
 |4 失败|显示状态、来源或范围错误，保留失败信息，不应用旧输出。|
 
@@ -1492,7 +1492,7 @@ Requirement 为 `ACTIVE` 时：
 |GUIDE_ACTIVE|展示运行进展或待回复内容；取消是否可用还要检查运行阶段；其他正文流程不可启动|
 |MANUAL_EDITING|编辑独立草稿，展示保存状态及完成/取消操作；不开放其他正文写入流程|
 |SUGGESTION_REVIEWING|展示当前建议批次和单项决策、完成、放弃入口；正文继续展示原 CURRENT|
-|标题编辑|按 [APP-REQ-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c02)：INITIALIZING 或 ACTIVE 可修改；不额外把 IDLE 套到标题条件上|
+|标题编辑|按 [APP-REQ-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c02)：INITIALIZING 或 ACTIVE 可修改；不额外把 IDLE 套到标题条件上|
 |初始化模式|创建后只读，详情所有状态均无修改入口；原DT-OP04写入撤销，创建及读取字段保留|
 
 前端根据已读取的状态提前控制入口；后端仍在提交时检查。状态冲突时重新读取需求和活动对象，保留用户未提交输入。
@@ -1507,7 +1507,7 @@ Requirement 为 `ACTIVE` 时：
 |需求状态|Requirement.status|中文状态标签|否|只能通过合法状态事件变化|后端事务保存|
 |初始化模式|Requirement.initialization_mode|更多属性内显示灵感／设计模式及创建后只读说明|否|创建时必选，创建后不得通过属性更新修改；旧请求整体拒绝|创建时保存；详情仅真实读取|
 |AI 对话|ConversationMessage|按 sequence_no 展示 TEXT、INTERACTION_CARDS 和 CARD_RESPONSE|历史消息不可编辑；用户只能提交新消息|只保存实际可见消息；内部 Prompt、工具结果和模型原始 JSON 不作为普通消息|消息生成或用户提交成功后保存|
-|交互卡片|后端[MessageReadModel](WALL-E.V1_0.6.后端设计文档.md#messagereadmodel).structured_content|一条消息展示1～5张卡片|AVAILABLE 时可填写；ANSWERED 或 EXPIRED 时只读|必答项必须回答；非必答项可跳过；整组一次提交|正式提交后创建 CARD_RESPONSE；提交前仅使用 sessionStorage 暂存|
+|交互卡片|后端[MessageReadModel](WALL-E.后端设计文档_V_1.0.md#messagereadmodel).structured_content|一条消息展示1～5张卡片|AVAILABLE 时可填写；ANSWERED 或 EXPIRED 时只读|必答项必须回答；非必答项可跳过；整组一次提交|正式提交后创建 CARD_RESPONSE；提交前仅使用 sessionStorage 暂存|
 |Current Document|`RequirementDocument(document_type=CURRENT)`|Milkdown + Crepe|不直接编辑；人工编辑时切换到独立 MANUAL_DRAFT|是当前唯一正式事实源；人工编辑时以其内容创建草稿；AI 建议或人工编辑完成后才能更新|正式操作完成时与区块状态同事务保存|
 |AI 建议|SuggestionBatch、Suggestion|在右侧“AI 对话”页签按 `order_no ASC` 展示区块级纵向对比；原内容和建议内容具有明确标签；点击卡片只定位并高亮正文目标|可以接受、拒绝或编辑建议内容；原内容不可编辑|不做字符级 Diff；单项操作不改正文；批次完成前允许重新选择决策|单项决策独立保存；最终完成批次时统一应用到 Current Document|
 |评论|Comment|正文辅助栏展示 `OPEN + ATTACHED` 评论数量；右侧“评论”页签按 `created_at ASC, id ASC` 展示评论卡片；处理状态和锚点状态分别展示|ACTIVE 且 IDLE 时按照评论状态执行编辑、解决、重新打开、删除或 AI 修改|ORPHANED 展示原引用但不能定位正文或发起 AI 修改；RESOLVED 必须先重新打开才能编辑或发起 AI 修改|评论操作独立保存，不修改 Current Document；软删除后从默认页面隐藏|
@@ -1523,9 +1523,9 @@ Requirement 为 `ACTIVE` 时：
 |TEXT|展示实际可见 content|不把 Prompt、工具结果、内部推理和原始模型 JSON 展示为消息|
 |INTERACTION_CARDS|展示引导语和1～5张卡片|组件规则见 [BND-CARDS](#bnd-cards)；只使用已校验结构，损坏时退化为可读 content|
 |CARD_RESPONSE|展示用户正式答案|按 reply_to_message_id 对应原卡片；已提交答案不可编辑|
-|输入与动作|初始化使用 INITIALIZE；正式维护选择 ASK、REVIEW、MODIFY|输入长度及换行规则与 [I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14)/[I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15) 一致；未提交输入不进入 ConversationMessage|
+|输入与动作|初始化使用 INITIALIZE；正式维护选择 ASK、REVIEW、MODIFY|输入长度及换行规则与 [I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14)/[I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15) 一致；未提交输入不进入 ConversationMessage|
 |操作范围|DOCUMENT、SECTION、BLOCK、SELECTION|显示本次选中范围，SELECTION仅一个Block；无有效单区块选区时禁用并说明原因，范围来自当前正式正文；见[范围交互](#sync-fe-06)与[选区契约](#sync-fe-07)|
-|等待回复|展示正式问题或 AVAILABLE 卡片|普通文本走 [I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15)；整组卡片走 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)；等待期间停止运行轮询，用户提交后恢复|
+|等待回复|展示正式问题或 AVAILABLE 卡片|普通文本走 [I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15)；整组卡片走 [I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)；等待期间停止运行轮询，用户提交后恢复|
 |运行进度|展示安全的运行状态或步骤文案|网络查询失败显示连接异常；原状态保留；PERSISTING 时取消不可用|
 |最终结果|ASK 显示回答；REVIEW 显示检查结果；MODIFY 显示追问、无需修改说明或建议批次|运行成功后刷新消息及相关资源，不能仅根据 HTTP 接受任务就显示处理成功|
 |更早消息加载失败|保留当前消息|原游标重试；不把失败当作没有更多消息|
@@ -1597,7 +1597,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 |编辑中|保留原正文与编辑值；校验错误就近显示；请求失败不丢失输入|
 |处理请求中|针对当前评论禁止重复提交；成功后根据返回评论更新对应卡片，列表仍按创建时间排列|
 |正文标记联动|OPEN + ATTACHED 计入标记数量；解决、重开、删除、锚点变化后更新；完整统计依赖见 [FE-Q05](#fe-q05)|
-|评论分页|[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27) 固定每页20条；空结果显示评论空态；失败保留当前成功页|
+|评论分页|[I27](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i27) 固定每页20条；空结果显示评论空态；失败保留当前成功页|
 |定位不在当前页的评论|按I37索引顺序计算I27目标页，加载并核实；并发变化重读索引及列表，不能擅自把该评论挪到列表顶部|
 
 <a id="fe-comment-read-v2"></a>
@@ -1615,10 +1615,10 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |内容|具体定义|
 |---|---|
-|列表|根据 [I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24) 展示版本号、BASELINE/MANUAL 类型、版本说明和创建时间；类型使用中文文案|
-|排序与分页|使用 [I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24) 的顺序和 meta.pagination；不由页面重新排序；固定20条|
-|保存版本|ACTIVE + IDLE；说明可选，长度按 [I26](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i26)；保存过程及结果见 [DT-OP15](#dt-op15)|
-|读取快照|点击某版本读取 [I25](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i25)；加载失败保留版本列表并允许重试|
+|列表|根据 [I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24) 展示版本号、BASELINE/MANUAL 类型、版本说明和创建时间；类型使用中文文案|
+|排序与分页|使用 [I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24) 的顺序和 meta.pagination；不由页面重新排序；固定20条|
+|保存版本|ACTIVE + IDLE；说明可选，长度按 [I26](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i26)；保存过程及结果见 [DT-OP15](#dt-op15)|
+|读取快照|点击某版本读取 [I25](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i25)；加载失败保留版本列表并允许重试|
 |快照身份|明确展示正在查看的版本号与历史只读状态，不能让它与 CURRENT 或草稿混淆|
 |快照内容|同一 Revision 的 Markdown 与区块状态；不展示当前活动评论，不允许编辑和恢复|
 |退出查看|点击“退出历史”重新读取需求、CURRENT及活动状态，再恢复实际当前文档或草稿视图；不得把历史正文写回CURRENT|
@@ -1655,7 +1655,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 |状态|进入条件|用户可见反馈|下一步|
 |---|---|---|---|
 |未保存|编辑内容较最后确认快照变化|“未保存”|到达保存时机后串行提交|
-|保存中|[I11](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i11) 请求在途|“保存中”；允许继续编辑|新编辑只替换最新待发快照|
+|保存中|[I11](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i11) 请求在途|“保存中”；允许继续编辑|新编辑只替换最新待发快照|
 |已保存|当前编辑内容对应快照已被后端确认|“已保存”及保存时间|继续编辑时重新变为未保存|
 |暂时失败|网络或暂时存储失败|“保存失败，正在重试”|按2/5/10/30秒退避，之后最多每30秒；只保存最新快照|
 |校验失败|字段、文档或区块校验失败|显示具体错误|停止自动重试，修正后再保存|
@@ -1694,18 +1694,18 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |项目|正式定义与前端绑定|
 |---|---|
-|模板与初始化|模板事实及结构锁定见后端[INF-TEMPLATE](WALL-E.V1_0.6.后端设计文档.md#inf-template)、[APP-REQ-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c01)/C03；前端使用固定版本，初始化界面按该锁定限制操作，完成后进入正式维护|
-|历史版本|对象及创建条件见后端[OBJ-REV](WALL-E.V1_0.6.后端设计文档.md#obj-rev)、[APP-REV-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-rev-cmd-c01)、[APP-REQ-CMD-C03](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c03)；前端版本列表/只读快照按[DT-OP15](#dt-op15)/16呈现，不提供恢复操作|
+|模板与初始化|模板事实及结构锁定见后端[INF-TEMPLATE](WALL-E.后端设计文档_V_1.0.md#inf-template)、[APP-REQ-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c01)/C03；前端使用固定版本，初始化界面按该锁定限制操作，完成后进入正式维护|
+|历史版本|对象及创建条件见后端[OBJ-REV](WALL-E.后端设计文档_V_1.0.md#obj-rev)、[APP-REV-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-rev-cmd-c01)、[APP-REQ-CMD-C03](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c03)；前端版本列表/只读快照按[DT-OP15](#dt-op15)/16呈现，不提供恢复操作|
 |多人协作|本文1.2/2.1已明确单用户、无Y.js/在线光标；编辑保护采用本节自动保存及冲突反馈|
-|完成与重新激活|许可见后端[APP-REQ-CMD-C04](WALL-E.V1_0.6.后端设计文档.md#app-req-cmd-c04)/C05及[APP-GUIDE-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c01)；前端二次确认，COMPLETED只保留允许的只读ASK及查看，变更操作在重激活后开放；不伪造新Revision或正文变化|
-|评论身份、定位、状态与来源|后端[OBJ-COMMENT](WALL-E.V1_0.6.后端设计文档.md#obj-comment)、[SHR-ANCHOR](WALL-E.V1_0.6.后端设计文档.md#shr-anchor)、[APP-COMMENT-CMD-C06](WALL-E.V1_0.6.后端设计文档.md#app-comment-cmd-c06)、[APP-GUIDE-CMD-C05](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c05)为正式定义；前端按返回双状态展示，不通过定位查询改状态，不自动解决来源评论、不提供重新挂载、回复或线程|
-|卡片结构与整组提交|后端[SHR-CARDS](WALL-E.V1_0.6.后端设计文档.md#shr-cards)、[APP-GUIDE-CMD-C06](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c06)为正式定义；展示1～5张、通常优先1～3张；同组独立问题可任意顺序填写，一次整组提交；推荐不自动成为选择；开放式问题用文本对话|
+|完成与重新激活|许可见后端[APP-REQ-CMD-C04](WALL-E.后端设计文档_V_1.0.md#app-req-cmd-c04)/C05及[APP-GUIDE-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c01)；前端二次确认，COMPLETED只保留允许的只读ASK及查看，变更操作在重激活后开放；不伪造新Revision或正文变化|
+|评论身份、定位、状态与来源|后端[OBJ-COMMENT](WALL-E.后端设计文档_V_1.0.md#obj-comment)、[SHR-ANCHOR](WALL-E.后端设计文档_V_1.0.md#shr-anchor)、[APP-COMMENT-CMD-C06](WALL-E.后端设计文档_V_1.0.md#app-comment-cmd-c06)、[APP-GUIDE-CMD-C05](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c05)为正式定义；前端按返回双状态展示，不通过定位查询改状态，不自动解决来源评论、不提供重新挂载、回复或线程|
+|卡片结构与整组提交|后端[SHR-CARDS](WALL-E.后端设计文档_V_1.0.md#shr-cards)、[APP-GUIDE-CMD-C06](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c06)为正式定义；展示1～5张、通常优先1～3张；同组独立问题可任意顺序填写，一次整组提交；推荐不自动成为选择；开放式问题用文本对话|
 |卡片历史与本地草稿|[BND-CARDS](#bnd-cards)正式定义sessionStorage与清理；ANSWERED展示正式答案，EXPIRED保留卡片和选项但禁用操作；正式历史不可编辑，新的决定通过新对话处理|
-|人工编辑与数据隔离|后端[OBJ-DOC](WALL-E.V1_0.6.后端设计文档.md#obj-doc)及[APP-DOC-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-doc-cmd-c01)—C04正式定义CURRENT与MANUAL_DRAFT；编辑器只编辑草稿，AI/评论/版本及普通正文使用CURRENT；完成确认后刷新，不提前当正文生效|
-|草稿保护与冲突|本节“人工草稿保存状态”“保存与快照顺序”及[DT-OP24](#dt-op24)—26定义前端责任；后端[SHR-CONCURRENCY](WALL-E.V1_0.6.后端设计文档.md#shr-concurrency)、[APP-BATCH-CMD-C02](WALL-E.V1_0.6.后端设计文档.md#app-batch-cmd-c02)定义版本与目标检查。刷新恢复已确认草稿，本地内容不覆盖更新服务端版本，冲突不自动合并|
-|AI建议展示|根据后端[OBJ-BATCH](WALL-E.V1_0.6.后端设计文档.md#obj-batch)与[APP-BATCH-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-batch-cmd-c01)/C02/C03结果，按order_no ASC纵向展示完整区块或表格行；不做字符Diff、不提前叠到CURRENT；单项标签“待处理/已接受/已拒绝/已编辑并接受”，完成批次前允许重新决定|
-|内容来源|后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)定义区块创建与最近修改来源元数据；前端通过辅助栏打开来源浮层，正文默认不常驻元数据，不把元数据写进Markdown|
-|评论排序与选择|使用[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)的created_at ASC、id ASC顺序；选中仅滚动和高亮，不重排，不增加位置排序、拖动或分组|
+|人工编辑与数据隔离|后端[OBJ-DOC](WALL-E.后端设计文档_V_1.0.md#obj-doc)及[APP-DOC-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-doc-cmd-c01)—C04正式定义CURRENT与MANUAL_DRAFT；编辑器只编辑草稿，AI/评论/版本及普通正文使用CURRENT；完成确认后刷新，不提前当正文生效|
+|草稿保护与冲突|本节“人工草稿保存状态”“保存与快照顺序”及[DT-OP24](#dt-op24)—26定义前端责任；后端[SHR-CONCURRENCY](WALL-E.后端设计文档_V_1.0.md#shr-concurrency)、[APP-BATCH-CMD-C02](WALL-E.后端设计文档_V_1.0.md#app-batch-cmd-c02)定义版本与目标检查。刷新恢复已确认草稿，本地内容不覆盖更新服务端版本，冲突不自动合并|
+|AI建议展示|根据后端[OBJ-BATCH](WALL-E.后端设计文档_V_1.0.md#obj-batch)与[APP-BATCH-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-batch-cmd-c01)/C02/C03结果，按order_no ASC纵向展示完整区块或表格行；不做字符Diff、不提前叠到CURRENT；单项标签“待处理/已接受/已拒绝/已编辑并接受”，完成批次前允许重新决定|
+|内容来源|后端[SHR-BLOCK](WALL-E.后端设计文档_V_1.0.md#shr-block)定义区块创建与最近修改来源元数据；前端通过辅助栏打开来源浮层，正文默认不常驻元数据，不把元数据写进Markdown|
+|评论排序与选择|使用[I27](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i27)的created_at ASC、id ASC顺序；选中仅滚动和高亮，不重排，不增加位置排序、拖动或分组|
 |评论双状态视觉|OPEN/RESOLVED展示“未解决/已解决”；ATTACHED/ORPHANED通过定位能力和“位置已失效”警告表达；孤立评论显示警告图标和原引用并说明非当前内容；操作仍受[DT-OP17](#dt-op17)—22条件约束|
 |已解决评论|保持可见但弱化；隐藏编辑及“让AI修改”，提供重开；重开后按锚点状态显示定位和AI入口；历史Revision不展示当前评论|
 
@@ -1788,13 +1788,13 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |原操作|复查接口|确认依据与后续处理|
 |---|---|---|
-|属性、生命周期变更|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)；初始化完成额外 [I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24)|使用后端状态，不按超时推断失败；幂等接口可原键原输入重放|
-|开始、保存、完成、取消人工编辑|[I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)、[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)、[I10](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i10)|联合判断工作状态、草稿是否存在、CURRENT与草稿版本；单独草稿404不代表必然完成成功|
-|AI 创建、继续、取消、重试|已知运行 ID 时 [I16](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i16)，并查询 [I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)/[I35](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i35)|没有拿到新 ID 时先按原键原请求恢复结果；不能另外发送同一条用户消息|
-|卡片提交|[I35](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i35)，按已有正式响应引用读取所在消息|ANSWERED 后使用正式答案；模型后续失败不撤销已保存回答|
-|建议决策、完成、放弃|[I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20)；可能已应用时加 [I03](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i03)/[I08](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i08)|使用单项状态、批次状态和正文版本确认；不根据本地按钮颜色确认应用|
-|评论操作|[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28)、[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)；影响标记时更新统计来源|通过[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28)返回的deleted_at确认软删除，配合[I27](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i27)列表和原键原输入重放；[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28)仅真正不存在才404，404不能单独证明本次删除成功；未确认前不提前移除评论|
-|保存版本|[I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24)，必要时原键重放 [I26](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i26)|不仅根据类似说明文本推断已创建；不能盲目再保存一版|
+|属性、生命周期变更|[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03)；初始化完成额外 [I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24)|使用后端状态，不按超时推断失败；幂等接口可原键原输入重放|
+|开始、保存、完成、取消人工编辑|[I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03)、[I08](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i08)、[I10](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i10)|联合判断工作状态、草稿是否存在、CURRENT与草稿版本；单独草稿404不代表必然完成成功|
+|AI 创建、继续、取消、重试|已知运行 ID 时 [I16](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i16)，并查询 [I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03)/[I35](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i35)|没有拿到新 ID 时先按原键原请求恢复结果；不能另外发送同一条用户消息|
+|卡片提交|[I35](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i35)，按已有正式响应引用读取所在消息|ANSWERED 后使用正式答案；模型后续失败不撤销已保存回答|
+|建议决策、完成、放弃|[I20](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i20)；可能已应用时加 [I03](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i03)/[I08](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i08)|使用单项状态、批次状态和正文版本确认；不根据本地按钮颜色确认应用|
+|评论操作|[I28](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i28)、[I27](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i27)；影响标记时更新统计来源|通过[I28](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i28)返回的deleted_at确认软删除，配合[I27](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i27)列表和原键原输入重放；[I28](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i28)仅真正不存在才404，404不能单独证明本次删除成功；未确认前不提前移除评论|
+|保存版本|[I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24)，必要时原键重放 [I26](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i26)|不仅根据类似说明文本推断已创建；不能盲目再保存一版|
 
 
 **实现定位**
@@ -1816,17 +1816,17 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 ### 5.6 BND-CREATE 新建需求抽屉
 
-职责与状态归属：负责五字段表单、就近校验和提交展示；[BND-WORKBENCH](#bnd-workbench)维护配置、调用[I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)、控制成功关闭与列表刷新。组件不直接请求HTTP。
+职责与状态归属：负责五字段表单、就近校验和提交展示；[BND-WORKBENCH](#bnd-workbench)维护配置、调用[I02](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i02)、控制成功关闭与列表刷新。组件不直接请求HTTP。
 
 |输入项|类型或定义引用|必传、可空与默认规则|用途及外部变化后的同步|
 |---|---|---|---|
-|title / type / template / idea / mode|五字段表单；最终值及约束见后端[BND-REQ-API-I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)|所有字段初始为空；提交必填性及允许null以[I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)为准。title/idea初始为""，type/mode/template未选为null，template={template_key,template_version}|受父级当前值控制；template选择绑定template_key、template_version，不增加第六个用户输入|
+|title / type / template / idea / mode|五字段表单；最终值及约束见后端[BND-REQ-API-I02](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i02)|所有字段初始为空；提交必填性及允许null以[I02](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i02)为准。title/idea初始为""，type/mode/template未选为null，template={template_key,template_version}|受父级当前值控制；template选择绑定template_key、template_version，不增加第六个用户输入|
 |可选配置|需求类型、模板及适用关系、工作模式选项|采用[正式配置](#sync-fe-03)；选项含明确value/label、适用类型及禁用语义；父级受控更新不触发用户事件|类型未选时禁用模板；一个适用模板自动选中，多个适用模板不默认选择；切换类型清空不兼容模板|
 |提交状态|是否正在执行创建请求|由父页面传入；初始未提交|同步控制重复提交和关闭限制|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
-|create|字段校验通过后提交|title、type、template、idea、mode五字段；父级将template映射为[I02](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i02)的key/version|创建意图，不表示需求已创建|
+|create|字段校验通过后提交|title、type、template、idea、mode五字段；父级将template映射为[I02](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i02)的key/version|创建意图，不表示需求已创建|
 |cancel|允许关闭时点击取消或按Esc；已有输入先经放弃确认|取消意图；不携带业务请求参数|关闭抽屉，不执行创建|
 
 特殊交互：空表单→编辑→提交中→成功关闭或错误保留。字段错误按表单顺序就近展示并聚焦第一个错误；请求失败保留已填内容。遮罩不关闭；Esc或取消在已有输入时先确认；请求中禁止关闭。
@@ -1844,16 +1844,16 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |输入项|类型或定义引用|必传、可空与默认规则|用途及外部变化后的同步|
 |---|---|---|---|
-|文档|后端4.2 [DocumentReadModel](WALL-E.V1_0.6.后端设计文档.md#documentreadmodel)|载入完成后使用；加载、缺失及错误由页面5.3处理|以页面选择的CURRENT、MANUAL_DRAFT或版本只读快照为来源；迟到保存响应不得覆盖较新本地内容|
+|文档|后端4.2 [DocumentReadModel](WALL-E.后端设计文档_V_1.0.md#documentreadmodel)|载入完成后使用；加载、缺失及错误由页面5.3处理|以页面选择的CURRENT、MANUAL_DRAFT或版本只读快照为来源；迟到保存响应不得覆盖较新本地内容|
 |只读状态|boolean|由页面编辑条件确定|外部切换立即同步可编辑性；不是后端授权依据|
 |保存状态|[BND-DETAIL](#bnd-detail)／5.5 自动保存状态|由父页面维护|展示保存中、失败、冲突及已保存；组件不自行认定持久化成功|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
-|文档变化|允许编辑并发生内容变化|同一编辑器快照的完整Markdown与BlockState；结构引用后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)及[BND-DOC-API-I11](WALL-E.V1_0.6.后端设计文档.md#bnd-doc-api-i11)|本地文档已变化，不代表保存成功|
+|文档变化|允许编辑并发生内容变化|同一编辑器快照的完整Markdown与BlockState；结构引用后端[SHR-BLOCK](WALL-E.后端设计文档_V_1.0.md#shr-block)及[BND-DOC-API-I11](WALL-E.后端设计文档_V_1.0.md#bnd-doc-api-i11)|本地文档已变化，不代表保存成功|
 |selection / block选择|用户选择文本或区块|document_id/content_version/block_id/start_offset/end_offset/selected_text/prefix_text/suffix_text；UTF-16转Unicode码点半开区间，见[选区契约](#sync-fe-07)|当前用户选择；供父级范围、评论或定位操作使用|
 
-特殊交互：只读→人工编辑→保存、冲突或提交，生命周期由[BND-DETAIL](#bnd-detail)／5.5统一控制。编辑器采用Milkdown+Crepe；节点属性携带block_id，Markdown序列化不得泄漏元数据。身份继承以及拆分、合并、复制的正式规则归属后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)，算法见后端[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)。视觉及滚动宽度采用[BND-DETAIL](#bnd-detail)／5.2正文区。
+特殊交互：只读→人工编辑→保存、冲突或提交，生命周期由[BND-DETAIL](#bnd-detail)／5.5统一控制。编辑器采用Milkdown+Crepe；节点属性携带block_id，Markdown序列化不得泄漏元数据。身份继承以及拆分、合并、复制的正式规则归属后端[SHR-BLOCK](WALL-E.后端设计文档_V_1.0.md#shr-block)，算法见后端[SHR-BLOCK](WALL-E.后端设计文档_V_1.0.md#shr-block)。视觉及滚动宽度采用[BND-DETAIL](#bnd-detail)／5.2正文区。
 
 |内容|确定定义|
 |---|---|
@@ -1908,7 +1908,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 选区事件携带 `document_id/content_version/block_id/start_offset/end_offset/selected_text/prefix_text/suffix_text`。DOM/ProseMirror 的 UTF-16 位置必须显式转为后端共同规则的 Unicode 码点半开区间；不得跨 Block 或根据相似文本猜身份。定位动作校验当前需求、文档身份及版本，历史快照不接收当前评论定位；HTTP 只传原接口已有字段，不新增客户端可信 offset。
 
-保存回执按实际提交快照和草稿版本接续服务器确认的创建事实、确认版本和出生账本，保留较新的本地正文、顺序、选区及高水位。迟到回执不能整份覆盖编辑器；撤销恢复使用同草稿的已证明身份。具体来源与分配时间规则统一引用 [BE-08](WALL-E.V1_0.6.后端设计文档.md#sync-be-08)/09。
+保存回执按实际提交快照和草稿版本接续服务器确认的创建事实、确认版本和出生账本，保留较新的本地正文、顺序、选区及高水位。迟到回执不能整份覆盖编辑器；撤销恢复使用同草稿的已证明身份。具体来源与分配时间规则统一引用 [BE-08](WALL-E.后端设计文档_V_1.0.md#sync-be-08)/09。
 
 **确认依据**：D-004、D-008、D-009。**代码对应**：`frontend/src/documents/{selection,editor-selection,identity,edited-snapshot,autosave,manual-session}.ts`；`backend/app/documents/{anchors,manual_identity,sources}.py`。
 
@@ -1916,19 +1916,19 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 ### 5.6 BND-CARDS 决策卡片组
 
-职责与状态归属：负责整组本地回答和输入展示；父页面传入服务端消息、推导状态及正式答案，并提交[I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)。用于[BND-DETAIL](#bnd-detail)。未提交答案不是已确认事实。
+职责与状态归属：负责整组本地回答和输入展示；父页面传入服务端消息、推导状态及正式答案，并提交[I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)。用于[BND-DETAIL](#bnd-detail)。未提交答案不是已确认事实。
 
 |输入项|类型或定义引用|必传、可空与默认规则|用途及外部变化后的同步|
 |---|---|---|---|
-|卡片消息|后端4.2 [MessageReadModel](WALL-E.V1_0.6.后端设计文档.md#messagereadmodel)及[SHR-CARDS](WALL-E.V1_0.6.后端设计文档.md#shr-cards)|消息承载1～5张卡片；结构和选项限制引用正式定义|消息变化按requirement_id、message_id隔离本地草稿|
+|卡片消息|后端4.2 [MessageReadModel](WALL-E.后端设计文档_V_1.0.md#messagereadmodel)及[SHR-CARDS](WALL-E.后端设计文档_V_1.0.md#shr-cards)|消息承载1～5张卡片；结构和选项限制引用正式定义|消息变化按requirement_id、message_id隔离本地草稿|
 |推导状态 / 正式响应|AVAILABLE、ANSWERED、EXPIRED及对应正式响应消息|以服务端读取结果为准；未回答不伪造响应|仅AVAILABLE恢复本地未提交草稿；ANSWERED显示正式答案，EXPIRED禁止提交；两者均清理本地草稿|
 |提交状态|父级请求状态|提交前为非提交中|请求中防止重复提交；失败后恢复编辑并保留本地答案|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
-|整组responses|required卡全部满足后整组提交|后端[BND-MSG-API-I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)的responses；包含显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）；schema_version=1由请求映射提供|用户提交整组答案的意图；接受后仍由服务端决定运行进度|
+|整组responses|required卡全部满足后整组提交|后端[BND-MSG-API-I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)的responses；包含显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）；schema_version=1由请求映射提供|用户提交整组答案的意图；接受后仍由服务端决定运行进度|
 
-特殊交互：AVAILABLE本地填写→提交中→ANSWERED；状态变化可变为EXPIRED。required卡必须回答；可跳过卡使用显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）。未提交草稿按requirement_id与message_id存入sessionStorage，仅AVAILABLE时恢复；失败保留本地。重复响应读取已有正式答案。卡片业务可用条件由后端[APP-GUIDE-CMD-C06](WALL-E.V1_0.6.后端设计文档.md#app-guide-cmd-c06)判断。视觉依据：同一消息内展示1～5张卡，采用[BND-DETAIL](#bnd-detail)／5.2右侧对话区；输入、按钮和错误按5.1公共规则。
+特殊交互：AVAILABLE本地填写→提交中→ANSWERED；状态变化可变为EXPIRED。required卡必须回答；可跳过卡使用显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）。未提交草稿按requirement_id与message_id存入sessionStorage，仅AVAILABLE时恢复；失败保留本地。重复响应读取已有正式答案。卡片业务可用条件由后端[APP-GUIDE-CMD-C06](WALL-E.后端设计文档_V_1.0.md#app-guide-cmd-c06)判断。视觉依据：同一消息内展示1～5张卡，采用[BND-DETAIL](#bnd-detail)／5.2右侧对话区；输入、按钮和错误按5.1公共规则。
 
 <a id="fe-cards-presentation-v2"></a>
 
@@ -1948,21 +1948,21 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 ### 5.6 BND-SUGGESTIONS 建议处理面板
 
-职责与状态归属：负责逐项决定、纵向对比和定位意图；父页面维护读取结果、请求状态及[I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21)/[I22](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i22)/[I23](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i23)调用。用于[BND-DETAIL](#bnd-detail)。
+职责与状态归属：负责逐项决定、纵向对比和定位意图；父页面维护读取结果、请求状态及[I21](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i21)/[I22](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i22)/[I23](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i23)调用。用于[BND-DETAIL](#bnd-detail)。
 
 |输入项|类型或定义引用|必传、可空与默认规则|用途及外部变化后的同步|
 |---|---|---|---|
-|Batch / Suggestion列表 / counts|后端4.2 [SuggestionBatchReadModel](WALL-E.V1_0.6.后端设计文档.md#suggestionbatchreadmodel)及[SuggestionReadModel](WALL-E.V1_0.6.后端设计文档.md#suggestionreadmodel)|由[I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20)完整结果提供；加载失败不伪造空批次|以最新查询结果替换；决定尚未提交时不当作正式状态|
+|Batch / Suggestion列表 / counts|后端4.2 [SuggestionBatchReadModel](WALL-E.后端设计文档_V_1.0.md#suggestionbatchreadmodel)及[SuggestionReadModel](WALL-E.后端设计文档_V_1.0.md#suggestionreadmodel)|由[I20](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i20)完整结果提供；加载失败不伪造空批次|以最新查询结果替换；决定尚未提交时不当作正式状态|
 |提交状态|父页面维护的操作状态|提交期间防重复操作|与当前单项或批次操作绑定；未知结果先查询|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
-|decide|用户决定一项建议|suggestion_id、decision、满足[I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21)条件的edited_content|单项决定意图；不表示事实正文已改变|
-|complete|用户完成批次且页面前置条件满足|batch_id、当前已读取expected_content_version，引用[I22](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i22)|应用批次的意图；实际允许条件与原子采用在后端|
-|discard|用户确认放弃批次|batch_id，引用[I23](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i23)|放弃意图|
+|decide|用户决定一项建议|suggestion_id、decision、满足[I21](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i21)条件的edited_content|单项决定意图；不表示事实正文已改变|
+|complete|用户完成批次且页面前置条件满足|batch_id、当前已读取expected_content_version，引用[I22](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i22)|应用批次的意图；实际允许条件与原子采用在后端|
+|discard|用户确认放弃批次|batch_id，引用[I23](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i23)|放弃意图|
 |locate|用户选择定位建议目标|该建议的目标引用及当前需求、文档身份与版本；按[定位契约](#sync-fe-07)校验|页面内定位，不发起事实写入|
 
-特殊交互：PENDING可决定，终态只读；未知结果先GET复查；目标失效显示不可继续并允许放弃，不自动合并。决定与最终采用规则分别引用[APP-BATCH-CMD-C01](WALL-E.V1_0.6.后端设计文档.md#app-batch-cmd-c01)、C02、C03。视觉依据：按区块纵向展示原内容与新内容，原内容始终只读；批次操作固定可见。
+特殊交互：PENDING可决定，终态只读；未知结果先GET复查；目标失效显示不可继续并允许放弃，不自动合并。决定与最终采用规则分别引用[APP-BATCH-CMD-C01](WALL-E.后端设计文档_V_1.0.md#app-batch-cmd-c01)、C02、C03。视觉依据：按区块纵向展示原内容与新内容，原内容始终只读；批次操作固定可见。
 
 <a id="fe-suggestions-presentation-v2"></a>
 
@@ -2114,7 +2114,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 ### 5.6 BND-FILTER 筛选与搜索控件
 
-职责与状态归属：父页面维护已提交查询与输入草稿、参数组装和HTTP；控件只输出选择或查询意图。不同筛选条件之间为且关系，同一枚举控件内为或关系；后端匹配规则正式定义在[APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)。
+职责与状态归属：父页面维护已提交查询与输入草稿、参数组装和HTTP；控件只输出选择或查询意图。不同筛选条件之间为且关系，同一枚举控件内为或关系；后端匹配规则正式定义在[APP-REQ-QUERY-C01](WALL-E.后端设计文档_V_1.0.md#app-req-query-c01)。
 
 |输入项|类型或定义引用|必传、可空与默认规则|用途及外部变化后的同步|
 |---|---|---|---|
@@ -2122,7 +2122,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 |选项列表|数组；每项唯一value及显示label|至少2项；value保留调用者传入的类型，不做数字/字符串转换|显示名仅用于展示|
 |默认选中项 / 当前选中值|选项值数组|默认／未筛选勾满具体项；允许传空数组表示全部，打开规范为全勾；父级持有已提交值|弹层持独立草稿，入口显示已提交条件；父级语义或可选集合变化、禁用时丢弃旧草稿，不额外查询|
 |占位提示 / 当前输入值|string|初始输入为空字符串；占位文案由页面给出|编辑仅改变输入草稿，未提交内容不参与查询|
-|关键词限制与匹配|[BND-WORKBENCH](#bnd-workbench)及后端[APP-REQ-QUERY-C01](WALL-E.V1_0.6.后端设计文档.md#app-req-query-c01)|工作台keyword最多100 Unicode码点；不支持多个关键词|工作台标题包含匹配与完整REQ编号精确匹配按后端定义；通用控件不另作默认模糊匹配|
+|关键词限制与匹配|[BND-WORKBENCH](#bnd-workbench)及后端[APP-REQ-QUERY-C01](WALL-E.后端设计文档_V_1.0.md#app-req-query-c01)|工作台keyword最多100 Unicode码点；不支持多个关键词|工作台标题包含匹配与完整REQ编号精确匹配按后端定义；通用控件不另作默认模糊匹配|
 
 |输出事件|触发条件|输出结构|表达的事实|
 |---|---|---|---|
@@ -2212,7 +2212,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 组件实现定位：`frontend/src/shared/single-select.ts :: createSingleSelect / SingleSelectConfig`、`shared/single-select.tsx :: SingleSelect`、`shared/styles.css`；使用位置为`requirements/create_drawer.tsx`三处、`guide/composer-view.tsx`两处、`documents/format-toolbar.ts`和`documents/editor-interactions.ts`各一处。
 
-本次定义依据2026-10-10用户对公共单选、箭头、圆角、配色及禁用态的直接要求；迭代原因及基础检查见[UX-027](../archive/iterations/WALL-E.V1_0.6.迭代优化V3文档.md#13-ux-027-公共单选下拉及圆角原则)。本节在sync7已合入；2026-10-11 sync8复核保留，并同步其余V3最终规则，见[合并记录](../archive/merges/合并记录-2026-10-11.md)。
+本次定义依据2026-10-10用户对公共单选、箭头、圆角、配色及禁用态的直接要求；迭代原因及基础检查见[UX-027](../archive/iterations/WALL-E.迭代优化V3文档_V_1.0.md#13-ux-027-公共单选下拉及圆角原则)。本节在sync7已合入；2026-10-11 sync8复核保留，并同步其余V3最终规则，见[合并记录](../archive/merges/合并记录-2026-10-11.md)。
 
 
 <a id="bnd-model-call"></a>
@@ -2250,7 +2250,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 |搜索／复制|仅搜索已保存快照；复制完整分段或选定JSON视图|失败显示本地提示；不调用模型、计数或更改业务数据|
 |运行历史|文档记录中的只读运行详情复用同一请求摘要和抽屉|独立运行轮询及原版本／草稿保护保持，不选择当前AI任务|
 
-**实现定位**：`guide/model-call-reader.ts`、`guide/model-call-view.tsx`、`api/model-calls.ts`、`messages/timeline.tsx`、`requirements/document-records.tsx` 与 `shared/styles.css`。读接口字段见后端 [I38](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i38)／[I39](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i39)，组件仅投影已有业务记录。
+**实现定位**：`guide/model-call-reader.ts`、`guide/model-call-view.tsx`、`api/model-calls.ts`、`messages/timeline.tsx`、`requirements/document-records.tsx` 与 `shared/styles.css`。读接口字段见后端 [I38](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i38)／[I39](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i39)，组件仅投影已有业务记录。
 
 <a id="bnd-record-list"></a>
 
@@ -2343,7 +2343,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 ### 7.4 浏览器本地数据与服务端依赖
 
-前端调用的HTTP契约由[后端设计文档第6章](WALL-E.V1_0.6.后端设计文档.md#api-com)正式定义。浏览器持有的数据按下表管理，不能替代服务端业务事实。
+前端调用的HTTP契约由[后端设计文档第6章](WALL-E.后端设计文档_V_1.0.md#api-com)正式定义。浏览器持有的数据按下表管理，不能替代服务端业务事实。
 
 <a id="sync-fe-09"></a>
 
@@ -2371,7 +2371,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 ### 8.1 验收场景
 
-测试独立准备页面与数据，不依赖其他用例执行结果。服务端对象夹具采用[后端设计文档8.1](WALL-E.V1_0.6.后端设计文档.md#backend-acceptance)的F-A/F-I/F-D/F-C/F-G/F-B/F-K/F-M/F-L；测试用ID和时间不是产品默认配置。浏览器场景可由符合后端第6章的可控HTTP响应准备各状态；核心创建、人工编辑、AI运行、建议、评论与版本路径另用真实后端串联。视觉/焦点/滚动结论必须观察浏览器，不能只检接口数据。
+测试独立准备页面与数据，不依赖其他用例执行结果。服务端对象夹具采用[后端设计文档8.1](WALL-E.后端设计文档_V_1.0.md#backend-acceptance)的F-A/F-I/F-D/F-C/F-G/F-B/F-K/F-M/F-L；测试用ID和时间不是产品默认配置。浏览器场景可由符合后端第6章的可控HTTP响应准备各状态；核心创建、人工编辑、AI运行、建议、评论与版本路径另用真实后端串联。视觉/焦点/滚动结论必须观察浏览器，不能只检接口数据。
 
 前端公共准备：工作台建立41条需求、第一页20条；已提交keyword=“审批”，输入草稿为“未提交”；详情CURRENT版本3、草稿版本1，正文含唯一“部门经理”选区；时钟与HTTP响应返回顺序可控制；所有状态数据满足正式后端模型。未知结果通过“服务端已提交但前端未收到响应”独立分支模拟，不能只用提交前网络断开代替。
 
@@ -2408,7 +2408,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP01|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP01](#dt-op01)|正文工具栏或 AI 对话输入区；输入普通文本；INITIALIZING 且 IDLE；普通文本使用 action_type=INITIALIZE、source_type=USER_INSTRUCTION，并携带当前 CURRENT 版本；卡片走 [DT-OP02](#dt-op02) 的 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)|1 触发与检查：用户提交普通文本，或一次性提交1～5张卡片的整组响应；2 准备并提交：提交期间禁止重复发送；请求被接受后读取消息与运行；本轮结束后刷新 CURRENT 和需求状态；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：保存真实用户消息并创建新的 INITIALIZE GuideRun；本轮可信结果可以更新 CURRENT。卡片整组提交使用 [I36](WALL-E.V1_0.6.后端设计文档.md#bnd-msg-api-i36)，同一组只创建一个新运行。；4 明确失败或取消：失败不写入不可信正文；卡片提交事务失败时保留本地草稿；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP01|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP01](#dt-op01)|正文工具栏或 AI 对话输入区；输入普通文本；INITIALIZING 且 IDLE；普通文本使用 action_type=INITIALIZE、source_type=USER_INSTRUCTION，并携带当前 CURRENT 版本；卡片走 [DT-OP02](#dt-op02) 的 [I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)|1 触发与检查：用户提交普通文本，或一次性提交1～5张卡片的整组响应；2 准备并提交：提交期间禁止重复发送；请求被接受后读取消息与运行；本轮结束后刷新 CURRENT 和需求状态；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：保存真实用户消息并创建新的 INITIALIZE GuideRun；本轮可信结果可以更新 CURRENT。卡片整组提交使用 [I36](WALL-E.后端设计文档_V_1.0.md#bnd-msg-api-i36)，同一组只创建一个新运行。；4 明确失败或取消：失败不写入不可信正文；卡片提交事务失败时保留本地草稿；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP02 提交待确认卡片**
@@ -2422,7 +2422,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP03|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP03](#dt-op03)|AI 对话普通文本发送入口；当前存在 AVAILABLE 卡片；初始化空闲时 [I14](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i14) 创建 INITIALIZE；ASK/REVIEW/MODIFY 等待时 [I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15) 继续原运行|1 触发与检查：用户不提交卡片，直接发送普通文本；2 准备并提交：发送前保留卡片本地输入；成功后重新读取消息，由服务端推导原卡片为 EXPIRED，再清理该组草稿；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：普通文本按正常用户消息处理，原卡片变为 EXPIRED；4 明确失败或取消：不将文本自动映射成任何选项；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP03|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP03](#dt-op03)|AI 对话普通文本发送入口；当前存在 AVAILABLE 卡片；初始化空闲时 [I14](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i14) 创建 INITIALIZE；ASK/REVIEW/MODIFY 等待时 [I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15) 继续原运行|1 触发与检查：用户不提交卡片，直接发送普通文本；2 准备并提交：发送前保留卡片本地输入；成功后重新读取消息，由服务端推导原卡片为 EXPIRED，再清理该组草稿；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：普通文本按正常用户消息处理，原卡片变为 EXPIRED；4 明确失败或取消：不将文本自动映射成任何选项；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP04 初始化模式只读及旧请求拒绝**
@@ -2478,14 +2478,14 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP11|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP11](#dt-op11)|AI 对话修改入口；ACTIVE 且 IDLE；action_type=MODIFY；instruction、Scope、expected_version；source_type=USER_INSTRUCTION|1 触发与检查：选择范围并提交修改要求；2 准备并提交：先显示并确认目标范围；接受后跟踪运行；等待时显示追问，有建议时加载 [I20](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i20) 并交给 [BND-SUGGESTIONS](#bnd-suggestions)；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：信息不足时等待；充分时生成 SuggestionBatch；4 明确失败或取消：无需修改时只返回消息；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP11|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP11](#dt-op11)|AI 对话修改入口；ACTIVE 且 IDLE；action_type=MODIFY；instruction、Scope、expected_version；source_type=USER_INSTRUCTION|1 触发与检查：选择范围并提交修改要求；2 准备并提交：先显示并确认目标范围；接受后跟踪运行；等待时显示追问，有建议时加载 [I20](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i20) 并交给 [BND-SUGGESTIONS](#bnd-suggestions)；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：信息不足时等待；充分时生成 SuggestionBatch；4 明确失败或取消：无需修改时只返回消息；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP12 处理建议**
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP12|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP12](#dt-op12)|[BND-SUGGESTIONS](#bnd-suggestions) 中接受、拒绝、编辑后接受；SUGGESTION_REVIEWING；suggestion_id、decision；EDITED 时提交 edited_content；实际枚举与条件按 [I21](WALL-E.V1_0.6.后端设计文档.md#bnd-batch-api-i21)|1 触发与检查：接受、拒绝或编辑后接受；2 准备并提交：单项显示提交状态；服务端成功后更新该项及 counts；失败保留编辑内容和上次成功决策；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：更新单项状态，正文不变；4 明确失败或取消：保留当前批次；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP12|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP12](#dt-op12)|[BND-SUGGESTIONS](#bnd-suggestions) 中接受、拒绝、编辑后接受；SUGGESTION_REVIEWING；suggestion_id、decision；EDITED 时提交 edited_content；实际枚举与条件按 [I21](WALL-E.后端设计文档_V_1.0.md#bnd-batch-api-i21)|1 触发与检查：接受、拒绝或编辑后接受；2 准备并提交：单项显示提交状态；服务端成功后更新该项及 counts；失败保留编辑内容和上次成功决策；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：更新单项状态，正文不变；4 明确失败或取消：保留当前批次；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP13 完成本批修改**
@@ -2513,7 +2513,7 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP16|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP16](#dt-op16)|版本记录列表中的版本条目；Requirement 存在；revision_id 来自 [I24](WALL-E.V1_0.6.后端设计文档.md#bnd-rev-api-i24) 的条目|1 触发与检查：打开快照；2 准备并提交：在原正文区域加载对应只读 Markdown 与区块状态；展示历史标识，右侧保留文档记录的版本子页，关闭当前评论交互；点击“退出历史”先重读需求、CURRENT和活动状态，再恢复实际当前视图；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：以历史身份只读展示 Markdown 和区块状态快照；不改 CURRENT，不带入当前活动评论；具体快照容器见 [FE-Q03](#fe-q03)。；4 明确失败或取消：失败允许重试；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP16|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP16](#dt-op16)|版本记录列表中的版本条目；Requirement 存在；revision_id 来自 [I24](WALL-E.后端设计文档_V_1.0.md#bnd-rev-api-i24) 的条目|1 触发与检查：打开快照；2 准备并提交：在原正文区域加载对应只读 Markdown 与区块状态；展示历史标识，右侧保留文档记录的版本子页，关闭当前评论交互；点击“退出历史”先重读需求、CURRENT和活动状态，再恢复实际当前视图；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 已确认成功：以历史身份只读展示 Markdown 和区块状态快照；不改 CURRENT，不带入当前活动评论；具体快照容器见 [FE-Q03](#fe-q03)。；4 明确失败或取消：失败允许重试；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP17 添加评论**
@@ -2590,28 +2590,28 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP27|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP27](#dt-op27)|INITIALIZING 或 ACTIVE；详情标题编辑入口；title；去首尾空格后1～20字符，不允许换行|1 编辑：从当前确认标题初始化输入；校验去首尾空格后1～20字符、无换行。；2 提交：仅传title到[I04](WALL-E.V1_0.6.后端设计文档.md#bnd-req-api-i04)，显示保存中并禁止重复保存。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：回显返回的标题并退出标题编辑，正文和版本保持原值。；4 失败或取消：失败保留编辑输入并显示错误；用户主动取消则恢复已确认标题。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP27|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP27](#dt-op27)|INITIALIZING 或 ACTIVE；详情标题编辑入口；title；去首尾空格后1～20字符，不允许换行|1 编辑：从当前确认标题初始化输入；校验去首尾空格后1～20字符、无换行。；2 提交：仅传title到[I04](WALL-E.后端设计文档_V_1.0.md#bnd-req-api-i04)，显示保存中并禁止重复保存。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：回显返回的标题并退出标题编辑，正文和版本保持原值。；4 失败或取消：失败保留编辑输入并显示错误；用户主动取消则恢复已确认标题。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP28 回复等待中的 AI 运行**
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP28|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP28](#dt-op28)|GuideRun=WAITING_USER；AI 输入区；当前 guide_run_id、instruction、动作幂等键|1 输入：确认当前为WAITING_USER，保留待发送文字并校验。；2 提交：使用当前guide_run_id调用[I15](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i15)，显示发送中并防重复。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：读取正式消息，在同一运行上恢复轮询；原卡片是否失效以服务端为准。；4 失败：保留输入；状态冲突时重新读取运行，不能另建运行来规避。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP28|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP28](#dt-op28)|GuideRun=WAITING_USER；AI 输入区；当前 guide_run_id、instruction、动作幂等键|1 输入：确认当前为WAITING_USER，保留待发送文字并校验。；2 提交：使用当前guide_run_id调用[I15](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i15)，显示发送中并防重复。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：读取正式消息，在同一运行上恢复轮询；原卡片是否失效以服务端为准。；4 失败：保留输入；状态冲突时重新读取运行，不能另建运行来规避。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP29 取消 AI 运行**
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP29|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP29](#dt-op29)|当前可取消运行；PERSISTING 阶段不可取消；当前 guide_run_id、动作幂等键|1 检查：读取当前运行状态及阶段，PERSISTING时显示不可取消。；2 提交：允许取消时调用[I17](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i17)，当前取消入口显示处理中。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：读取运行和需求，显示已取消，按已确认工作状态恢复操作。；4 失败或竞态：若已进入提交阶段则等待最终结果；请求失败保留原运行状态。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP29|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP29](#dt-op29)|当前可取消运行；PERSISTING 阶段不可取消；当前 guide_run_id、动作幂等键|1 检查：读取当前运行状态及阶段，PERSISTING时显示不可取消。；2 提交：允许取消时调用[I17](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i17)，当前取消入口显示处理中。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：读取运行和需求，显示已取消，按已确认工作状态恢复操作。；4 失败或竞态：若已进入提交阶段则等待最终结果；请求失败保留原运行状态。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **TC-UI-DT-OP30 重新运行失败任务**
 
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
-|TC-UI-DT-OP30|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP30](#dt-op30)|原运行 FAILED，当前需求允许原动作且 IDLE；失败运行 guide_run_id、动作幂等键|1 触发：从FAILED运行的重新运行入口发起，保留失败摘要和原运行ID。；2 提交：调用[I18](WALL-E.V1_0.6.后端设计文档.md#bnd-guide-api-i18)；后端重新校验当前状态、来源和范围。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：使用返回的新运行ID跟踪处理，原运行仍保留FAILED。；4 失败：显示状态、来源或范围错误，保留失败信息，不应用旧输出。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
+|TC-UI-DT-OP30|[BND-DETAIL](#bnd-detail)／5.4 [DT-OP30](#dt-op30)|原运行 FAILED，当前需求允许原动作且 IDLE；失败运行 guide_run_id、动作幂等键|1 触发：从FAILED运行的重新运行入口发起，保留失败摘要和原运行ID。；2 提交：调用[I18](WALL-E.后端设计文档_V_1.0.md#bnd-guide-api-i18)；后端重新校验当前状态、来源和范围。；明确失败、取消、迟到和结果未知按本操作适用分支分别执行|3 成功：使用返回的新运行ID跟踪处理，原运行仍保留FAILED。；4 失败：显示状态、来源或范围错误，保留失败信息，不应用旧输出。；无明确确认前不显示业务完成；原键重放及资源复查遵循5.5|浏览器自动化；核心业务路径与后端对应8.1场景真实串联|
 
 
 **独立组件场景**
@@ -2619,9 +2619,9 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 |场景引用与名称|规格依据|前置条件与输入|操作或故障场景|预期结果|验证方式|
 |---|---|---|---|---|---|
 |TC-UI-CREATE 新建抽屉|[BND-CREATE](#bnd-create)、工作台5.4|空五字段表单；分别无类型、1个/多个适用模板；标题21码点与空idea；有效配置取[FE-Q02](#fe-q02)对应正式资源|切换类型、提交错误表单、点击遮罩/Esc/取消、提交中再关闭；分别成功与失败响应|初始空、类型未选禁模板；1项自动选、多项不默认、不兼容清空；首错聚焦；输入未确认放弃前不丢；请求中不能关闭；成功由父页面处理、失败保留内容|frontend/tests/requirements.test.mjs；frontend/tests/browser/create-probe.tsx；完整场景按验收场景映射核对；浏览器测600px抽屉及固定区|
-|TC-UI-EDITOR 编辑器快照|[BND-EDITOR](#bnd-editor)、[BND-DETAIL](#bnd-detail)／5.5、[SHR-BLOCK](WALL-E.V1_0.6.后端设计文档.md#shr-block)|F-D；本地先改为快照A，再改为B，A响应迟到；只读CURRENT和历史快照对照|输入、选择、保存、切换只读；复制/拆分/合并按正式身份算法分别执行|每次输出Markdown与BlockState同一快照；旧成功不覆盖B；节点元数据不泄漏Markdown；只读不能发起编辑；身份继承按后端SHR-BLOCK及已确认分配/回执算法证明|frontend/tests/identity.test.mjs；frontend/tests/browser/editor-host-probe.ts；完整场景按验收场景映射核对；实际Milkdown+Crepe环境|
-|TC-UI-CARDS 整组回答|[BND-CARDS](#bnd-cards)、[DT-OP02](#dt-op02)、[SHR-CARDS](WALL-E.V1_0.6.后端设计文档.md#shr-cards)|F-K；1/5张卡、required与可跳过、自定义开/关；AVAILABLE/ANSWERED/EXPIRED|填写、刷新恢复、提交失败、已有正式答案、状态失效；切换requirement/message|必答全满足才提交；显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）；仅AVAILABLE恢复对应本地草稿；失败保留；已答/失效清理；每组一次正式提交，推荐不自动选择|frontend/tests/cards.test.mjs；frontend/tests/card-groups.test.mjs；完整场景按验收场景映射核对；浏览器sessionStorage与可控HTTP|
-|TC-UI-SUGGESTIONS 决定与批次|[BND-SUGGESTIONS](#bnd-suggestions)、[DT-OP12](#dt-op12)—14|F-B；PENDING与终态，目标失效及结果未知|接受/编辑/拒绝、定位、完成/放弃；模拟已提交丢响应|原文只读、纵向区块对比、固定批次操作；单项不把正文当已更新；未知先查；失效不可继续但可放弃；不自动合并，终态只读|frontend/tests/suggestion-batch.test.mjs；frontend/tests/browser/suggestion-panel-probe.tsx；完整场景按验收场景映射核对；真实业务后果用后端[TC-E2E-03](WALL-E.V1_0.6.后端设计文档.md#tc-e2e-03)|
+|TC-UI-EDITOR 编辑器快照|[BND-EDITOR](#bnd-editor)、[BND-DETAIL](#bnd-detail)／5.5、[SHR-BLOCK](WALL-E.后端设计文档_V_1.0.md#shr-block)|F-D；本地先改为快照A，再改为B，A响应迟到；只读CURRENT和历史快照对照|输入、选择、保存、切换只读；复制/拆分/合并按正式身份算法分别执行|每次输出Markdown与BlockState同一快照；旧成功不覆盖B；节点元数据不泄漏Markdown；只读不能发起编辑；身份继承按后端SHR-BLOCK及已确认分配/回执算法证明|frontend/tests/identity.test.mjs；frontend/tests/browser/editor-host-probe.ts；完整场景按验收场景映射核对；实际Milkdown+Crepe环境|
+|TC-UI-CARDS 整组回答|[BND-CARDS](#bnd-cards)、[DT-OP02](#dt-op02)、[SHR-CARDS](WALL-E.后端设计文档_V_1.0.md#shr-cards)|F-K；1/5张卡、required与可跳过、自定义开/关；AVAILABLE/ANSWERED/EXPIRED|填写、刷新恢复、提交失败、已有正式答案、状态失效；切换requirement/message|必答全满足才提交；显式跳过（skipped=true、selected_option_keys=[]、custom_answer=null）；仅AVAILABLE恢复对应本地草稿；失败保留；已答/失效清理；每组一次正式提交，推荐不自动选择|frontend/tests/cards.test.mjs；frontend/tests/card-groups.test.mjs；完整场景按验收场景映射核对；浏览器sessionStorage与可控HTTP|
+|TC-UI-SUGGESTIONS 决定与批次|[BND-SUGGESTIONS](#bnd-suggestions)、[DT-OP12](#dt-op12)—14|F-B；PENDING与终态，目标失效及结果未知|接受/编辑/拒绝、定位、完成/放弃；模拟已提交丢响应|原文只读、纵向区块对比、固定批次操作；单项不把正文当已更新；未知先查；失效不可继续但可放弃；不自动合并，终态只读|frontend/tests/suggestion-batch.test.mjs；frontend/tests/browser/suggestion-panel-probe.tsx；完整场景按验收场景映射核对；真实业务后果用后端[TC-E2E-03](WALL-E.后端设计文档_V_1.0.md#tc-e2e-03)|
 |TC-UI-CONFIRM 确认意图|[BND-CONFIRM](#bnd-confirm)|普通/危险类型；标题与说明；原触发元素分别存在/移除|打开、Tab循环、Enter、Esc、遮罩、确认；提交中重复操作；失败后取消/重试|初始焦点取消、焦点限弹窗；底层不可操作滚动，遮罩不关闭；只确认一次；请求中不关闭；成功父级关闭刷新；失败内联不重复Toast；关闭恢复有效焦点|浏览器自动化+键盘人工验证；宽度建议与令牌见[Q-FE-VISUAL](#q-fe-visual)|
 |TC-UI-TOAST 队列与计时|[BND-TOAST](#bnd-toast)|成功/提示3秒、失败5秒；连续相同类型文案及4条不同提示|显示、悬停/焦点暂停、离开续时、手动关闭、重复触发|只在明确结果后出现，不抢焦点不阻操作；同型同文合并重计时，最多3条新在上，超出移除最早；关闭无业务事件；辅助技术可感知；就地错误不重复提示|可控时钟浏览器测试+辅助技术检查；长文案换行不丢结论|
 |TC-UI-FILTER 受控筛选|[BND-FILTER](#bnd-filter)、工作台及运行四处|数字0／字符串值、全勾／部分／空选、输入草稿与已提交关键词|多项勾选、外点／入口关闭／Tab、Esc、窗口失焦、父级变化／禁用／卸载|勾选不查询；关闭规范后一次提交，空选／全勾等价且无变化不查询；Esc取消，窗口单独失焦不提交，过期草稿不覆盖新条件；搜索清除规则保持|组件事件与页面GET计数，38px入口／4px项间距按8.4；执行状态另记|
@@ -2686,10 +2686,10 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 |实际承诺|必须观察的内容|方法与完成判据|
 |---|---|---|
 |自动保存串行与最新快照|停止输入2秒、持续输入10秒、失焦/隐藏触发；只有一个在途请求、一个最新待发快照；使用草稿已确认版本|受控浏览器时钟与延迟HTTP，编辑内容A→B→C；A响应后只能发送最新C，旧成功不覆盖C；失败分别按2/5/10/30秒及后续30秒退避、校验停止、冲突保留双方|
-|完成/取消时序|[DT-OP25](#dt-op25)/26在保存中、结果未知、失败和成功时的调用顺序|捕获保存/GET/完成/DELETE，检查取消删除后没有迟到保存；未确认前不丢最新本地内容；真实服务端事务由后端[TC-E2E-02](WALL-E.V1_0.6.后端设计文档.md#tc-e2e-02)证明|
+|完成/取消时序|[DT-OP25](#dt-op25)/26在保存中、结果未知、失败和成功时的调用顺序|捕获保存/GET/完成/DELETE，检查取消删除后没有迟到保存；未确认前不丢最新本地内容；真实服务端事务由后端[TC-E2E-02](WALL-E.后端设计文档_V_1.0.md#tc-e2e-02)证明|
 |轮询及离开|RUNNING可见时1秒轮询；失败2/5/10/30秒退避；WAITING_USER/终态停止；隐藏/恢复和页面离开|受控时间及响应顺序；观察定时器/请求和恢复重读；离开不自动取消后台业务，迟到响应不污染新需求页面|
 |查询竞态|工作台、评论、版本列表的列表/分页/错误/加载状态|请求1、2逆序成功/失败，只有最新生效；用户筛选和翻页保持绑定|
-|未知业务结果|原请求输入、幂等键、响应丢失与GET复查|分别对创建、卡片、批次、评论软删、草稿保存执行；不得把未收到响应当未执行；软删评论通过[I28](WALL-E.V1_0.6.后端设计文档.md#bnd-comment-api-i28).deleted_at核实；完整规则引用后端6.1|
+|未知业务结果|原请求输入、幂等键、响应丢失与GET复查|分别对创建、卡片、批次、评论软删、草稿保存执行；不得把未收到响应当未执行；软删评论通过[I28](WALL-E.后端设计文档_V_1.0.md#bnd-comment-api-i28).deleted_at核实；完整规则引用后端6.1|
 |浏览器恢复|卡片sessionStorage、侧栏偏好、本地未确认草稿|刷新、重入、切对象、窄屏临时收起、存储不可用等；已定行为逐项检查，跨刷新草稿和存储失败策略按第7.4节执行|
 
 ### 8.4 质量与人工验证
@@ -2741,4 +2741,4 @@ FAILED／CANCELLED运行从I16的returned_responses读取已有助手内容，�
 |<a id="q-fe-filter"></a>Q-FE-FILTER|已确认；结论见[FE-11](#sync-fe-11)|[BND-FILTER](#bnd-filter)、工作台5.4、TC-UI-WB-02|既有业务条件与验收要求保留；设计决定不等于已验证。|
 |<a id="q-fe-visual"></a>Q-FE-VISUAL|暂定实施已允许；分页按[FE-OPT-V1](#sync-fe-opt-v1)、共享头部／正文／工具局部尺寸及标题排版按[FE-OPT-V2](#sync-fe-opt-v2)与对应页面／组件固定；V3已授权配色／消息／筛选／记录／导航等局部参数按各节固定，其余未固定视觉值保留原边界，见[FE-12](#sync-fe-12)|第5.1节[FE-UI-COLOR](#fe-ui-color)、[FE-UI-TYPOGRAPHY](#fe-ui-typography)、[FE-UI-LAYOUT](#fe-ui-layout)，[BND-CONFIRM](#bnd-confirm)、[BND-TOAST](#bnd-toast)，第8.4节|40%遮罩、440px确认框、Toast顶部24px/最大480px及未固定字号/间距仍暂定；已固定局部尺寸不变。|
 
-共同业务、HTTP、模板、Markdown/Block身份、Scope、锚点和Patch缺口以[后端设计文档附录A](WALL-E.V1_0.6.后端设计文档.md#backend-issues)为唯一问题定义。前端不得自行填入与后端不一致的算法或参数。已解决项保留锚点并链接正文结论，不再重复声明待定；尚未确认部分继续保留，验收结果单独记录。
+共同业务、HTTP、模板、Markdown/Block身份、Scope、锚点和Patch缺口以[后端设计文档附录A](WALL-E.后端设计文档_V_1.0.md#backend-issues)为唯一问题定义。前端不得自行填入与后端不一致的算法或参数。已解决项保留锚点并链接正文结论，不再重复声明待定；尚未确认部分继续保留，验收结果单独记录。

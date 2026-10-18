@@ -29,7 +29,7 @@
 
 实现位于frontend/src/guide/model-call-view.tsx，新增ContextOverview替换原诊断区块，并调整TokenDetails文案。没有新增接口、字段、持久对象、模型调用或计数。原技术值保留在折叠区便于排查。
 
-规范已合入[前端设计BND-MODEL-CALL](../../design/WALL-E.V1_0.6.前端设计文档.md#bnd-model-call)；[专项记录](../../verification/context-copy-2026-10-18.md)记录静态检查和正在运行的Vite只读模块读取结果，未扩大全项目验收。本轮不新增测试、不构建生产产物或重启服务；5173开发页使用Vite更新，8000静态页需后续获准构建后才更新。
+规范已合入[前端设计BND-MODEL-CALL](../../design/WALL-E.前端设计文档_V_1.0.md#bnd-model-call)；[专项记录](../../verification/context-copy-2026-10-18.md)记录静态检查和正在运行的Vite只读模块读取结果，未扩大全项目验收。本轮不新增测试、不构建生产产物或重启服务；5173开发页使用Vite更新，8000静态页需后续获准构建后才更新。
 
 ## 4. 用户反馈后的最终修订
 

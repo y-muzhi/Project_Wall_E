@@ -22,3 +22,6 @@ docs/design/originals/** -text
 
 # Classified adoption records retain their approved bytes after relocation.
 docs/decisions/adoptions/** -text
+
+# Renamed project design documents retain their byte-preservation rule.
+docs/design/WALL-E.*_V_1.0.md -text
