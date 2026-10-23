@@ -67,15 +67,26 @@ class _Counter:
         return receipt
 
 
-def _prepare(database, identity, profile, context, catalog, clock, admission):
+def _prepare(database, identity, profile, context, catalog, clock, admission, observation=None):
     with database.transaction(write=True) as connection:
-        return dict(AuditRepository(connection).prepare_collaboration(identity, profile, context, operation_time(clock), catalog=catalog, admission=admission))
+        return dict(AuditRepository(connection).prepare_collaboration(identity, profile, context, operation_time(clock), catalog=catalog, admission=admission, observation=observation))
 
 
-async def execute_collaboration(database, identity, *, process_lock, catalog, profile, gateway, counting_counter, native, state, fail, clock):
+async def execute_collaboration(database, identity, *, process_lock, catalog, profile, gateway, counting_counter, native, state, fail, clock, observation=None):
     from backend.app.infrastructure.collaboration_admission import CollaborationAdmission
     admission = CollaborationAdmission(database, process_lock, catalog)
+    if observation is not None:
+        from backend.app.infrastructure.collaboration_observation import CollaborationObservation
+        if type(observation) is not CollaborationObservation:
+            raise ConfigInvalid('Only the explicit isolated observation capability is permitted')
+        counting_counter = observation.counter(TokenizationGateway() if counting_counter is None else counting_counter)
+        gateway = observation.gateway(ModelGateway() if gateway is None else gateway)
     async def admitted():
+        process_lock.assert_owned()
+        if observation is not None:
+            proof = await native(observation.check, database, identity, catalog, profile)
+            process_lock.assert_owned()
+            return proof
         proof = await native(admission.current, profile.snapshot)
         process_lock.assert_owned()
         catalog.collaboration.require_live(profile.snapshot, admission=proof)
@@ -86,7 +97,7 @@ async def execute_collaboration(database, identity, *, process_lock, catalog, pr
         TokenizationGateway() if counting_counter is None else counting_counter, native, clock, admitted)
     context = await compile_counted(canonical, catalog, profile, counter=counter, admission_guard=admitted)
     proof = await admitted()
-    prepared = await native(_prepare, database, identity, profile, context, catalog, clock, proof)
+    prepared = await native(_prepare, database, identity, profile, context, catalog, clock, proof, observation)
     # Preparation is durable. Check cancellation and the execution lease again
     # before I/O; neither a duplicate dispatcher nor an expired task may send.
     await admitted()

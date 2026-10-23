@@ -110,7 +110,7 @@ class AuditRepository:
     def get(self, identity):
         return self.connection.execute('SELECT * FROM llm_uses WHERE id=?', (identity,)).fetchone()
 
-    def prepare_collaboration(self, run_id, profile, context, at, *, catalog, admission=None):
+    def prepare_collaboration(self, run_id, profile, context, at, *, catalog, admission=None, observation=None):
         from backend.app.guide.collaboration_context import read_canonical
         from backend.app.guide.collaboration_counting import verify_counted
         from .audit_data import collaboration_audit_json
@@ -123,7 +123,13 @@ class AuditRepository:
         if at < max(run['updated_at'], root['updated_at']):
             raise ValueError('Preparation cannot precede actual activity')
         resources = catalog.collaboration
-        resources.require_live(profile.snapshot, admission=admission)
+        if observation is None:
+            resources.require_live(profile.snapshot, admission=admission)
+        else:
+            from .collaboration_observation import CollaborationObservation
+            if type(observation) is not CollaborationObservation:
+                raise ValueError('An actual isolated observation capability is required')
+            admission = observation.check_connection(self.connection, run_id, catalog, profile)
         canonical = read_canonical(self.connection, run_id, catalog)
         counting = verify_counted(context, catalog, profile, expected_canonical=canonical)
         protocol = {'function_type': 'collaboration_v1', 'input_schema': 'collaboration.wire@v1',
@@ -133,6 +139,8 @@ class AuditRepository:
         snapshot = {'profile': profile.snapshot, 'request': profile.request(context), 'protocol': protocol,
             'context_basis': context.basis, 'counting': counting,
             'admission': resources.validate('Admission', resources.release['admission'] if admission is None else admission.value)}
+        if observation is not None:
+            snapshot['observation'] = observation.budget
         fields = {'id': entity_id(self.connection, EntityKind.LLM_USE), 'guide_run_id': run_id, 'call_no': 1, 'attempt_no': 1,
             'provider': 'volcengine', 'model_name': profile.model_name, 'model_version': profile.model_version,
             'function_type': 'collaboration_v1', 'prompt_config': protocol['prompt'],

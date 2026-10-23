@@ -22,3 +22,5 @@
 | A15-16 布局 | detail-layout／reading-position／355前端专项 | 1024／1100／1280／1440／1920、1000保存保护 | 完整焦点／长表格／独立滚动组合未逐项执行 |
 
 浏览器过程、临时进程归属和清理见recovery-browser-2026-10-23.md；最新读取／前端检查见contracts-frontend-2026-10-23.md。EV-DISCUSS／DOCUMENT／PROPOSALS／ANALYSIS均仍待执行；资源OFFLINE_READY不放行普通真实请求。
+
+2026-10-23追加：资源准入／隔离观测链路已接并离线专项验证；完整24文件156项通过。阶段卡片PROGRAM确认、历史REVIEW完整Analysis展示及检查标签已有browser-phase-analysis记录；实际历史消息详情500已按保存alias修复，4项HTTP／读取专项通过。上述不扩展为事实确认／全浏览器或真实EV通过。

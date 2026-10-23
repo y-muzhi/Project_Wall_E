@@ -1,5 +1,7 @@
 # 前端实施边界
 
+2026-10-23当前实施：前端已采用V1.5多文档、讨论、六操作AI、卡片／候选及独立读写目标契约。最近完整355项离线专项、类型检查及临时生产构建通过；离线浏览器覆盖范围见[记录](../docs/verification/v1.5/recovery-browser-2026-10-23.md)。当前启动／新库说明见[V1.5运行说明](../docs/operations/v1.5/运行说明_V_1.5.md)，未完成项见[实现进度](../docs/project/v1.5/实现进度_V_1.5.md)。以下V1.0日期记录保留历史，不作为当前V1.5验收结论。
+
 2026-10-18收口状态：当前前端规格sync12；请求详情移除重复上下文概览，保留请求上下文与Token明细，采用正式系统文案。见[版本收口](../docs/project/v1.0/版本收口_V_1.0.md)。最近UI修订仅有静态与Vite模块读取检查，生产dist本轮未重建；下文均为历史实施及专项范围，不能据此声明当前版本全量验收通过。
 
 已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。实际根入口 `index.html` / `src/main.tsx` / `application` 已连接工作台、新建需求和完整详情，所有业务读取及写入使用正式 API。`npm run build` 进行 TypeScript 检查及实际 Vite 生产构建；正式运行及开发模式见 [运行说明](../docs/operations/v1.0/运行说明.md)。根页面浏览器验证使用 `node tools/verify-product-browser.mjs`，与下述各历史诊断探针分开记录。

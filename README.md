@@ -1,4 +1,8 @@
-# WALL-E V1_0.6
+# WALL-E V1.5（实施中）
+
+2026-10-23：V1.5主要业务链路已接通，当前进行离线联调与验收核对。启动入口见[运行说明](docs/operations/v1.5/运行说明_V_1.5.md)，当前状态见[实施断点](docs/project/v1.5/实现进度_V_1.5.md)、[需求实现映射](docs/traceability/v1.5/需求实现映射_V_1.5.md)及[验收矩阵](docs/verification/v1.5/acceptance-matrix-2026-10-23.md)。必须显式配置schema150新库，不迁移或覆盖旧库；资源v10仍OFFLINE_READY，真实供应方准入／效果尚未验证。
+
+本地进度已按用户要求提交推送GitHub；这属于实施快照，不能据此视为V1.5发布完成。以下按日期保留的V1.0记录是历史证据。
 
 2026-10-19文档按“类型／版本”维护：[v1.0收口资料](docs/project/v1.0/README.md)、[v1.5需求规划](docs/project/v1.5/README.md)。共享模板与规则独立保留，完整导航见[docs](docs/README.md)。以下历史实施记录保留当时状态。
 

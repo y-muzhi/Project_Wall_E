@@ -132,13 +132,16 @@ def _collaboration_detail(row, snapshot):
             'selected_materials': selected, 'omitted_materials': omitted,
             'resource_refs': [item['resource_ref'] for item in basis['canonical']['resources']]}
     history = wire['recent_history'] if wire else []
+    aliases = {item['ref']: item['source_refs'] for item in basis.get('aliases', [])}
+    included = list(dict.fromkeys(source['message_id'] for item in history
+        for source in aliases.get(item['ref'], []) if source['kind'] in ('MESSAGE', 'CARD_ANSWER')))
     removed = list(dict.fromkeys(source['message_id'] for item in basis.get('omitted', []) if item['reason'] == 'BUDGET_OPTIONAL_HISTORY'
         for source in item['source_refs'] if source['kind'] in ('MESSAGE', 'CARD_ANSWER')))
     prompt = protocol.get('prompt')
     return {'call': _summary(row), 'requirement_id': row['requirement_id'], 'action_type': row['action_type'], 'operation': row['operation'],
         'prompt_reference': prompt if isinstance(prompt, str) else None,
         'context_reference': 'collaboration_context_v1', 'context_strategy': 'collaboration_context_v1', 'selection_summary': selection,
-        'sections': sections, 'included_history_ids': [item['message_id'] for item in history], 'budget_removed_history_ids': removed,
+        'sections': sections, 'included_history_ids': included, 'budget_removed_history_ids': removed,
         'raw_request_json': _dump(request) if isinstance(request, dict) else None,
         'preflight': {'input_tokens': _number(counting.get('input_tokens_candidate')), 'budget': budget, 'counts': counts}}
 

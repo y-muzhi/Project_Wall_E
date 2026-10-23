@@ -60,7 +60,8 @@ def main():
             return output(context, response_type='DOCUMENT_RESULT', document_result={'name': document['name'], 'document_kind': document['document_kind'],
                 'markdown_content': markdown, 'change_summary': '离线浏览器明确修订'})
         if operation in ('COMPARE', 'REVIEW'):
-            return output(context, response_type='ANALYSIS', analysis={'conclusion': 'NO_CHANGE', 'summary': '离线检查无新增修改', 'findings': [], 'covered_refs': [], 'unresolved': []})
+            return output(context, response_type='ANALYSIS', analysis={'conclusion': 'RESULT', 'summary': '离线检查无新增修改', 'findings': [],
+                'covered_refs': [document['ref'] for document in context.input['documents']], 'unresolved': []})
         if '[phase]' in (request['content'] or ''):
             return output(context, cards=group('PHASE_CHANGE', {'phase_kind': 'SOLUTION', 'closure_summary': '用户确认后进入方案',
                 'unresolved_refs': [], 'basis_discussion_version': request['basis_ref']['discussion_version']}))

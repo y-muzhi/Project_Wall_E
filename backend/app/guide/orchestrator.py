@@ -74,7 +74,7 @@ def _parse(database, identity, clock):
 
 
 async def execute_guide_run(database, payload, *, process_lock, catalog=None, profile=None,
-                      gateway=None, counting_counter=None, clock=None):
+                      gateway=None, counting_counter=None, clock=None, observation=None):
     """One accepted V1.5 run, bounded counts and at most one actual Chat.
 
     Explicit private offline dependencies cannot bypass the release gate.
@@ -121,7 +121,7 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
         from .collaboration_execution import execute_collaboration
         return await execute_collaboration(database, identity, process_lock=process_lock, catalog=resources,
             profile=frozen_profile, gateway=gateway, counting_counter=counting_counter,
-            native=_native, state=state, fail=fail, clock=clock)
+            native=_native, state=state, fail=fail, clock=clock, observation=observation)
     except asyncio.CancelledError:
         raise
     except ContextLimitExceeded:

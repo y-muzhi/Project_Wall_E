@@ -15,6 +15,35 @@ from backend.app.guide.api import guide_router
 from backend.app.shared.http_boundary import HttpRuntime
 
 
+def test_review_with_carried_history_resolves_saved_alias_ids_and_actual_detail_http(workspace, monkeypatch):
+    from backend.tests.documents.test_v15_documents import document
+    offline_gate(monkeypatch)
+    current = document(workspace)['data']['document']
+    assert accept(workspace, operation='REVIEW', target={'kind': 'EXISTING', 'document_id': current['id'],
+        'expected_content_version': 1}, scope={'scope_type': 'DOCUMENT', 'scope_ref': None})['code'] == 'GUIDE_ACCEPTED'
+    assert execute(workspace, Gateway(lambda context: output(context, response_type='ANALYSIS', analysis={
+        'conclusion': 'RESULT', 'summary': 'Checked without changes', 'findings': [],
+        'covered_refs': [item['ref'] for item in context.input['documents']], 'unresolved': []})))['code'] == 'AI_FINISHED'
+    with workspace[0].transaction() as connection:
+        snapshot = json.loads(connection.execute('SELECT request_snapshot_json FROM llm_uses WHERE id=1').fetchone()[0])
+    history = json.loads(snapshot['request']['messages'][1]['content'])['recent_history']
+    assert history and all('message_id' not in item for item in history)
+    before = counts(workspace[0])
+    def forbidden(*args, **kwargs): raise AssertionError('Reading saved history cannot compile or count')
+    monkeypatch.setattr('backend.app.guide.collaboration_context.compile_context', forbidden)
+    detail = get_model_call(workspace[0], 1)
+    assert detail['code'] == 'READ_OK', detail
+    # Initial thought is long-term material; document creation's actual user
+    # action (message 2) is the carried history, independently of its wire ref.
+    assert detail['data']['included_history_ids'] == [2]
+    app = FastAPI();app.state.walle_runtime = HttpRuntime(workspace[0], workspace[2], workspace[1]);app.include_router(guide_router)
+    with TestClient(app) as client:
+        response = client.get('/api/v1/model-calls/1')
+        assert response.status_code == 200, response.text
+        assert response.json()['data'] == detail['data']
+    assert counts(workspace[0]) == before
+
+
 def test_eight_saved_wire_sections_actual_count_measurements_and_read_only_http(workspace, monkeypatch):
     offline_gate(monkeypatch);assert accept(workspace)['code'] == 'GUIDE_ACCEPTED'
     assert execute(workspace, Gateway())['code'] == 'AI_FINISHED'
