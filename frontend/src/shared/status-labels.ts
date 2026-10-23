@@ -1,7 +1,7 @@
 import type {SaveStatus} from '../documents/autosave.ts';
 
 export const REQUIREMENT_STATUS_LABELS = Object.freeze({
-  INITIALIZING: '初始化中', ACTIVE: '进行中', COMPLETED: '已完成',
+  PLANNING: '规划中', READY: '待实施', IMPLEMENTING: '实施中', COMPLETED: '已完成', CLOSED: '已关闭',
 } as const);
 
 export const SAVE_STATUS_LABELS = Object.freeze({

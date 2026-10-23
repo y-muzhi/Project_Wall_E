@@ -9,7 +9,7 @@ const recordPath = 'docs/decisions/adoptions/output-evidence-adoption-v2.json';
 const approvedManifest = '06a2048688b5d014a69384ed39b2599993caa00cc59c2af96102039da98757dd';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 if (existsSync(target) || existsSync(resolve(root, recordPath))) throw new Error('Refusing overwrite of immutable v2 adoption');
-const decision = readFileSync(resolve(root, 'docs/decisions/决策记录.md'), 'utf8');
+const decision = readFileSync(resolve(root, 'docs/decisions/v1.0/决策记录.md'), 'utf8');
 if (!decision.includes('## D-010') || !decision.includes(approvedManifest)) throw new Error('Record the actual D-010 approval first');
 const manifestBytes = readFileSync(resolve(source, 'manifest.json'));
 if (sha(manifestBytes) !== approvedManifest) throw new Error('Candidate manifest differs from human-approved identity');

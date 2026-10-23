@@ -20,7 +20,7 @@ export class RequirementAiRead{
  private readonly api:Api;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private readonly openPanel:()=>void|Promise<void>;private readonly timing:PollClock|undefined;
  private value:AiReadState;private readonly listeners=new Set<()=>void>();private poll:GuideRunPolling|undefined;private releasePoll:(()=>void)|undefined;private pollSignature:string|null=null;private generation=0;private visibilityGeneration=0;private closed=false;private pending:Promise<void>|undefined;private pendingGeneration=0;private dirty=false;
  constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,openPanel:()=>void|Promise<void>,timing?:PollClock){
-  positiveInteger(detail.requirement.id);if(detail.current.requirement_id!==detail.requirement.id||detail.current.document_type!=='CURRENT')throw TypeError('Owned actual detail required');
+  positiveInteger(detail.requirement.id);if(detail.current!==null&&(detail.current.requirement_id!==detail.requirement.id||detail.current.document_type!=='CURRENT'))throw TypeError('Owned actual detail required');
   this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.openPanel=openPanel;this.timing=timing;this.messages=new RequirementMessages(detail.requirement.id,api);this.history=new RequirementRunHistory(detail.requirement.id,api);
   this.value=Object.freeze({detail:capture(detail),selected:null,selection:null,run:null,querying:false,connection_error:false,polling:false,visible:false,refreshing:false,error:null,active:true});
   if(detail.activity.kind==='GUIDE')this.select(detail.activity.run,'ACTIVITY',detail.activity.run);
@@ -30,7 +30,7 @@ export class RequirementAiRead{
  private publish(changes:Partial<AiReadState>):void{if(this.closed)return;this.value=Object.freeze({...this.value,...changes});for(const listener of this.listeners)try{listener();}catch(error){console.error('WALL-E AI read observer failed',error);}}
  private owned(run:RunIdentity):void{positiveInteger(run.id);if(run.requirement_id!==this.value.detail.requirement.id)throw TypeError('Run belongs to another requirement');}
  adopt(actual:DetailSnapshot):void{
-  if(this.closed)return;if(actual.requirement.id!==this.value.detail.requirement.id||actual.current.requirement_id!==actual.requirement.id||actual.current.document_type!=='CURRENT')throw TypeError('Owned actual detail required');
+  if(this.closed)return;if(actual.requirement.id!==this.value.detail.requirement.id||actual.current!==null&&(actual.current.requirement_id!==actual.requirement.id||actual.current.document_type!=='CURRENT'))throw TypeError('Owned actual detail required');
   this.publish({detail:capture(actual)});if(actual.activity.kind==='GUIDE'&&this.value.selection!=='HISTORY')this.select(actual.activity.run,'ACTIVITY',actual.activity.run);
   else if(actual.activity.kind==='BATCH'&&this.value.selection!=='HISTORY')this.select({id:actual.activity.batch.guide_run_id,requirement_id:actual.requirement.id},'ACTIVITY');
  }
@@ -47,7 +47,7 @@ export class RequirementAiRead{
  }
  /** Safe to replay the same acknowledged receipt: layout opening and selected
   * identity are idempotent, with only one selected Run polling lifetime. */
- receive=async(run:RunIdentity):Promise<void>=>{this.owned(run);if(this.closed)throw Error('AI view is retired');await this.openPanel();if(this.closed)throw Error('AI view is retired');const resume=this.value.visible&&this.value.selected===run.id&&this.value.run?.status==='WAITING_USER';this.select(run,'ACCEPTED');this.setVisible(true);if(resume)this.poll?.refresh();};
+ receive=async(run:RunIdentity):Promise<void>=>{this.owned(run);if(this.closed)throw Error('AI view is retired');await this.openPanel();if(this.closed)throw Error('AI view is retired');const resume=this.value.visible&&this.value.selected===run.id;this.select(run,'ACCEPTED');this.setVisible(true);if(resume)this.poll?.refresh();};
  open(summary:GuideSummary):void{if(this.closed||!this.value.visible)return;this.select(summary,'HISTORY');}
  readRun():void{if(!this.closed&&this.value.visible)this.poll?.refresh();}
  setVisible(visible:boolean):void{

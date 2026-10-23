@@ -15,7 +15,7 @@ def list_revisions(database: Database, payload: object = MISSING) -> dict:
     try:
         with database.transaction() as connection:
             repository = RevisionRepository(connection)
-            if not repository.requirement_exists(request.requirement_id):
+            if not repository.document_exists(request.requirement_id, request.document_id):
                 result = {'code': 'NOT_FOUND', 'data': None, 'details': None}
             else:
                 result = {'code': 'READ_OK', 'data': repository.list_page(request), 'details': None}
@@ -37,7 +37,7 @@ def get_revision(database: Database, revision_id: object = MISSING, *, catalog: 
             if row is None:
                 result = {'code': 'NOT_FOUND', 'data': None, 'details': None}
             else:
-                sources = DocumentSources(connection, row['requirement_id'], catalog if catalog is not None else ResourceCatalog())
+                sources = DocumentSources(connection, row['requirement_id'], catalog if catalog is not None else ResourceCatalog(), document_id=row['document_id'])
                 result = {'code': 'READ_OK', 'data': get_revision_result(row, sources), 'details': None}
         return result
     except StorageUnavailable:

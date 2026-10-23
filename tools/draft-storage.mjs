@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { inspectSource } from './spec-audit.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const metadata = JSON.parse(readFileSync(resolve(root, 'docs/sources/manifest.json'), 'utf8')).find(source => source.key === 'backend');
+const metadata = JSON.parse(readFileSync(resolve(root, 'docs/sources/v1.0/manifest.json'), 'utf8')).find(source => source.key === 'backend');
 const source = inspectSource(metadata);
 const names = { Requirement: 'requirements', RequirementDocument: 'requirement_documents', Revision: 'revisions', ConversationMessage: 'conversation_messages', GuideRun: 'guide_runs', LLMUse: 'llm_uses', SuggestionBatch: 'suggestion_batches', Suggestion: 'suggestions', Comment: 'comments' };
 const entities = {};

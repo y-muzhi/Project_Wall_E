@@ -1,5 +1,6 @@
 import { ApiRejected, snapshotObject } from '../api/client.ts';
 import type { DocumentReadModel } from './contracts.ts';
+import {editorReadModel} from './contracts.ts';
 import type { EditedSnapshot, ManualDraftSubmission } from './edited-snapshot.ts';
 import type { LocalDraftSnapshot } from './recovery-store.ts';
 import type { PollClock } from '../guide/polling.ts';
@@ -117,7 +118,7 @@ export class ManualDraftAutosave {
   }
   private acknowledge(ticket: ManualDraftSubmission, document: DocumentReadModel): void {
     if (!this.validIdentity(document)) throw new TypeError('Another draft receipt');
-    this.observed = this.ledger.acknowledgeSave(ticket, document); this.confirmed = document; this.tickets.clear(); this.failures = 0;
+    this.observed = this.ledger.acknowledgeSave(ticket, editorReadModel(document)); this.confirmed = document; this.tickets.clear(); this.failures = 0;
     this.publish({ confirmed_version: document.content_version, saved_at: document.updated_at, error: null, server_conflict: null, status: this.dirty() ? 'DIRTY' : 'SAVED' });
     if (this.dirty()) { this.persist(); this.requested = true; }
     else if (this.value.local_revision) {
@@ -138,12 +139,16 @@ export class ManualDraftAutosave {
     catch { if (!this.closed) this.later('UNKNOWN', '保存结果待核实，正在重新读取草稿'); return 'STOP'; }
     if (this.closed) return 'STOP';
     if (!this.validIdentity(document)) { this.conflict(null); return 'STOP'; }
-    if (document.content_version === this.confirmed.content_version && same(document, this.confirmed)) return 'OLD';
-    const ticket = [...this.tickets.keys()].find(value => corresponds(value, document));
-    if (ticket) {
-      try { this.acknowledge(ticket, document); return 'ACK'; }
-      catch { this.conflict(document); return 'STOP'; }
+    const old=document.content_version===this.confirmed.content_version&&same(document,this.confirmed);
+    const ticket=[...this.tickets.keys()].find(value=>value.expected_version===this.confirmed.content_version&&(old||corresponds(value,document)));
+    if(ticket){
+      // A matching GET is only an observation. The port retains the original
+      // keyed action for this exact ticket; its receipt confirms our save.
+      try{const receipt=await this.api.save(ticket);if(this.closed)return 'STOP';this.acknowledge(ticket,receipt);return 'ACK';}
+      catch(error){if(error instanceof ApiRejected&&!['REQUEST_IN_PROGRESS','STORAGE_UNAVAILABLE','INTERNAL_ERROR'].includes(error.code)){this.conflict(document);return 'STOP';}
+        if(!this.closed)this.later('UNKNOWN','保存结果待核实，正在核实原请求');return 'STOP';}
     }
+    if(old&&!this.tickets.size)return 'OLD';
     this.conflict(document); return 'STOP';
   }
   private async drive(): Promise<void> {
@@ -165,7 +170,7 @@ export class ManualDraftAutosave {
         this.acknowledge(ticket, document);
       } catch (error) {
         if (this.closed) return;
-        if (error instanceof ApiRejected) {
+        if (error instanceof ApiRejected && !['REQUEST_IN_PROGRESS','STORAGE_UNAVAILABLE','INTERNAL_ERROR'].includes(error.code)) {
           this.ledger.rejectSave(ticket); this.tickets.delete(ticket);
           if (error.code === 'CONTENT_VERSION_CONFLICT') {
             const result = await this.reconcile();

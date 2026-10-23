@@ -12,9 +12,11 @@ import type {RequirementRunHistory} from './history.ts';
 import {RecordList} from '../shared/record-list.tsx';
 import {ModelReturnContent} from '../messages/model-return.tsx';
 import {RequestCallRecord} from './model-call-view.tsx';
-export const statuses={RUNNING:'运行中',WAITING_USER:'等待回复',COMPLETED:'已完成',FAILED:'失败',CANCELLED:'已取消'} as const;
-export const actions={INITIALIZE:'初始化',ASK:'提问',REVIEW:'检查',MODIFY:'修改'} as const;
-const steps={PREPARING:'正在准备',CALLING_MODEL:'正在调用模型',VALIDATING:'正在校验结果',PERSISTING:'正在提交结果',WAITING_USER:'等待补充信息',FINISHED:'运行结束'} as const;
+import {AnalysisResult} from './analysis-result.tsx';
+export const statuses={RUNNING:'运行中',COMPLETED:'已完成',FAILED:'失败',CANCELLED:'已取消'} as const;
+export const actions={GENERATE:'生成',ASK:'讨论',REVIEW:'检查',MODIFY:'修改'} as const;
+import {operationNames} from './operation-labels.ts';
+const steps={PREPARING:'正在准备',CALLING_MODEL:'正在调用模型',VALIDATING:'正在校验结果',PERSISTING:'正在提交结果',FINISHED:'运行结束'} as const;
 const scopeNames={DOCUMENT:'整篇文档',SECTION:'章节',BLOCK:'区块',SELECTION:'选区'} as const;
 function failure(run:GuideRun):string|null{return run.status!=='FAILED'?null:run.error_code==='EXECUTION_TIMEOUT'?'运行长时间没有进展，已停止本次运行':run.error_code==='INTERRUPTED'?'服务中断，本次运行未完成':run.error_message;}
 export function RunHistory({history,available,selected,open}:Readonly<{history:RequirementRunHistory;available:boolean;selected:number|null;open(run:GuideSummary):void}>){
@@ -22,14 +24,18 @@ export function RunHistory({history,available,selected,open}:Readonly<{history:R
  return <RecordList title="运行记录" total={state.confirmed?.pagination.total??null} loading={state.loading} error={state.error} retry={()=>void history.refresh()} retryDisabled={state.loading||!available}
   filters={<><MultiFilter name="运行状态" options={runStatuses.map(value=>({value,label:statuses[value]}))} value={query.status} disabled={state.loading||!available} change={(values,all)=>void history.refresh({...query,status:all?[]:values,page:1})}/>
    <MultiFilter name="运行操作" options={runActions.map(value=>({value,label:actions[value]}))} value={query.action_type} disabled={state.loading||!available} change={(values,all)=>void history.refresh({...query,action_type:all?[]:values,page:1})}/></>}
-  items={(state.confirmed?.items??[]).map(run=>({id:run.id,title:<><span>{actions[run.action_type]}</span><span className="record-status" data-state={run.status}>{statuses[run.status]}</span></>,metadata:<><span>运行 #{run.id}</span><time dateTime={run.created_at}>{localTime(run.created_at)}</time></>,selected:selected===run.id,disabled:!available,label:`查看运行 #${run.id} · ${actions[run.action_type]} · ${statuses[run.status]}`,open:()=>open(run)}))}
+  items={(state.confirmed?.items??[]).map(run=>({id:run.id,title:<><span>{operationNames[run.operation]}</span><span className="record-status" data-state={run.status}>{statuses[run.status]}</span></>,metadata:<><span>运行 #{run.id}</span><time dateTime={run.created_at}>{localTime(run.created_at)}</time></>,selected:selected===run.id,disabled:!available,label:`查看运行 #${run.id} · ${operationNames[run.operation]} · ${statuses[run.status]}`,open:()=>open(run)}))}
   empty={state.confirmed?.pagination.total?'当前页暂无运行':'暂无符合条件的运行'}
   footer={state.confirmed&&(state.confirmed.pagination.total_pages>1||state.confirmed.pagination.page>1)&&<Pagination compactSingle value={state.confirmed.pagination} loading={state.loading||!available} showLoadingStatus={false} change={page=>void history.refresh({...state.confirmed!.query,page})}/>}/>;
 }
 export function RunRecordSummary({run}:Readonly<{run:GuideRun}>){
- return <><p className="run-task-summary" data-state={run.status}><strong>{actions[run.action_type]} · {statuses[run.status]}</strong> · {scopeNames[run.scope.scope_type]}</p>{run.current_step!=='FINISHED'&&<p>{steps[run.current_step]}</p>}
+ return <><p className="run-task-summary" data-state={run.status}><strong>{operationNames[run.operation]} · {statuses[run.status]}</strong> · {run.scope===null?'未指定范围':scopeNames[run.scope.scope_type]}</p>{run.current_step!=='FINISHED'&&<p>{steps[run.current_step]}</p>}
   {run.source_type==='COMMENT'&&<p>来自评论的修改请求，评论处理状态保持独立。</p>}
   {run.status==='FAILED'&&<p role="alert" className="inline-error">{failure(run)}</p>}{run.status==='CANCELLED'&&<p>本次运行已取消。</p>}
+  {run.application_result==='APPLIED'&&<p>{run.suggestion_batch_id!==null?'修改建议已生成，等待审阅。':`文档已保存为 V${run.document_effect!.after_content_version}。`}</p>}
+  {run.application_result==='NO_CHANGE'&&<p>未产生正文变化。</p>}{run.application_result==='NOT_APPLIED'&&<p className="inline-error">本轮未写入文档。</p>}
+  {run.progress_result==='APPLIED'&&<p>讨论进度已更新。</p>}{run.progress_result==='REJECTED'&&<p role="alert" className="inline-error">{run.progress_error}</p>}
+  {run.final_result?.analysis&&<details className="run-result"><summary>查看分析结果</summary><AnalysisResult value={run.final_result.analysis}/></details>}
   {run.final_result&&<details className="run-result"><summary>查看运行结果摘要</summary><p className="run-summary">{run.final_result.summary}</p></details>}</>;
 }
 export function ReturnedResponses({run}:Readonly<{run:GuideRun}>){
@@ -49,7 +55,7 @@ export function AiReadPanel({owner,structured,commands,renderMarkdown,scrollPort
   {state.selected!==null&&<section aria-label="当前查看的 AI 运行" className="run-status" aria-busy={state.querying}>
    <div className="run-status-context"><strong>{state.selection==='HISTORY'?'历史运行详情':'当前任务'}</strong><span>#{state.selected}</span></div>
    {!run&&<p role="status">正在读取运行状态…</p>}
-   {run&&<><RunRecordSummary run={run}/>{commands?.(run)}{!messages.items?.some(message=>message.role==='USER'&&message.guide_run_id===run.id)&&<RequestCallRecord runId={run.id}/>}</>}
+   {run&&<><RunRecordSummary run={run}/>{commands?.(run)}{run.status!=='FAILED'&&run.returned_responses.length>0&&<ReturnedResponses run={run}/>} {!messages.items?.some(message=>message.role==='USER'&&message.guide_run_id===run.id)&&<RequestCallRecord runId={run.id}/>}</>}
    {state.connection_error&&<p role="alert" className="inline-error">运行连接异常，保留最后确认状态。<button className="ui-button" type="button" disabled={!state.visible||state.querying} onClick={()=>owner.readRun()}>重读运行</button></p>}
   </section>}
   <MessageTimeline {...(scrollPort!==undefined?{scrollPort}:{})} {...(scrollContent!==undefined?{scrollContent}:{})} messages={owner.messages} requestRecord={message=>message.role==='USER'&&message.guide_run_id!==null?<RequestCallRecord runId={message.guide_run_id} messageId={message.id}/>:null} {...(run?.latest_assistant_message_id?{reply:{message_id:run.latest_assistant_message_id,guide_run_id:run.id}}:{})} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/>

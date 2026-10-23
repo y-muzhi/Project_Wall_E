@@ -32,6 +32,36 @@ class GuideRepository:
     def get(self, identity: int):
         return self.connection.execute('SELECT * FROM guide_runs WHERE id=?', (identity,)).fetchone()
 
+    def accept_collaboration(self, identity, root, message, request, basis, at, *, parent=None, retry_of=None, trigger_type=None):
+        require_write_transaction(self.connection)
+        if message['requirement_id'] != root['id'] or message['role'] != 'USER':
+            raise ValueError('Acceptance requires the actual owned user input')
+        if retry_of is None:
+            if message['guide_run_id'] != identity:
+                raise ValueError('A new input must bind its newly accepted run')
+        else:
+            previous = self.get(retry_of)
+            if previous is None or previous['status'] != 'FAILED' or previous['requirement_id'] != root['id'] or previous['trigger_message_id'] != message['id']:
+                raise ValueError('Retry must bind its actual failed predecessor and original input')
+        scope = request.scope
+        authorization = basis['authorization']
+        values = {'id': identity, 'requirement_id': root['id'], 'idempotency_key': request.idempotency_key,
+            'trigger_message_id': message['id'], 'trigger_type': trigger_type or ('RETRY' if retry_of is not None else 'CREATE_GUIDE_RUN' if parent is None else 'CONTINUE_GUIDE_RUN'),
+            'source_type': 'COMMENT' if basis.get('comment_source') is not None else 'USER_INSTRUCTION',
+            'source_id': None if basis.get('comment_source') is None else basis['comment_source']['id'], 'function_type': 'collaboration_v1',
+            'context_template_key': 'collaboration_context_v1', 'context_template_version': 'v1', 'prompt_version': 'v1',
+            'action_type': request.action_type, 'mode_snapshot': None, 'instruction_summary': request.instruction,
+            'scope_type': None if scope is None else scope['scope_type'], 'scope_ref_json': None if scope is None or scope['scope_ref'] is None else canonical_input(scope['scope_ref']),
+            'read_scope_manifest_json': canonical_input({'schema_version': 1, 'source_refs': request.source_refs}),
+            'allowed_targets_json': canonical_input({'schema_version': 1, 'targets': authorization['allowed_targets']}),
+            'status': 'RUNNING', 'current_step': 'PREPARING', 'final_result_json': None,
+            'created_at': at, 'started_at': None, 'waiting_user_at': None, 'ended_at': None, 'updated_at': at,
+            'error_code': None, 'error_message': None, 'cancel_reason': None, 'retry_of_guide_run_id': retry_of,
+            'operation': request.operation, 'target_document_id': authorization['target_document_id'], 'parent_guide_run_id': parent,
+            'discussion_version_snapshot': root['discussion_version'], 'execution_basis_json': canonical_input(basis)}
+        self.connection.execute('INSERT INTO guide_runs('+','.join(values)+') VALUES ('+','.join('?' for _ in values)+')', tuple(values.values()))
+        return self.get(identity)
+
     def accept(self, identity, root, message, function, scope, manifest, at, *, trigger_type='CREATE_GUIDE_RUN', retry_of=None, key=None):
         require_write_transaction(self.connection)
         if message['requirement_id'] != root['id'] or message['role'] != 'USER' or message['message_type'] not in ('TEXT', 'CARD_RESPONSE'):
@@ -105,7 +135,7 @@ class GuideRepository:
         for row in self.connection.execute('SELECT started_at FROM llm_uses WHERE guide_run_id=? AND ended_at IS NULL', (identity,)):
             if _time(row['started_at']) > at:
                 raise ValueError('Cancellation cannot precede an unfinished attempt')
-        result = self.connection.execute("UPDATE guide_runs SET status='CANCELLED',current_step='FINISHED',cancel_reason='USER_REQUESTED',final_result_json=NULL,error_code=NULL,error_message=NULL,ended_at=?,updated_at=? WHERE id=? AND status IN ('RUNNING','WAITING_USER') AND current_step<>'PERSISTING'", (at, at, identity))
+        result = self.connection.execute("UPDATE guide_runs SET status='CANCELLED',current_step='FINISHED',cancel_reason='USER_REQUESTED',final_result_json=NULL,error_code=NULL,error_message=NULL,ended_at=?,updated_at=? WHERE id=? AND status='RUNNING'", (at, at, identity))
         if result.rowcount != 1:
             raise ValueError('Cancellation lost its shared transaction state gate')
         # An unfinished request is logically cancelled, not a proven Provider

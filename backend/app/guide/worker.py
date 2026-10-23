@@ -38,7 +38,7 @@ class GuideWorker:
         self.process_lock = ProcessLock.for_database(database.path)
         self.executor = None
         self._options = {} if orchestrator_options is None else dict(orchestrator_options)
-        if set(self._options) - {'profile', 'gateway', 'context_compiler', 'compatibility_check', 'sleep','counting_counter','counting_compatibility_check'}:
+        if set(self._options) - {'profile', 'gateway', 'counting_counter'}:
             raise ValueError('Only private diagnostic ORCH dependencies are injectable')
         self._tasks = {}; self._leases = {}; self._resubmit = set()
         self._loop = None; self._monitor = None; self._scan_lock = asyncio.Lock()
@@ -55,13 +55,14 @@ class GuideWorker:
         # startup never initializes, drops or migrates an application database.
         def verify():
             with self.database.transaction(): pass
+            self.catalog.collaboration  # Validate V1.5 fixed resources; no Chat admission or credentials.
         await _native(verify)
         try:
             await _native(self.process_lock.acquire)
             self.executor = Idempotency(self.database, self.process_lock, clock=self.clock)
             cleared = await _native(self.executor.recover_previous_process)
             recovery = await _native(recover_runs, self.database, {'recovery_reason': 'STARTUP',
-                'live_run_ids': set(), 'operation_time': operation_time(self.clock)}, process_lock=self.process_lock)
+                'live_run_ids': set(), 'operation_time': operation_time(self.clock)}, process_lock=self.process_lock, catalog=self.catalog)
             if recovery['code'] not in ('RECOVERED', 'RECOVERY_NO_CHANGE'):
                 raise WorkerStartupFailed(recovery['code'])
             self._loop = asyncio.get_running_loop(); self.started = self.accepting = True
@@ -80,10 +81,8 @@ class GuideWorker:
             return False
         previous = self._tasks.get(identity)
         if previous is not None and not previous.done():
-            # A new user may continue just after C07 committed WAITING_USER
-            # while the previous coroutine is returning its frozen receipt.
-            # One coalesced replay only observes the actual persisted state;
-            # it neither creates new business input nor retries a failed run.
+            # Coalesce duplicate dispatch while its accepted run is returning.
+            # Replay only observes the durable state; it creates no new input.
             self._resubmit.add(identity)
             return False
         lease = ExecutionLease()
@@ -130,7 +129,7 @@ class GuideWorker:
             started = monotonic()
             result = await _native(recover_runs, self.database, {'recovery_reason': 'NO_PROGRESS',
                 'live_run_ids': set(self.live_run_ids), 'operation_time': operation_time(self.clock)},
-                process_lock=self.process_lock)
+                process_lock=self.process_lock, catalog=self.catalog)
             self.events.append({'event': 'SCAN_RETURNED', 'code': result['code'],
                 'delay_seconds': max(0, started-scheduled_at) if scheduled_at is not None else 0,
                 'duration_seconds': max(0, monotonic()-started)})
@@ -168,7 +167,7 @@ class GuideWorker:
         """Use actual application success before HTTP projection may fail."""
         try:
             code, data = result['code'], result['data']
-            if code == 'CREATED' and set(data) == {'requirement', 'current_document_id', 'guide_run_id'}:
+            if data.get('processing') == 'MODEL':
                 identity = data['guide_run_id']
             elif code == 'GUIDE_ACCEPTED':
                 identity = data['guide_run']['id'] if 'guide_run' in data else data['id']
@@ -191,7 +190,8 @@ class GuideWorker:
         self.accepting = False; self._resubmit.clear()
         if self._monitor is not None:
             self._monitor.cancel()
-            await self._monitor
+            try: await self._monitor
+            except asyncio.CancelledError: pass  # It may be cancelled before its first instruction.
             self._monitor = None
         tasks = set(self._tasks.values())
         waited = monotonic()
@@ -205,7 +205,7 @@ class GuideWorker:
         recovery = None
         try:
             recovery = await _native(recover_runs, self.database, {'recovery_reason': 'STARTUP',
-                'live_run_ids': set(), 'operation_time': operation_time(self.clock)}, process_lock=self.process_lock)
+                'live_run_ids': set(), 'operation_time': operation_time(self.clock)}, process_lock=self.process_lock, catalog=self.catalog)
             self.events.append({'event': 'CLOSED_RECOVERY', 'code': recovery['code']})
         finally:
             self.process_lock.release(); self.executor = None; self.started = False

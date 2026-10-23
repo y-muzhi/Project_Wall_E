@@ -5,26 +5,25 @@ import { validateDefinition } from '../src/api/resource-schema.ts';
 import { snapshotObject } from '../src/api/client.ts';
 
 const at = '2026-10-05T09:00:00.000Z';
-const root = () => ({ id: 1, requirement_no: 'REQ000001', title: '需求😀', requirement_type: 'NEW', initialization_mode: 'IDEATION',
-  template_key: 'new-requirement', template_version: 'v1', status: 'INITIALIZING', document_work_state: 'IDLE',
-  active_operation_type: null, active_operation_id: null, created_at: at, updated_at: at, completed_at: null, state_started_at: null });
-const run = () => ({ id: 2, requirement_id: 1, action_type: 'ASK', function_type: 'ANSWER_REQUIREMENT', source_type: 'USER_INSTRUCTION', source_id: null,
-  scope: { scope_type: 'DOCUMENT', scope_ref: null }, status: 'RUNNING', current_step: 'PREPARING', final_result: null,
-  suggestion_batch_id: null, latest_assistant_message_id: null, error_code: null, error_message: null, cancel_reason: null, retry_of_guide_run_id: null,
-  created_at: at, started_at: at, waiting_user_at: null, ended_at: null, updated_at: at });
+const root=()=>({id:1,requirement_no:'REQ000001',title:'需求😀',requirement_type:'NEW',status:'PLANNING',metadata_version:1,initial_message_id:1,discussion_version:1,
+ document_work_state:'IDLE',active_operation_type:null,active_operation_id:null,created_at:at,updated_at:at,completed_at:null,closed_at:null,state_started_at:null});
+const run=()=>({id:2,requirement_id:1,action_type:'ASK',function_type:'collaboration_v1',source_type:'USER_INSTRUCTION',source_id:null,
+ scope:{scope_type:'DOCUMENT',scope_ref:null},status:'RUNNING',current_step:'PREPARING',final_result:null,suggestion_batch_id:null,latest_assistant_message_id:null,
+ error_code:null,error_message:null,cancel_reason:null,retry_of_guide_run_id:null,created_at:at,started_at:at,waiting_user_at:null,ended_at:null,updated_at:at,
+ operation:'DISCUSS',parent_guide_run_id:null,target:null,discussion_version_snapshot:1,material_summary:null,application_result:null,progress_result:null,progress_error:null,document_effect:null,returned_responses:[]});
+const revision=()=>({id:3,requirement_id:1,document_id:2,version_no:2,source_content_version:2,created_at:at,change_summary:null,source_refs:[],markers:[{event_id:8,description:'😀'.repeat(1000),created_at:at}]});
 const option = (key) => ({ option_key: key, label: key, description: '', impact: '', risks: '' });
-const cards = () => ({ schema_version: 1, intro: '请确认', cards: [{ card_key: 'confirm', card_type: 'CONFIRM', question: '完整候选', context: '', required: true,
+const cards = () => ({ schema_version:1,intro:'请确认',purpose:'CLARIFICATION',action_payload:null,program_binding:{discussion_version:1,target_content_version:null,source_heads:[]},cards: [{ card_key: 'confirm', card_type: 'CONFIRM', question: '完整候选', context: '', required: true,
   options: [option('yes'), option('later')], selection_rule: { min: 1, max: 1 }, custom_answer: { enabled: false, max_length: 0 },
-  recommendation: null, related_spec_context: [{ block_id: 1, content_snapshot: '原文😀' }] }] });
-const comment = () => ({ id: 4, requirement_id: 1, content: '评论', anchor_type: 'SELECTION', block_id: 3,
+  recommendation: null, related_spec_context: [{document_id:2,content_version:1, block_id: 1, content_snapshot: '原文😀' }] }] });
+const comment = () => ({ id:4,requirement_id:1,document_id:2,content: '评论', anchor_type: 'SELECTION', block_id: 3,
   anchor_ref: { selected_text: '甲😀', prefix_text: '', suffix_text: '' }, anchor_status: 'ATTACHED', status: 'OPEN',
   resolved_at: null, deleted_at: null, created_at: at, updated_at: at });
 const location = () => ({ status: 'ATTACHED', block_id: 3, start_offset: 2, end_offset: 4 });
 
 test('SHR-TEXT exactly accepts1000 revision codepoints and100 selection context, refusing1001/101 without truncation', () => {
-  const revision = { id: 3, requirement_id: 1, version_no: 2, revision_type: 'MANUAL', description: '😀'.repeat(1000), source_content_version: 2, created_at: at };
-  assert.equal(models.revisionSummary(revision).description, revision.description);
-  assert.throws(() => models.revisionSummary({ ...revision, description: revision.description + 'x' }));
+  const input=revision();assert.equal(models.revisionSummary(input).markers[0].description,input.markers[0].description);
+  assert.throws(()=>models.revisionSummary({...input,markers:[{...input.markers[0],description:input.markers[0].description+'x'}]}));
   const reference = { block_id: 3, selected_text: '选😀', prefix_text: '😀'.repeat(100), suffix_text: '后'.repeat(100) };
   const scoped = { scope_type: 'SELECTION', scope_ref: reference };
   assert.deepEqual(models.scope(scoped), scoped);
@@ -35,7 +34,7 @@ test('SHR-TEXT exactly accepts1000 revision codepoints and100 selection context,
     assert.throws(() => models.comment({ ...anchored, anchor_ref: { ...anchored.anchor_ref, [field]: reference[field] + 'x' } }));
   }
 });
-const batch = () => ({ id: 8, requirement_id: 1, guide_run_id: 2, source_type: 'USER_INSTRUCTION', source_id: null, title: '修改', summary: '说明',
+const batch = () => ({ id:8,requirement_id:1,guide_run_id:2,target_document_id:2,source_refs:[],source_type: 'USER_INSTRUCTION', source_id: null, title: '修改', summary: '说明',
   status: 'PENDING', completion_result: null, error_message: null, base_content_version: 7, applied_content_version: null,
   created_at: at, completed_at: null, updated_at: at, counts: { total: 1, pending: 1, accepted: 0, rejected: 0, edited: 0 },
   suggestions: [{ id: 9, batch_id: 8, order_no: 1, title: '修改', explanation: '原因', impact: null, patch_operation: 'REPLACE_BLOCK',
@@ -55,14 +54,14 @@ test('guide functions, safe errors, independent final-result version and exact h
   assert.deepEqual(models.guideRun(run()), {...run(),returned_responses:[]});
   const returned={...run(),returned_responses:[{llm_use_id:13,call_no:1,attempt_no:1,content:'截断返回，不是 JSON'}]};
   assert.deepEqual(models.guideRun(returned).returned_responses,returned.returned_responses);
-  const completed = run(); Object.assign(completed, { status: 'COMPLETED', current_step: 'FINISHED', ended_at: at,
-    final_result: { summary: '完成', assistant_message_id: 10, current_document_version: 7, suggestion_batch_id: null } });
+  const completed = run(); Object.assign(completed, {application_result:'NOT_REQUESTED',progress_result:'NOT_REQUESTED', status:'COMPLETED',current_step: 'FINISHED', ended_at: at,
+    final_result: { summary: '完成', assistant_message_id: 10, current_document_version: 7, suggestion_batch_id:null,analysis:null} });
   assert.equal(models.guideRun(completed).final_result.current_document_version, 7);
-  const history = run(); delete history.final_result; assert.deepEqual(models.guideSummary(history), history);
+  const history = run(); delete history.final_result;delete history.returned_responses; assert.deepEqual(models.guideSummary(history), history);
   rejectsMutants(models.guideRun, run, [r => r.source_id = 2, r => r.function_type = 'MODIFY_FROM_COMMENT', r => r.scope.scope_ref = {},
     r => r.status = 'FAILED', r => r.ended_at = at, r => r.error_code = 'PRIVATE_STACK', r => r.retry_of_guide_run_id = r.id,
     r => r.final_result = completed.final_result, r => r.started_at = '2026-10-04T09:00:00.000Z']);
-  const failed = run(); Object.assign(failed, { status: 'FAILED', current_step: 'FINISHED', ended_at: at, error_code: 'CONTEXT_LIMIT_EXCEEDED', error_message: '真实拒绝' });
+  const failed = run(); Object.assign(failed, {application_result:'NOT_REQUESTED',progress_result:'NOT_REQUESTED', status:'FAILED',current_step: 'FINISHED', ended_at: at, error_code: 'CONTEXT_LIMIT_EXCEEDED', error_message: '真实拒绝' });
   assert.equal(models.guideRun(failed).error_code, 'CONTEXT_LIMIT_EXCEEDED'); failed.error_code = 'unregistered'; assert.throws(() => models.guideRun(failed));
 });
 test('frozen card schema preserves complete text, rejects semantic and conditional-field violations', () => {
@@ -75,14 +74,14 @@ test('frozen card schema preserves complete text, rejects semantic and condition
   const input = cards(); input.cards[0].options[0].label = '😀'.repeat(1000); assert.equal(models.cards(input).cards[0].options[0].label, input.cards[0].options[0].label);
 });
 test('formal responses retain explicit skip/custom null and reject duplicate keys/partial schemas', () => {
-  const make = () => ({ schema_version: 1, responses: [{ card_key: 'c', selected_option_keys: [], custom_answer: null, skipped: true }] });
+  const make = () => ({ schema_version: 1, responses: [{ card_key: 'c', selected_option_keys: [], custom_answer: null, skipped:true}],execution_selection:null});
   assert.deepEqual(models.responses(make()), make());
   rejectsMutants(models.responses, make, [r => delete r.responses[0].custom_answer, r => r.responses[0].selected_option_keys = ['x'],
     r => r.responses.push(structuredClone(r.responses[0])), r => r.responses[0].custom_answer = '', r => r.schema_version = 2]);
 });
 test('messages keep damaged structured-content fallback and server card-state; text cannot carry formal answers', () => {
   const message = { id: 1, requirement_id: 1, guide_run_id: 2, sequence_no: 5, role: 'ASSISTANT', content: '回退正文', message_type: 'INTERACTION_CARDS',
-    structured_content: null, reply_to_message_id: null, created_at: at, card_state: null };
+    structured_content: null, reply_to_message_id: null, created_at:at,card_state:null,phase_ref:null,topic_refs:[],document_ids:[],program_receipt:null};
   assert.deepEqual(models.message(message), message);
   assert.equal(models.message({ ...message, structured_content: cards(), card_state: 'EXPIRED' }).card_state, 'EXPIRED');
   for (const bad of [{ ...message, card_state: 'AVAILABLE' }, { ...message, role: 'USER' }, { ...message, message_type: 'TEXT', structured_content: cards() },
@@ -124,10 +123,9 @@ test('batch completion changes CURRENT once; no-change and discard have no adopt
   }
   const discarded = make(); Object.assign(discarded, { status: 'DISCARDED', completed_at: at }); assert.equal(models.batchMetadata(discarded).applied_content_version, null);
 });
-test('revision summaries keep historical source version and fixed BASELINE/manual numbering', () => {
-  const make = () => ({ id: 1, requirement_id: 1, version_no: 1, revision_type: 'BASELINE', description: null, source_content_version: 7, created_at: at });
-  assert.equal(models.revisionSummary(make()).source_content_version, 7);
-  rejectsMutants(models.revisionSummary, make, [r => r.version_no = 2, r => r.revision_type = 'MANUAL', r => r.description = '', r => r.markdown_content = 'extra']);
+test('CONTENT history keeps the actual document/version and separate chronological marker events',()=>{
+ const make=revision;assert.equal(models.revisionSummary(make()).source_content_version,2);
+ rejectsMutants(models.revisionSummary,make,[r=>r.version_no=3,r=>r.document_id=0,r=>r.markers[0].description='',r=>r.markdown_content='extra',r=>r.markers.push({...r.markers[0]})]);
 });
 test('frozen definition names are explicit and business captures getters once with immutable nested data', () => {
   assert.throws(() => validateDefinition('invented', {}));

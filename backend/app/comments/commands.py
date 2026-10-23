@@ -25,18 +25,18 @@ from backend.app.shared.validation import InvalidInput
 def revalidate_anchors(connection: sqlite3.Connection, payload: object, *, catalog: ResourceCatalog | None = None) -> dict:
     # No own transaction, error conversion, or commit: corruption aborts the outer command.
     require_write_transaction(connection)
-    requirement_id, document = revalidate_anchors_input(payload)
-    rows = DocumentRepository(connection).by_requirement(requirement_id, 'CURRENT')
-    if len(rows) != 1:
-        raise ValueError('Internal reanchoring requires unique actual CURRENT')
-    sources = DocumentSources(connection, requirement_id, catalog if catalog is not None else ResourceCatalog())
-    current = get_current_document_result(rows[0], sources)
+    requirement_id, document_id, document = revalidate_anchors_input(payload)
+    row = DocumentRepository(connection).get_current(requirement_id, document_id)
+    if row is None:
+        raise ValueError('Internal reanchoring requires the actual target document')
+    sources = DocumentSources(connection, requirement_id, catalog if catalog is not None else ResourceCatalog(), document_id=document_id)
+    current = get_current_document_result(row, sources)
     if document != {key: current[key] for key in ('markdown_content', 'block_state_json')}:
         raise ValueError('Internal snapshot must be the CURRENT written in this transaction')
     snapshot = validate_snapshot(document['markdown_content'], document['block_state_json'], sources)
     repository = CommentRepository(connection)
     attached, orphaned = [], []
-    for comment in repository.live_anchors(requirement_id):
+    for comment in repository.live_anchors(requirement_id, document_id):
         anchor = strict_json_object(comment['anchor_ref_json'], 'anchor_ref_json')
         canonical_input(anchor)  # Reject invalid Unicode even when the original block is absent.
         found = locate(snapshot, comment['anchor_type'], comment['block_id'], anchor).attached
@@ -53,10 +53,10 @@ def create_comment(executor: Idempotency, payload: object, *, catalog: ResourceC
     def operation(connection):
         root = RequirementRepository(connection).get(request.requirement_id)
         if root is None: raise Rejected('NOT_FOUND')
-        if root['status'] != 'ACTIVE': raise Rejected('STATE_CONFLICT')
         assert_idle(connection, root, remaining_conflicts=frozenset())
-        current = current_at_version(connection, root['id'], request.expected_content_version)
-        sources = DocumentSources(connection, root['id'], catalog if catalog is not None else ResourceCatalog())
+        current = current_at_version(connection, root['id'], request.expected_content_version, document_id=request.document_id)
+        if current['archived_at'] is not None: raise Rejected('STATE_CONFLICT')
+        sources = DocumentSources(connection, root['id'], catalog if catalog is not None else ResourceCatalog(), document_id=current['id'])
         document = get_current_document_result(current, sources)
         snapshot = validate_snapshot(document['markdown_content'], document['block_state_json'], sources)
         try:
@@ -93,7 +93,10 @@ def _comment_action(executor, payload, *, action, parse, build, capability, cloc
         if root is None: raise Rejected('NOT_FOUND')
         if action == 'DELETE' and comment['deleted_at'] is not None:
             return Success(build(row), 200)
-        if root['status'] != 'ACTIVE' or comment['deleted_at'] is not None: raise Rejected('STATE_CONFLICT')
+        if comment['deleted_at'] is not None: raise Rejected('STATE_CONFLICT')
+        document = DocumentRepository(connection).get_current(root['id'], comment['document_id'])
+        if document is None: raise Rejected('NOT_FOUND')
+        if document['archived_at'] is not None: raise Rejected('STATE_CONFLICT')
         assert_idle(connection, root, remaining_conflicts=frozenset())
         if action == 'EDIT' and comment['status'] != 'OPEN': raise Rejected('STATE_CONFLICT')
         if (action == 'RESOLVE' and comment['status'] == 'RESOLVED') or (action == 'REOPEN' and comment['status'] == 'OPEN'):

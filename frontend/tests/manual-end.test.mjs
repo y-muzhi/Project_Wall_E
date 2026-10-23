@@ -10,14 +10,14 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture(){const calls=[],f={fail:null,clears:0,cleanupFail:false,version:2,submits:0};
  const editor={flushLocal:()=>true,setReadonly:value=>calls.push(['readonly',value])};
  const autosave={state:{confirmed_version:2},localSnapshot:pair,freezeAndFlush:async()=>{calls.push(['freeze']);return true;},pauseAndWait:async()=>{calls.push(['pause']);},resumeEditing:()=>calls.push(['resume']),dispose:()=>calls.push(['dispose'])};
- const prepare=kind=>(id,version)=>{calls.push(['prepare',kind,id,version]);const action={submit:async()=>{f.submits++;calls.push(['submit',action]);if(f.fail){const error=f.fail;f.fail=null;throw error;}return {data:kind==='COMPLETE'?{...current,content_version:8}:{requirement_id:1,manual_draft_id:3,cancelled:true}};}};return action;};
+ const prepare=kind=>(id,documentId,draftId,version)=>{assert.equal(documentId,2);assert.equal(draftId,3);calls.push(['prepare',kind,id,version]);const action={submit:async()=>{f.submits++;calls.push(['submit',action]);if(f.fail){const error=f.fail;f.fail=null;throw error;}return {data:kind==='COMPLETE'?{document_id:2,before_content_version:7,after_content_version:8,revision_id:9,result:'UPDATED'}:{requirement_id:1,document_id:2,manual_draft_id:3,cancelled:true}};}};return action;};
  const api={prepareCompleteManualDraft:prepare('COMPLETE'),prepareCancelManualDraft:prepare('CANCEL'),getRequirement:async()=>({data:{id:1,document_work_state:'MANUAL_EDITING',active_operation_id:3}}),getCurrentDocument:async()=>({data:current}),getManualDraft:async()=>({data:{...draft,content_version:f.version}})};
  const cache={clearClosedDraft:async()=>{f.clears++;if(f.cleanupFail)throw Error('storage');}};return {...f,calls,editor,autosave,api,cache,f};}
 
 test('complete waits confirmed last save then uses draft version, coalesces only same operation and never exposes success or cleans before receipt',async()=>{
  const p=fixture(),wait=deferred();p.autosave.freezeAndFlush=async()=>wait.promise;const end=new ManualDraftEnd(current,draft,p.api,p.editor,p.autosave,p.cache);
  const first=end.complete();assert.equal(end.complete(),first);assert(!await end.cancelConfirmed());await settle();assert(!p.calls.some(c=>c[0]==='prepare'));assert.equal(end.getSnapshot().outcome,null);
- p.autosave.state.confirmed_version=5;wait.resolve(true);assert(await first);assert.deepEqual(p.calls.find(c=>c[0]==='prepare'),['prepare','COMPLETE',1,5]);assert.equal(end.getSnapshot().phase,'CLOSED');assert.equal(end.getSnapshot().outcome.current.id,2);assert.equal(p.f.clears,1);end.dispose();
+ p.autosave.state.confirmed_version=5;wait.resolve(true);assert(await first);assert.deepEqual(p.calls.find(c=>c[0]==='prepare'),['prepare','COMPLETE',1,5]);assert.equal(end.getSnapshot().phase,'CLOSED');assert.equal(end.getSnapshot().outcome.effect.document_id,2);assert.equal(p.f.clears,1);end.dispose();
 });
 test('confirmed cancel stops new saves, waits owned save, reads native latest version and checks cancelled session identity before cleanup',async()=>{
  const p=fixture(),wait=deferred();p.f.version=9;p.autosave.pauseAndWait=async()=>{p.calls.push(['pause']);await wait.promise;};const end=new ManualDraftEnd(current,draft,p.api,p.editor,p.autosave,p.cache);

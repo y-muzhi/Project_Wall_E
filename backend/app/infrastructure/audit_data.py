@@ -36,3 +36,22 @@ def sanitize_audit(value, *, credentials=()):
 def audit_json(value, *, credentials=()):
     if type(value) is not dict: raise ValueError('Audit snapshots must be complete objects')
     return canonical_input(sanitize_audit(value,credentials=credentials))
+
+
+def collaboration_audit_json(value, resources, *, credentials=()):
+    """Preserve only the Schema-validated private program grant at its exact
+    ContextBasis path. HTTP authorization and arbitrary credentials still use
+    the normal scrubber. If scrubbing changes the replayable request/basis,
+    stop before I/O instead of saving misleading request evidence.
+    """
+    from .resources import ConfigInvalid
+    basis = resources.validate('ContextBasis', value['context_basis'])
+    grant = basis['canonical']['authorization']
+    clean = sanitize_audit(value, credentials=credentials)
+    clean['context_basis']['canonical']['authorization'] = sanitize_audit({'grant': grant}, credentials=credentials)['grant']
+    if canonical_input(clean['context_basis']) != canonical_input(value['context_basis']) or clean['request'] != value['request']:
+        raise ConfigInvalid('Exact collaboration request cannot be safely retained')
+    encoded = canonical_input(clean)
+    if len(encoded.encode('utf-8')) > MAX_AUDIT_BYTES:
+        raise AuditCapacityExceeded('Collaboration audit exceeds its approved capacity')
+    return encoded

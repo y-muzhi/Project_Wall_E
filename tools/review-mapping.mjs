@@ -3,9 +3,9 @@ import { resolve } from 'node:path';
 import { inspectSource, coverage } from './spec-audit.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const path = resolve(root, 'docs/traceability/需求实现映射.md');
-const sources = JSON.parse(readFileSync(resolve(root, 'docs/sources/manifest.json'), 'utf8')).map(inspectSource);
-const ledger = JSON.parse(readFileSync(resolve(root, 'docs/sources/reading-ledger.json'), 'utf8'));
+const path = resolve(root, 'docs/traceability/v1.0/需求实现映射.md');
+const sources = JSON.parse(readFileSync(resolve(root, 'docs/sources/v1.0/manifest.json'), 'utf8')).map(inspectSource);
+const ledger = JSON.parse(readFileSync(resolve(root, 'docs/sources/v1.0/reading-ledger.json'), 'utf8'));
 for (const source of sources) if (!coverage(source.lineCount, ledger[source.key]).complete) throw new Error('Complete source reading is required');
 let mapping = readFileSync(path, 'utf8');
 mapping = mapping.replace('这是持续维护台账。自动建立的稳定锚点行只是遗漏检查底稿：标为“待完整正文复核”的行不表示全文已读或行为已梳理。所有业务单元当前未开始；来源读取状态在 reading-ledger.json 单独记录。每次实现前重新阅读对应完整正文、公共规则及失败分支。实现时应将较大来源行继续拆为独立可核验单元。', '两份原文已逐段全文阅读。稳定锚点行用于定位和检查遗漏，行为列是管理摘要，不能代替完整正文；每次实现前重新读取全部条件/失败分支。较大条目继续沿自然边界拆分；公共原语的验证与接口/事务/页面验证分别登记。第8章373项编号场景见 [验收场景映射](验收场景映射.md)，均未执行；无编号的组件和质量要求仍按本表对应条目拆分。');

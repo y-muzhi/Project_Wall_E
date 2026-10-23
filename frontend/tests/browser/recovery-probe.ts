@@ -1,3 +1,4 @@
+import {probeDocumentId,probeRecoveryBinding,probeDraftId} from './v15-probe-targets.ts';
 import type { Ctx } from '@milkdown/kit/ctx';
 import { require } from '../../src/api/decoding.ts';
 import type { WalleApi } from '../../src/api/walle.ts';
@@ -11,10 +12,10 @@ import { GuideRunPolling } from '../../src/guide/polling.ts';
 export async function recoveryProbe(ctx: Ctx, api: WalleApi, requirement: number, run: number) {
   const owner = (await api.getRequirement(requirement)).data;
   require(owner.document_work_state === 'IDLE');
-  const current = (await api.getCurrentDocument(requirement)).data;
-  const draft = (await api.prepareStartManualDraft(requirement, current.content_version).submit()).data.manual_draft;
+  const current = (await api.getCurrentDocument(requirement,probeDocumentId(requirement))).data;
+  const draft = (await api.prepareStartManualDraft(requirement,probeDocumentId(requirement),current.content_version).submit()).data.manual_draft;
   const name = 'walle-recovery-probe-' + crypto.randomUUID();
-  let store = new DraftRecoveryStore(ctx, { name });
+  let store = new DraftRecoveryStore(ctx,probeRecoveryBinding(),{ name });
   const checks: string[] = [];
   const snapshot: LocalDraftSnapshot = Object.freeze({ schema_version: 1, base_confirmed_version: draft.content_version,
     markdown_content: draft.markdown_content, block_state_json: draft.block_state_json, local_revision: 1, updated_at: new Date().toISOString() });
@@ -26,7 +27,7 @@ export async function recoveryProbe(ctx: Ctx, api: WalleApi, requirement: number
   try {
     require(await store.put(requirement, draft.id, snapshot));
     same(await store.get(requirement, draft.id), snapshot); store.close();
-    store = new DraftRecoveryStore(ctx, { name }); same(await store.get(requirement, draft.id), snapshot);
+    store = new DraftRecoveryStore(ctx,probeRecoveryBinding(),{ name }); same(await store.get(requirement, draft.id), snapshot);
     require(await store.get(requirement, draft.id + 1) === null);
     checks.push('actual transaction commit / connection reopen / key isolation');
     const newest = { ...snapshot, local_revision: 2 };
@@ -47,7 +48,7 @@ export async function recoveryProbe(ctx: Ctx, api: WalleApi, requirement: number
     require(await store.get(requirement, draft.id + 20) === null);
     require(await store.put(requirement, draft.id, { ...newest, local_revision: 3 }));
     checks.push('twenty real IndexedDB records / twenty-first refused / replacement permitted / no eviction');
-    const unavailable = new DraftRecoveryStore(ctx, { name: name + '-unavailable', factory: () => { throw new Error('diagnostic unavailable'); } });
+    const unavailable = new DraftRecoveryStore(ctx,probeRecoveryBinding(),{ name: name + '-unavailable', factory: () => { throw new Error('diagnostic unavailable'); } });
     await refuse(unavailable.put(requirement, draft.id, snapshot), 'UNAVAILABLE'); unavailable.close();
     const raw = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(name, 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
@@ -70,7 +71,7 @@ export async function recoveryProbe(ctx: Ctx, api: WalleApi, requirement: number
     });
     checks.push('real production API terminal state read through owned polling controller: ' + observed);
     require(await store.clearIfRevision(requirement, draft.id, 3)); require(await store.get(requirement, draft.id) === null);
-    await api.prepareCancelManualDraft(requirement, draft.content_version).submit();
+    await api.prepareCancelManualDraft(requirement,probeDocumentId(requirement),probeDraftId(requirement),draft.content_version).submit();
     await store.clearClosedDraft(requirement, draft.id);
     checks.push('matching acknowledged revision clear / actual draft cancel confirmed');
     return { passed: true, name, draft_id: draft.id, checks, capacity_records: 20,

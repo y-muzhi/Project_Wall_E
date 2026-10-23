@@ -28,12 +28,12 @@ def get_comment(database: Database, comment_id: object = MISSING) -> dict:
     return {'code': code, 'data': None, 'details': None}
 
 
-def _current(connection, requirement_id, catalog):
-    rows = DocumentRepository(connection).by_requirement(requirement_id, 'CURRENT')
-    if len(rows) != 1:
-        raise Rejected('WORK_STATE_INCONSISTENT')
-    sources = DocumentSources(connection, requirement_id, catalog if catalog is not None else ResourceCatalog())
-    document = get_current_document_result(rows[0], sources)
+def _current(connection, requirement_id, document_id, catalog):
+    row = DocumentRepository(connection).get_current(requirement_id, document_id)
+    if row is None:
+        raise Rejected('NOT_FOUND')
+    sources = DocumentSources(connection, requirement_id, catalog if catalog is not None else ResourceCatalog(), document_id=document_id)
+    document = get_current_document_result(row, sources)
     snapshot = validate_snapshot(document['markdown_content'], document['block_state_json'], sources)
     return document, snapshot
 
@@ -41,17 +41,18 @@ def _current(connection, requirement_id, catalog):
 def _collection(database, payload, *, index: bool, catalog):
     try:
         request = get_comment_index_input(payload) if index else list_comments_input(payload)
-        requirement_id = request if index else request.requirement_id
+        requirement_id = request['requirement_id'] if index else request.requirement_id
+        document_id = request['document_id'] if index else request.document_id
     except InvalidInput as error:
         return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
     try:
         with database.transaction() as connection:
             if connection.execute('SELECT 1 FROM requirements WHERE id=?', (requirement_id,)).fetchone() is None:
                 raise Rejected('NOT_FOUND')
-            document, snapshot = _current(connection, requirement_id, catalog)
+            document, snapshot = _current(connection, requirement_id, document_id, catalog)
             repository = CommentRepository(connection)
             if index:
-                items = [locate_comment(row, snapshot) for row in repository.all_live(requirement_id)]
+                items = [locate_comment(row, snapshot) for row in repository.all_live(requirement_id, document_id)]
                 data = get_comment_index_result(requirement_id, document, snapshot, items)
             else:
                 total, rows = repository.list_page(request)

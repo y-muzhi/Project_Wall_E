@@ -3,8 +3,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const manifestPath = resolve(root, 'docs/sources/manifest.json');
-const ledgerPath = resolve(root, 'docs/sources/reading-ledger.json');
+const manifestPath = resolve(root, 'docs/sources/v1.0/manifest.json');
+const ledgerPath = resolve(root, 'docs/sources/v1.0/reading-ledger.json');
 const definitions = [
   { key: 'frontend', path: 'C:/Users/羊牧之/Desktop/WALL-E.V1_0.6.前端设计文档.md', expectedVersion: '1.1-draft', expectedHash: '91ECFFF98EDB1ABBDF6D5076B810F72EDE2AB7A8B8FDBA066884117AE4BD37CA' },
   { key: 'backend', path: 'C:/Users/羊牧之/Desktop/WALL-E.V1_0.6.后端设计文档.md', expectedVersion: '1.0-draft', expectedHash: 'EB9D40453576587AED754A53E939842233E48C64FAC14A4D64F56E908F186D9F' },
@@ -59,7 +59,7 @@ function main() {
   const sources = definitions.map(inspectSource);
   const ledger = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) : { frontend: [], backend: [] };
   if (command === 'index') {
-    mkdirSync(resolve(root, 'docs/sources'), { recursive: true });
+    mkdirSync(resolve(root, 'docs/sources/v1.0'), { recursive: true });
     writeFileSync(manifestPath, JSON.stringify(sources.map(({ lines, ...metadata }) => metadata), null, 2) + '\n');
     const out = ['# 设计来源索引', '', '自动定位索引，不代替正文，不表示已经阅读或实现。输入 SHA-256 见 manifest.json。', ''];
     for (const source of sources) {
@@ -69,7 +69,7 @@ function main() {
       source.anchors.forEach(a => out.push(`| ${a.line} | ${a.id} |`));
       out.push('');
     }
-    writeFileSync(resolve(root, 'docs/sources/设计来源索引.md'), out.join('\n') + '\n');
+    writeFileSync(resolve(root, 'docs/sources/v1.0/设计来源索引.md'), out.join('\n') + '\n');
     console.log(JSON.stringify(sources.map(({ key, version, lineCount, hash, headings, anchors }) => ({ key, version, lineCount, hash, headings: headings.length, anchors: anchors.length })), null, 2));
     return;
   }

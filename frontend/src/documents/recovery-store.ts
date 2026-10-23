@@ -13,7 +13,10 @@ export class DraftStorageError extends Error {
 export const DRAFT_BYTES = 8 * 1024 * 1024, TOTAL_DRAFT_BYTES = 160 * 1024 * 1024, DRAFT_RECORDS = 20;
 const storeName = 'draft_snapshots';
 function bytes(value: unknown): number { return new TextEncoder().encode(JSON.stringify(snapshotObject(value))).length; }
-function key(requirement: number, draft: number): [number, number] { return [positiveInteger(requirement), positiveInteger(draft)]; }
+export type RecoveryBinding=Readonly<{requirement_id:number;target_document_id:number;manual_draft_id:number;base_content_version:number}>;
+export function recoveryStorageKey(binding:RecoveryBinding):readonly[number,number,number,number]{
+  return Object.freeze([positiveInteger(binding.requirement_id),positiveInteger(binding.target_document_id),positiveInteger(binding.manual_draft_id),positiveInteger(binding.base_content_version)]);
+}
 
 /** Local intentions, not a server DocumentReadModel or saved receipt. */
 export function validateLocalDraftSnapshot(ctx:Ctx,value:unknown):LocalDraftSnapshot {
@@ -38,14 +41,21 @@ export function recoveryChoice(local: LocalDraftSnapshot, draft: DocumentReadMod
 
 /** Real IndexedDB transactions. Quota/blocked/damaged data never trigger an
  * automatic deletion of another unconfirmed draft. Optional name/factory are
- * private browser diagnostics; production keeps walle-v1/version1.
+ * private browser diagnostics; production uses a new V1.5 database namespace.
  */
 export class DraftRecoveryStore {
   private readonly ctx: Ctx; private readonly name: string; private readonly factory: () => IDBFactory;
   private opening: Promise<IDBDatabase> | undefined; private database: IDBDatabase | undefined; private closed = false;
   private readonly pending = new Set<Promise<unknown>>();
-  constructor(ctx: Ctx, diagnostic: { name?: string; factory?: () => IDBFactory } = {}) {
-    this.ctx = ctx; this.name = diagnostic.name ?? 'walle-v1'; this.factory = diagnostic.factory ?? (() => globalThis.indexedDB);
+  private readonly binding:RecoveryBinding;
+  constructor(ctx: Ctx, binding:RecoveryBinding,diagnostic: { name?: string; factory?: () => IDBFactory } = {}) {
+    const fields=['requirement_id','target_document_id','manual_draft_id','base_content_version'];
+    exact(binding,fields);recoveryStorageKey(binding);if(binding.target_document_id===binding.manual_draft_id)throw TypeError('The draft is distinct from its target');
+    this.binding=Object.freeze({...binding});this.ctx = ctx; this.name = diagnostic.name ?? 'walle-v1.5'; this.factory = diagnostic.factory ?? (() => globalThis.indexedDB);
+  }
+  private key(requirement:number,draft:number):[number,number,number,number]{
+    if(positiveInteger(requirement)!==this.binding.requirement_id||positiveInteger(draft)!==this.binding.manual_draft_id)throw TypeError('Local recovery belongs to another actual edit session');
+    return [...recoveryStorageKey(this.binding)];
   }
   private validate(value: unknown): LocalDraftSnapshot {
     return validateLocalDraftSnapshot(this.ctx,value);
@@ -93,7 +103,7 @@ export class DraftRecoveryStore {
    * claim of protection when a transaction was refused. */
   async settle():Promise<void>{while(this.pending.size)await Promise.allSettled([...this.pending]);}
   async get(requirement: number, draft: number): Promise<LocalDraftSnapshot | null> {
-    const identity = key(requirement, draft);
+    const identity = this.key(requirement, draft);
     const value = await this.transaction<unknown>('readonly', (store, complete) => {
       const request = store.get(identity); request.onsuccess = () => complete(request.result);
     });
@@ -103,7 +113,7 @@ export class DraftRecoveryStore {
     return this.validate(value);
   }
   async put(requirement: number, draft: number, value: unknown): Promise<boolean> {
-    const identity = key(requirement, draft); let encoded: number;
+    const identity = this.key(requirement, draft); let encoded: number;
     try { encoded = bytes(value); } catch { throw new DraftStorageError('CORRUPT'); }
     if (encoded > DRAFT_BYTES) throw new DraftStorageError('CAPACITY');
     const record = this.validate(value);
@@ -117,7 +127,8 @@ export class DraftRecoveryStore {
           let size: number;
           try { size = bytes(entry.value); } catch { fail(new DraftStorageError('CORRUPT')); return; }
           total += size; entries++;
-          if (Array.isArray(entry.key) && entry.key[0] === identity[0] && entry.key[1] === identity[1]) {
+          const storedKey=entry.key;
+          if (Array.isArray(storedKey) && storedKey.length===identity.length&&identity.every((part,index)=>storedKey[index]===part)) {
             exists = true; previous = size;
             let saved: LocalDraftSnapshot;
             try { saved = this.validate(entry.value); } catch { fail(new DraftStorageError('CORRUPT')); return; }
@@ -134,7 +145,7 @@ export class DraftRecoveryStore {
   }
   /** A late acknowledgement cannot clear a newer persisted local revision. */
   async clearIfRevision(requirement: number, draft: number, revision: number): Promise<boolean> {
-    const identity = key(requirement, draft); positiveInteger(revision);
+    const identity = this.key(requirement, draft); positiveInteger(revision);
     return this.transaction<boolean>('readwrite', (store, complete, fail) => {
       const request = store.get(identity);
       request.onsuccess = () => {
@@ -148,7 +159,7 @@ export class DraftRecoveryStore {
   }
   /** Only called after a parent confirms actual complete/cancel success. */
   async clearClosedDraft(requirement: number, draft: number): Promise<void> {
-    const identity = key(requirement, draft);
+    const identity = this.key(requirement, draft);
     return this.transaction<void>('readwrite', (store, complete) => { const removed = store.delete(identity); removed.onsuccess = () => complete(undefined); });
   }
   close(): void { this.closed = true; this.database?.close(); this.database = undefined; }

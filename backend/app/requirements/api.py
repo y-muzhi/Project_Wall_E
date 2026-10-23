@@ -20,13 +20,14 @@ async def list_requirements_http(request: Request):
 @req_router.get('/requirements/{requirement_id}')
 async def get_requirement_http(request: Request):
     return await read_http(request, GetRequirementRequest, GetRequirementResponse,
-        lambda runtime, parsed: queries.get_requirement(runtime.database, parsed.requirement_id))
+        lambda runtime, parsed: queries.get_requirement(runtime.database, parsed.requirement_id, expand=parsed.expand))
 
 
 @req_router.patch('/requirements/{requirement_id}')
 async def update_requirement_http(request: Request):
     return await handle_http(request, UpdateRequirementRequest, UpdateRequirementResponse,
-        lambda runtime, parsed: commands.update_requirement(runtime.database, parsed.payload))
+        lambda runtime, parsed: commands.update_discussion(runtime.commands(), parsed.payload, catalog=runtime.catalog)
+            if 'discussion_command' in parsed.payload else commands.update_requirement(runtime.commands(), parsed.payload))
 
 
 @req_router.post('/requirements/{requirement_id}/complete-initialization')

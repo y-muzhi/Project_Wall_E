@@ -4,10 +4,10 @@ import type {DetailSnapshot} from './detail-read.ts';
  * checks. Title deliberately has no IDLE condition; mode is creation-only. */
 export function detailPermissions(snapshot:DetailSnapshot|null,ready:boolean,blocked=false,history=false){
   const usable=!!snapshot&&ready&&!blocked&&!history,root=snapshot?.requirement;
-  const initializing=root?.status==='INITIALIZING',active=root?.status==='ACTIVE',completed=root?.status==='COMPLETED',idle=root?.document_work_state==='IDLE';
-  return Object.freeze({title:usable&&(initializing||active),mode:false,
-    complete_initialization:usable&&initializing&&idle,complete_requirement:usable&&active&&idle,reactivate:usable&&completed&&idle,
-    manual_start:usable&&(initializing||active)&&idle,initialize:usable&&initializing&&idle,
-    ask:usable&&(active||completed)&&idle,review:usable&&active&&idle,modify:usable&&active&&idle,
-    comment_write:usable&&active&&idle,revision_save:usable&&active&&idle});
+  const idle=root?.document_work_state==='IDLE',document=snapshot?.current,maintain=!!document&&document.archived_at===null;
+  return Object.freeze({title:usable,mode:false,
+    complete_initialization:false,complete_requirement:false,reactivate:false,
+    manual_start:usable&&maintain&&idle,initialize:false,
+    ask:usable&&idle,review:usable&&idle,modify:usable&&idle,
+    comment_write:usable&&maintain&&idle,revision_save:usable&&maintain&&idle});
 }

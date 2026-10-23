@@ -1,3 +1,4 @@
+import {probeDocumentId,probeRecoveryBinding,probeDraftId} from './v15-probe-targets.ts';
 import { editorViewCtx } from '@milkdown/kit/core';
 import type { WalleApi } from '../../src/api/walle.ts';
 import { require } from '../../src/api/decoding.ts';
@@ -12,20 +13,20 @@ export function editorHostProbe(api: WalleApi, identity: () => number) {
   const root = document.createElement('section'); root.id = 'native-editor-host';
   return {
     async prepare() {
-      requirement = identity(); const current = (await api.getCurrentDocument(requirement)).data;
-      const draft = (await api.prepareStartManualDraft(requirement, current.content_version).submit()).data.manual_draft; draftId = draft.id;
+      requirement = identity(); const current = (await api.getCurrentDocument(requirement,probeDocumentId(requirement))).data;
+      const draft = (await api.prepareStartManualDraft(requirement,probeDocumentId(requirement),current.content_version).submit()).data.manual_draft; draftId = draft.id;
       document.body.append(root);
       host = await RequirementEditor.create(root, draft, false, { change: () => autosave?.changed(), error: message => { if (message) errors.push(message); },
         blur: () => { if (host?.flushLocal()) void autosave?.flush(); } });
-      cache = host.action(ctx => new DraftRecoveryStore(ctx, { name: 'walle-host-probe-' + crypto.randomUUID() }));
-      autosave = new ManualDraftAutosave(draft, host.ledger!, { read: async () => (await api.getManualDraft(requirement)).data,
-        save: async ticket => (await api.prepareSaveManualDraft(requirement, { expected_version: ticket.expected_version,
-          markdown_content: ticket.markdown_content, block_state_json: ticket.block_state_json }).submit()).data }, cache);
+      cache = host.action(ctx => new DraftRecoveryStore(ctx,probeRecoveryBinding(),{ name: 'walle-host-probe-' + crypto.randomUUID() }));
+      autosave = new ManualDraftAutosave(draft, host.ledger!, { read: async () => (await api.getManualDraft(requirement,probeDocumentId(requirement))).data,
+        save: async ticket => (await api.prepareSaveManualDraft(requirement,{document_id:probeDocumentId(requirement),draft_id:probeDraftId(requirement),...({ expected_version: ticket.expected_version,
+          markdown_content: ticket.markdown_content, block_state_json: ticket.block_state_json })}).submit()).data }, cache);
       return { ready: true, draft_id: draftId };
     },
     status() { return { ...autosave!.state, markdown: host!.ledger!.currentSnapshot.markdown_content, valid: host!.valid }; },
     async inspect() {
-      const actual = (await api.getManualDraft(requirement)).data;
+      const actual = (await api.getManualDraft(requirement,probeDocumentId(requirement))).data;
       require(host!.valid && !errors.length && actual.markdown_content === host!.ledger!.currentSnapshot.markdown_content);
       require(JSON.stringify(actual.block_state_json) === JSON.stringify(host!.ledger!.currentSnapshot.block_state_json));
       return { passed: true, actual_version: actual.content_version, markdown: actual.markdown_content, errors };
@@ -44,7 +45,7 @@ export function editorHostProbe(api: WalleApi, identity: () => number) {
     async close() {
       require(host!.flushLocal()); host!.setReadonly(true); require(await autosave!.freezeAndFlush()); await autosave!.pauseAndWait();
       const version = autosave!.state.confirmed_version;
-      await api.prepareCancelManualDraft(requirement, version).submit(); await cache!.clearClosedDraft(requirement, draftId);
+      await api.prepareCancelManualDraft(requirement,probeDocumentId(requirement),probeDraftId(requirement),version).submit(); await cache!.clearClosedDraft(requirement, draftId);
       autosave!.dispose(); cache!.close(); await host!.destroy(); root.remove();
       return { closed: true, version };
     },

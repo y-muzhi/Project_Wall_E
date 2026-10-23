@@ -11,16 +11,16 @@ const supported = new Set(['$ref', 'type', 'const', 'enum', 'allOf', 'anyOf', 'o
   'properties', 'required', 'additionalProperties', 'items', 'minItems', 'maxItems', 'uniqueItems',
   'minimum', 'maximum', 'minLength', 'maxLength', 'pattern', 'format']);
 
-function valid(value: unknown, schema: unknown): boolean {
-  try { validate(value, schema); return true; } catch (error) { if (error instanceof TypeError) return false; throw error; }
+function valid(value: unknown, schema: unknown, definitions: Readonly<Record<string, unknown>>): boolean {
+  try { validate(value, schema, definitions); return true; } catch (error) { if (error instanceof TypeError) return false; throw error; }
 }
-function validate(value: unknown, schema: unknown): void {
+function validate(value: unknown, schema: unknown, definitions: Readonly<Record<string, unknown>>): void {
   const rule = object(schema);
   if (Object.keys(rule).some(key => !supported.has(key))) throw new Error('Unsupported frozen schema keyword');
   if (rule.$ref !== undefined) {
-    if (typeof rule.$ref !== 'string' || !/^#\/\$defs\/[a-z_]+$/.test(rule.$ref)) throw new Error('Unsupported resource reference');
+    if (typeof rule.$ref !== 'string' || !/^#\/\$defs\/[A-Za-z_][A-Za-z_0-9]*$/.test(rule.$ref)) throw new Error('Unsupported resource reference');
     const referenced = definitions[rule.$ref.slice(8)]; if (referenced === undefined) throw new Error('Missing frozen definition');
-    validate(value, referenced);
+    validate(value, referenced, definitions);
   }
   if (Object.hasOwn(rule, 'const')) require(JSON.stringify(value) === JSON.stringify(rule.const));
   if (rule.enum !== undefined) require((rule.enum as readonly unknown[]).includes(value));
@@ -30,12 +30,12 @@ function validate(value: unknown, schema: unknown): void {
       integer: typeof value === 'number' && Number.isSafeInteger(value), number: typeof value === 'number' && Number.isFinite(value) };
     require(typeof rule.type === 'string' && types[rule.type] === true);
   }
-  if (rule.allOf !== undefined) for (const child of rule.allOf as readonly unknown[]) validate(value, child);
+  if (rule.allOf !== undefined) for (const child of rule.allOf as readonly unknown[]) validate(value, child, definitions);
   for (const key of ['anyOf', 'oneOf']) if (rule[key] !== undefined) {
-    const matches = (rule[key] as readonly unknown[]).filter(child => valid(value, child)).length;
+    const matches = (rule[key] as readonly unknown[]).filter(child => valid(value, child, definitions)).length;
     require(key === 'oneOf' ? matches === 1 : matches > 0);
   }
-  if (rule.if !== undefined) { const branch = valid(value, rule.if) ? rule.then : rule.else; if (branch !== undefined) validate(value, branch); }
+  if (rule.if !== undefined) { const branch = valid(value, rule.if, definitions) ? rule.then : rule.else; if (branch !== undefined) validate(value, branch, definitions); }
   if (typeof value === 'string') {
     text(value); const length = [...value].length;
     if (rule.minLength !== undefined) require(length >= (rule.minLength as number));
@@ -51,15 +51,15 @@ function validate(value: unknown, schema: unknown): void {
     if (rule.minItems !== undefined) require(value.length >= (rule.minItems as number));
     if (rule.maxItems !== undefined) require(value.length <= (rule.maxItems as number));
     if (rule.uniqueItems === true) require(new Set(value.map(item => JSON.stringify(item))).size === value.length);
-    if (rule.items !== undefined) for (const item of value) validate(item, rule.items);
+    if (rule.items !== undefined) for (const item of value) validate(item, rule.items, definitions);
   }
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
     const row = object(value), properties = rule.properties === undefined ? {} : object(rule.properties);
     if (rule.required !== undefined) for (const key of rule.required as readonly string[]) require(Object.hasOwn(row, key));
     if (rule.additionalProperties === false) require(Object.keys(row).every(key => Object.hasOwn(properties, key)));
-    for (const [key, child] of Object.entries(properties)) if (Object.hasOwn(row, key)) validate(row[key], child);
+    for (const [key, child] of Object.entries(properties)) if (Object.hasOwn(row, key)) validate(row[key], child, definitions);
   }
 }
-export function validateDefinition(name: string, value: unknown): void {
-  const schema = definitions[name]; if (schema === undefined) throw new Error('Unregistered frozen definition'); validate(value, schema);
+export function validateDefinition(name: string, value: unknown, selectedDefinitions: Readonly<Record<string, unknown>> = definitions): void {
+  const schema = selectedDefinitions[name]; if (schema === undefined) throw new Error('Unregistered frozen definition'); validate(value, schema, selectedDefinitions);
 }

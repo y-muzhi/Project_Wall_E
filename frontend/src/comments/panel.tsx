@@ -14,7 +14,7 @@ function Operation({panel,slot}:Readonly<{panel:RequirementCommentPanel;slot:Com
   const state=slot.flow.getSnapshot(),current=panel.getSnapshot().detail.current,intent=slot.flow.intent;
   if(!slot.open)return <button className="ui-button" type="button" disabled={panel.blocked} onClick={()=>panel.open(slot.flow)}>继续处理未确认评论操作</button>;
   return <>
-    {intent.kind==='CREATE'&&(intent.target.document_id!==current.id||intent.target.content_version!==current.content_version)&&<p role="status">正文已变化，请在当前正文重新选择评论范围；输入仍保留。</p>}
+    {intent.kind==='CREATE'&&(intent.target.document_id!==current?.id||intent.target.content_version!==current?.content_version)&&<p role="status">正文已变化，请在当前正文重新选择评论范围；输入仍保留。</p>}
     <CommentCommandControl key={slot.key} flow={slot.flow} blocked={panel.blocked} writeReady={panel.writable(slot.flow)} readActual={panel.observe} changed={outcome=>panel.finish(slot.flow,outcome)} cancel={()=>panel.close(slot.flow)} confirmOnMount/>
     {slot.identity!==null&&['READY','ERROR'].includes(state.phase)&&!panel.comments.getSnapshot().confirmed?.items.some(row=>row.id===slot.identity)&&<button className="ui-button" type="button" disabled={panel.blocked} onClick={()=>void panel.select(slot.identity!)}>返回评论所在页</button>}
   </>;

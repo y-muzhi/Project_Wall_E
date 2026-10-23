@@ -1,11 +1,11 @@
 export type DetailTab = 'AI' | 'COMMENTS' | 'REVISIONS';
 export type DetailPreferences = Readonly<{ schema_version: 1; left_open: boolean; right_open: boolean; right_tab: DetailTab; right_width: number }>;
 export type DetailGeometry = Readonly<{ mode: 'DESKTOP' | 'COMPACT' | 'BLOCKED'; left_open: boolean; right_open: boolean;
+  left_drawer: boolean; split_view: boolean; document_open: boolean;
   right_tab: DetailTab; right_width: number; right_max: number; document_width: number; preferences: DetailPreferences; warning: string | null }>;
-export const preferencesKey = 'walle:v1:preferences';
+export const preferencesKey = 'walle:v1.5:preferences';
 type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 function dimension(value: number): number { if (!Number.isFinite(value) || value < 0) throw new TypeError('Invalid CSS width'); return value; }
-function mode(width: number): DetailGeometry['mode'] { return width < 1024 ? 'BLOCKED' : width < 1280 ? 'COMPACT' : 'DESKTOP'; }
 function tab(value: unknown): DetailTab { if (value !== 'AI' && value !== 'COMMENTS' && value !== 'REVISIONS') throw new TypeError('Invalid panel tab'); return value; }
 export function decodeDetailPreferences(value: unknown): DetailPreferences {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Invalid preferences');
@@ -19,36 +19,34 @@ export function decodeDetailPreferences(value: unknown): DetailPreferences {
 /** Layout is browser preference only. No document/GuideRun mutation capability. */
 export class DetailLayout {
   private preferences: DetailPreferences; private width: number; private available: number;
-  private compactSide: 'LEFT' | 'RIGHT' | null = null; private warning: string | null = null;
+  private drawerOpen = false; private singleView: 'DOCUMENT' | 'PANEL' = 'DOCUMENT'; private warning: string | null = null;
   private readonly storage: StoragePort | null; private readonly listeners = new Set<() => void>(); private value: DetailGeometry;
-  constructor(status: 'INITIALIZING' | 'ACTIVE' | 'COMPLETED', width: number, storage: StoragePort | null) {
+  constructor(_status: import('../api/models.ts').Requirement['status'], width: number, storage: StoragePort | null) {
     this.width = dimension(width); this.available = Math.max(0, width - (width < 1280 ? 16 : 32)); this.storage = storage;
-    this.preferences = Object.freeze({schema_version: 1, left_open: true, right_open: status === 'INITIALIZING', right_tab: 'AI', right_width: 420});
+    this.preferences = Object.freeze({schema_version: 1, left_open: true, right_open: true, right_tab: 'AI', right_width: 420});
     try { if (!storage) throw new Error('Unavailable'); const raw = storage.getItem(preferencesKey); if (raw !== null) this.preferences = decodeDetailPreferences(JSON.parse(raw)); }
     catch { this.warning = '页面偏好暂存不可用，当前布局仍可调整。'; }
-    this.selectCompact(); this.value = this.compute();
+    this.value = this.compute();
   }
   getSnapshot = (): DetailGeometry => this.value;
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
-  private selectCompact(): void { this.compactSide = this.preferences.right_open ? 'RIGHT' : this.preferences.left_open ? 'LEFT' : null; }
   private compute(): DetailGeometry {
-    const current = mode(this.width), supported = current !== 'BLOCKED';
-    const left = supported && this.preferences.left_open && (current === 'DESKTOP' || this.compactSide === 'LEFT');
-    const right = supported && this.preferences.right_open && (current === 'DESKTOP' || this.compactSide === 'RIGHT');
-    // Six CSS pixels per displayed separator/gap. Content minimum is reserved
-    // before clamping the effective width; preference is never overwritten.
-    const available = Math.max(0, this.available - (left ? 206 : 0) - (right ? 6 : 0));
-    const maximum = Math.min(available / 2, available - 640);
-    const effective = right && maximum >= 360 ? Math.min(Math.max(360, this.preferences.right_width), maximum) : 0;
-    return Object.freeze({mode: current, left_open: left, right_open: right && effective > 0, right_tab: this.preferences.right_tab,
-      right_width: effective, right_max: Math.max(0, maximum), document_width: available - effective,
+    const supported = this.width >= 1024, drawer = this.available < 1212, split = this.available >= 1006;
+    const left = supported && (drawer ? this.drawerOpen : this.preferences.left_open);
+    const right = supported && this.preferences.right_open && (split || this.singleView === 'PANEL');
+    const available = Math.max(0, this.available - (left && !drawer ? 206 : 0));
+    const maximum = split ? Math.max(0, available - 646) : available;
+    const effective = right ? split ? Math.min(Math.max(360, this.preferences.right_width), maximum) : available : 0;
+    return Object.freeze({mode: !supported ? 'BLOCKED' : drawer ? 'COMPACT' : 'DESKTOP', left_open: left, left_drawer: drawer,
+      split_view: split, document_open: supported && (split || !right), right_open: right, right_tab: this.preferences.right_tab,
+      right_width: effective, right_max: maximum, document_width: right && !split ? 0 : available - effective - (right ? 6 : 0),
       preferences: this.preferences, warning: this.warning});
   }
   private publish(): void { this.value = this.compute(); for (const listener of this.listeners) { try { listener(); } catch (error) { console.error('WALL-E layout observer failed', error); } } }
   viewport(width: number, available?: number): void {
-    dimension(width); const previous = mode(this.width); this.width = width;
+    dimension(width); this.width = width;
     this.available = dimension(available ?? Math.max(0, width - (width < 1280 ? 16 : 32)));
-    if (mode(width) === 'COMPACT' && previous !== 'COMPACT') this.selectCompact(); this.publish();
+    this.publish();
   }
   private store(changes: Partial<DetailPreferences>): void {
     this.preferences = decodeDetailPreferences({...this.preferences, ...changes});
@@ -56,19 +54,21 @@ export class DetailLayout {
     catch { this.warning = '页面偏好暂存不可用，当前布局仍可调整。'; } this.publish();
   }
   toggleLeft(): void {
-    if (this.value.mode === 'BLOCKED') return; const open = !this.value.left_open;
-    if (this.value.mode === 'COMPACT') this.compactSide = open ? 'LEFT' : null; this.store({left_open: open});
+    if (this.value.mode === 'BLOCKED') return;
+    if (this.value.left_drawer) { this.drawerOpen = !this.drawerOpen; this.publish(); }
+    else this.store({left_open: !this.value.left_open});
   }
   toggleRight(): void {
     if (this.value.mode === 'BLOCKED') return; const open = !this.value.right_open;
-    if (this.value.mode === 'COMPACT') this.compactSide = open ? 'RIGHT' : null; this.store({right_open: open});
+    this.singleView = open ? 'PANEL' : 'DOCUMENT'; this.store({right_open: open});
   }
   openTab(value: DetailTab): void {
     if (this.value.mode === 'BLOCKED') return;
-    if (this.value.mode === 'COMPACT') this.compactSide = 'RIGHT'; this.store({right_open: true, right_tab: tab(value)});
+    this.singleView = 'PANEL'; this.store({right_open: true, right_tab: tab(value)});
   }
+  showDocument(): void { if (this.value.mode !== 'BLOCKED') { this.singleView = 'DOCUMENT'; this.publish(); } }
   resizeRight(width: number): void {
-    dimension(width); if (!this.value.right_open) return;
+    dimension(width); if (!this.value.right_open || !this.value.split_view) return;
     // Explicit drag writes only the width the current geometry actually allows.
     this.store({right_width: Math.min(Math.max(360, width), this.value.right_max)});
   }

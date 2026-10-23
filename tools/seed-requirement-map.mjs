@@ -2,9 +2,9 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const output = resolve(root, 'docs/traceability/需求实现映射.md');
+const output = resolve(root, 'docs/traceability/v1.0/需求实现映射.md');
 if (existsSync(output)) throw new Error('Mapping already exists. Edit incrementally; do not overwrite reviewed mappings.');
-const sources = JSON.parse(readFileSync(resolve(root, 'docs/sources/manifest.json'), 'utf8'));
+const sources = JSON.parse(readFileSync(resolve(root, 'docs/sources/v1.0/manifest.json'), 'utf8'));
 const known = {
   'frontend:fe-ui-principles': ['黑白灰主体；真实区分受理/完成/未知结果；就近反馈；键盘焦点；减少动态效果', '浏览器检查页面/组件、焦点和减少动态效果；尚未执行'],
   'frontend:fe-ui-color': ['主按钮近黑色；保留成功绿色、危险/失败红色；已固定局部值优先', '实际 CSS 与浏览器核对；尚未执行'],

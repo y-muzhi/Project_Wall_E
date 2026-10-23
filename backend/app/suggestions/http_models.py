@@ -73,13 +73,13 @@ class DecideSuggestionRequest:
 
 class DecideSuggestionResponse:
     success_code = 'SUGGESTION_DECIDED'
-    errors = DiscardBatchResponse.errors | {'PATCH_INVALID'}
+    errors = DiscardBatchResponse.errors | {'PATCH_INVALID', 'TARGET_STALE', 'CONTENT_VERSION_CONFLICT'}
 
     @staticmethod
     def project(data, request):
         value = object_fields(data, 'data', ('suggestion', 'counts'), ('suggestion', 'counts'))
         suggestion = suggestion_read_model(value['suggestion']); counts = counts_model(value['counts'])
-        if suggestion['id'] != request.payload['suggestion_id'] or suggestion['status'] != request.payload['decision'] or suggestion['user_edited_content'] != request.payload['edited_content'] or counts[suggestion['status'].lower()] < 1:
+        if suggestion['id'] != request.payload['suggestion_id'] or suggestion['status'] != request.payload['decision'] or suggestion['user_edited_content'] != request.payload.get('edited_content') or counts[suggestion['status'].lower()] < 1:
             raise ValueError('Decision response must reflect the actual accepted action')
         return {'suggestion': suggestion, 'counts': counts}, None
 
@@ -104,8 +104,17 @@ class CompleteBatchResponse:
 
     @staticmethod
     def project(data, request):
-        value = object_fields(data, 'data', ('batch', 'counts', 'current_document'), ('batch', 'counts', 'current_document'))
+        fields = ('batch', 'counts', 'current_document', 'document_effect', 'applied_suggestion_ids')
+        value = object_fields(data, 'data', fields, fields)
         batch = batch_metadata(value['batch']); counts = counts_model(value['counts']); current = document(value['current_document'], 'CURRENT')
         if batch['id'] != request.payload['batch_id'] or batch['status'] != 'COMPLETED' or counts['pending'] or batch['base_content_version'] != request.payload['expected_content_version'] or current['requirement_id'] != batch['requirement_id'] or current['content_version'] != (batch['applied_content_version'] or batch['base_content_version']):
             raise ValueError('Completion projection must preserve actual committed batch/document effects')
-        return {'batch': batch, 'counts': counts, 'current_document': current}, None
+        from backend.app.documents.contracts import document_effect
+        from backend.app.shared.validation import strict_integer
+        effect = document_effect(value['document_effect']);ids = value['applied_suggestion_ids']
+        if type(ids) is not list or len(set(ids)) != len(ids) or len(ids) != counts['accepted']+counts['edited']:
+            raise ValueError('Actual adopted suggestion identities required')
+        for identity in ids: strict_integer(identity, 'applied_suggestion_ids')
+        if current['id'] != batch['target_document_id'] or effect['document_id'] != current['id'] or effect['before_content_version'] != batch['base_content_version'] or effect['after_content_version'] != current['content_version'] or effect['result'] != ('NO_CHANGE' if batch['completion_result'] == 'NO_CHANGE' else 'UPDATED'):
+            raise ValueError('Completion effect differs from the committed target')
+        return {**value, 'batch': batch, 'counts': counts, 'current_document': current, 'document_effect': effect}, None

@@ -209,6 +209,14 @@ def _inspect_schema(node, root):
 
 
 class ResourceCatalog:
+    @property
+    def collaboration(self):
+        """V1.5 uses this same catalog; loading does not grant Chat admission."""
+        from .collaboration_resources import CollaborationResources
+        if not hasattr(self, '_collaboration_resources'):
+            self._collaboration_resources = CollaborationResources.load()
+        return self._collaboration_resources
+
     def __init__(self, root: Path | str | None = None, *, versioned_root: Path | str | None = None, extended_root: Path | str | None = None, layout_root: Path | str | None = None, progression_root: Path | str | None = None, heading_root: Path | str | None = None, promoted_heading_root: Path | str | None = None, projection_root: Path | str | None = None):
         # Explicit v1 roots are useful for immutable historical deployments and
         # diagnostics. Installed defaults register historical releases before

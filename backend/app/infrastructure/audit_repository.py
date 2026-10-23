@@ -65,8 +65,101 @@ def verify_actual_context(connection, run_id, function, supplied_input, system_t
 class AuditRepository:
     def __init__(self, connection): self.connection = connection
 
+    def record_content_commit(self, before, after, revision_id, source_type, source_id, source_refs, summary, key, at):
+        from .idempotency import request_key
+        require_write_transaction(self.connection)
+        request_key(key)
+        if source_type not in ('MANUAL_EDIT', 'GUIDE_RUN', 'SUGGESTION_BATCH') or before['id'] != after['id'] or after['content_version'] != before['content_version'] + 1:
+            raise ValueError('Invalid formal content event')
+        payload = {'source_refs': source_refs, 'change_summary': summary, 'idempotency_key': key}
+        self.connection.execute("INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,?,?,?,'CONTENT_UPDATE',?,?,?,'CONTENT_COMMITTED',?,?,?)",
+            (entity_id(self.connection, EntityKind.DOCUMENT_AUDIT), after['requirement_id'], after['id'], source_type, source_id,
+             before['content_version'], after['content_version'], at, revision_id, source_id if source_type == 'GUIDE_RUN' else None, canonical_input(payload)))
+
+    def record_document_event(self, document, event_type, payload, at, *, revision_id=None, before_version=None):
+        require_write_transaction(self.connection)
+        fields = {
+            'CONTENT_COMMITTED': {'creation_message_id', 'template_ref', 'idempotency_key'},
+            'DOCUMENT_RENAMED': {'before', 'after', 'idempotency_key'},
+            'DOCUMENT_ARCHIVED': {'idempotency_key'}, 'DOCUMENT_RESTORED': {'idempotency_key'},
+            'DOCUMENT_CONFIRMED': {'revision_id', 'content_version', 'idempotency_key'},
+            'VERSION_MARKED': {'description', 'idempotency_key'}}
+        if event_type not in fields or type(payload) is not dict or set(payload) != fields[event_type]:
+            raise ValueError('Document event payload differs from its registered type')
+        identity = entity_id(self.connection, EntityKind.DOCUMENT_AUDIT)
+        version = document['content_version']
+        before = before_version if event_type == 'CONTENT_COMMITTED' else version
+        self.connection.execute('INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,?,\'USER_ACTION\',?,?,?,?,?,?,?,NULL,?)',
+            (identity, document['requirement_id'], document['id'], document['id'], event_type,
+             before, version, at, event_type, revision_id, canonical_input(payload)))
+        return identity
+
+    def record_requirement_update(self, before, after, changes, key, at):
+        """Actual user metadata event; no body/version/occupancy side effects."""
+        from .idempotency import request_key
+        require_write_transaction(self.connection)
+        request_key(key)
+        if not changes or not set(changes) <= {'title', 'status'} or after['id'] != before['id'] or after['metadata_version'] != before['metadata_version'] + 1:
+            raise ValueError('Invalid requirement metadata event')
+        payload = {'changes': {field: {'before': before[field], 'after': after[field]} for field in changes},
+            'metadata_version_before': before['metadata_version'], 'metadata_version_after': after['metadata_version'],
+            'idempotency_key': key}
+        self.connection.execute("INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,NULL,'USER_ACTION',?,'USER_METADATA_UPDATE',NULL,NULL,?,'REQUIREMENT_UPDATED',NULL,NULL,?)",
+            (entity_id(self.connection, EntityKind.DOCUMENT_AUDIT), before['id'], before['id'], at, canonical_input(payload)))
+
     def get(self, identity):
         return self.connection.execute('SELECT * FROM llm_uses WHERE id=?', (identity,)).fetchone()
+
+    def prepare_collaboration(self, run_id, profile, context, at, *, catalog, admission=None):
+        from backend.app.guide.collaboration_context import read_canonical
+        from backend.app.guide.collaboration_counting import verify_counted
+        from .audit_data import collaboration_audit_json
+        require_write_transaction(self.connection);_time(at)
+        run = GuideRepository(self.connection).get(run_id);root = _owned(self.connection, run)
+        if run['function_type'] != 'collaboration_v1' or run['current_step'] != 'PREPARING':
+            raise Rejected('STATE_CONFLICT')
+        if self.connection.execute('SELECT 1 FROM llm_uses WHERE guide_run_id=?', (run_id,)).fetchone():
+            raise Rejected('STATE_CONFLICT')
+        if at < max(run['updated_at'], root['updated_at']):
+            raise ValueError('Preparation cannot precede actual activity')
+        resources = catalog.collaboration
+        resources.require_live(profile.snapshot, admission=admission)
+        canonical = read_canonical(self.connection, run_id, catalog)
+        counting = verify_counted(context, catalog, profile, expected_canonical=canonical)
+        protocol = {'function_type': 'collaboration_v1', 'input_schema': 'collaboration.wire@v1',
+            'output_schema': 'collaboration.output.'+run['operation'].lower()+'@v1',
+            'context_template': 'collaboration_context_v1@v1', 'prompt': resources.release['prompt']['key']+'@'+resources.release['prompt']['version'],
+            'manifest_sha256': resources.manifest_sha256, 'release': resources.reference('collaboration.release')}
+        snapshot = {'profile': profile.snapshot, 'request': profile.request(context), 'protocol': protocol,
+            'context_basis': context.basis, 'counting': counting,
+            'admission': resources.validate('Admission', resources.release['admission'] if admission is None else admission.value)}
+        fields = {'id': entity_id(self.connection, EntityKind.LLM_USE), 'guide_run_id': run_id, 'call_no': 1, 'attempt_no': 1,
+            'provider': 'volcengine', 'model_name': profile.model_name, 'model_version': profile.model_version,
+            'function_type': 'collaboration_v1', 'prompt_config': protocol['prompt'],
+            'request_snapshot_json': collaboration_audit_json(snapshot, resources, credentials=(profile.api_key,)),
+            'parsed_output_json': None, 'trusted_output_json': None, 'input_summary': canonical['current_message']['content'],
+            'context_manifest_json': context.manifest_json, 'raw_response_json': None, 'finish_reason': None,
+            'parse_status': 'NOT_STARTED', 'parse_error': None, 'validation_status': 'NOT_STARTED', 'validation_error': None,
+            'call_status': 'RUNNING', 'input_tokens': None, 'output_tokens': None, 'cache_info_json': None,
+            'provider_request_id': None, 'started_at': at, 'ended_at': None, 'duration_ms': None, 'error_code': None,
+            'error_message': None, 'cost': None, 'cost_currency': None}
+        self.connection.execute('INSERT INTO llm_uses('+','.join(fields)+') VALUES ('+','.join('?' for _ in fields)+')', tuple(fields.values()))
+        self.connection.execute("UPDATE guide_runs SET current_step='CALLING_MODEL',started_at=coalesce(started_at,?),updated_at=? WHERE id=? AND status='RUNNING' AND current_step='PREPARING'", (at, at, run_id))
+        return self.get(fields['id'])
+
+    def record_discussion_update(self, before, after, command, message_id, closed_phase, key, at):
+        require_write_transaction(self.connection)
+        if before['id'] != after['id'] or after['discussion_version'] != before['discussion_version'] + 1:
+            raise ValueError('Invalid discussion event versions')
+        message = MessageRepository(self.connection).get(message_id)
+        if message is None or message['requirement_id'] != before['id'] or message['role'] != 'USER' or message['guide_run_id'] is not None:
+            raise ValueError('Discussion event requires its real user action message')
+        event = 'PHASE_CHANGED' if closed_phase is not None else 'DISCUSSION_UPDATED'
+        payload = {'command': command, 'message_id': message_id, 'idempotency_key': key,
+            'discussion_version_before': before['discussion_version'], 'discussion_version_after': after['discussion_version'],
+            'phase_before': closed_phase or before['discussion_state_json']['phase'], 'phase_after': after['discussion_state_json']['phase']}
+        self.connection.execute("INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,NULL,'USER_ACTION',?,?,NULL,NULL,?,?,NULL,NULL,?)",
+            (entity_id(self.connection, EntityKind.DOCUMENT_AUDIT), before['id'], message_id, event, at, event, canonical_input(payload)))
 
     def prepare(self, run_id, function, profile, context, at, *, catalog, call_no=None):
         """Record the exact prepared request before the caller sends it once.

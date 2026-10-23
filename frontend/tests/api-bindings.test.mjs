@@ -6,14 +6,15 @@ import { WalleApi } from '../src/api/walle.ts';
 
 const KEY = '00000000-0000-4000-8000-000000000001', REQUEST = '00000000-0000-4000-8000-000000000002';
 const at = '2026-10-05T09:00:00.000Z';
-const root = () => ({ id: 1, requirement_no: 'REQ000001', requirement_type: 'NEW', initialization_mode: 'IDEATION', title: '标题😀',
-  template_key: 'new-requirement', template_version: 'v1', status: 'INITIALIZING', document_work_state: 'GUIDE_ACTIVE',
-  active_operation_type: 'GUIDE_RUN', active_operation_id: 2, created_at: at, updated_at: at, completed_at: null, state_started_at: at });
-const create = () => ({ title: '标题😀', requirement_type: 'NEW', template_key: 'new-requirement', template_version: 'v1', initial_idea: '原始想法', initialization_mode: 'IDEATION' });
+const root = () => ({id:1,requirement_no:'REQ000001',requirement_type:'NEW',title:'标题😀',status:'PLANNING',metadata_version:1,initial_message_id:1,discussion_version:1,
+ document_work_state:'IDLE',active_operation_type:null,active_operation_id:null,created_at:at,updated_at:at,completed_at:null,closed_at:null,state_started_at:null});
+const detail=(requirement=root())=>({requirement,documents:[],discussion_summary:{discussion_version:1,phase_ref:'p1',phase_kind:'DISCOVERY',focus_topic_ref:null,focus_title:null,next_step:null,pending_count:0},discussion:null,active_operation:null});
+const created=()=>({requirement:root(),initial_message_id:1,documents:[]});
+const create = () => ({title:'标题😀',requirement_type:'NEW',initial_idea:'原始想法'});
 const emptyState = { schema_version: 1, next_block_id: 1, blocks: [] };
-const guide = { expected_version: 7, action_type: 'ASK', instruction: '提问', scope_type: 'DOCUMENT', source_type: 'USER_INSTRUCTION' };
-const answer = { schema_version: 1, responses: [{ card_key: 'c', selected_option_keys: ['yes'], custom_answer: null, skipped: false }] };
-const comment = { expected_content_version: 7, content: '评论', anchor_type: 'BLOCK', block_id: 3 };
+const guide={expected_discussion_version:7,operation:'DISCUSS',instruction:'提问',target:null,scope:null,source_refs:[],proposal_ref:null,acknowledge_source_changes:false};
+const answer = { schema_version: 1, responses: [{ card_key: 'c', selected_option_keys: ['yes'], custom_answer: null, skipped: false }],execution_selection:null };
+const comment = {document_id:2, expected_content_version: 7, content: '评论', anchor_type: 'BLOCK', block_id: 3 };
 const json = (data, status = 200, pagination) => new Response(JSON.stringify({ success: true, data, error: null,
   meta: { request_id: REQUEST, ...(pagination === undefined ? {} : { pagination }) } }), { status, headers: { 'Content-Type': 'application/json' } });
 const rejected = () => new Response(JSON.stringify({ success: false, data: null,
@@ -27,43 +28,44 @@ const cases = [
   ['I01', 'listRequirements', [{}], 'GET', '/requirements', null, false],
   ['I02', 'prepareCreateRequirement', [create()], 'POST', '/requirements', create(), true],
   ['I03', 'getRequirement', [1], 'GET', '/requirements/1', null, false],
-  ['I04', 'prepareUpdateRequirement', [1, { title: '新标题' }], 'PATCH', '/requirements/1', { title: '新标题' }, false],
-  ['I05', 'prepareCompleteInitialization', [1, 7], 'POST', '/requirements/1/complete-initialization', { expected_content_version: 7 }, true],
-  ['I06', 'prepareCompleteRequirement', [1, 7], 'POST', '/requirements/1/complete', { expected_version: 7 }, true],
-  ['I07', 'prepareReactivateRequirement', [1], 'POST', '/requirements/1/reactivate', null, true],
-  ['I08', 'getCurrentDocument', [1], 'GET', '/requirements/1/current-document', null, false],
-  ['I09', 'prepareStartManualDraft', [1, 7], 'POST', '/requirements/1/manual-draft', { expected_version: 7 }, true],
-  ['I10', 'getManualDraft', [1], 'GET', '/requirements/1/manual-draft', null, false],
-  ['I11', 'prepareSaveManualDraft', [1, { expected_version: 4, markdown_content: '', block_state_json: emptyState }], 'PUT', '/requirements/1/manual-draft', { expected_version: 4, markdown_content: '', block_state_json: emptyState }, false],
-  ['I13', 'prepareCancelManualDraft', [1, 4], 'DELETE', '/requirements/1/manual-draft', { expected_version: 4 }, true],
-  ['I12', 'prepareCompleteManualDraft', [1, 4], 'POST', '/requirements/1/manual-draft/complete', { expected_version: 4 }, true],
+  ['I04', 'prepareUpdateRequirement', [1, {expected_metadata_version:1,changes:{title:'新标题'}}], 'PATCH', '/requirements/1', {expected_metadata_version:1,changes:{title:'新标题'}}, true],
+  ['I08', 'getCurrentDocument', [1,2], 'GET', '/requirements/1/current-document', null, false],
+  ['I09', 'prepareStartManualDraft', [1,2,7], 'POST', '/requirements/1/manual-draft', {document_id:2, expected_version: 7 }, true],
+  ['I10', 'getManualDraft', [1,2], 'GET', '/requirements/1/manual-draft', null, false],
+  ['I11', 'prepareSaveManualDraft', [1, {document_id:2,draft_id:3,expected_version:4,markdown_content:'',block_state_json:emptyState}], 'PUT', '/requirements/1/manual-draft', {document_id:2,draft_id:3,expected_version:4,markdown_content:'',block_state_json:emptyState}, true],
+  ['I13', 'prepareCancelManualDraft', [1,2,3,4], 'DELETE', '/requirements/1/manual-draft', {document_id:2,draft_id:3,expected_version:4}, true],
+  ['I12', 'prepareCompleteManualDraft', [1,2,3,4], 'POST', '/requirements/1/manual-draft/complete', {document_id:2,draft_id:3,expected_version:4}, true],
   ['I14', 'prepareCreateGuide', [1, guide], 'POST', '/requirements/1/guide-runs', guide, true],
-  ['I15', 'prepareContinueGuide', [2, '补充'], 'POST', '/guide-runs/2/continue', { instruction: '补充' }, true],
+  ['I15', 'prepareContinueGuide', [2,'补充',7], 'POST', '/guide-runs/2/continue', {instruction:'补充',expected_discussion_version:7}, true],
   ['I16', 'getGuideRun', [2], 'GET', '/guide-runs/2', null, false],
   ['I17', 'prepareCancelGuide', [2], 'POST', '/guide-runs/2/cancel', null, true],
   ['I18', 'prepareRetryGuide', [2], 'POST', '/guide-runs/2/retry', null, true],
   ['I19', 'listGuideRuns', [1, {}], 'GET', '/requirements/1/guide-runs', null, false],
   ['I20', 'getBatch', [8], 'GET', '/suggestion-batches/8', null, false],
   ['I21', 'prepareDecideSuggestion', [9, { decision: 'ACCEPTED' }], 'PUT', '/suggestions/9/decision', { decision: 'ACCEPTED' }, true],
-  ['I22', 'prepareCompleteBatch', [8, 7], 'POST', '/suggestion-batches/8/complete', { expected_content_version: 7 }, true],
+  ['I22', 'prepareCompleteBatch', [8, 7], 'POST', '/suggestion-batches/8/complete', {expected_content_version:7}, true],
   ['I23', 'prepareDiscardBatch', [8], 'POST', '/suggestion-batches/8/discard', null, true],
-  ['I24', 'listRevisions', [1], 'GET', '/requirements/1/revisions', null, false],
+  ['I24', 'listRevisions', [1,2], 'GET', '/requirements/1/revisions', null, false],
   ['I25', 'getRevision', [4], 'GET', '/revisions/4', null, false],
-  ['I26', 'prepareCreateRevision', [1, { expected_version: 7 }], 'POST', '/requirements/1/revisions', { expected_version: 7 }, true],
-  ['I27', 'listComments', [1], 'GET', '/requirements/1/comments', null, false],
+  ['I26', 'prepareCreateRevision', [1, {document_id:2, expected_version:7}], 'POST', '/requirements/1/revisions', {document_id:2,expected_version:7}, true],
+  ['I27', 'listComments', [1,2], 'GET', '/requirements/1/comments', null, false],
   ['I28', 'getComment', [4], 'GET', '/comments/4', null, false],
   ['I29', 'prepareCreateComment', [1, comment], 'POST', '/requirements/1/comments', comment, true],
   ['I30', 'prepareEditComment', [4, '编辑'], 'PATCH', '/comments/4', { content: '编辑' }, true],
   ['I31', 'prepareResolveComment', [4], 'POST', '/comments/4/resolve', null, true],
   ['I32', 'prepareReopenComment', [4], 'POST', '/comments/4/reopen', null, true],
   ['I33', 'prepareDeleteComment', [4], 'DELETE', '/comments/4', null, true],
-  ['I34', 'prepareModifyFromComment', [4, 7], 'POST', '/comments/4/guide-runs', { expected_content_version: 7 }, true],
+  ['I34', 'prepareModifyFromComment', [4,7,3], 'POST', '/comments/4/guide-runs', {expected_content_version:7,expected_discussion_version:3}, true],
   ['I35', 'listMessages', [1], 'GET', '/requirements/1/messages', null, false],
-  ['I36', 'prepareCardResponses', [5, answer], 'POST', '/conversation-messages/5/responses', answer, true],
-  ['I37', 'getCommentIndex', [1], 'GET', '/requirements/1/comment-index', null, false],
+  ['I36', 'prepareCardResponses', [5,answer,3], 'POST', '/conversation-messages/5/responses', {...answer,expected_discussion_version:3}, true],
+  ['I37', 'getCommentIndex', [1,2], 'GET', '/requirements/1/comment-index', null, false],
+  ['I38','listModelCalls',[2],'GET','/guide-runs/2/model-calls',null,false],
+  ['I39','getModelCall',[20],'GET','/model-calls/20',null,false],
+  ['I40','prepareCreateDocument',[1,{name:'新稿',document_kind:'REQUIREMENT_BRIEF',template_ref:null}],'POST','/requirements/1/documents',{name:'新稿',document_kind:'REQUIREMENT_BRIEF',template_ref:null},true],
+  ['I41','prepareUpdateDocument',[2,{expected_metadata_version:1,change:{type:'RENAME',name:'重命名'}}],'PATCH','/documents/2',{expected_metadata_version:1,change:{type:'RENAME',name:'重命名'}},true],
 ];
 
-test('all 37 bindings reach exact public method/path/body/key policy; no empty-body JSON or draft/CURRENT version substitution', async () => {
+test('all 38 active client bindings reach exact public method/path/body/key policy; no empty-body JSON or draft/CURRENT version substitution', async () => {
   for (const [name, method, args, verb, path, body, keyed] of cases) {
     let sent, keys = 0; const service = api(async (url, options) => { sent = { url, ...options }; return rejected(); }, () => { keys++; return KEY; });
     const pending = service[method](...args);
@@ -78,35 +80,36 @@ test('all 37 bindings reach exact public method/path/body/key policy; no empty-b
     const source = readFileSync(new URL(`../../backend/app/${module}/api.py`, import.meta.url), 'utf8');
     for (const match of source.matchAll(/@\w+\.(get|post|patch|put|delete)\('([^']+)'\)/g)) registered.push(match[1].toUpperCase() + ' ' + match[2].replace(/\{[^}]+\}/g, ':id'));
   }
+  const serverOnly=['POST /requirements/:id/complete-initialization','POST /requirements/:id/complete','POST /requirements/:id/reactivate'];
   const bindings = cases.map(([, , , method, path]) => method + ' ' + path.replace(/\/[0-9]+(?=\/|$)/g, '/:id'));
-  assert.equal(registered.length, 37); assert.deepEqual(bindings.sort(), registered.sort());
+  assert.equal(registered.length,41);assert.equal(cases.length,38);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
 });
 test('one creation captures body and response expectations once; loss/replay retains key while next action gets a new key', async () => {
   const calls = []; let attempt = 0, keys = 0, getters = 0;
   const service = api(async (url, options) => { calls.push({ url, ...options }); if (attempt++ === 0) throw new Error('lost');
-    return json({ requirement: root(), current_document_id: 3, guide_run_id: 2 }, 201); }, () => keys++ === 0 ? KEY : REQUEST);
-  const source = create(); Object.defineProperty(source, 'template_key', { enumerable: true, get() { getters++; return 'new-requirement'; } });
-  const action = service.prepareCreateRequirement(source); source.template_version = 'changed';
+    return json(created(),201); }, () => keys++ === 0 ? KEY : REQUEST);
+  const source = create(); Object.defineProperty(source,'title',{enumerable:true,get(){getters++;return '标题😀';}});
+  const action = service.prepareCreateRequirement(source); source.initial_idea='changed';
   await assert.rejects(action.submit(), error => error instanceof ApiUnknown && error.mutation);
-  assert.equal((await action.submit()).data.guide_run_id, 2); assert.equal(getters, 1); assert.equal(keys, 1);
+  assert.equal((await action.submit()).data.documents.length,0); assert.equal(getters, 1); assert.equal(keys, 1);
   assert.equal(calls[0].body, calls[1].body); assert.equal(calls[1].headers['Idempotency-Key'], KEY);
   const next = service.prepareCreateRequirement(create()); await next.submit(); assert.equal(keys, 2); assert.equal(calls[2].headers['Idempotency-Key'], REQUEST);
 });
 test('wrong response ownership or successful command pagination keeps results unknown and original request retained', async () => {
-  for (const reply of [json({ requirement: { ...root(), template_version: 'wrong' }, current_document_id: 3, guide_run_id: 2 }, 201),
-    json({ requirement: root(), current_document_id: 3, guide_run_id: 2 }, 201, { page: 1, page_size: 20, total: 0, total_pages: 0 })]) {
+  for (const reply of [json({...created(),requirement:{...root(),title:'wrong'}},201),
+    json(created(),201, { page: 1, page_size: 20, total: 0, total_pages: 0 })]) {
     const service = api(async () => reply.clone()); const action = service.prepareCreateRequirement(create());
     await assert.rejects(action.submit(), error => error instanceof ApiUnknown && error.mutation);
     await assert.rejects(action.submit(), ApiUnknown);
   }
-  for (const reply of [json({ ...root(), id: 2 }), json(root(), 200, { page: 1, page_size: 20, total: 0, total_pages: 0 })])
+  for (const reply of [json(detail({...root(),id:2})), json(detail(),200, { page: 1, page_size: 20, total: 0, total_pages: 0 })])
     await assert.rejects(api(async () => reply).getRequirement(1), error => error instanceof ApiUnknown && !error.mutation);
 });
 test('requirement page checks actual page/window/count and encodes repeated filters without comma joining', async () => {
   const summary = ({ id, requirement_no, title, requirement_type, status, updated_at }) => ({ id, requirement_no, title, requirement_type, status, updated_at });
   let sent; const service = api(async (url) => { sent = url; return json({ items: [summary(root())] }, 200, { page: 2, page_size: 20, total: 21, total_pages: 2 }); });
-  assert.equal((await service.listRequirements({ keyword: '甲&乙😀', status: ['INITIALIZING', 'ACTIVE'], requirement_type: ['NEW'], page: 2 })).data.items.length, 1);
-  const params = new URL(sent, 'http://local').searchParams; assert.deepEqual(params.getAll('status'), ['INITIALIZING', 'ACTIVE']); assert.equal(params.get('keyword'), '甲&乙😀');
+  assert.equal((await service.listRequirements({ keyword: '甲&乙😀', status: ['PLANNING','READY'], requirement_type: ['NEW'], page: 2 })).data.items.length, 1);
+  const params = new URL(sent, 'http://local').searchParams; assert.deepEqual(params.getAll('status'), ['PLANNING','READY']); assert.equal(params.get('keyword'), '甲&乙😀');
   for (const reply of [json({ items: [] }), json({ items: [] }, 200, { page: 1, page_size: 20, total: 1, total_pages: 1 }),
     json({ items: [] }, 200, { page: 2, page_size: 20, total: 0, total_pages: 0 })])
     await assert.rejects(api(async () => reply).listRequirements(), ApiUnknown);
@@ -122,11 +125,11 @@ test('workbench keeps server order and raw display time while invalid business t
   assert.equal(localTime(response.data.items[0].updated_at), '--');
   await assert.rejects(api(async () => json({ items: [{ ...first, updated_at: null }] }, 200,
     { page: 1, page_size: 20, total: 1, total_pages: 1 })).listRequirements(), ApiUnknown);
-  await assert.rejects(api(async () => json({ ...root(), updated_at: 'invalid-time' })).getRequirement(1), ApiUnknown);
+  await assert.rejects(api(async () => json(detail({...root(),updated_at:'invalid-time'}))).getRequirement(1), ApiUnknown);
 });
 test('message cursor is exclusive, ascending and independently continued by first sequence', async () => {
   const message = sequence => ({ id: sequence, requirement_id: 1, guide_run_id: null, sequence_no: sequence, role: 'USER', content: '原文',
-    message_type: 'TEXT', structured_content: null, reply_to_message_id: null, created_at: at, card_state: null });
+    message_type: 'TEXT', structured_content: null, reply_to_message_id: null, created_at:at,card_state:null,phase_ref:null,topic_refs:[],document_ids:[],program_receipt:null});
   let sent; const service = api(async url => { sent = url; return json({ items: [message(3), message(5)] }, 200, { page_size: 20, next_cursor: 3, has_more: true }); });
   assert.equal((await service.listMessages(1, 6)).meta.pagination.next_cursor, 3); assert.equal(new URL(sent, 'http://local').searchParams.get('before_sequence_no'), '6');
   for (const [items, cursor] of [[[message(5), message(3)], 5], [[message(3), message(3)], 3], [[message(3), message(6)], 3], [[], 3], [[message(3)], 2]])
@@ -137,15 +140,17 @@ test('invalid IDs and absent/misspelled request fields fail before allocating or
   for (const id of [0, -1, 2 ** 53, '1', NaN]) assert.throws(() => service.prepareCancelGuide(id), TypeError);
   assert.throws(() => service.prepareUpdateRequirement(1, {}));
   assert.throws(() => service.prepareUpdateRequirement(1, { initialization_mode: 'DESIGN' }));
-  assert.throws(() => service.prepareUpdateRequirement(1, { title: '不得部分修改', initialization_mode: 'DESIGN' }));
+  assert.throws(() => service.prepareUpdateRequirement(1, {expected_metadata_version:1,changes:{title:'不得部分修改',initialization_mode:'DESIGN'}}));
   assert.throws(() => service.prepareCreateRequirement({ ...create(), extra: 'x' }));
   assert.throws(() => service.prepareCreateRevision(1, { expected_content_version: 7 }));
   assert.throws(() => service.prepareCreateGuide(1, { ...guide, source: 'wrong' }));
   assert.equal(calls, 0);
 });
-test('I15 original run continues; I17 only acknowledges finished cancellation; I18 requires a new retry identity', async () => {
-  assert.equal((await api(async () => json({ id: 2, requirement_id: 1, status: 'RUNNING', current_step: 'PREPARING' }, 202)).prepareContinueGuide(2, '补充').submit()).data.id, 2);
-  await assert.rejects(api(async () => json({ id: 3, requirement_id: 1, status: 'RUNNING', current_step: 'PREPARING' }, 202)).prepareContinueGuide(2, '补充').submit(), ApiUnknown);
-  assert.equal((await api(async () => json({ id: 2, requirement_id: 1, status: 'CANCELLED', current_step: 'FINISHED' })).prepareCancelGuide(2).submit()).data.status, 'CANCELLED');
-  await assert.rejects(api(async () => json({ id: 2, requirement_id: 1, status: 'RUNNING', current_step: 'PREPARING' })).prepareCancelGuide(2).submit(), ApiUnknown);
+test('I15 continuation and I18 retry require a new model receipt; cancellation confirms the actual terminal run',async()=>{
+ const receipt={processing:'MODEL',guide_run_id:3,user_message_id:4};
+ assert.deepEqual((await api(async()=>json(receipt,202)).prepareContinueGuide(2,'补充',3).submit()).data,receipt);
+ await assert.rejects(api(async()=>json({...receipt,guide_run_id:2},202)).prepareContinueGuide(2,'补充',3).submit(),ApiUnknown);
+ assert.deepEqual((await api(async()=>json(receipt,202)).prepareRetryGuide(2).submit()).data,receipt);
+ assert.equal((await api(async()=>json({id:2,requirement_id:1,status:'CANCELLED',current_step:'FINISHED'})).prepareCancelGuide(2).submit()).data.status,'CANCELLED');
+ await assert.rejects(api(async()=>json({id:2,requirement_id:1,status:'RUNNING',current_step:'PREPARING'})).prepareCancelGuide(2).submit(),ApiUnknown);
 });

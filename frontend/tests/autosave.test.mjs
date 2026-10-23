@@ -61,31 +61,27 @@ test('one in-flight write, many edits coalesce to newest and old success never o
   assert.equal(rig.controller.localSnapshot.markdown_content, 'newest'); assert.equal(rig.controller.state.status, 'SAVED'); assert.equal(rig.controller.state.confirmed_version, 3);
   assert.equal(rig.clears.length, 1); assert.equal(rig.clears[0][2], 3); rig.controller.dispose();
 });
-test('lost response is read back against actual submitted snapshot before marking saved; no second write', async () => {
-  let persisted = draft(), calls = 0;
-  const rig = setup({ async save(ticket) { calls++; persisted = draft(ticket.markdown_content, 2); throw new ApiUnknown(true); }, async read() { return persisted; } });
-  rig.edit('committed'); await rig.controller.flush(); assert.equal(calls, 1); assert.equal(rig.controller.state.status, 'SAVED'); assert.equal(rig.controller.state.confirmed_version, 2);
-  assert.deepEqual(rig.timing.live(), []); rig.controller.dispose();
+test('lost receipt confirms the same original ticket instead of inferring command success from GET text', async () => {
+  let persisted=draft(),calls=0,original;
+  const rig=setup({async save(ticket){calls++;original??=ticket;assert.equal(ticket,original);persisted=draft(ticket.markdown_content,2);if(calls===1)throw new ApiUnknown(true);return persisted;},async read(){return persisted;}});
+  rig.edit('committed');await rig.controller.flush();assert.equal(calls,2);assert.equal(rig.controller.state.status,'SAVED');assert.equal(rig.controller.state.confirmed_version,2);rig.controller.dispose();
 });
-test('old GET retains earlier proof and retries newest at unchanged version; old write winning is acknowledged then latest sent', async () => {
-  let persisted = draft(), calls = 0; const sent = [];
-  const rig = setup({ async save(ticket) { sent.push(ticket); calls++; if (calls === 1) throw new ApiUnknown(true); persisted = draft(ticket.markdown_content, ticket.expected_version + 1); return persisted; }, async read() { return persisted; } });
-  rig.edit('first'); await rig.controller.flush(); assert.equal(rig.controller.state.status, 'RETRYING'); assert.equal(rig.controller.state.confirmed_version, 1);
-  rig.edit('newest'); assert.deepEqual(rig.timing.live(), [2000]);
-  // Old native request commits after the old GET, before the next reconciliation.
-  persisted = draft('first', 2); rig.timing.fire(2000); await settle();
-  assert.equal(sent.length, 2); assert.equal(sent[1].markdown_content, 'newest'); assert.equal(sent[1].expected_version, 2);
-  assert.equal(rig.controller.state.confirmed_version, 3); assert.equal(rig.controller.state.status, 'SAVED'); rig.controller.dispose();
+
+test('pending original save keeps its ticket while newer edits wait, then drains the newest body at the confirmed next version', async () => {
+  let persisted=draft(),calls=0;const sent=[];
+  const rig=setup({async save(ticket){sent.push(ticket);calls++;if(calls===1)throw new ApiUnknown(true);if(calls===2)throw new ApiRejected('REQUEST_IN_PROGRESS','pending',null,'diagnostic',409);persisted=draft(ticket.markdown_content,ticket.expected_version+1);return persisted;},async read(){return persisted;}});
+  rig.edit('first');await rig.controller.flush();assert.equal(rig.controller.state.status,'UNKNOWN');assert.equal(rig.controller.state.confirmed_version,1);
+  rig.edit('newest');await rig.controller.flush();
+  assert.equal(sent[0],sent[1]);assert.equal(sent[1],sent[2]);assert.equal(sent[3].markdown_content,'newest');assert.equal(sent[3].expected_version,2);
+  assert.equal(rig.controller.state.status,'SAVED');assert.equal(rig.controller.state.confirmed_version,3);rig.controller.dispose();
 });
-test('old GET with newest retry racing old native commit: conflict read can adopt earlier real ticket, never an invented version', async () => {
-  let persisted = draft(), calls = 0; const sent = [];
-  const rig = setup({ async save(ticket) { sent.push(ticket); calls++; if (calls === 1) throw new ApiUnknown(true);
-    if (calls === 2) { persisted = draft('first', 2); throw new ApiRejected('CONTENT_VERSION_CONFLICT', 'conflict', null, 'diagnostic', 409); }
-    persisted = draft(ticket.markdown_content, ticket.expected_version + 1); return persisted; }, async read() { return persisted; } });
-  rig.edit('first'); await rig.controller.flush(); rig.edit('newest'); rig.timing.fire(2000); await settle();
-  assert.deepEqual(sent.map(value => value.expected_version), [1, 1, 2]); assert.deepEqual(sent.map(value => value.markdown_content), ['first', 'newest', 'newest']);
-  assert.equal(rig.controller.state.status, 'SAVED'); assert.equal(rig.controller.state.confirmed_version, 3); rig.controller.dispose();
+
+test('matching content from another action cannot acknowledge our failed original save', async () => {
+  let persisted=draft(),calls=0;
+  const rig=setup({async save(ticket){if(++calls===1){persisted=draft(ticket.markdown_content,2);throw new ApiUnknown(true);}throw new ApiRejected('CONTENT_VERSION_CONFLICT','conflict',null,'diagnostic',409);},async read(){return persisted;}});
+  rig.edit('same text');await rig.controller.flush();assert.equal(calls,2);assert.equal(rig.controller.state.status,'CONFLICT');assert.equal(rig.controller.state.confirmed_version,1);assert.equal(rig.controller.localSnapshot.markdown_content,'same text');rig.controller.dispose();
 });
+
 test('repeated unknown writes/read failure back off2/5/10/30 capped, keep confirmed version and latest local pair', async () => {
   let reads = 0; const rig = setup({ async save() { throw new ApiUnknown(true); }, async read() { reads++; if (reads > 1) throw new ApiUnknown(false); return draft(); } });
   rig.edit('unsynced'); await rig.controller.flush();

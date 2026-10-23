@@ -4,7 +4,7 @@ import {captureMessageAnchor,restoreMessageAnchor} from '../src/messages/scroll-
 import {REQUIREMENT_STATUS_LABELS,SAVE_STATUS_LABELS,saveStatusLabel} from '../src/shared/status-labels.ts';
 
 test('status labels cover actual states and invalid local input cannot claim saved',()=>{
-  assert.deepEqual(REQUIREMENT_STATUS_LABELS,{INITIALIZING:'初始化中',ACTIVE:'进行中',COMPLETED:'已完成'});
+  assert.deepEqual(REQUIREMENT_STATUS_LABELS,{PLANNING:'规划中',READY:'待实施',IMPLEMENTING:'实施中',COMPLETED:'已完成',CLOSED:'已关闭'});
   assert.equal(Object.keys(SAVE_STATUS_LABELS).length,8);
   assert.match(saveStatusLabel('SAVED',false),/未保存/);
   assert.equal(saveStatusLabel('UNKNOWN',true),'保存结果待核实');

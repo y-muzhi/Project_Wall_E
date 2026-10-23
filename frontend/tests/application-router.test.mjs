@@ -11,7 +11,7 @@ function browser(path='/requirements'){
 const api={listRequirements:async filters=>({data:{items:[]},meta:{pagination:{page:filters.page,page_size:20,total:0,total_pages:0}}})};
 test('actual history entry restores committed filters/page/scroll and retained list; main navigation creates fresh defaults',async()=>{
  const port=browser(),router=new ApplicationRouter(api,port,port.storage,port.identify),first=router.getSnapshot();
- const query={...defaultWorkbenchQuery,keyword:'原提交',status:['ACTIVE'],page:3};await first.workbench.query(query);port.setScroll(320);router.saveEntry(query,320);router.openRequirement(17);
+ const query={...defaultWorkbenchQuery,keyword:'原提交',status:['PLANNING'],page:3};await first.workbench.query(query);port.setScroll(320);router.saveEntry(query,320);router.openRequirement(17);
  assert.equal(port.pathname(),'/requirements/17');assert.equal(router.getSnapshot().route.id,17);router.backToWorkbench();await port.idle();const restored=router.getSnapshot();
  assert.equal(restored.entry.entry_id,first.entry.entry_id);assert.equal(restored.workbench,first.workbench);assert.deepEqual(restored.entry.query,query);assert.equal(restored.restoreScroll,320);
  router.mainNavigation();assert.notEqual(router.getSnapshot().entry.entry_id,first.entry.entry_id);assert.deepEqual(router.getSnapshot().entry.query,defaultWorkbenchQuery);router.dispose();

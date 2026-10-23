@@ -17,6 +17,9 @@ ERRORS = {
     'WORK_STATE_CONFLICT': (409, 'WORK_STATE_CONFLICT', '当前已有其他操作占用正文'),
     'WORK_STATE_INCONSISTENT': (409, 'WORK_STATE_INCONSISTENT', '工作状态与活动对象不一致'),
     'CONTENT_VERSION_CONFLICT': (409, 'CONTENT_VERSION_CONFLICT', '内容已更新，请刷新后重试'),
+    'METADATA_VERSION_CONFLICT': (409, 'METADATA_VERSION_CONFLICT', '属性已更新，请刷新后重试'),
+    'DISCUSSION_VERSION_CONFLICT': (409, 'DISCUSSION_VERSION_CONFLICT', '讨论已更新，请刷新后重试'),
+    'SOURCE_VERSION_CONFLICT': (409, 'SOURCE_VERSION_CONFLICT', '来源已更新，请重新核对'),
     'TEMPLATE_INVALID': (422, 'TEMPLATE_INVALID', '模板不存在、不适用或结构不符合要求'),
     'DOCUMENT_INVALID': (422, 'DOCUMENT_INVALID', '正文与区块快照不合法'),
     'ANCHOR_INVALID': (422, 'ANCHOR_INVALID', '评论锚点无法唯一定位'),
@@ -60,6 +63,12 @@ def _request_id(value: str) -> str:
 
 
 def _details(code: str, value: object) -> dict[str, Any] | None:
+    if code in ('METADATA_VERSION_CONFLICT', 'DISCUSSION_VERSION_CONFLICT', 'SOURCE_VERSION_CONFLICT') and value is not None:
+        if type(value) is not dict or set(value) != {'expected_version', 'actual_version', 'resource_kind', 'resource_id'}:
+            raise ValueError('Invalid safe version conflict details')
+        if any(type(value[key]) is not int or not 1 <= value[key] <= MAX_SAFE_INTEGER for key in ('expected_version', 'actual_version', 'resource_id')) or value['resource_kind'] not in ('Requirement', 'RequirementDocument', 'Discussion', 'Revision'):
+            raise ValueError('Invalid safe version conflict identity')
+        return dict(value)
     if code in ('PATCH_INVALID', 'TARGET_STALE') and value is not None:
         if type(value) is not dict or set(value) != {'suggestion_errors'} or type(value['suggestion_errors']) is not list or not 1 <= len(value['suggestion_errors']) <= 100:
             raise ValueError('Invalid approved suggestion errors')

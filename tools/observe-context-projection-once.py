@@ -30,7 +30,7 @@ from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid
 from backend.app.infrastructure.schema_transport import compact, function_schema
 from backend.app.infrastructure.tokenization import TokenizationGateway, restore_measurement
 
-REPORT = ROOT / 'docs/verification/context-projection-live-once-2026-10-18.md'
+REPORT = ROOT / 'docs/verification/v1.0/context-projection-live-once-2026-10-18.md'
 
 
 def sha(text):

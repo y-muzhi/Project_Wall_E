@@ -2,17 +2,17 @@ import { snapshotObject } from '../api/client.ts';
 import { workbenchQuery, defaultWorkbenchQuery } from './workbench.ts';
 import type { WorkbenchQuery } from './workbench.ts';
 
-export type WorkbenchEntry = Readonly<{schema_version:1;kind:'WALLE_WORKBENCH';entry_id:string;query:WorkbenchQuery;scroll:number}>;
+export type WorkbenchEntry = Readonly<{schema_version:2;kind:'WALLE_WORKBENCH';entry_id:string;query:WorkbenchQuery;scroll:number}>;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const key = (id:string) => 'walle:v1:workbench:' + id;
+const key = (id:string) => 'walle:v1.5:workbench:' + id;
 function scroll(value:unknown):number { if(typeof value!=='number'||!Number.isFinite(value)||value<0)throw new TypeError('Invalid scroll');return value; }
 export function decodeWorkbenchEntry(input:unknown):WorkbenchEntry {
   const row=snapshotObject(input);
-  if(Object.keys(row).sort().join(',')!=='entry_id,kind,query,schema_version,scroll'||row.schema_version!==1||row.kind!=='WALLE_WORKBENCH'||typeof row.entry_id!=='string'||!uuid.test(row.entry_id))throw new TypeError('Invalid workbench entry');
+  if(Object.keys(row).sort().join(',')!=='entry_id,kind,query,schema_version,scroll'||row.schema_version!==2||row.kind!=='WALLE_WORKBENCH'||typeof row.entry_id!=='string'||!uuid.test(row.entry_id))throw new TypeError('Invalid workbench entry');
   const query=workbenchQuery(row.query as unknown as WorkbenchQuery);
   const original=row.query as unknown as WorkbenchQuery;
   if(original.keyword!==query.keyword||JSON.stringify(original.status)!==JSON.stringify(query.status)||JSON.stringify(original.requirement_type)!==JSON.stringify(query.requirement_type))throw new TypeError('Noncanonical stored query');
-  return Object.freeze({schema_version:1,kind:'WALLE_WORKBENCH',entry_id:row.entry_id,query,scroll:scroll(row.scroll)});
+  return Object.freeze({schema_version:2,kind:'WALLE_WORKBENCH',entry_id:row.entry_id,query,scroll:scroll(row.scroll)});
 }
 
 /** One entry belongs to one actual browser history position, never "latest list". */
@@ -31,7 +31,7 @@ export class WorkbenchHistory {
     if(mode==='RESTORE') {
       try {const entry=decodeWorkbenchEntry(this.history.state);this.memory.set(entry.entry_id,entry);return entry;}catch { /* Supplement only the same entry. */ }
       let identity:string|null=null;
-      try {const row=snapshotObject(this.history.state);if(row.kind==='WALLE_WORKBENCH'&&row.schema_version===1&&typeof row.entry_id==='string'&&uuid.test(row.entry_id))identity=row.entry_id;}catch { /* Unrelated history uses defaults. */ }
+      try {const row=snapshotObject(this.history.state);if(row.kind==='WALLE_WORKBENCH'&&row.schema_version===2&&typeof row.entry_id==='string'&&uuid.test(row.entry_id))identity=row.entry_id;}catch { /* Unrelated history uses defaults. */ }
       if(identity) {
         const existing=this.memory.get(identity);if(existing)return existing;
         try {const value=this.storage?.getItem(key(identity));if(value) {const saved=decodeWorkbenchEntry(JSON.parse(value));if(saved.entry_id===identity)return this.persist(saved);}}
@@ -39,7 +39,7 @@ export class WorkbenchHistory {
       }
     }
     const identity=this.identify();if(!uuid.test(identity))throw new TypeError('UUIDv4 entry required');
-    return this.persist(decodeWorkbenchEntry({schema_version:1,kind:'WALLE_WORKBENCH',entry_id:identity,query:defaultWorkbenchQuery,scroll:0}));
+    return this.persist(decodeWorkbenchEntry({schema_version:2,kind:'WALLE_WORKBENCH',entry_id:identity,query:defaultWorkbenchQuery,scroll:0}));
   }
   save(entry:WorkbenchEntry,query:WorkbenchQuery,position:number):WorkbenchEntry {
     const next=decodeWorkbenchEntry({...entry,query:workbenchQuery(query),scroll:scroll(position)});return this.persist(next);

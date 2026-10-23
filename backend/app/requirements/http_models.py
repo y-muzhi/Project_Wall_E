@@ -1,16 +1,12 @@
-"""I01/I03 strict transport inputs and successful read projections."""
+"""V1.5 requirement HTTP contracts on the existing /api/v1 routes."""
 from dataclasses import dataclass
 from fastapi import Request
 
 from backend.app.shared.http_boundary import request_query
-from backend.app.shared.http_projection import page, requirement, requirement_summary
-from backend.app.shared.validation import decimal_integer
-from .contracts import list_requirements_input, STATUSES, REQUIREMENT_TYPES
-from .contracts import update_requirement_input, complete_initialization_input, complete_requirement_input, reactivate_requirement_input
-from .contracts import create_requirement_input
 from backend.app.shared.http_commands import CommandRequest
-from backend.app.shared.http_projection import exact, revision
-from backend.app.shared.validation import strict_integer
+from backend.app.shared.http_projection import page, requirement, requirement_summary, exact
+from backend.app.shared.validation import decimal_integer, strict_enum, strict_integer
+from .contracts import list_requirements_input, STATUSES, REQUIREMENT_TYPES, create_requirement_input, update_requirement_input
 
 
 @dataclass(frozen=True)
@@ -37,11 +33,13 @@ class ListRequirementsResponse:
 @dataclass(frozen=True)
 class GetRequirementRequest:
     requirement_id: int
+    expand: str | None = None
 
     @classmethod
     def parse(cls, request: Request):
-        request_query(request)
-        return cls(decimal_integer(request.path_params['requirement_id'], 'requirement_id'))
+        query = request_query(request, singles=('expand',))
+        expand = strict_enum(query['expand'], 'expand', ('discussion',)) if 'expand' in query else None
+        return cls(decimal_integer(request.path_params['requirement_id'], 'requirement_id'), expand)
 
 
 class GetRequirementResponse:
@@ -49,25 +47,38 @@ class GetRequirementResponse:
 
     @staticmethod
     def project(data, request):
-        value = requirement(data)
-        if value['id'] != request.requirement_id:
+        from .queries import project_detail
+        value = project_detail(data, request.expand)
+        if value['requirement']['id'] != request.requirement_id:
             raise ValueError('Read returned a different requirement')
         return value, None
 
 
 class UpdateRequirementRequest(CommandRequest):
-    body_fields = ('title',)
-    uses_key = False
-    validate = staticmethod(update_requirement_input)
-    normalize = staticmethod(lambda payload, validated: {'requirement_id': validated.requirement_id, **validated.changes})
+    body_fields = ('expected_metadata_version', 'changes', 'expected_discussion_version', 'discussion_command')
+    mandatory = ()
+    @staticmethod
+    def validate(payload):
+        from .contracts import discussion_command_input
+        return discussion_command_input(payload) if {'expected_discussion_version', 'discussion_command'} & payload.keys() else update_requirement_input(payload)
+    normalize = staticmethod(lambda payload, validated: {**validated.business_input(), 'idempotency_key': validated.idempotency_key})
 
 
-class UpdateRequirementResponse(GetRequirementResponse):
-    success_code = 'UPDATED'
-    errors = GetRequirementResponse.errors | {'STATE_CONFLICT', 'WORK_STATE_CONFLICT'}
+class UpdateRequirementResponse:
+    success_codes = ('UPDATED', 'NO_CHANGE')
+    errors = GetRequirementResponse.errors | {'METADATA_VERSION_CONFLICT', 'DISCUSSION_VERSION_CONFLICT', 'STATE_CONFLICT',
+        'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED'}
 
     @staticmethod
     def project(data, request):
+        if 'discussion_command' in request.payload:
+            from .discussion import validate_discussion
+            value = exact(data, ('requirement_id', 'discussion_version', 'discussion'))
+            if value['requirement_id'] != request.payload['requirement_id']:
+                raise ValueError('Discussion result belongs to another requirement')
+            strict_integer(value['discussion_version'], 'discussion_version')
+            value['discussion'] = validate_discussion(value['discussion'])
+            return value, None
         value = requirement(data)
         if value['id'] != request.payload['requirement_id']:
             raise ValueError('Write returned another requirement')
@@ -75,83 +86,53 @@ class UpdateRequirementResponse(GetRequirementResponse):
 
 
 class CompleteInitializationRequest(CommandRequest):
-    body_fields = ('expected_content_version',)
-    mandatory = body_fields
-    validate = staticmethod(complete_initialization_input)
+    validate = staticmethod(lambda payload: payload)
 
 
 class CompleteInitializationResponse:
-    success_code = 'INITIALIZATION_COMPLETED'
-    errors = UpdateRequirementResponse.errors | {'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'DOCUMENT_INVALID', 'TEMPLATE_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED'}
-
-    @staticmethod
-    def project(data, request):
-        value = exact(data, ('requirement', 'baseline_revision', 'current_document'))
-        root = requirement(value['requirement'])
-        baseline = revision(value['baseline_revision'])
-        current = exact(value['current_document'], ('id', 'content_version'))
-        for field in current:
-            strict_integer(current[field], field)
-        if root['id'] != request.payload['requirement_id'] or root['status'] != 'ACTIVE' or root['document_work_state'] != 'IDLE' or baseline['requirement_id'] != root['id'] or baseline['revision_type'] != 'BASELINE' or baseline['source_content_version'] != request.payload['expected_content_version'] or current['content_version'] != request.payload['expected_content_version']:
-            raise ValueError('Initialization response contradicts the submitted target')
-        return {'requirement': root, 'baseline_revision': baseline, 'current_document': current}, None
+    errors = frozenset({'INVALID_INPUT', 'STATE_CONFLICT', 'INTERNAL_ERROR'})
 
 
 class CompleteRequirementRequest(CommandRequest):
-    body_fields = ('expected_version',)
+    body_fields = ('expected_metadata_version',)
     mandatory = body_fields
-    rename = {'expected_version': 'expected_content_version'}
-    validate = staticmethod(complete_requirement_input)
+    status_value = 'COMPLETED'
+
+    @classmethod
+    def validate(cls, payload):
+        return update_requirement_input({**payload, 'changes': {'status': cls.status_value}})
 
 
 class CompleteRequirementResponse(UpdateRequirementResponse):
-    success_code = 'REQUIREMENT_COMPLETED'
-    errors = UpdateRequirementResponse.errors | {'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS'}
-
-    @staticmethod
-    def project(data, request):
-        value, pagination = UpdateRequirementResponse.project(data, request)
-        if value['status'] != 'COMPLETED' or value['document_work_state'] != 'IDLE':
-            raise ValueError('Requirement completion response has wrong lifecycle')
-        return value, pagination
+    pass
 
 
-class ReactivateRequirementRequest(CommandRequest):
-    validate = staticmethod(reactivate_requirement_input)
+class ReactivateRequirementRequest(CompleteRequirementRequest):
+    status_value = 'PLANNING'
 
 
 class ReactivateRequirementResponse(UpdateRequirementResponse):
-    success_code = 'REACTIVATED'
-    errors = UpdateRequirementResponse.errors | {'WORK_STATE_INCONSISTENT', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS'}
+    pass
 
-    @staticmethod
-    def project(data, request):
-        value, pagination = UpdateRequirementResponse.project(data, request)
-        if value['status'] != 'ACTIVE' or value['document_work_state'] != 'IDLE':
-            raise ValueError('Reactivation response has wrong lifecycle')
-        return value, pagination
+
 class CreateRequirementRequest(CommandRequest):
-    body_fields = ('title', 'requirement_type', 'template_key', 'template_version', 'initial_idea', 'initialization_mode')
+    body_fields = ('title', 'requirement_type', 'initial_idea')
     mandatory = body_fields
     uses_requirement_path = False
     validate = staticmethod(create_requirement_input)
-
-    @staticmethod
-    def normalize(payload, validated):
-        return {**validated.business_input(), 'idempotency_key': validated.idempotency_key}
+    normalize = staticmethod(lambda payload, validated: {**validated.business_input(), 'idempotency_key': validated.idempotency_key})
 
 
 class CreateRequirementResponse:
     success_code = 'CREATED'
     status = 201
-    errors = frozenset({'INVALID_INPUT', 'TEMPLATE_INVALID', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR', 'CAPACITY_EXHAUSTED'})
+    errors = frozenset({'INVALID_INPUT', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR', 'CAPACITY_EXHAUSTED'})
 
     @staticmethod
     def project(data, request):
-        value = exact(data, ('requirement', 'current_document_id', 'guide_run_id'))
+        value = exact(data, ('requirement', 'initial_message_id', 'documents'))
         root = requirement(value['requirement'])
-        for field in ('current_document_id', 'guide_run_id'):
-            strict_integer(value[field], field)
-        if root['status'] != 'INITIALIZING' or root['document_work_state'] != 'GUIDE_ACTIVE' or root['active_operation_type'] != 'GUIDE_RUN' or root['active_operation_id'] != value['guide_run_id'] or any(root[field] != request.payload[field] for field in ('title', 'requirement_type', 'initialization_mode', 'template_key', 'template_version')):
-            raise ValueError('Created resource contradicts accepted creation input')
-        return {'requirement': root, 'current_document_id': value['current_document_id'], 'guide_run_id': value['guide_run_id']}, None
+        strict_integer(value['initial_message_id'], 'initial_message_id')
+        if root['status'] != 'PLANNING' or root['document_work_state'] != 'IDLE' or value['documents'] != [] or root['initial_message_id'] != value['initial_message_id'] or any(root[field] != request.payload[field] for field in ('title', 'requirement_type')):
+            raise ValueError('Created resource contradicts creation input')
+        return {'requirement': root, 'initial_message_id': value['initial_message_id'], 'documents': []}, None

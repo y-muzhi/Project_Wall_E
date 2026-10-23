@@ -116,7 +116,8 @@ async def handle_http(request: Request, request_model: type, response_model: typ
         meta = {'request_id': request_id}
         if pagination is not None:
             meta['pagination'] = pagination
-        return JSONResponse({'success': True, 'data': data, 'error': None, 'meta': meta}, status_code=getattr(response_model, 'status', 200))
+        status = response_model.status_for(data) if hasattr(response_model, 'status_for') else getattr(response_model, 'status', 200)
+        return JSONResponse({'success': True, 'data': data, 'error': None, 'meta': meta}, status_code=status)
     except ExecutionRetired:
         return failure('STORAGE_UNAVAILABLE')
     except Exception:

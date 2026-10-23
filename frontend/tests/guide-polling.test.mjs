@@ -5,13 +5,13 @@ import { guideRun } from '../src/api/models.ts';
 
 const at = '2026-10-05T10:00:00.000Z';
 function run(status = 'RUNNING', changes = {}) {
-  return guideRun({ id: 2, requirement_id: 1, action_type: 'ASK', function_type: 'ANSWER_REQUIREMENT', source_type: 'USER_INSTRUCTION', source_id: null,
-    scope: { scope_type: 'DOCUMENT', scope_ref: null }, status, current_step: status === 'RUNNING' ? 'PREPARING' : status === 'WAITING_USER' ? 'WAITING_USER' : 'FINISHED',
-    final_result: status === 'COMPLETED' ? { summary: '完成', assistant_message_id: 1, current_document_version: null, suggestion_batch_id: null } : null,
+  return guideRun({ id: 2, requirement_id: 1, action_type: 'ASK', function_type:'collaboration_v1', source_type: 'USER_INSTRUCTION', source_id: null,
+    scope: { scope_type: 'DOCUMENT', scope_ref: null }, status, current_step: status === 'RUNNING' ? 'PREPARING' : 'FINISHED',
+    final_result: status === 'COMPLETED' ? { summary: '完成', assistant_message_id: 1, current_document_version: null, suggestion_batch_id:null,analysis:null} : null,
     suggestion_batch_id: null, latest_assistant_message_id: null, error_code: status === 'FAILED' ? 'CONFIG_INVALID' : null,
     error_message: status === 'FAILED' ? '配置缺失' : null, cancel_reason: status === 'CANCELLED' ? 'USER_REQUESTED' : null,
-    retry_of_guide_run_id: null, created_at: at, started_at: at, waiting_user_at: status === 'WAITING_USER' ? at : null,
-    ended_at: ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status) ? at : null, updated_at: at, ...changes });
+    retry_of_guide_run_id: null, created_at: at, started_at: at, waiting_user_at:null,
+    ended_at: ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status) ? at : null, updated_at:at,operation:'DISCUSS',parent_guide_run_id:null,target:null,discussion_version_snapshot:1,material_summary:null,application_result:status==='RUNNING'?null:'NOT_REQUESTED',progress_result:status==='RUNNING'?null:'NOT_REQUESTED',progress_error:null,document_effect:null,returned_responses:[],...changes });
 }
 function timing() {
   const queue = [], delays = [];
@@ -47,8 +47,8 @@ test('failure backoff is 2/5/10/30 seconds then capped30, retaining last confirm
   assert.deepEqual(clock.delays, [1000, 2000, 5000, 10000, 30000, 30000]);
   clock.next(); await flush(); assert.equal(poll.state.connection_error, false); assert.equal(clock.delays.at(-1), 1000); poll.dispose();
 });
-test('WAITING_USER and every terminal state stop; explicit accepted continuation refresh reads the same run again', async () => {
-  for (const status of ['WAITING_USER', 'COMPLETED', 'FAILED', 'CANCELLED']) {
+test('every terminal state stops; explicit refresh only reads its actual stored status', async () => {
+  for (const status of ['COMPLETED', 'FAILED', 'CANCELLED']) {
     const clock = timing(); let calls = 0;
     const poll = new GuideRunPolling(2, async () => ++calls === 1 ? run(status) : run(), clock);
     poll.setVisible(true); await flush(); assert.equal(poll.state.polling, false); assert.equal(clock.queue.length, 0);
@@ -72,13 +72,13 @@ test('dispose cancels timer/read and ignores late failures without changing anot
 });
 test('wrong run identity is a query failure; a subscribed refresh cannot start a simultaneous read', async () => {
   const clock = timing(); let calls = 0, refresh = true;
-  const poll = new GuideRunPolling(2, async () => { calls++; return calls === 1 ? run('RUNNING', { id: 3 }) : run('WAITING_USER'); }, clock);
+  const poll = new GuideRunPolling(2, async () => { calls++; return calls === 1 ? run('RUNNING', { id: 3 }) : run('COMPLETED'); }, clock);
   poll.subscribe(state => { if (state.querying && refresh) { refresh = false; poll.refresh(); } });
-  poll.setVisible(true); await flush(); assert.equal(calls, 2); assert.equal(poll.state.confirmed.status, 'WAITING_USER'); assert.equal(poll.state.connection_error, false); poll.dispose();
+  poll.setVisible(true); await flush(); assert.equal(calls, 2); assert.equal(poll.state.confirmed.status,'COMPLETED'); assert.equal(poll.state.connection_error, false); poll.dispose();
 });
 test('observer exceptions cannot prevent the owned query, rewrite its confirmed status, or turn STOP into retries', async t => {
   const logged=[];t.mock.method(console,'error',(...args)=>logged.push(args));
-  for(const status of ['RUNNING','WAITING_USER','FAILED']){
+  for(const status of ['RUNNING','COMPLETED','FAILED']){
     const clock=timing();let calls=0;const seen=[];
     const poll=new GuideRunPolling(2,async()=>{calls++;return run(status);},clock);
     poll.subscribe(state=>{if(state.querying||state.confirmed)throw Error('view observer');});poll.subscribe(state=>seen.push(state));

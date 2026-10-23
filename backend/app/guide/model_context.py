@@ -78,6 +78,9 @@ def read_context(connection, identity, resources):
     guides = GuideRepository(connection)
     run = guides.get(identity)
     if run is None: raise Rejected('NOT_FOUND')
+    if run['function_type'] == 'collaboration_v1':
+        from .collaboration_context import read_canonical
+        return {'code': 'READ_OK', 'data': read_canonical(connection, identity, resources), 'details': None}
     root = RequirementRepository(connection).get(run['requirement_id'])
     if root is None: raise Rejected('SOURCE_INVALID')
     requirement = requirement_read_model(root)
@@ -143,7 +146,11 @@ def get_model_context(database, guide_run_id=MISSING, *, catalog=None):
     try:
         with database.transaction() as connection:
             resources = catalog if catalog is not None else ResourceCatalog()
-            return read_context(connection, identity, resources)
+            result = read_context(connection, identity, resources)
+            if result['data'].get('layout_version') == 'collaboration_context_v1':
+                from .collaboration_context import compile_context
+                return {'code': 'READ_OK', 'data': compile_context(result['data'], resources).basis, 'details': None}
+            return result
     except Rejected as error: return {'code': error.code, 'data': None, 'details': None}
     except (ConfigInvalid, TemplateInvalid): code = 'CONFIG_INVALID'
     except (StorageUnavailable, sqlite3.Error): code = 'STORAGE_UNAVAILABLE'

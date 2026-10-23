@@ -217,6 +217,6 @@ def before_send(profile, context, function):
 
 def production_options():
     """No credential read or network I/O during construction/startup."""
-    return {'counting_counter': TokenizationGateway(),
-            'counting_compatibility_check': before_count,
-            'compatibility_check': before_send}
+    # V1.5 gates exact release/profile in collaboration_execution, before
+    # counting and Chat. Historical Function admissions cannot authorize it.
+    return {'counting_counter': TokenizationGateway()}

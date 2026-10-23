@@ -1,26 +1,33 @@
-/** The 37 explicit API bindings. Each action owns its original body/key and
+/** Explicit V1.5 API bindings. Each action owns its original body/key and
  * response expectations; retry is a caller decision on the same action.
  */
 import type { Ctx } from '@milkdown/kit/ctx';
 import type { BlockState } from '../documents/contracts.ts';
 import { ApiClient, ApiUnknown, ApiRejected, snapshotObject } from './client.ts';
 import type { ApiSuccess, JsonObject } from './client.ts';
-import { array, checked, shape, id, require, distinct } from './decoding.ts';
+import { array, checked, shape, id, require, distinct,choices } from './decoding.ts';
 import type { Decoder } from './decoding.ts';
 import * as models from './models.ts';
 import {modelCalls,modelCallDetail} from './model-calls.ts';
+import {suggestionMarkdown} from '../suggestions/preview.ts';
 
 export type ApiAction<T> = Readonly<{ submit: (signal?: AbortSignal) => Promise<ApiSuccess<T>> }>;
+const sameJson=(left:unknown,right:unknown)=>JSON.stringify(left,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value)===JSON.stringify(right,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value);
 export type RequirementFilters = Readonly<{ keyword?: string; status?: readonly (typeof models.requirementStatuses[number])[];
   requirement_type?: readonly (typeof models.requirementTypes[number])[]; page?: number }>;
 export type GuideFilters = Readonly<{ status?: readonly (typeof models.runStatuses[number])[]; action_type?: readonly (typeof models.runActions[number])[]; page?: number }>;
-export type CreateRequirement = Readonly<{ title: string; requirement_type: 'NEW' | 'CHANGE'; template_key: string; template_version: string;
-  initial_idea: string; initialization_mode: 'IDEATION' | 'DESIGN' }>;
-export type CreateGuide = Readonly<{ expected_version: number; action_type: 'INITIALIZE' | 'ASK' | 'REVIEW' | 'MODIFY'; instruction: string;
-  scope_type: 'DOCUMENT' | 'SECTION' | 'BLOCK' | 'SELECTION'; scope_ref?: ReturnType<typeof models.scope>['scope_ref'];
-  source_type: 'USER_INSTRUCTION' | 'REVIEW_RESULT'; source_id?: number | null }>;
-export type CreateComment = Readonly<{ expected_content_version: number; content: string; anchor_type: 'BLOCK' | 'SELECTION'; block_id: number;
-  selection?: Readonly<{ selected_text: string; prefix_text: string; suffix_text: string }> | null }>;
+export type CreateRequirement = Readonly<{ title: string; requirement_type: 'NEW' | 'CHANGE'; initial_idea: string }>;
+export type DiscussionCommand=Readonly<
+ {type:'SET_BINDING';target_document_id:number|null;source_refs:readonly ReturnType<typeof models.sourceRef>[];scope:Readonly<JsonObject>|null}|
+ {type:'SET_FOCUS';topic_ref:string}|{type:'CHANGE_PHASE';phase_kind:typeof models.phaseKinds[number];closure_message:string|null;unresolved_refs:readonly string[]}|
+ {type:'SET_DISPOSITION';subject_ref:string;decision:'DEFER'|'NOT_APPLICABLE'|'DECLINE_DRAFT';description:string}>;
+export type CreateDocument=Readonly<{name:string;document_kind:typeof models.documentKinds[number];template_ref:ReturnType<typeof models.resourceRef>|null}>;
+export type DocumentChange=Readonly<{type:'RENAME';name:string}|{type:'ARCHIVE'|'RESTORE'}|{type:'CONFIRM';expected_content_version:number;revision_id:number}>;
+export type CreateGuide = Readonly<{expected_discussion_version:number;operation:typeof models.operations[number];instruction:string;
+ target:ReturnType<typeof models.targetRef>|null;scope:Readonly<JsonObject>|null;source_refs:readonly ReturnType<typeof models.sourceRef>[];
+ proposal_ref:Readonly<{message_id:number;card_key:string}>|null;acknowledge_source_changes:boolean}>;
+export type CreateComment = Readonly<{ document_id:number;expected_content_version: number; content: string; anchor_type: 'BLOCK' | 'SELECTION'; block_id: number;
+  selection?: Readonly<{ selected_text: string; prefix_text: string; suffix_text: string }> }>;
 const root = '/api/v1';
 const target = (collection: string, identity: number, suffix = '') => `${root}/${collection}/${id(identity)}${suffix}`;
 const owned = <T extends { requirement_id: number }>(decode: Decoder<T>, identity: number) => checked(decode, value => require(value.requirement_id === identity));
@@ -41,8 +48,9 @@ function query(filters: RequirementFilters | GuideFilters): readonly (readonly [
 export class WalleApi {
   private readonly client: ApiClient; private readonly ctx: Ctx;
   constructor(client: ApiClient, ctx: Ctx) { this.client = client; this.ctx = ctx; }
+  previewMarkdown(markdown:string,columns?:number):DocumentFragment { return suggestionMarkdown(this.ctx,markdown,columns); }
   private action<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body: unknown | null,
-                    decoder: (original: JsonObject | null) => Decoder<T>, status: 200 | 201 | 202 = 200, keyed = true): ApiAction<T> {
+                    decoder: (original: JsonObject | null) => Decoder<T>, status: 200 | 201 | 202 | readonly (200|201|202)[] = 200, keyed = true): ApiAction<T> {
     const original = body === null ? null : snapshotObject(body);
     const decode = decoder(original), handle = this.client.prepare(method, path, original, { idempotent: keyed, success_status: status });
     return Object.freeze({ submit: async (signal?: AbortSignal) => {
@@ -51,8 +59,8 @@ export class WalleApi {
       return response;
     } });
   }
-  private async single<T>(path: string, decode: Decoder<T>, signal?: AbortSignal) {
-    const response = await this.client.read(path, decode, [], signal);
+  private async single<T>(path: string, decode: Decoder<T>, signal?: AbortSignal,parameters:readonly(readonly[string,string])[]=[]) {
+    const response = await this.client.read(path, decode, parameters, signal);
     if (response.meta.pagination !== undefined) throw new ApiUnknown(false);
     return response;
   }
@@ -74,19 +82,25 @@ export class WalleApi {
   listRequirements(filters: RequirementFilters = {}, signal?: AbortSignal) {
     return this.page(`${root}/requirements`, models.requirementSummary, query(filters), filters.page ?? 1, signal);
   }
-  getRequirement(identity: number, signal?: AbortSignal) { return this.single(target('requirements', identity), identified(models.requirement, identity), signal); }
-  getCurrentDocument(identity: number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/current-document'), this.current(identity), signal); }
-  getManualDraft(identity: number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/manual-draft'), this.draft(identity), signal); }
-  listRevisions(identity: number, page = 1, signal?: AbortSignal) { return this.page(target('requirements', identity, '/revisions'), owned(models.revisionSummary, identity), [['page', String(page)]], page, signal); }
+  getRequirementDetail(identity:number,signal?:AbortSignal,expandDiscussion=false){
+    const decode=checked(models.requirementDetail,value=>{
+      require(value.requirement.id===identity);require(expandDiscussion===(value.discussion!==null));
+    });
+    return this.single(target('requirements',identity),decode,signal,expandDiscussion?[['expand','discussion']]:[]);
+  }
+  async getRequirement(identity: number, signal?: AbortSignal) { const response=await this.getRequirementDetail(identity,signal);return {...response,data:response.data.requirement}; }
+  getCurrentDocument(identity: number,documentId:number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/current-document'), checked(this.current(identity),document=>require(document.id===documentId)), signal,[['document_id',String(id(documentId))]]); }
+  getManualDraft(identity: number,documentId:number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/manual-draft'), checked(this.draft(identity),draft=>require(draft.target_document_id===documentId)), signal,[['document_id',String(id(documentId))]]); }
+  listRevisions(identity: number,documentId:number, page = 1, signal?: AbortSignal) { return this.page(target('requirements', identity, '/revisions'), checked(owned(models.revisionSummary, identity),row=>require(row.document_id===documentId)), [['document_id',String(id(documentId))],['page', String(page)]], page, signal); }
   getRevision(identity: number, signal?: AbortSignal) { return this.single(target('revisions', identity), identified(models.revisionDecoder(this.ctx), identity), signal); }
-  listComments(identity: number, page = 1, signal?: AbortSignal) { return this.page(target('requirements', identity, '/comments'), owned(models.commentItem, identity), [['page', String(page)]], page, signal); }
+  listComments(identity: number,documentId:number, page = 1, signal?: AbortSignal) { return this.page(target('requirements', identity, '/comments'), checked(owned(models.commentItem, identity),comment=>require(comment.document_id===documentId)), [['document_id',String(id(documentId))],['page', String(page)]], page, signal); }
   getComment(identity: number, signal?: AbortSignal) { return this.single(target('comments', identity), identified(models.comment, identity), signal); }
   getGuideRun(identity: number, signal?: AbortSignal) { return this.single(target('guide-runs', identity), identified(models.guideRun, identity), signal); }
   listModelCalls(identity:number,signal?:AbortSignal){return this.single(target('guide-runs',identity,'/model-calls'),identified(modelCalls,identity),signal);}
   getModelCall(identity:number,signal?:AbortSignal){return this.single(target('model-calls',identity),checked(modelCallDetail,value=>require(value.call.id===identity)),signal);}
   listGuideRuns(identity: number, filters: GuideFilters = {}, signal?: AbortSignal) { return this.page(target('requirements', identity, '/guide-runs'), owned(models.guideSummary, identity), query(filters), filters.page ?? 1, signal); }
   getBatch(identity: number, signal?: AbortSignal) { return this.single(target('suggestion-batches', identity), identified(models.batch, identity), signal); }
-  getCommentIndex(identity: number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/comment-index'), owned(models.commentIndex, identity), signal); }
+  getCommentIndex(identity: number,documentId:number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/comment-index'), checked(owned(models.commentIndex, identity),index=>require(index.document_id===documentId)), signal,[['document_id',String(id(documentId))]]); }
   async listMessages(identity: number, before: number | null = null, signal?: AbortSignal) {
     const parameters: [string, string][] = before === null ? [] : [['before_sequence_no', String(id(before))]];
     const response = await this.client.read(target('requirements', identity, '/messages'), shape({ items: array(owned(models.message, identity), 20) }), parameters, signal);
@@ -101,99 +115,129 @@ export class WalleApi {
 
   // I02 / I04 / I05 / I06 / I07.
   prepareCreateRequirement(body: CreateRequirement) { return this.action('POST', `${root}/requirements`, body, original => {
-    bodyFields(original!, ['title', 'requirement_type', 'template_key', 'template_version', 'initial_idea', 'initialization_mode']);
-    return checked(shape({ requirement: models.requirement, current_document_id: id, guide_run_id: id }), value => {
-      require(value.requirement.status === 'INITIALIZING' && value.requirement.document_work_state === 'GUIDE_ACTIVE' && value.requirement.active_operation_id === value.guide_run_id);
-      for (const field of ['requirement_type', 'template_key', 'template_version', 'initialization_mode'] as const) require(value.requirement[field] === original![field]);
+    bodyFields(original!, ['title', 'requirement_type', 'initial_idea']);
+    return checked(shape({ requirement: models.requirement, initial_message_id: id, documents: array(models.documentDecoder(this.ctx, 'CURRENT'), 0) }), value => {
+      require(value.requirement.status === 'PLANNING' && value.requirement.document_work_state === 'IDLE' && value.requirement.initial_message_id === value.initial_message_id);
+      for (const field of ['title', 'requirement_type'] as const) require(value.requirement[field] === original![field]);
     });
   }, 201); }
-  prepareUpdateRequirement(identity: number, body: Readonly<{ title: string }>) {
+  prepareUpdateRequirement(identity: number, body: Readonly<{ expected_metadata_version: number; changes: Readonly<{ title?: string; status?: models.Requirement['status'] }> }>) {
     return this.action('PATCH', target('requirements', identity), body, original => {
-      bodyFields(original!, ['title'], []); return identified(models.requirement, identity);
-    }, 200, false);
+      bodyFields(original!, ['expected_metadata_version', 'changes']); id(original!.expected_metadata_version);
+      const changes=snapshotObject(original!.changes);
+      require(Object.keys(changes).length>0&&Object.keys(changes).every(key=>key==='title'||key==='status'));
+      if(Object.hasOwn(changes,'status'))choices(models.requirementStatuses)(changes.status);
+      return checked(identified(models.requirement, identity), value => {
+        require(Object.entries(changes).every(([key, submitted]) => value[key as 'title' | 'status'] === submitted));
+      });
+    });
   }
-  prepareCompleteInitialization(identity: number, version: number) { return this.action('POST', target('requirements', identity, '/complete-initialization'), { expected_content_version: id(version) }, original =>
-    checked(shape({ requirement: identified(models.requirement, identity), baseline_revision: owned(models.revisionSummary, identity), current_document: shape({ id, content_version: id }) }), value => {
-      require(value.requirement.status === 'ACTIVE' && value.requirement.document_work_state === 'IDLE' && value.baseline_revision.revision_type === 'BASELINE');
-      require(value.baseline_revision.source_content_version === original!.expected_content_version && value.current_document.content_version === original!.expected_content_version);
-    })); }
-  prepareCompleteRequirement(identity: number, version: number) { return this.action('POST', target('requirements', identity, '/complete'), { expected_version: id(version) }, () =>
-    checked(identified(models.requirement, identity), value => require(value.status === 'COMPLETED' && value.document_work_state === 'IDLE'))); }
-  prepareReactivateRequirement(identity: number) { return this.action('POST', target('requirements', identity, '/reactivate'), null, () =>
-    checked(identified(models.requirement, identity), value => require(value.status === 'ACTIVE' && value.document_work_state === 'IDLE'))); }
 
   // I09 / I11 / I12 / I13 / I26. Draft version never substitutes CURRENT version.
-  prepareStartManualDraft(identity: number, version: number) { return this.action('POST', target('requirements', identity, '/manual-draft'), { expected_version: id(version) }, () =>
+  prepareUpdateDiscussion(identity:number,body:Readonly<{expected_discussion_version:number;discussion_command:DiscussionCommand}>){
+    return this.action('PATCH',target('requirements',identity),body,original=>{
+      bodyFields(original!,['expected_discussion_version','discussion_command']);const version=id(original!.expected_discussion_version);
+      return checked(shape({requirement_id:id,discussion_version:id,discussion:models.discussionState}),value=>{
+        require(value.requirement_id===identity&&(value.discussion_version===version||value.discussion_version===version+1));
+        const command=original!.discussion_command as JsonObject;
+        if(command.type==='SET_FOCUS')require(value.discussion.focus_topic_ref===command.topic_ref);
+        if(command.type==='CHANGE_PHASE')require(value.discussion.phase.kind===command.phase_kind);
+        if(command.type==='SET_BINDING')require(value.discussion.binding.target_document_id===command.target_document_id&&sameJson(value.discussion.binding.source_refs,command.source_refs)&&sameJson(value.discussion.binding.scope,command.scope));
+      });
+    });
+  }
+  prepareStartManualDraft(identity: number, documentId:number,version: number,restoreRevisionId?:number) { return this.action('POST', target('requirements', identity, '/manual-draft'), { document_id:id(documentId),expected_version: id(version),...(restoreRevisionId===undefined?{}:{restore_revision_id:id(restoreRevisionId)}) }, () =>
     checked(shape({ manual_draft: this.draft(identity), requirement: identified(models.requirement, identity) }), value => {
       require(value.manual_draft.content_version === 1 && value.requirement.document_work_state === 'MANUAL_EDITING' && value.requirement.active_operation_id === value.manual_draft.id);
+      require(value.manual_draft.target_document_id===documentId&&value.manual_draft.base_content_version===version);
     }), 201); }
-  prepareSaveManualDraft(identity: number, body: Readonly<{ expected_version: number; markdown_content: string; block_state_json: BlockState }>) {
+  prepareSaveManualDraft(identity: number, body: Readonly<{ document_id:number;draft_id:number;expected_version: number; markdown_content: string; block_state_json: BlockState }>) {
     return this.action('PUT', target('requirements', identity, '/manual-draft'), body, original => {
-      bodyFields(original!, ['expected_version', 'markdown_content', 'block_state_json']); id(original!.expected_version);
+      bodyFields(original!, ['document_id','draft_id','expected_version', 'markdown_content', 'block_state_json']); id(original!.expected_version);id(original!.document_id);id(original!.draft_id);
       const ids = (original!.block_state_json as JsonObject).blocks;
       require(Array.isArray(ids)); const blockIds = ids.map(item => id((item as JsonObject).block_id));
       return checked(this.draft(identity), value => {
         require(value.content_version === (original!.expected_version as number) + 1 && value.markdown_content === original!.markdown_content);
+        require(value.id===original!.draft_id&&value.target_document_id===original!.document_id);
         require(value.block_state_json.next_block_id === (original!.block_state_json as JsonObject).next_block_id);
         require(JSON.stringify(value.block_state_json.blocks.map(item => item.block_id)) === JSON.stringify(blockIds));
       });
-    }, 200, false);
+    });
   }
-  prepareCancelManualDraft(identity: number, version: number) { return this.action('DELETE', target('requirements', identity, '/manual-draft'), { expected_version: id(version) }, () =>
-    checked(shape({ requirement_id: id, manual_draft_id: id, cancelled: value => { require(value === true); return true as const; } }), value => require(value.requirement_id === identity))); }
-  prepareCompleteManualDraft(identity: number, version: number) { return this.action('POST', target('requirements', identity, '/manual-draft/complete'), { expected_version: id(version) }, () => this.current(identity)); }
-  prepareCreateRevision(identity: number, body: Readonly<{ expected_version: number; description?: string | null }>) { return this.action('POST', target('requirements', identity, '/revisions'), body, original => {
-    bodyFields(original!, ['expected_version'], ['description']); id(original!.expected_version);
-    return checked(owned(models.revisionSummary, identity), value => require(value.revision_type === 'MANUAL' && value.source_content_version === original!.expected_version));
-  }, 201); }
+  prepareCancelManualDraft(identity: number, documentId:number,draftId:number,version: number) { return this.action('DELETE', target('requirements', identity, '/manual-draft'), {document_id:id(documentId),draft_id:id(draftId),expected_version: id(version) }, () =>
+    checked(shape({ requirement_id: id,document_id:id, manual_draft_id: id, cancelled: value => { require(value === true); return true as const; } }), value => require(value.requirement_id === identity&&value.document_id===documentId&&value.manual_draft_id===draftId))); }
+  prepareCompleteManualDraft(identity: number, documentId:number,draftId:number,version: number) { return this.action('POST', target('requirements', identity, '/manual-draft/complete'), {document_id:id(documentId),draft_id:id(draftId),expected_version: id(version) }, () =>checked(models.documentEffect,effect=>require(effect.document_id===documentId&&effect.result!=='CREATED'))); }
+  prepareCreateRevision(identity: number, body: Readonly<{ document_id:number;expected_version: number; description?: string | null }>) { return this.action('POST', target('requirements', identity, '/revisions'), body, original => {
+    bodyFields(original!, ['document_id','expected_version'], ['description']); id(original!.document_id);id(original!.expected_version);
+    return models.versionMarker;
+  }); }
+  prepareCreateDocument(identity:number,body:CreateDocument){return this.action('POST',target('requirements',identity,'/documents'),body,original=>{
+    bodyFields(original!,['name','document_kind','template_ref']);
+    return checked(shape({document:this.current(identity),revision_id:id}),result=>require(result.document.name===original!.name&&result.document.document_kind===original!.document_kind&&result.document.content_version===1&&result.revision_id===result.document.current_revision_id));
+  },201);}
+  prepareUpdateDocument(identity:number,body:Readonly<{expected_metadata_version:number;change:DocumentChange}>){return this.action('PATCH',target('documents',identity),body,original=>{
+    bodyFields(original!,['expected_metadata_version','change']);id(original!.expected_metadata_version);
+    return checked(shape({document:identified(models.documentSummary,identity),event_id:models.nullableId}),result=>{
+      const change=original!.change as JsonObject;
+      if(change.type==='RENAME')require(result.document.name===change.name);
+      if(change.type==='ARCHIVE')require(result.document.archived_at!==null);
+      if(change.type==='RESTORE')require(result.document.archived_at===null);
+      if(change.type==='CONFIRM')require(result.document.confirmed_revision_id===change.revision_id&&result.document.current_revision_id===change.revision_id&&result.document.content_version===change.expected_content_version);
+    });
+  });}
 
   // I14 / I15 / I17 / I18 / I34 / I36.
-  prepareCreateGuide(identity: number, body: CreateGuide) { return this.action('POST', target('requirements', identity, '/guide-runs'), body, original => {
-    bodyFields(original!, ['expected_version', 'action_type', 'instruction', 'scope_type', 'source_type'], ['scope_ref', 'source_id']);
-    return checked(shape({ guide_run: owned(models.guideAccepted, identity), user_message: owned(models.message, identity) }), value => {
-      require(value.guide_run.status === 'RUNNING' && value.guide_run.current_step === 'PREPARING' && value.user_message.role === 'USER' && value.user_message.message_type === 'TEXT' && value.user_message.guide_run_id === value.guide_run.id);
-    });
-  }, 202); }
-  prepareContinueGuide(identity: number, instruction: string) { return this.action('POST', target('guide-runs', identity, '/continue'), { instruction }, () =>
-    checked(identified(models.guideAccepted, identity), value => require(value.status === 'RUNNING' && value.current_step === 'PREPARING')), 202); }
-  prepareCancelGuide(identity: number) { return this.action('POST', target('guide-runs', identity, '/cancel'), null, () =>
-    checked(identified(models.guideAccepted, identity), value => require(value.status === 'CANCELLED' && value.current_step === 'FINISHED'))); }
-  prepareRetryGuide(identity: number) { return this.action('POST', target('guide-runs', identity, '/retry'), null, () =>
-    checked(models.guideRun, value => require(value.id !== identity && value.retry_of_guide_run_id === identity && value.status === 'RUNNING' && value.current_step === 'PREPARING')), 202); }
-  prepareModifyFromComment(identity: number, version: number) { return this.action('POST', target('comments', identity, '/guide-runs'), { expected_content_version: id(version) }, () =>
-    checked(models.guideRun, value => require(value.action_type === 'MODIFY' && value.function_type === 'MODIFY_FROM_COMMENT' && value.source_type === 'COMMENT' && value.source_id === identity && value.status === 'RUNNING' && value.current_step === 'PREPARING' && ['BLOCK', 'SELECTION'].includes(value.scope.scope_type))), 202); }
-  prepareCardResponses(identity: number, body: models.Responses) { return this.action('POST', target('conversation-messages', identity, '/responses'), body, original => {
-    const answers = models.responses(original);
-    return checked(shape({ response_message: models.message, guide_run: models.guideAccepted,
-      card_state: value => { require(value === 'ANSWERED'); return 'ANSWERED' as const; } }), value => {
-      require((value.guide_run.status === 'RUNNING' && value.guide_run.current_step === 'PREPARING' || value.guide_run.status === 'COMPLETED' && value.guide_run.current_step === 'FINISHED') && value.response_message.message_type === 'CARD_RESPONSE' && value.response_message.reply_to_message_id === identity);
-      require(value.response_message.guide_run_id === value.guide_run.id && value.response_message.requirement_id === value.guide_run.requirement_id);
-      const formal = models.responses(value.response_message.structured_content);
-      require(JSON.stringify(formal.responses.map(item => [item.card_key, item.selected_option_keys, item.skipped])) === JSON.stringify(answers.responses.map(item => [item.card_key, item.selected_option_keys, item.skipped])));
-    });
-  }, 202); }
+  prepareCreateGuide(identity:number,body:CreateGuide){return this.action('POST',target('requirements',identity,'/guide-runs'),body,original=>{
+    bodyFields(original!,['expected_discussion_version','operation','instruction','target','scope','source_refs','proposal_ref','acknowledge_source_changes']);
+    id(original!.expected_discussion_version);if(original!.target!==null)models.targetRef(original!.target);
+    if(original!.scope!==null)models.collaborationValue('legacy_scope')(original!.scope);
+    return models.runReceipt;
+  },202);}
+  prepareContinueGuide(identity:number,instruction:string,discussionVersion:number){return this.action('POST',target('guide-runs',identity,'/continue'),
+    {instruction,expected_discussion_version:id(discussionVersion)},()=>checked(models.runReceipt,value=>require(value.guide_run_id!==identity)),202);}
+  prepareCancelGuide(identity:number){return this.action('POST',target('guide-runs',identity,'/cancel'),null,()=>value=>{
+    const row=snapshotObject(value);if(row.status==='COMPLETED')return identified(models.guideRun,identity)(row);
+    return checked(identified(models.guideAccepted,identity),actual=>require(actual.status==='CANCELLED'&&actual.current_step==='FINISHED'))(row);
+  });}
+  prepareRetryGuide(identity:number){return this.action('POST',target('guide-runs',identity,'/retry'),null,()=>checked(models.runReceipt,value=>require(value.guide_run_id!==identity)),202);}
+  prepareModifyFromComment(identity:number,version:number,discussionVersion:number){return this.action('POST',target('comments',identity,'/guide-runs'),
+    {expected_content_version:id(version),expected_discussion_version:id(discussionVersion)},()=>models.runReceipt,202);}
+
+  prepareCardResponses(identity:number,body:models.Responses,discussionVersion:number){
+    const action=this.action('POST',target('conversation-messages',identity,'/responses'),{...body,expected_discussion_version:id(discussionVersion)},original=>{
+      const answers=models.responses(Object.fromEntries(Object.entries(original!).filter(([key])=>key!=='expected_discussion_version')));void answers;
+      return (value:unknown)=>{const row=snapshotObject(value);return row.processing==='MODEL'?models.runReceipt(row):models.programReceipt(row);};
+    },[200,202]);
+    return Object.freeze({submit:async(signal?:AbortSignal)=>{const response=await action.submit(signal);
+      if(response.status!==(response.data.processing==='MODEL'?202:200)||response.data.user_message_id===identity)throw new ApiUnknown(true);
+      return response;
+    }});
+  }
 
   // I20 read above; I21 / I22 / I23.
   prepareDecideSuggestion(identity: number, body: Readonly<{ decision: 'ACCEPTED' | 'REJECTED' | 'EDITED'; edited_content?: string | null }>) {
     return this.action('PUT', target('suggestions', identity, '/decision'), body, original => {
       bodyFields(original!, ['decision'], ['edited_content']);
+      require(original!.decision==='EDITED'?typeof original!.edited_content==='string':!('edited_content' in original!));
       return checked(shape({ suggestion: identified(models.suggestion, identity), counts: models.counts }), value => {
         require(value.suggestion.status === original!.decision && value.counts[value.suggestion.status.toLowerCase() as 'accepted' | 'rejected' | 'edited'] > 0);
       });
     });
   }
   prepareCompleteBatch(identity: number, version: number) { return this.action('POST', target('suggestion-batches', identity, '/complete'), { expected_content_version: id(version) }, original =>
-    checked(shape({ batch: identified(models.batchMetadata, identity), counts: models.counts, current_document: models.documentDecoder(this.ctx, 'CURRENT') }), value => {
+    checked(shape({ batch: identified(models.batchMetadata, identity), counts: models.counts, current_document: models.documentBodyDecoder(this.ctx, 'CURRENT'),document_effect:models.documentEffect,applied_suggestion_ids:array(id,100) }), value => {
       require(value.batch.status === 'COMPLETED' && value.counts.pending === 0 && value.batch.base_content_version === original!.expected_content_version);
       require(value.current_document.requirement_id === value.batch.requirement_id && value.current_document.content_version === (value.batch.applied_content_version ?? value.batch.base_content_version));
+      const effect=value.document_effect;require(value.current_document.id===value.batch.target_document_id&&effect.document_id===value.current_document.id&&effect.before_content_version===value.batch.base_content_version&&effect.after_content_version===value.current_document.content_version&&effect.result===(value.batch.completion_result==='NO_CHANGE'?'NO_CHANGE':'UPDATED'));
+      require(new Set(value.applied_suggestion_ids).size===value.applied_suggestion_ids.length&&value.applied_suggestion_ids.length===value.counts.accepted+value.counts.edited);
     })); }
   prepareDiscardBatch(identity: number) { return this.action('POST', target('suggestion-batches', identity, '/discard'), null, () =>
     checked(shape({ batch: identified(models.batchMetadata, identity), counts: models.counts }), value => require(value.batch.status === 'DISCARDED'))); }
 
   // I29 / I30 / I31 / I32 / I33.
   prepareCreateComment(identity: number, body: CreateComment) { return this.action('POST', target('requirements', identity, '/comments'), body, original => {
-    bodyFields(original!, ['expected_content_version', 'content', 'anchor_type', 'block_id'], ['selection']);
-    return checked(owned(models.comment, identity), value => require(value.status === 'OPEN' && value.anchor_status === 'ATTACHED' && value.deleted_at === null && value.block_id === original!.block_id && value.anchor_type === original!.anchor_type));
+    bodyFields(original!, ['document_id','expected_content_version', 'content', 'anchor_type', 'block_id'], ['selection']);
+    return checked(owned(models.comment, identity), value => require(value.document_id===original!.document_id&&value.status === 'OPEN' && value.anchor_status === 'ATTACHED' && value.deleted_at === null && value.block_id === original!.block_id && value.anchor_type === original!.anchor_type));
   }, 201); }
   prepareEditComment(identity: number, content: string) { return this.action('PATCH', target('comments', identity), { content }, () => identified(models.comment, identity)); }
   prepareResolveComment(identity: number) { return this.action('POST', target('comments', identity, '/resolve'), null, () =>

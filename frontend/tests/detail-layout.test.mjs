@@ -5,33 +5,39 @@ const store = () => {const values=new Map(),writes=[];return {values,writes,getI
 const deferred = () => {let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 const settle = () => new Promise(resolve=>setImmediate(resolve));
 
-test('full viewport geometry preserves editor minimum/right half bound, temporary clamp and original preferences through all breakpoints',()=>{
-  const storage=store(),layout=new DetailLayout('INITIALIZING',1600,storage);
-  assert.equal(layout.getSnapshot().right_width,420);layout.resizeRight(600);assert.equal(layout.getSnapshot().preferences.right_width,600);
-  const writes=storage.writes.length;
-  for(const width of [1280,1279,1024,1023,900,1024,1279,1280,1600]){
-    layout.viewport(width);const s=layout.getSnapshot();assert.equal(s.preferences.right_width,600);
-    if(width>=1024){assert(s.document_width>=640);if(s.right_open){assert(s.right_width>=360);assert(s.right_width<=s.right_max);}if(width<1280)assert(!(s.left_open&&s.right_open));}
-    else assert(!s.left_open&&!s.right_open);
+test('actual available width selects three columns, drawer and single view without overwriting saved width',()=>{
+  const storage=store(),layout=new DetailLayout('READY',1600,storage);
+  layout.resizeRight(600);const writes=storage.writes.length;
+  for(const available of [1400,1212,1211,1006,1005,824,1212,1400]){
+    layout.viewport(1600,available);const s=layout.getSnapshot();
+    assert.equal(s.left_drawer,available<1212);assert.equal(s.split_view,available>=1006);
+    assert.equal(s.preferences.right_width,600);assert(s.document_width>=640);
+    if(s.right_open){assert(s.right_width>=360);assert(s.right_width<=s.right_max);}
+    if(available>=1212)assert(s.left_open&&s.right_open);else assert(!s.left_open);
   }
-  assert.equal(storage.writes.length,writes);assert.equal(layout.getSnapshot().right_width,600);
-  assert(layout.getSnapshot().left_open&&layout.getSnapshot().right_open);
+  assert.equal(storage.writes.length,writes);assert.equal(layout.getSnapshot().right_width,548);
+  layout.viewport(1600,1568);assert.equal(layout.getSnapshot().right_width,600);
+  layout.viewport(1023,1400);assert(!layout.getSnapshot().document_open&&!layout.getSnapshot().right_open);
 });
-test('explicit compact open selects one side without persisting automatic collapse; tabs and legitimate user width survive a fresh browser owner',()=>{
-  const storage=store(),layout=new DetailLayout('INITIALIZING',1024,storage);
-  assert(!layout.getSnapshot().left_open&&layout.getSnapshot().right_open);
-  layout.toggleLeft();assert(layout.getSnapshot().left_open&&!layout.getSnapshot().right_open);assert(layout.getSnapshot().preferences.right_open);
-  layout.openTab('COMMENTS');assert(!layout.getSnapshot().left_open&&layout.getSnapshot().right_open);assert(layout.getSnapshot().preferences.left_open);
-  layout.viewport(1600);assert(layout.getSnapshot().left_open&&layout.getSnapshot().right_open);layout.resizeRight(99999);
-  const saved=JSON.parse(storage.values.get(preferencesKey)),fresh=new DetailLayout('ACTIVE',1600,storage);assert.deepEqual(fresh.getSnapshot().preferences,saved);
-  assert.equal(fresh.getSnapshot().right_tab,'COMMENTS');layout.toggleRight();assert(!layout.getSnapshot().right_open);assert(layout.getSnapshot().left_open);
-  assert(new DetailLayout('ACTIVE',1600,store()).getSnapshot().left_open);assert(!new DetailLayout('ACTIVE',1600,store()).getSnapshot().right_open);
+test('drawer overlays the same split and single view preserves panel selection and preferred geometry',()=>{
+  const storage=store(),layout=new DetailLayout('PLANNING',1600,storage);layout.viewport(1600,1006);
+  const before=layout.getSnapshot();layout.toggleLeft();const drawer=layout.getSnapshot();
+  assert(drawer.left_open&&drawer.left_drawer&&drawer.right_open);assert.equal(drawer.document_width,before.document_width);
+  layout.toggleLeft();layout.viewport(1600,1005);assert(layout.getSnapshot().document_open&&!layout.getSnapshot().right_open);
+  layout.openTab('COMMENTS');assert(layout.getSnapshot().right_open&&!layout.getSnapshot().document_open);
+  assert.equal(layout.getSnapshot().right_width,1005);const width=layout.getSnapshot().preferences.right_width;
+  layout.resizeRight(360);assert.equal(layout.getSnapshot().preferences.right_width,width);
+  layout.showDocument();assert(layout.getSnapshot().document_open);assert(!layout.getSnapshot().right_open);
+  layout.openTab('REVISIONS');layout.toggleRight();assert(layout.getSnapshot().document_open);
+  layout.viewport(1600,1400);layout.openTab('COMMENTS');layout.resizeRight(99999);
+  const saved=JSON.parse(storage.values.get(preferencesKey)),fresh=new DetailLayout('CLOSED',1600,storage);
+  assert.deepEqual(fresh.getSnapshot().preferences,saved);assert.equal(fresh.getSnapshot().right_tab,'COMMENTS');
 });
 test('malformed or unavailable preference storage is visible without preventing in-memory interaction or writing defaults on mount',()=>{
   for(const v of [{schema_version:1,left_open:true,right_open:true,right_tab:'INVALID',right_width:420},{schema_version:1,left_open:true,right_open:true,right_tab:'AI',right_width:359},{schema_version:1,left_open:true,right_open:true,right_tab:'AI',right_width:Infinity},{schema_version:2,left_open:true,right_open:true,right_tab:'AI',right_width:420}])assert.throws(()=>decodeDetailPreferences(v));
-  const storage=store();storage.values.set(preferencesKey,'broken');const layout=new DetailLayout('ACTIVE',1280,storage);assert(layout.getSnapshot().warning);assert.equal(storage.writes.length,0);
+  const storage=store();storage.values.set(preferencesKey,'broken');const layout=new DetailLayout('READY',1280,storage);assert(layout.getSnapshot().warning);assert.equal(storage.writes.length,0);
   layout.openTab('REVISIONS');assert.equal(layout.getSnapshot().warning,null);
-  const denied={getItem(){throw Error('denied');},setItem(){throw Error('denied');}},other=new DetailLayout('ACTIVE',1280,denied);
+  const denied={getItem(){throw Error('denied');},setItem(){throw Error('denied');}},other=new DetailLayout('READY',1280,denied);
   other.openTab('COMMENTS');assert(other.getSnapshot().right_open);assert.match(other.getSnapshot().warning,/暂存不可用/);
 });
 test('narrow guard freezes immediately once per crossing, preserves failed save, then waits actual save before re-read and supports explicit retry',async()=>{

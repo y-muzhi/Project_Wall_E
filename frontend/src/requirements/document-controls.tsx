@@ -10,14 +10,14 @@ import type {ConfirmedNotice} from '../shared/toast-store.ts';
 
 function HistoricalDraftConflict({owner,session,actual,blocked,notifyConfirmed}:{owner:RequirementDocumentOwner;session:ManualDraftSession;actual:DetailSnapshot;blocked:boolean;notifyConfirmed?:ConfirmedNotice}){
   const ending=useSyncExternalStore(session.ending.subscribe,session.ending.getSnapshot),[dialog,setDialog]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),pending=useRef(false);
-  const cancelAllowed=actual.activity.kind==='MANUAL'&&actual.activity.draft.id===session.autosave.confirmedDocument.id&&actual.requirement.status!=='COMPLETED';
+  const cancelAllowed=actual.activity.kind==='MANUAL'&&actual.activity.draft.id===session.autosave.confirmedDocument.id;
   const cancel=async()=>{if(pending.current||blocked)return;pending.current=true;setBusy(true);setError(null);
     try{const confirmed=ending.phase==='UNKNOWN'?await session.ending.retryUnknown():await session.ending.cancelConfirmed();if(confirmed){const outcome=session.ending.getSnapshot().outcome;if(outcome)notifyConfirmed?.(outcome,'人工编辑已取消，正式正文保持不变');setDialog(false);if(!await owner.exitHistory())setError('取消已确认，实际视图尚未恢复，请重试退出历史');}}
     catch{setError(session.ending.getSnapshot().outcome?.kind==='CANCELLED'?'取消已确认，实际视图暂时无法恢复，请重试退出历史':'取消结果尚未确认，历史及本地内容仍保留');}finally{pending.current=false;setBusy(false);}};
   return <section aria-label="历史退出草稿冲突">
     <details open><summary>对照保留的本地草稿与最新后端内容</summary><div className="draft-comparison">
       <section><h3>本页保留的人工草稿 · 确认基线 v{session.autosave.state.confirmed_version}</h3><pre>{session.autosave.localSnapshot.markdown_content}</pre></section>
-      <section><h3>{actual.activity.kind==='MANUAL'?`后端草稿 · v${actual.activity.draft.content_version}`:`最新正式正文 · v${actual.current.content_version}`}</h3><pre>{actual.activity.kind==='MANUAL'?actual.activity.draft.markdown_content:actual.current.markdown_content}</pre></section>
+      <section><h3>{actual.activity.kind==='MANUAL'?`后端草稿 · v${actual.activity.draft.content_version}`:`最新正式正文 · v${actual.current?.content_version}`}</h3><pre>{actual.activity.kind==='MANUAL'?actual.activity.draft.markdown_content:actual.current?.markdown_content}</pre></section>
     </div></details>
     <p>两份内容保持独立，请先保留需要的文字。重读不会自动合并或覆盖本页内容。</p>
     {cancelAllowed&&ending.phase!=='CLOSED'&&<button className="ui-button" type="button" disabled={blocked||busy} onClick={()=>setDialog(true)}>放弃冲突人工草稿</button>}
@@ -34,16 +34,20 @@ export function OwnedDocumentOutline({owner,close,heading=true}:{owner:Requireme
 }
 export function OwnedDocumentControls({owner,blocked=false,auxiliary=true,notifyConfirmed,showSaveStatus=true,actionHost}:{actionHost?:HTMLElement|null;owner:RequirementDocumentOwner;showSaveStatus?:boolean;blocked?:boolean;auxiliary?:boolean;notifyConfirmed?:ConfirmedNotice}){
   const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),session=state.manual;
-  const exitHistory=<button className="ui-button primary" type="button" disabled={blocked||state.busy} onClick={()=>void owner.exitHistory()}>退出历史</button>;
+  const [restoreOpen,setRestoreOpen]=useState(false),[restoreBusy,setRestoreBusy]=useState(false),[restoreError,setRestoreError]=useState<string|null>(null),restorePending=useRef(false);
+  const restoreState=state.restore?.getSnapshot(),retained=restoreState&&['UNKNOWN','STARTED'].includes(restoreState.phase);
+  const restore=async()=>{if(restorePending.current)return;restorePending.current=true;setRestoreBusy(true);setRestoreError(null);try{if(await owner.restoreHistory())setRestoreOpen(false);}catch{setRestoreError('历史恢复暂时无法完成，原请求和正文仍保留。');}finally{restorePending.current=false;setRestoreBusy(false);}};
+  const exitHistory=<><button className="ui-button primary" type="button" disabled={blocked||state.busy||restoreBusy||!!retained} onClick={()=>void owner.exitHistory()}>退出历史</button><button className="ui-button" type="button" disabled={blocked||restoreBusy||(!owner.restoreAllowed&&!retained)} onClick={()=>setRestoreOpen(true)}>恢复到编辑草稿</button></>;
   return <section aria-label="正文视图操作">
     {state.mode==='HISTORY'&&<><p role="status">{state.revision?`历史版本 V${state.revision.version_no} · 只读 · 来源正文 v${state.revision.source_content_version}`:'正在读取历史版本…'}</p>
       {actionHost?createPortal(exitHistory,actionHost):exitHistory}
       {state.save_warning&&<p role="alert">草稿尚未同步，原编辑内容和本地暂存仍保留；历史正文只读。</p>}</>}
     {state.error&&<p role="alert" className="inline-error">{state.error}</p>}
-    {session&&state.mode!=='HISTORY'&&state.detail?.requirement.status==='INITIALIZING'&&<p>初始化期间模板标题固定，可编辑标题下的正文。</p>}
+
     {session&&state.mode==='HISTORY'&&state.restoration_conflict&&<HistoricalDraftConflict owner={owner} session={session} actual={state.restoration_conflict} blocked={blocked||state.busy} {...(notifyConfirmed?{notifyConfirmed}:{})}/>}
     {session&&state.mode!=='HISTORY'&&<ManualDraftControls actionHost={actionHost??null} showSaveStatus={showSaveStatus} autosave={session.autosave} ending={session.ending} recovery={session.recovery} valid={session.editor.valid}
       blocked={blocked||state.busy||session.getSnapshot().blocked} ended={async outcome=>{notifyConfirmed?.(outcome,outcome.kind==='COMPLETED'?'人工编辑已完成':'人工编辑已取消，正式正文保持不变');await owner.refresh();}} serverSelected={async()=>{await owner.refresh();}}/>}
     {auxiliary&&state.navigation&&<BlockAuxiliary navigation={state.navigation}/>}
+    <Confirmation open={restoreOpen} title="恢复到编辑草稿" description="历史内容将载入当前文档的新编辑草稿。完成编辑后才保存为新的内容版本，历史记录仍保留。" busy={restoreBusy} error={restoreError??restoreState?.error??state.error} confirmLabel={restoreState?.phase==='UNKNOWN'?'核实原请求':restoreState?.phase==='STARTED'?'读取编辑草稿':'恢复草稿'} confirmDisabled={blocked||state.busy||(!owner.restoreAllowed&&!retained)} confirm={()=>void restore()} cancel={()=>{if(!restoreBusy)setRestoreOpen(false);}}/>
   </section>;
 }

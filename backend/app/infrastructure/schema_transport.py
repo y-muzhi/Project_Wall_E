@@ -129,3 +129,67 @@ def derive_schema(original_json: str) -> TransportSchema:
 def function_schema(function: FrozenFunction) -> TransportSchema:
     if type(function) is not FrozenFunction: raise ConfigInvalid('Frozen Function required')
     return derive_schema(function.output_schema_json)
+
+
+def named_schema(bundle: dict, entry: str) -> TransportSchema:
+    """V1.5 named entry: local closure with lexically ordered definitions.
+
+    Reuses the existing conservative resolution checks; a different bundle
+    entry never substitutes for the caller's selected operation contract.
+    """
+    if type(entry) is not str or entry not in bundle.get('$defs', {}):
+        raise ConfigInvalid('Unknown collaboration schema entry')
+    root = {'$schema': DIALECT, '$ref': '#/$defs/' + entry, '$defs': bundle['$defs']}
+    derived = derive_schema(compact(root))
+    schema = derived.schema
+    retained = tuple(sorted(derived.retained_definitions))
+    schema['$defs'] = {key: schema['$defs'][key] for key in retained}
+    encoded = compact(schema)
+    return TransportSchema(encoded, derived.original_sha256,
+        hashlib.sha256(encoded.encode('utf-8')).hexdigest(), retained, derived.removed_definitions)
+
+
+def declared_json(schema: dict, value) -> str:
+    """Validate and serialize instances in named type declaration order.
+
+    Never normalizes strings, fills nullable fields, sorts arrays or removes
+    data. Schema objects themselves keep their original keyword order.
+    """
+    from .resources import _validate, STRICT_VALIDATOR
+    _validate(compact(schema), value)
+    definitions = schema.get('$defs', {})
+
+    def matches(rule, item):
+        return STRICT_VALIDATOR({'$schema': DIALECT, '$defs': definitions, **rule}).is_valid(item)
+
+    def expand(rule, item):
+        if type(rule) is not dict:
+            return []
+        result = []
+        if '$ref' in rule:
+            result.extend(expand(definitions[rule['$ref'][8:]], item))
+        result.append(rule)
+        for keyword in ('oneOf', 'anyOf', 'allOf'):
+            for branch in rule.get(keyword, []):
+                if matches(branch, item):
+                    result.extend(expand(branch, item))
+        return result
+
+    def order(rule, item):
+        rules = expand(rule, item)
+        if type(item) is dict:
+            properties = {}
+            for candidate in rules:
+                for key, child in candidate.get('properties', {}).items():
+                    properties.setdefault(key, child)
+            output = {key: order(child, item[key]) for key, child in properties.items() if key in item}
+            for key in item:
+                if key not in output:
+                    output[key] = item[key]
+            return output
+        if type(item) is list:
+            items_rule = next((candidate['items'] for candidate in rules if 'items' in candidate), {})
+            return [order(items_rule, child) for child in item]
+        return item
+
+    return compact(order(schema, value))

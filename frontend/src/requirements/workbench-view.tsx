@@ -6,16 +6,17 @@ import type { WorkbenchQuery } from './workbench.ts';
 import { CreateRequirementFlow } from './create.ts';
 import { CreateRequirementDrawer } from './create_drawer.tsx';
 import { requirementCatalog } from './catalog.ts';
+import { requirementStatuses } from '../api/models.ts';
 import { MultiFilter, SearchInput } from '../shared/filter.tsx';
 import { Pagination } from '../shared/pagination.tsx';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { localTime } from '../shared/time.ts';
 import {PageHeader} from '../application/header.tsx';
 
-const statusOptions=(['INITIALIZING','ACTIVE','COMPLETED'] as const).map(value=>({value,label:REQUIREMENT_STATUS_LABELS[value]}));
+const statusOptions=requirementStatuses.map(value=>({value,label:REQUIREMENT_STATUS_LABELS[value]}));
 const typeName=(value:'NEW'|'CHANGE')=>requirementCatalog.requirement_types.find(option=>option.value===value)!.label;
 function condition(query:WorkbenchQuery):string {
-  return `关键词：${query.keyword||'无'}；状态：${query.status.length===3?'全部':query.status.map(value=>statusOptions.find(option=>option.value===value)!.label).join('、')}；类型：${query.requirement_type.length===2?'全部':query.requirement_type.map(typeName).join('、')}`;
+  return `关键词：${query.keyword||'无'}；状态：${query.status.length===requirementStatuses.length?'全部':query.status.map(value=>statusOptions.find(option=>option.value===value)!.label).join('、')}；类型：${query.requirement_type.length===2?'全部':query.requirement_type.map(typeName).join('、')}`;
 }
 
 /** Controllers belong to the route owner; this view emits navigation intent. */

@@ -19,7 +19,7 @@ def get_batch(database: Database, batch_id: object = MISSING, *, catalog: Resour
                 result = {'code': 'NOT_FOUND', 'data': None, 'details': None}
             else:
                 parent = repository.parent(row)
-                if parent is None or parent['requirement_id'] != row['requirement_id'] or parent['action_type'] != 'MODIFY' or parent['status'] != 'COMPLETED' or parent['source_type'] != row['source_type'] or parent['source_id'] != row['source_id']:
+                if parent is None or parent['requirement_id'] != row['requirement_id'] or parent['action_type'] != 'MODIFY' or parent['operation'] != 'PROPOSE_CHANGES' or parent['target_document_id'] != row['target_document_id'] or parent['status'] != 'COMPLETED' or parent['source_type'] != row['source_type'] or parent['source_id'] != row['source_id']:
                     raise ValueError('Batch must belong to its actual completed MODIFY source run')
                 if connection.execute('SELECT 1 FROM requirements WHERE id=?', (row['requirement_id'],)).fetchone() is None:
                     raise ValueError('Batch requirement is missing')
@@ -31,8 +31,8 @@ def get_batch(database: Database, batch_id: object = MISSING, *, catalog: Resour
                     if source is None or source['requirement_id'] != row['requirement_id']:
                         raise ValueError('Historical source must belong to the same requirement')
                 resources = catalog if catalog is not None else ResourceCatalog()
-                protocol = resources.freeze('MODIFY', row['source_type'])
-                if parent['function_type'] != protocol.function_type:
+                protocol = resources.collaboration
+                if parent['function_type'] != 'collaboration_v1':
                     raise ValueError('Batch source must match its parent frozen Function')
                 result = {'code': 'READ_OK', 'data': get_batch_result(row, repository.suggestions(identity), protocol=protocol), 'details': None}
         return result

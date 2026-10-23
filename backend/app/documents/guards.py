@@ -34,17 +34,17 @@ def assert_idle(connection: sqlite3.Connection, root: dict, *, remaining_conflic
     raise Rejected('WORK_STATE_CONFLICT')
 
 
-def current_at_version(connection: sqlite3.Connection, requirement_id: int, expected_version: int) -> sqlite3.Row:
+def current_at_version(connection: sqlite3.Connection, requirement_id: int, expected_version: int, *, document_id: int) -> sqlite3.Row:
     require_write_transaction(connection)
-    rows = DocumentRepository(connection).by_requirement(requirement_id, 'CURRENT')
-    if len(rows) != 1:
-        raise Rejected('WORK_STATE_INCONSISTENT')
-    if rows[0]['content_version'] != expected_version:
+    current = DocumentRepository(connection).get_current(requirement_id, document_id)
+    if current is None:
+        raise Rejected('NOT_FOUND')
+    if current['content_version'] != expected_version:
         raise Rejected('CONTENT_VERSION_CONFLICT')
-    return rows[0]
+    return current
 
 
-def active_manual_draft(connection: sqlite3.Connection, root: dict) -> sqlite3.Row:
+def active_manual_draft(connection: sqlite3.Connection, root: dict, *, document_id: int | None = None, draft_id: int | None = None) -> sqlite3.Row:
     require_write_transaction(connection)
     rows = DocumentRepository(connection).by_requirement(root['id'], 'MANUAL_DRAFT')
     if root['document_work_state'] != 'MANUAL_EDITING':
@@ -55,6 +55,8 @@ def active_manual_draft(connection: sqlite3.Connection, root: dict) -> sqlite3.R
         raise Rejected('WORK_STATE_CONFLICT')
     if len(rows) != 1 or root['active_operation_type'] != 'MANUAL_DRAFT' or root['active_operation_id'] != rows[0]['id']:
         raise Rejected('WORK_STATE_INCONSISTENT')
+    if document_id is not None and rows[0]['target_document_id'] != document_id or draft_id is not None and rows[0]['id'] != draft_id:
+        raise Rejected('MANUAL_DRAFT_NOT_FOUND')
     try:
         assert_idle(connection, root, remaining_conflicts=frozenset())
     except Rejected as error:

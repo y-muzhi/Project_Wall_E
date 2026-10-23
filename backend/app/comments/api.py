@@ -25,7 +25,7 @@ async def get_comment_http(request: Request):
 @comment_router.get('/requirements/{requirement_id}/comment-index')
 async def get_comment_index_http(request: Request):
     return await read_http(request, GetCommentIndexRequest, GetCommentIndexResponse,
-        lambda runtime, parsed: queries.get_comment_index(runtime.database, parsed.requirement_id, catalog=runtime.catalog))
+        lambda runtime, parsed: queries.get_comment_index(runtime.database, {'requirement_id': parsed.requirement_id, 'document_id': parsed.document_id}, catalog=runtime.catalog))
 
 
 @comment_router.post('/requirements/{requirement_id}/comments')

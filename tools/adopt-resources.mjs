@@ -8,7 +8,7 @@ const source = resolve(proposals, 'resources-v1');
 const target = resolve(root, 'backend/resources/v1');
 const adoptionPath = resolve(root, 'docs/decisions/adoptions/resource-adoption-v1.json');
 if (existsSync(adoptionPath)) throw new Error('Already adopted: do not overwrite frozen resources');
-const decision = readFileSync(resolve(root, 'docs/decisions/决策记录.md'), 'utf8');
+const decision = readFileSync(resolve(root, 'docs/decisions/v1.0/决策记录.md'), 'utf8');
 if (!decision.includes('## D-004') || !decision.includes('## D-005')) throw new Error('Actual user decisions must be recorded before adoption');
 const evidence = JSON.parse(readFileSync(resolve(root, 'docs/verification/proposals-v1.json'), 'utf8'));
 const resourceManifest = JSON.parse(readFileSync(resolve(source, 'manifest.json'), 'utf8'));

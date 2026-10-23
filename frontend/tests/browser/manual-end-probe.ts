@@ -1,3 +1,4 @@
+import {probeDocumentId,probeRecoveryBinding,probeDraftId} from './v15-probe-targets.ts';
 import {editorViewCtx} from '@milkdown/kit/core';
 import {ApiRejected,ApiUnknown} from '../../src/api/client.ts';
 import type {WalleApi} from '../../src/api/walle.ts';
@@ -8,17 +9,17 @@ import {DraftRecoveryStore} from '../../src/documents/recovery-store.ts';
 import {ManualDraftEnd} from '../../src/documents/manual-end.ts';
 function deferred(){let resolve!:()=>void;const promise=new Promise<void>(accept=>{resolve=accept;});return {promise,resolve};}
 export async function manualEndProbe(api:WalleApi,identity:number){
-  const initial=(await api.getCurrentDocument(identity)).data,results:unknown[]=[];
+  const initial=(await api.getCurrentDocument(identity,probeDocumentId(identity))).data,results:unknown[]=[];
   for(const operation of ['COMPLETE','CANCEL'] as const){
-    const current=(await api.getCurrentDocument(identity)).data,draft=(await api.prepareStartManualDraft(identity,current.content_version).submit()).data.manual_draft;
+    const current=(await api.getCurrentDocument(identity,probeDocumentId(identity))).data,draft=(await api.prepareStartManualDraft(identity,probeDocumentId(identity),current.content_version).submit()).data.manual_draft;
     const element=document.createElement('section');document.body.append(element);
     let autosave:ManualDraftAutosave|undefined;
     const host=await RequirementEditor.create(element,draft,false,{change:()=>autosave?.changed()});
-    const cache=host.action(ctx=>new DraftRecoveryStore(ctx,{name:'walle-manual-end-probe-'+crypto.randomUUID()}));
+    const cache=host.action(ctx=>new DraftRecoveryStore(ctx,probeRecoveryBinding(),{name:'walle-manual-end-probe-'+crypto.randomUUID()}));
     const committed=deferred(),release=deferred();let saves=0,preparations=0,submissions=0,drop=true;const sent:number[]=[],clearPhases:string[]=[];
     autosave=new ManualDraftAutosave(draft,host.ledger!,{
-      read:async()=>(await api.getManualDraft(identity)).data,
-      save:async ticket=>{saves++;sent.push(ticket.expected_version);const result=(await api.prepareSaveManualDraft(identity,{expected_version:ticket.expected_version,markdown_content:ticket.markdown_content,block_state_json:ticket.block_state_json}).submit()).data;
+      read:async()=>(await api.getManualDraft(identity,probeDocumentId(identity))).data,
+      save:async ticket=>{saves++;sent.push(ticket.expected_version);const result=(await api.prepareSaveManualDraft(identity,{document_id:probeDocumentId(identity),draft_id:probeDraftId(identity),...({expected_version:ticket.expected_version,markdown_content:ticket.markdown_content,block_state_json:ticket.block_state_json})}).submit()).data;
         if(saves===1){committed.resolve();await release.promise;}return result;},
     },cache);
     const endingApi={
@@ -43,14 +44,14 @@ export async function manualEndProbe(api:WalleApi,identity:number){
       require(!end.continueEditing()&&host.readonly);require(saves===(operation==='COMPLETE'?2:1));
       require(await end.retryUnknown());require(end.getSnapshot().phase==='CLOSED'&&Number(preparations)===1&&submissions===2&&Number(clearPhases.length)===1&&clearPhases[0]==='CLOSED');
       require(await cache.get(identity,draft.id)===null);
-      const final=(await api.getCurrentDocument(identity)).data,root=(await api.getRequirement(identity)).data;
+      const final=(await api.getCurrentDocument(identity,probeDocumentId(identity))).data,root=(await api.getRequirement(identity)).data;
       require(root.document_work_state==='IDLE');
       if(operation==='COMPLETE')require(final.id===current.id&&final.content_version===current.content_version+1&&final.markdown_content.includes('结束控制器最新真实内容😀'));
       else require(final.content_version===current.content_version&&final.markdown_content===current.markdown_content&&!final.markdown_content.includes('取消前已发送真实内容'));
       results.push({operation,saves,versions_sent:sent,preparations,submissions,current_version:final.content_version,observed_draft:end.getSnapshot().observed?.manual_draft??null});
     }finally{
       release.resolve();end.dispose();autosave.dispose();await host.destroy();cache.close();element.remove();
-      try{const remaining=(await api.getManualDraft(identity)).data;await api.prepareCancelManualDraft(identity,remaining.content_version).submit();}
+      try{const remaining=(await api.getManualDraft(identity,probeDocumentId(identity))).data;await api.prepareCancelManualDraft(identity,probeDocumentId(identity),probeDraftId(identity),remaining.content_version).submit();}
       catch(error){if(!(error instanceof ApiRejected&&error.code==='MANUAL_DRAFT_NOT_FOUND'))throw error;}
     }
   }

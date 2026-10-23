@@ -2,6 +2,7 @@
 # Approved content and migration checksums are byte identities, including EOL.
 backend/resources/** -text
 backend/app/infrastructure/migrations/** -text
+backend/app/infrastructure/schemas/** -text
 docs/proposals/** -text
 docs/verification/** -text
 docs/resource-adoption-v1.json -text
@@ -25,3 +26,7 @@ docs/decisions/adoptions/** -text
 
 # Renamed project design documents retain their byte-preservation rule.
 docs/design/WALL-E.*_V_1.0.md -text
+
+# Version directories preserve original design and source metadata byte identities.
+docs/design/** -text
+docs/sources/**/*.json -text

@@ -41,7 +41,7 @@ class ListModelCallsResponse:
 
     @staticmethod
     def project(data, request):
-        fields = ('id', 'requirement_id', 'action_type', 'status', 'current_step', 'trigger_message_id', 'program_processed', 'items')
+        fields = ('id', 'requirement_id', 'action_type', 'operation', 'status', 'current_step', 'trigger_message_id', 'program_processed', 'items')
         value = object_fields(data, 'model_calls', fields, fields)
         if value['id'] != request.guide_run_id or any(item['guide_run_id'] != value['id'] for item in value['items']):
             raise ValueError('Calls must belong to the requested run')
@@ -63,7 +63,7 @@ class GetModelCallResponse:
 
     @staticmethod
     def project(data, request):
-        fields = ('call', 'requirement_id', 'action_type', 'prompt_reference', 'context_reference', 'sections',
+        fields = ('call', 'requirement_id', 'action_type', 'operation', 'prompt_reference', 'context_reference', 'sections',
             'included_history_ids', 'budget_removed_history_ids', 'raw_request_json', 'preflight', 'context_strategy', 'selection_summary')
         value = object_fields(data, 'model_call', fields, fields)
         if value['call']['id'] != request.llm_use_id:
@@ -84,11 +84,16 @@ class CancelGuideRunRequest:
 
 
 class CancelGuideRunResponse:
-    success_code = 'GUIDE_CANCELLED'
+    success_codes = ('GUIDE_CANCELLED', 'GUIDE_ALREADY_COMPLETED')
     errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
 
     @staticmethod
     def project(data, request):
+        if data.get('status') == 'COMPLETED':
+            value = guide_run_read_model(data)
+            if value['id'] != request.payload['guide_run_id']:
+                raise ValueError('Completion belongs to another run')
+            return value, None
         value = guide_run_accepted(data)
         if value['id'] != request.payload['guide_run_id'] or value['status'] != 'CANCELLED' or value['current_step'] != 'FINISHED':
             raise ValueError('Cancellation response must reference the actual cancelled run')
@@ -101,7 +106,7 @@ class ListGuideRunsRequest:
 
     @classmethod
     def parse(cls, request):
-        payload = request_query(request, singles=('page',), arrays={'status': GUIDE_STATUSES, 'action_type': ('INITIALIZE', 'ASK', 'REVIEW', 'MODIFY')})
+        payload = request_query(request, singles=('page',), arrays={'status': GUIDE_STATUSES, 'action_type': ('ASK', 'GENERATE', 'REVIEW', 'MODIFY')})
         payload['requirement_id'] = decimal_integer(request.path_params['requirement_id'], 'requirement_id')
         if 'page' in payload:
             payload['page'] = decimal_integer(payload['page'], 'page', maximum=100000)
@@ -123,9 +128,8 @@ class ListGuideRunsResponse:
 
 
 class CreateGuideRunRequest(CommandRequest):
-    body_fields = ('expected_version', 'action_type', 'instruction', 'scope_type', 'scope_ref', 'source_type', 'source_id')
-    mandatory = ('expected_version', 'action_type', 'instruction', 'scope_type', 'source_type')
-    rename = {'expected_version': 'expected_content_version'}
+    body_fields = ('expected_discussion_version', 'operation', 'instruction', 'target', 'scope', 'source_refs', 'proposal_ref', 'acknowledge_source_changes')
+    mandatory = body_fields
     validate = staticmethod(create_guide_run_input)
     normalize = staticmethod(lambda payload, validated: validated.business_input() | {'idempotency_key': validated.idempotency_key})
 
@@ -133,19 +137,20 @@ class CreateGuideRunRequest(CommandRequest):
 class CreateGuideRunResponse:
     success_code = 'GUIDE_ACCEPTED'
     status = 202
-    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'DISCUSSION_VERSION_CONFLICT', 'CONTENT_VERSION_CONFLICT', 'SOURCE_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
 
     @staticmethod
     def project(data, request):
-        value = object_fields(data, 'data', ('guide_run', 'user_message'), ('guide_run', 'user_message'))
-        run, message = guide_run_accepted(value['guide_run']), message_read_model(value['user_message'])
-        if run['requirement_id'] != request.payload['requirement_id'] or run['status'] != 'RUNNING' or run['current_step'] != 'PREPARING' or message['guide_run_id'] != run['id'] or message['requirement_id'] != run['requirement_id'] or message['role'] != 'USER' or message['message_type'] != 'TEXT' or message['content'] != request.payload['instruction']:
-            raise ValueError('Accepted response contradicts the submitted instruction/run')
-        return {'guide_run': run, 'user_message': message}, None
+        from backend.app.shared.validation import strict_enum, strict_integer
+        fields = ('processing', 'guide_run_id', 'user_message_id')
+        value = object_fields(data, 'data', fields, fields)
+        strict_enum(value['processing'], 'processing', ('MODEL',))
+        strict_integer(value['guide_run_id'], 'guide_run_id');strict_integer(value['user_message_id'], 'user_message_id')
+        return value, None
 
 
 class ContinueGuideRunRequest(CommandRequest):
-    body_fields = ('instruction',)
+    body_fields = ('instruction', 'expected_discussion_version')
     mandatory = body_fields
     uses_requirement_path = False
 
@@ -157,21 +162,21 @@ class ContinueGuideRunRequest(CommandRequest):
         return cls(validated.business_input() | {'idempotency_key': validated.idempotency_key})
 
 
-class ContinueGuideRunResponse:
+class ContinueGuideRunResponse(CreateGuideRunResponse):
     success_code = 'GUIDE_CONTINUED'
     status = 202
     errors = CreateGuideRunResponse.errors - {'CONTENT_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID'}
 
     @staticmethod
     def project(data, request):
-        value = guide_run_accepted(data)
-        if value['id'] != request.payload['guide_run_id'] or value['status'] != 'RUNNING' or value['current_step'] != 'PREPARING':
-            raise ValueError('Continuation must reference the accepted original run')
+        value, _ = CreateGuideRunResponse.project(data, request)
+        if value['guide_run_id'] == request.payload['guide_run_id']:
+            raise ValueError('Continuation must accept a new linked run')
         return value, None
 
 
 class ModifyFromCommentRequest(CommandRequest):
-    body_fields = ('expected_content_version',)
+    body_fields = ('expected_content_version', 'expected_discussion_version')
     mandatory = body_fields
     uses_requirement_path = False
 
@@ -186,14 +191,11 @@ class ModifyFromCommentRequest(CommandRequest):
 class ModifyFromCommentResponse:
     success_code = 'GUIDE_ACCEPTED'
     status = 202
-    errors = CreateGuideRunResponse.errors - {'SOURCE_INVALID', 'SCOPE_INVALID'} | {'COMMENT_ORPHANED'}
+    errors = CreateGuideRunResponse.errors | {'COMMENT_ORPHANED'}
 
     @staticmethod
     def project(data, request):
-        value = guide_run_read_model(data)
-        if value['status'] != 'RUNNING' or value['current_step'] != 'PREPARING' or value['action_type'] != 'MODIFY' or value['function_type'] != 'MODIFY_FROM_COMMENT' or value['source_type'] != 'COMMENT' or value['source_id'] != request.payload['comment_id'] or value['scope']['scope_type'] not in ('BLOCK', 'SELECTION'):
-            raise ValueError('Accepted comment run must preserve its source and derived authority')
-        return value, None
+        return CreateGuideRunResponse.project(data, request)
 
 
 @dataclass(frozen=True)
@@ -210,11 +212,11 @@ class RetryGuideRunRequest:
 class RetryGuideRunResponse:
     success_code = 'GUIDE_RETRY_ACCEPTED'
     status = 202
-    errors = CreateGuideRunResponse.errors - {'CONTENT_VERSION_CONFLICT'}
+    errors = CreateGuideRunResponse.errors
 
     @staticmethod
     def project(data, request):
-        value = guide_run_read_model(data)
-        if value['id'] == request.payload['guide_run_id'] or value['retry_of_guide_run_id'] != request.payload['guide_run_id'] or value['status'] != 'RUNNING' or value['current_step'] != 'PREPARING':
+        value, _ = CreateGuideRunResponse.project(data, request)
+        if value['guide_run_id'] == request.payload['guide_run_id']:
             raise ValueError('Retry response must reference a new accepted run and actual predecessor')
         return value, None

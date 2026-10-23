@@ -39,6 +39,14 @@ export interface DocumentReadModel {
   readonly updated_at: string;
 }
 
+/** The editor uses this body/version projection of an already decoded public
+ * DocumentView or ManualDraft. Metadata is owned by the page, not the ledger. */
+export function editorReadModel(value:DocumentReadModel):DocumentReadModel{
+  return Object.freeze({id:value.id,requirement_id:value.requirement_id,document_type:value.document_type,
+    markdown_content:value.markdown_content,block_state_json:value.block_state_json,content_version:value.content_version,
+    created_at:value.created_at,updated_at:value.updated_at});
+}
+
 function invalid(message: string): never { throw new EditorSourceInvalid(message); }
 function object(value: unknown, fields: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||

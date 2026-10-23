@@ -204,7 +204,20 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .detail-refresh-notice { display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;max-width:420px;padding:6px 10px;border:1px solid var(--border-light);border-radius:8px;background:var(--surface-base);box-shadow:var(--shadow-overlay);color:var(--muted);font-size:12px;line-height:20px; }
 .detail-refresh-notice .ui-button { min-height:28px;padding:2px 8px;font-size:12px; }
 .document-view-status { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.detail-columns { display: grid; width: 100%; min-height: calc(100dvh - 132px); align-items: stretch; }
+.detail-columns { position:relative; display: grid; width: 100%; min-height: calc(100dvh - 132px); align-items: stretch; }
+.detail-view-controls { display:flex;align-items:center;gap:8px;flex:none;padding:4px 0; }
+.detail-view-controls:has(>button[hidden]):not(:has(>div)) { display:none; }
+.detail-view-controls > div { display:flex;gap:4px; }
+.discussion-progress { flex:none;max-height:45%;overflow:auto;border-bottom:1px solid var(--border-light);padding:8px; }
+.discussion-position { display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px; }
+.discussion-progress summary { cursor:pointer;padding:6px 0; }
+.discussion-progress h3 { margin:8px 0;font-size:14px; }
+.discussion-progress label { display:grid;gap:4px;margin-block:8px; }
+.discussion-progress fieldset label { display:flex;align-items:center; }
+.discussion-mainline { border-bottom:1px solid var(--border-light);padding-bottom:8px; }
+.detail-view-controls [aria-pressed=true] { background:var(--accent-soft);color:var(--accent); }
+.detail-navigation-backdrop { position:absolute;inset:0;z-index:19;background:rgb(0 0 0 / 12%);border:0; }
+.detail-columns[data-navigation-drawer=true] > .detail-outline { position:absolute;inset:0 auto 0 0;z-index:20;box-shadow:var(--shadow-overlay); }
 .detail-outline { width: 200px; min-width: 0; max-height: calc(100dvh - 132px); overflow: auto; background: var(--surface); padding: 12px;border-radius:12px; }
 .detail-left-divider { margin-left: 3px; }
 .detail-document-region { min-width: 0; overflow: clip; background:var(--surface-base); }
@@ -366,7 +379,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .detail-product .requirement-owned-document{height:100%;overflow:auto;position:relative;padding:0}
 .detail-product .detail-panel-content{flex:1;min-height:0}
 .detail-product #detail-panel-AI{overflow:hidden}
-.detail-product #detail-panel-AI { padding:0; }
+.detail-product #detail-panel-AI { padding:0;display:flex;flex-direction:column; }
+.detail-product #detail-panel-AI > .guide-conversation { flex:1;height:auto; }
 .guide-conversation{height:100%;min-height:0;display:flex;flex-direction:column}
 .conversation-view-switch{display:flex;gap:8px;padding:8px 12px;flex:none}
 .conversation-suggestions,.conversation-workspace,.conversation-discussion{flex:1;min-height:0}
@@ -733,3 +747,17 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
   .single-select-trigger:disabled,.single-select-option[aria-disabled=true] { color:GrayText; }
   .single-select-option[aria-selected=true]:not([aria-disabled=true]) { outline:1px solid Highlight; }
 }
+
+/* V1.5 document directory shares the existing detail navigation region. */
+.document-directory { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.document-directory ul { list-style: none; margin: 0; padding: 0; }
+.document-directory-tabs { display: flex; gap: 6px; }
+.document-directory-item { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; margin-block: 3px; }
+.document-directory-item > span { width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.document-directory-item > small { color: var(--muted); font-size: 12px; white-space: normal; }
+.document-directory-item[aria-current="page"] { background: var(--accent-soft); }
+.document-metadata-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.document-metadata-bar > strong { overflow-wrap: anywhere; }
+.document-metadata-bar > span { color: var(--muted); }
+.document-metadata-bar > form { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.document-empty-workspace { min-height: 240px; display: grid; place-content: center; justify-items: center; gap: 12px; }

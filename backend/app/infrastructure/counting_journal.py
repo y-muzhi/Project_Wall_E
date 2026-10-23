@@ -79,6 +79,18 @@ class CountingJournal:
         self._create(record['id'],'prepared',record,profile)
         return record['id']
 
+    def prepare_collaboration(self, run_id, context, profile, at, resources):
+        _time(at);strict_integer(run_id, 'guide_run_id')
+        resources.validate('ContextBasis', context.basis)
+        record = {'schema_version': 1, 'id': uuid4().hex, 'phase': 'PREPARED', 'at': at,
+            'guide_run_id': run_id, 'trigger_message_id': context.canonical['current_message']['message_id'],
+            'owner_epoch': self.process_lock.owner_epoch, 'endpoint': ENDPOINT,
+            'protocol': {'function_type': 'collaboration_v1', 'release': resources.reference('collaboration.release'),
+                'manifest_sha256': resources.manifest_sha256}, 'request': {'model': profile.model_name, 'text': list(context.texts)},
+            'read_manifest': strict_json_object(context.manifest_json)}
+        self._create(record['id'], 'prepared', record, profile)
+        return record['id']
+
     def finish(self, identity, profile, at, *, status, measurement=None):
         _time(at)
         if status not in ('SUCCEEDED','FAILED','INTERRUPTED') or (status=='SUCCEEDED')!=(measurement is not None):raise ValueError('Count outcome must be explicit')

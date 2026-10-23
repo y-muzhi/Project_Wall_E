@@ -3,17 +3,17 @@ import assert from 'node:assert/strict';
 import {ManualDraftStart} from '../src/documents/manual-start.ts';
 import {ApiRejected,ApiUnknown} from '../src/api/client.ts';
 const at='2026-10-05T14:00:00.000Z',pair={markdown_content:'',block_state_json:{schema_version:1,next_block_id:1,blocks:[]}};
-const root={id:1,status:'ACTIVE',document_work_state:'IDLE',active_operation_type:null,active_operation_id:null};
+const root={id:1,status:'READY',document_work_state:'IDLE',active_operation_type:null,active_operation_id:null};
 const current={id:2,requirement_id:1,document_type:'CURRENT',content_version:7,created_at:at,updated_at:at,...pair};
-const draft={...current,id:3,document_type:'MANUAL_DRAFT',content_version:1};
+const draft={...current,id:3,document_type:'MANUAL_DRAFT',content_version:1,target_document_id:2,base_content_version:7};
 const receipt={requirement:{...root,document_work_state:'MANUAL_EDITING',active_operation_type:'MANUAL_DRAFT',active_operation_id:3},manual_draft:draft};
 const deferred=()=>{let resolve;const promise=new Promise(yes=>{resolve=yes;});return {promise,resolve};};
 const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
 function fixture(){const f={prepare:0,submit:0,reads:0,fail:null,receipt};const action={submit:async()=>{f.submit++;if(f.fail){const e=f.fail;f.fail=null;throw e;}return {data:f.receipt};}};
- const api={prepareStartManualDraft:(id,version)=>{f.prepare++;assert.equal(id,1);assert.equal(version,7);return action;},getRequirement:async()=>{f.reads++;return {data:receipt.requirement};},getCurrentDocument:async()=>{f.reads++;return {data:current};},getManualDraft:async()=>{f.reads++;return {data:draft};}};return {f,api,action};}
+ const api={prepareStartManualDraft:(id,documentId,version)=>{f.prepare++;assert.equal(id,1);assert.equal(documentId,2);assert.equal(version,7);return action;},getRequirement:async()=>{f.reads++;return {data:receipt.requirement};},getCurrentDocument:async()=>{f.reads++;return {data:current};},getManualDraft:async()=>{f.reads++;return {data:draft};}};return {f,api,action};}
 
 test('requires actual idle writable CURRENT; captures source and coalesces double start until the exact independent creation receipt',async()=>{
- for(const changed of [{status:'COMPLETED'},{document_work_state:'MANUAL_EDITING'},{active_operation_id:3}])assert.throws(()=>new ManualDraftStart({...root,...changed},current,{}));
+ for(const changed of [{document_work_state:'MANUAL_EDITING'},{active_operation_id:3}])assert.throws(()=>new ManualDraftStart({...root,...changed},current,{}));
  assert.throws(()=>new ManualDraftStart(root,{...current,document_type:'MANUAL_DRAFT'},{}));
  const p=fixture(),held=deferred();p.action.submit=()=>held.promise;const mutable=structuredClone(current),flow=new ManualDraftStart(root,mutable,p.api);mutable.content_version=88;
  const first=flow.start();assert.equal(flow.start(),first);await flush();assert.equal(flow.getSnapshot().phase,'SUBMITTING');assert.equal(flow.getSnapshot().receipt,null);
@@ -39,6 +39,17 @@ test('wrong creation content or root identity remains unknown; disposed lifetime
 });
 
 test('valid native lifecycle advancement before start is accepted at the same CURRENT version, not compared to stale loaded status',async()=>{
- const p=fixture(),flow=new ManualDraftStart({...root,status:'INITIALIZING'},current,p.api);
- assert(await flow.start());assert.equal(flow.getSnapshot().receipt.requirement.status,'ACTIVE');assert.equal(flow.getSnapshot().receipt.manual_draft.content_version,1);flow.dispose();
+ const p=fixture(),flow=new ManualDraftStart({...root,status:'PLANNING'},current,p.api);
+ assert(await flow.start());assert.equal(flow.getSnapshot().receipt.requirement.status,'READY');assert.equal(flow.getSnapshot().receipt.manual_draft.content_version,1);flow.dispose();
+});
+
+test('history restoration freezes the actual target, current baseline and immutable revision without rewinding high water',async()=>{
+ const revision={id:8,requirement_id:1,document_id:2,markdown_content:'old body',block_state_json:{schema_version:1,next_block_id:4,blocks:[]}};
+ const calls=[],restored={...draft,markdown_content:'old body',block_state_json:{...draft.block_state_json,next_block_id:10}};
+ const api={prepareStartManualDraft(...args){calls.push(args);return {async submit(){return {data:{...receipt,manual_draft:restored}};}};}};
+ const flow=new ManualDraftStart({...root,status:'CLOSED'},{...current,block_state_json:{...current.block_state_json,next_block_id:10}},api,revision);
+ revision.id=99;assert.equal(await flow.start(),true);assert.deepEqual(calls,[[1,2,7,8]]);flow.dispose();
+ assert.throws(()=>new ManualDraftStart(root,current,api,{...revision,document_id:4}));
+ const bad=new ManualDraftStart(root,{...current,block_state_json:{...current.block_state_json,next_block_id:20}},api,{...revision,id:8});
+ assert.equal(await bad.start(),false);assert.equal(bad.getSnapshot().phase,'UNKNOWN');bad.dispose();
 });

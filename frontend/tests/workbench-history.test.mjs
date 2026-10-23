@@ -7,7 +7,7 @@ function browser() {let count=0;const values=new Map();return {history:{state:nu
 test('each navigation entry owns frozen committed query/page/scroll; explicit main entry resets, return restores original position',()=>{
   const port=browser(),owner=new WorkbenchHistory(port.history,port.storage,port.identify);const initial=owner.enter('DEFAULT');
   assert.equal(port.history.scrollRestoration,'manual');
-  const draft={...defaultWorkbenchQuery,keyword:'\u0085已提交\u0085',status:['ACTIVE'],page:3};const saved=owner.save(initial,draft,444.5);draft.keyword='未提交外部变化';
+  const draft={...defaultWorkbenchQuery,keyword:'\u0085已提交\u0085',status:['IMPLEMENTING'],page:3};const saved=owner.save(initial,draft,444.5);draft.keyword='未提交外部变化';
   assert.equal(saved.query.keyword,'已提交');assert.equal(saved.scroll,444.5);assert(Object.isFrozen(saved.query.status));assert.equal(owner.enter('RESTORE').entry_id,initial.entry_id);
   const other=owner.enter('DEFAULT');assert.notEqual(other.entry_id,saved.entry_id);assert.deepEqual(other.query,defaultWorkbenchQuery);assert.equal(other.scroll,0);
   port.history.state=saved;const afterReload=new WorkbenchHistory(port.history,port.storage,port.identify).enter('RESTORE');assert.deepEqual(afterReload,saved);
@@ -15,14 +15,14 @@ test('each navigation entry owns frozen committed query/page/scroll; explicit ma
 test('session supplement uses only actual history entry ID, never most recent other query',()=>{
   const port=browser(),owner=new WorkbenchHistory(port.history,port.storage,port.identify),first=owner.enter('DEFAULT');const saved=owner.save(first,{...defaultWorkbenchQuery,keyword:'原条目'},200);
   owner.save(owner.enter('DEFAULT'),{...defaultWorkbenchQuery,keyword:'另一个条目'},500);
-  port.history.state={schema_version:1,kind:'WALLE_WORKBENCH',entry_id:first.entry_id};
+  port.history.state={schema_version:2,kind:'WALLE_WORKBENCH',entry_id:first.entry_id};
   const fresh=new WorkbenchHistory(port.history,port.storage,port.identify);assert.deepEqual(fresh.enter('RESTORE'),saved);
-  port.history.state={schema_version:1,kind:'WALLE_WORKBENCH',entry_id:'00000000-0000-4000-8000-999999999999'};assert.equal(fresh.enter('RESTORE').query.keyword,'');
+  port.history.state={schema_version:2,kind:'WALLE_WORKBENCH',entry_id:'00000000-0000-4000-8000-999999999999'};assert.equal(fresh.enter('RESTORE').query.keyword,'');
 });
 test('corrupt/noncanonical recovery safely uses defaults; storage/history failures remain visible and do not lose current in-memory snapshot',()=>{
   const port=browser(),owner=new WorkbenchHistory(port.history,port.storage,port.identify),entry=owner.enter('DEFAULT');
-  for(const altered of [{scroll:-1},{scroll:Infinity},{extra:true},{query:{...entry.query,keyword:' 带空白 '}},{query:{...entry.query,status:['ACTIVE','INITIALIZING','COMPLETED']}}])assert.throws(()=>decodeWorkbenchEntry({...entry,...altered}));
-  port.values.set('walle:v1:workbench:'+entry.entry_id,'broken');port.history.state={schema_version:1,kind:'WALLE_WORKBENCH',entry_id:entry.entry_id};
+  for(const altered of [{scroll:-1},{scroll:Infinity},{extra:true},{query:{...entry.query,keyword:' 带空白 '}},{query:{...entry.query,status:['IMPLEMENTING','INITIALIZING','COMPLETED']}}])assert.throws(()=>decodeWorkbenchEntry({...entry,...altered}));
+  port.values.set('walle:v1.5:workbench:'+entry.entry_id,'broken');port.history.state={schema_version:2,kind:'WALLE_WORKBENCH',entry_id:entry.entry_id};
   const fresh=new WorkbenchHistory(port.history,port.storage,port.identify);assert.equal(fresh.enter('RESTORE').query.keyword,'');assert.match(fresh.storageWarning,/暂存不可用/);
   const denied={getItem(){throw new Error('denied');},setItem(){throw new Error('denied');}},fail=new WorkbenchHistory(port.history,denied,port.identify);
   const fallback=fail.enter('DEFAULT');assert.match(fail.storageWarning,/暂存不可用/);assert.deepEqual(fail.enter('RESTORE'),fallback);

@@ -4,7 +4,8 @@ import type {WalleApi} from '../api/walle.ts';
 import {RequirementDetailOwner} from './detail-owner.ts';
 import {DetailFrame} from './detail-frame.tsx';
 import {RequirementHeader} from './header.tsx';
-import {OwnedDocumentControls,OwnedDocumentOutline} from './document-controls.tsx';
+import {OwnedDocumentControls} from './document-controls.tsx';
+import {DocumentDirectory,DocumentMetadataBar,NewDocumentButton} from './document-directory-view.tsx';
 import {CommentPanel,CommentDocumentTools} from '../comments/panel.tsx';
 import {RevisionList,RevisionSaveControl} from '../revisions/components.tsx';
 import {GuideConversation} from '../guide/conversation.tsx';
@@ -12,12 +13,13 @@ import {Confirmation} from '../shared/confirmation.tsx';
 import {ToastViewport} from '../shared/toast.tsx';
 import {localTime} from '../shared/time.ts';
 import {DocumentRecords} from './document-records.tsx';
+import {DiscussionProgress} from './discussion-view.tsx';
 
 function DocumentMount({host}:Readonly<{host:HTMLElement}>){const container=useRef<HTMLDivElement>(null);useLayoutEffect(()=>{container.current!.append(host);return()=>host.remove();},[host]);return <div className="detail-document-host" ref={container}/>;}
 function SaveStatus({owner}:Readonly<{owner:RequirementDetailOwner}>){
  const state=useSyncExternalStore(owner.documents.subscribe,owner.documents.getSnapshot);
- const version=state.detail?.current.content_version,identity=state.mode==='HISTORY'?(state.revision?`历史版本 V${state.revision.version_no} · 来源正文 v${state.revision.source_content_version} · 只读`:'历史版本 · 只读'):state.mode==='MANUAL'?`人工草稿 · 基于正式正文 v${version}`:`正式正文 v${version} · 只读`;
- const activity=state.detail?.activity,task=state.mode==='CURRENT'?(activity?.kind==='GUIDE'?(activity.run.status==='WAITING_USER'?'等待补充信息':'AI 运行中'):activity?.kind==='BATCH'?'建议待处理 · 尚未应用':null):null;
+ const version=state.detail?.current?.content_version,identity=state.mode==='EMPTY'?'尚无文档':state.mode==='HISTORY'?(state.revision?`历史版本 V${state.revision.version_no} · 来源正文 v${state.revision.source_content_version} · 只读`:'历史版本 · 只读'):state.mode==='MANUAL'?`人工草稿 · 基于正式正文 v${version}`:`正式正文 v${version} · 只读`;
+ const activity=state.detail?.activity,task=state.mode==='CURRENT'?(activity?.kind==='GUIDE'?('AI 运行中'):activity?.kind==='BATCH'?'建议待处理 · 尚未应用':null):null;
  return <div className="document-view-status"><span>{identity}</span>{task&&<span className="task-state">{task}</span>}{state.manual&&<ManualSaveStatus session={state.manual} retained={state.mode==='HISTORY'}/>}</div>;
 }
 function ManualSaveStatus({session,retained}:Readonly<{session:NonNullable<ReturnType<RequirementDetailOwner['documents']['getSnapshot']>['manual']>;retained:boolean}>){
@@ -29,16 +31,16 @@ function LoadedDetail({owner,host,back}:Readonly<{owner:RequirementDetailOwner;h
  const [documentActionHost,setDocumentActionHost]=useState<HTMLDivElement|null>(null);
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),document=useSyncExternalStore(owner.documents.subscribe,owner.documents.getSnapshot),departure=useSyncExternalStore(owner.departure.subscribe,owner.departure.getSnapshot),regions=owner.regions!;
  const geometry=useSyncExternalStore(regions.layout.subscribe,regions.layout.getSnapshot),viewport=useSyncExternalStore(regions.viewport.subscribe,regions.viewport.getSnapshot),historical=owner.documents.historical;
- const supported=geometry.mode!=='BLOCKED'&&viewport.phase==='SUPPORTED',blocked=!supported||departure.phase!=='IDLE',actual=state.detail!,activity=actual.activity.kind==='GUIDE'?(actual.activity.run.status==='WAITING_USER'?'等待回复':'AI 运行中'):actual.activity.kind==='BATCH'?'待处理建议':null;
+ const supported=geometry.mode!=='BLOCKED'&&viewport.phase==='SUPPORTED',blocked=!supported||departure.phase!=='IDLE',actual=state.detail!,activity=actual.activity.kind==='GUIDE'?('AI 运行中'):actual.activity.kind==='BATCH'?'待处理建议':null;
  useEffect(()=>{const protect=(event:BeforeUnloadEvent)=>{const session=owner.documents.getSnapshot().manual;if(session&&(session.autosave.state.status!=='SAVED'||!['EDITING','CLOSED'].includes(session.ending.getSnapshot().phase))){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',protect);return()=>window.removeEventListener('beforeunload',protect);},[owner]);
  return <div className="detail-product">
   <DetailFrame layout={regions.layout} viewport={regions.viewport} title={actual.requirement.title} status={<div className="requirement-metadata"><span>{actual.requirement.requirement_no}</span><span>{actual.requirement.requirement_type==='NEW'?'需求新增':'需求改造'}</span><span className="requirement-state-badge" data-state={actual.requirement.status}>{REQUIREMENT_STATUS_LABELS[actual.requirement.status]}</span></div>}
    actions={null} properties={<RequirementHeader documentActions={<div className="requirement-document-actions" ref={setDocumentActionHost}/>} commands={regions.header} ready={state.ready} blocked={blocked||document.busy} history={historical} refresh={owner.refresh} refreshRevisions={async()=>{if(!await owner.documents.revisions.refresh())throw Error('实际版本列表暂时无法读取');}} notifyConfirmed={owner.notifyConfirmed}
-    tools={<><dl className="requirement-property-summary"><dt>初始化模式</dt><dd>{actual.requirement.initialization_mode==='IDEATION'?'灵感模式':'设计模式'} · 创建后只读</dd></dl><button className="ui-button" type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button></>}/>}
-   outline={<OwnedDocumentOutline owner={owner.documents} heading={false}/>}
-   document={<><OwnedDocumentControls actionHost={documentActionHost} showSaveStatus={false} owner={owner.documents} blocked={blocked} auxiliary={document.mode!=='CURRENT'||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
-    {state.error&&<p className="inline-error" role="alert">{state.error}</p>}<DocumentMount host={host}/></>}
-   ai={<GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
+    tools={<><button className="ui-button" type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button></>}/>}
+   outline={<DocumentDirectory owner={owner}/>}
+   document={<><DocumentMetadataBar owner={owner}/><OwnedDocumentControls actionHost={documentActionHost} showSaveStatus={false} owner={owner.documents} blocked={blocked} auxiliary={document.mode!=='CURRENT'||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
+    {state.error&&<p className="inline-error" role="alert">{state.error}</p>}{document.mode==='EMPTY'&&<section className="document-empty-workspace"><h2>{actual.documents.length?'尚未选择文档':'尚无文档'}</h2><NewDocumentButton owner={owner}/></section>}<DocumentMount host={host}/></>}
+   ai={<><DiscussionProgress owner={owner} blocked={blocked||document.busy||historical}/><GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/></>}
    comments={<CommentPanel panel={regions.comments} documents={owner.documents}/>}
    revisions={<DocumentRecords modelCallApi={regions.conversation.modelCallApi} requirementId={actual.requirement.id} active={supported&&geometry.right_open&&geometry.right_tab==='REVISIONS'} blocked={blocked||document.busy} revisions={owner.documents.revisions} history={regions.conversation.read.history} readRun={owner.readRunRecord}
     versions={<>{state.revisionSave&&<RevisionSaveControl flow={state.revisionSave} ready={state.ready&&state.revisionSave.allowed} blocked={blocked||historical} refreshActual={owner.refresh} saved={receipt=>owner.savedRevision(receipt)}/>}

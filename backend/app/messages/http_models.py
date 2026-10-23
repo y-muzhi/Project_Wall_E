@@ -35,7 +35,7 @@ class ListMessagesResponse:
 
 
 class SubmitCardResponsesRequest:
-    body_fields = ('schema_version', 'responses')
+    body_fields = ('schema_version', 'responses', 'expected_discussion_version', 'execution_selection')
 
     def __init__(self, payload):
         self.payload = payload
@@ -49,15 +49,21 @@ class SubmitCardResponsesRequest:
 
 
 class SubmitCardResponsesResponse:
-    success_code = 'CARDS_ACCEPTED'
-    status = 202
-    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'SOURCE_INVALID', 'CARD_ALREADY_ANSWERED', 'CARD_EXPIRED', 'WORK_STATE_INCONSISTENT', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+    success_codes = ('CARDS_ACCEPTED', 'PROGRAM_PROCESSED')
+    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'SOURCE_VERSION_CONFLICT', 'CARD_ALREADY_ANSWERED', 'CARD_EXPIRED',
+        'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'DISCUSSION_VERSION_CONFLICT', 'CONTENT_VERSION_CONFLICT', 'TARGET_STALE', 'CONFIG_INVALID',
+        'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+
+    @staticmethod
+    def status_for(data):
+        return 202 if data['processing'] == 'MODEL' else 200
 
     @staticmethod
     def project(data, request):
-        fields = ('response_message', 'guide_run', 'card_state')
-        value = object_fields(data, 'data', fields, fields)
-        message, run = message_read_model(value['response_message']), guide_run_accepted(value['guide_run'])
-        if value['card_state'] != 'ANSWERED' or (run['status'], run['current_step']) not in (('RUNNING', 'PREPARING'), ('COMPLETED', 'FINISHED')) or message['reply_to_message_id'] != request.payload['message_id'] or message['message_type'] != 'CARD_RESPONSE' or message['guide_run_id'] != run['id'] or message['requirement_id'] != run['requirement_id'] or message['structured_content'] != {'schema_version': request.payload['schema_version'], 'responses': request.payload['responses']}:
-            raise ValueError('Formal answer result contradicts its accepted request')
-        return {'response_message': message, 'guide_run': run, 'card_state': 'ANSWERED'}, None
+        if data.get('processing') == 'MODEL':
+            from backend.app.guide.http_models import CreateGuideRunResponse
+            value, _ = CreateGuideRunResponse.project(data, request)
+        else:
+            from .contracts import program_receipt
+            value = program_receipt(data)
+        return value, None

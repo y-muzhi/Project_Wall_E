@@ -108,7 +108,7 @@ def main():
     profile = ModelProfile(key, DEFAULT_PROFILE)
     if profile.snapshot != plan['profile']:
         raise ConfigInvalid('Plan profile differs')
-    note = ROOT / 'docs/verification' / ('deepseek-observation-' + plan_hash + '.md')
+    note = ROOT / 'docs/verification/v1.0' / ('deepseek-observation-' + plan_hash + '.md')
     # A durable exclusive Markdown claim prevents repeating this one-round
     # license, including after failure, interruption or a process restart.
     with note.open('x', encoding='utf-8', newline='\n') as handle:

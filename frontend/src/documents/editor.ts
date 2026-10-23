@@ -1,3 +1,4 @@
+import {editorReadModel} from './contracts.ts';
 import { Crepe } from '@milkdown/crepe';
 import { editorViewCtx } from '@milkdown/kit/core';
 import type { Ctx } from '@milkdown/kit/ctx';
@@ -13,7 +14,7 @@ import type { SelectionEvent } from './selection.ts';
 import { snapshotObject } from '../api/client.ts';
 import type {LocalDraftSnapshot} from './recovery-store.ts';
 import { TemplateHeadingLock, templateLockMessage } from './template-lock.ts';
-import type { InitializationTemplate } from './template-lock.ts';
+import type { DocumentStructureBinding } from './template-lock.ts';
 import {installFormatToolbar} from './format-toolbar.ts';
 
 export type EditorEvents = Readonly<{
@@ -60,8 +61,8 @@ export class RequirementEditor {
     root.ownerDocument.addEventListener('focusout',focusout);this.removeListeners.push(()=>root.ownerDocument.removeEventListener('focusout',focusout));
     if(this.session)this.formatToolbar=installFormatToolbar(root,this,message=>this.notify(()=>this.events.error?.(message)));
   }
-  static async create(root: HTMLElement, input: DocumentReadModel, readonly = true, events: EditorEvents = {}, initializing: InitializationTemplate | null = null): Promise<RequirementEditor> {
-    input = snapshotObject(input) as unknown as DocumentReadModel;
+  static async create(root: HTMLElement, input: DocumentReadModel, readonly = true, events: EditorEvents = {}, structure: DocumentStructureBinding | null = null): Promise<RequirementEditor> {
+    input = editorReadModel(snapshotObject(input) as unknown as DocumentReadModel);
     if (!readonly && input.document_type !== 'MANUAL_DRAFT') throw new TypeError('Only actual manual draft may be edited');
     const crepe = new Crepe({ root, defaultValue: input.markdown_content, features: {
       [Crepe.Feature.CodeMirror]: false, [Crepe.Feature.ListItem]: false, [Crepe.Feature.LinkTooltip]: false, [Crepe.Feature.Cursor]: false,
@@ -73,7 +74,7 @@ export class RequirementEditor {
       installIdentityState(crepe, input.block_state_json.blocks.map(block => block.block_id), input.block_state_json.next_block_id);
       await crepe.create();
       const document = crepe.editor.action(ctx => validateDocumentReadModel(ctx, input).document);
-      const lock = initializing === null ? null : crepe.editor.action(ctx => new TemplateHeadingLock(ctx, initializing));
+      const lock = structure === null ? null : crepe.editor.action(ctx => new TemplateHeadingLock(ctx, structure));
       return new RequirementEditor(crepe, root, document, readonly, events, lock);
     } catch (error) { await crepe.destroy(); root.replaceChildren(); throw error; }
   }

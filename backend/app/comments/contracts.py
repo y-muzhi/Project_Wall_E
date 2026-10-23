@@ -10,26 +10,28 @@ from backend.app.documents.snapshot import _time
 from backend.app.infrastructure.idempotency import request_key
 from backend.app.shared.validation import selected_text, prefix_text, suffix_text, reject
 
-COMMENT_FIELDS = ('id', 'requirement_id', 'content', 'anchor_type', 'block_id', 'anchor_ref', 'anchor_status', 'status', 'resolved_at', 'deleted_at', 'created_at', 'updated_at')
+COMMENT_FIELDS = ('id', 'requirement_id', 'document_id', 'content', 'anchor_type', 'block_id', 'anchor_ref', 'anchor_status', 'status', 'resolved_at', 'deleted_at', 'created_at', 'updated_at')
 
 
 def get_comment_input(value: object = MISSING) -> int:
     return strict_integer(value, 'comment_id')
 
 
-def get_comment_index_input(value: object = MISSING) -> int:
-    return strict_integer(value, 'requirement_id')
+def get_comment_index_input(value: object = MISSING):
+    data = object_fields(value, 'query', ('requirement_id', 'document_id'), ('requirement_id', 'document_id'))
+    return {field: strict_integer(data[field], field) for field in data}
 
 
 @dataclass(frozen=True)
 class ListCommentsInput:
     requirement_id: int
+    document_id: int
     page: int
 
 
 def list_comments_input(payload: object) -> ListCommentsInput:
-    data = object_fields(payload, 'query', ('requirement_id', 'page'), ('requirement_id',))
-    return ListCommentsInput(strict_integer(data['requirement_id'], 'requirement_id'), page_number(data.get('page', 1)))
+    data = object_fields(payload, 'query', ('requirement_id', 'document_id', 'page'), ('requirement_id', 'document_id'))
+    return ListCommentsInput(strict_integer(data['requirement_id'], 'requirement_id'), strict_integer(data['document_id'], 'document_id'), page_number(data.get('page', 1)))
 
 
 def _detached(value):
@@ -38,7 +40,7 @@ def _detached(value):
 
 def comment_read_model(data: object) -> dict:
     value = object_fields(data, 'comment', COMMENT_FIELDS, COMMENT_FIELDS)
-    strict_integer(value['id'], 'id'); strict_integer(value['requirement_id'], 'requirement_id')
+    strict_integer(value['id'], 'id'); strict_integer(value['requirement_id'], 'requirement_id'); strict_integer(value['document_id'], 'document_id')
     if comment_content(value['content']) != value['content']:
         raise ValueError('Stored comment text must already be normalized')
     validate_anchor(value['anchor_type'], value['block_id'], value['anchor_ref'])
@@ -102,7 +104,7 @@ def list_comments_result(items: list[dict], request: ListCommentsInput, total: i
     if type(items) is not list or len(items) > 20:
         raise ValueError('Comment list must contain at most one fixed page')
     values = [comment_list_item(item) for item in items]
-    if any(item['requirement_id'] != request.requirement_id for item in values):
+    if any(item['requirement_id'] != request.requirement_id or item['document_id'] != request.document_id for item in values):
         raise ValueError('Comment list contains another requirement')
     return {'items': values, **page_metadata(request.page, total)}
 
@@ -141,7 +143,7 @@ def get_comment_index_result(requirement_id: int, document, snapshot, items: lis
     by_block = {}
     comments = []
     for item in items:
-        if item['requirement_id'] != requirement_id or item['deleted_at'] is not None:
+        if item['requirement_id'] != requirement_id or item['document_id'] != document['id'] or item['deleted_at'] is not None:
             raise ValueError('Index only contains the requirement complete live collection')
         comments.append({field: item[field] for field in ('id', 'status', 'anchor_status', 'location')})
         if item['status'] == 'OPEN' and item['location']['status'] == 'ATTACHED':
@@ -154,6 +156,7 @@ def get_comment_index_result(requirement_id: int, document, snapshot, items: lis
 @dataclass(frozen=True)
 class CreateCommentInput:
     requirement_id: int
+    document_id: int
     expected_content_version: int
     content: str
     anchor_type: str
@@ -162,7 +165,7 @@ class CreateCommentInput:
     idempotency_key: str
 
     def business_input(self) -> dict:
-        return {field: getattr(self, field) for field in ('requirement_id', 'expected_content_version', 'content', 'anchor_type', 'block_id', 'selection')}
+        return {field: getattr(self, field) for field in ('requirement_id', 'document_id', 'expected_content_version', 'content', 'anchor_type', 'block_id', 'selection') if field != 'selection' or self.selection is not None}
 
 
 def _unicode(value: str, field: str):
@@ -173,20 +176,20 @@ def _unicode(value: str, field: str):
 
 
 def create_comment_input(payload: object) -> CreateCommentInput:
-    fields = ('requirement_id', 'expected_content_version', 'content', 'anchor_type', 'block_id', 'selection', 'idempotency_key')
+    fields = ('requirement_id', 'document_id', 'expected_content_version', 'content', 'anchor_type', 'block_id', 'selection', 'idempotency_key')
     data = object_fields(payload, 'body', fields, tuple(field for field in fields if field != 'selection'))
     content = comment_content(data['content']); _unicode(content, 'content')
     kind = strict_enum(data['anchor_type'], 'anchor_type', ('BLOCK', 'SELECTION'))
     selection = data.get('selection')
     if kind == 'BLOCK':
-        if selection is not None: reject('selection', 'INVALID_TYPE', 'BLOCK评论不提交选区')
+        if 'selection' in data: reject('selection', 'INVALID_TYPE', 'BLOCK评论不提交选区')
     else:
         fields = ('selected_text', 'prefix_text', 'suffix_text')
         object_fields(selection, 'selection', fields, fields)
         selected_text(selection['selected_text']); prefix_text(selection['prefix_text']); suffix_text(selection['suffix_text'])
         for field in fields: _unicode(selection[field], 'selection.'+field)
         selection = _detached(selection)
-    return CreateCommentInput(strict_integer(data['requirement_id'], 'requirement_id'), strict_integer(data['expected_content_version'], 'expected_content_version'),
+    return CreateCommentInput(strict_integer(data['requirement_id'], 'requirement_id'), strict_integer(data['document_id'], 'document_id'), strict_integer(data['expected_content_version'], 'expected_content_version'),
         content, kind, strict_integer(data['block_id'], 'block_id'), selection, request_key(data['idempotency_key'], 'idempotency_key'))
 
 
@@ -234,9 +237,9 @@ delete_comment_result = edit_comment_result
 
 
 def revalidate_anchors_input(payload: object) -> tuple[int, dict]:
-    data = object_fields(payload, 'body', ('requirement_id', 'new_document'), ('requirement_id', 'new_document'))
+    data = object_fields(payload, 'body', ('requirement_id', 'document_id', 'new_document'), ('requirement_id', 'document_id', 'new_document'))
     document = object_fields(data['new_document'], 'new_document', ('markdown_content', 'block_state_json'), ('markdown_content', 'block_state_json'))
-    return strict_integer(data['requirement_id'], 'requirement_id'), document
+    return strict_integer(data['requirement_id'], 'requirement_id'), strict_integer(data['document_id'], 'document_id'), document
 
 
 def revalidate_anchors_result(requirement_id: int, document_id: int, version: int,

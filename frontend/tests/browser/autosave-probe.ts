@@ -1,3 +1,4 @@
+import {probeDocumentId,probeRecoveryBinding,probeDraftId} from './v15-probe-targets.ts';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { ApiUnknown, ApiRejected } from '../../src/api/client.ts';
 import type { WalleApi } from '../../src/api/walle.ts';
@@ -8,22 +9,22 @@ import { DraftRecoveryStore } from '../../src/documents/recovery-store.ts';
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(accept => { resolve = accept; }); return { promise, resolve }; }
 export async function autosaveProbe(api: WalleApi, requirement: number) {
-  const current = (await api.getCurrentDocument(requirement)).data;
-  const draft = (await api.prepareStartManualDraft(requirement, current.content_version).submit()).data.manual_draft;
+  const current = (await api.getCurrentDocument(requirement,probeDocumentId(requirement))).data;
+  const draft = (await api.prepareStartManualDraft(requirement,probeDocumentId(requirement),current.content_version).submit()).data.manual_draft;
   const root = document.createElement('div'); root.id = 'autosave-editor'; document.body.append(root);
   let binding: ManualDraftAutosave | undefined;
   const editor = await RequirementEditor.create(root, draft, false, { change: () => binding?.changed() });
   const ledger = editor.ledger!;
-  const cache = editor.action(ctx => new DraftRecoveryStore(ctx, { name: 'walle-autosave-probe-' + crypto.randomUUID() }));
+  const cache = editor.action(ctx => new DraftRecoveryStore(ctx,probeRecoveryBinding(),{ name: 'walle-autosave-probe-' + crypto.randomUUID() }));
   const firstCommitted = deferred<void>(), release = deferred<void>();
   const sent: { version: number; markdown: string }[] = []; let active = 0, peak = 0, loseResponse = false;
   const controller = new ManualDraftAutosave(draft, ledger, {
-    read: async () => (await api.getManualDraft(requirement)).data,
+    read: async () => (await api.getManualDraft(requirement,probeDocumentId(requirement))).data,
     save: async ticket => {
       active++; peak = Math.max(active, peak); sent.push({ version: ticket.expected_version, markdown: ticket.markdown_content });
       try {
-        const result = (await api.prepareSaveManualDraft(requirement, { expected_version: ticket.expected_version,
-          markdown_content: ticket.markdown_content, block_state_json: ticket.block_state_json }).submit()).data;
+        const result = (await api.prepareSaveManualDraft(requirement,{document_id:probeDocumentId(requirement),draft_id:probeDraftId(requirement),...({ expected_version: ticket.expected_version,
+          markdown_content: ticket.markdown_content, block_state_json: ticket.block_state_json })}).submit()).data;
         if (sent.length === 1) { firstCommitted.resolve(); await release.promise; }
         if (loseResponse) { loseResponse = false; throw new ApiUnknown(true); } // actual native commit already happened
         return result;
@@ -43,14 +44,14 @@ export async function autosaveProbe(api: WalleApi, requirement: number) {
     edit('中间编辑无需单独保存'); edit('最新真实编辑😀'); release.resolve(); await pending;
     require(peak === 1 && sent.length === 2 && sent[0]!.version === 1 && sent[1]!.version === 2);
     require(controller.state.status === 'SAVED' && controller.state.confirmed_version === 3);
-    let actual = (await api.getManualDraft(requirement)).data;
+    let actual = (await api.getManualDraft(requirement,probeDocumentId(requirement))).data;
     require(actual.markdown_content === controller.localSnapshot.markdown_content && actual.markdown_content.includes('最新真实编辑😀'));
     require(JSON.stringify(actual.block_state_json) === JSON.stringify(controller.localSnapshot.block_state_json));
     loseResponse = true; edit('真实提交后丢失响应'); await controller.flush();
     require(Number(sent.length) === 3 && Number(controller.state.confirmed_version) === 4 && controller.state.status === 'SAVED' && states.includes('UNKNOWN'));
-    actual = (await api.getManualDraft(requirement)).data; require(actual.content_version === 4 && actual.markdown_content === controller.localSnapshot.markdown_content);
+    actual = (await api.getManualDraft(requirement,probeDocumentId(requirement))).data; require(actual.content_version === 4 && actual.markdown_content === controller.localSnapshot.markdown_content);
     require(JSON.stringify(actual.block_state_json) === JSON.stringify(controller.localSnapshot.block_state_json));
-    const unchanged = (await api.getCurrentDocument(requirement)).data;
+    const unchanged = (await api.getCurrentDocument(requirement,probeDocumentId(requirement))).data;
     require(unchanged.content_version === current.content_version && unchanged.markdown_content === current.markdown_content);
     require(await controller.freezeAndFlush());
     await controller.pauseAndWait(); controller.dispose(); binding = undefined;
@@ -59,21 +60,21 @@ export async function autosaveProbe(api: WalleApi, requirement: number) {
     // proof must be retired rather than later accepted as a receipt.
     edit('旧请求尚待确认'); const older = ledger.beginSave(); ledger.suspendSave(older);
     edit('新输入保留等待接续'); const newer = ledger.beginSave();
-    const olderReceipt = (await api.prepareSaveManualDraft(requirement, { expected_version: older.expected_version,
-      markdown_content: older.markdown_content, block_state_json: older.block_state_json }).submit()).data;
-    try { await api.prepareSaveManualDraft(requirement, { expected_version: newer.expected_version,
-      markdown_content: newer.markdown_content, block_state_json: newer.block_state_json }).submit(); throw new Error('Expected native version conflict'); }
+    const olderReceipt = (await api.prepareSaveManualDraft(requirement,{document_id:probeDocumentId(requirement),draft_id:probeDraftId(requirement),...({ expected_version: older.expected_version,
+      markdown_content: older.markdown_content, block_state_json: older.block_state_json })}).submit()).data;
+    try { await api.prepareSaveManualDraft(requirement,{document_id:probeDocumentId(requirement),draft_id:probeDraftId(requirement),...({ expected_version: newer.expected_version,
+      markdown_content: newer.markdown_content, block_state_json: newer.block_state_json })}).submit(); throw new Error('Expected native version conflict'); }
     catch (error) { require(error instanceof ApiRejected && error.code === 'CONTENT_VERSION_CONFLICT'); }
     const preserved = ledger.acknowledgeSave(older, olderReceipt);
     require(preserved.markdown_content === newer.markdown_content && ledger.savedVersion === 5);
     let retired = false; try { ledger.acknowledgeSave(newer, olderReceipt); } catch { retired = true; } require(retired);
     const last = ledger.beginSave();
-    const lastReceipt = (await api.prepareSaveManualDraft(requirement, { expected_version: last.expected_version,
-      markdown_content: last.markdown_content, block_state_json: last.block_state_json }).submit()).data;
+    const lastReceipt = (await api.prepareSaveManualDraft(requirement,{document_id:probeDocumentId(requirement),draft_id:probeDraftId(requirement),...({ expected_version: last.expected_version,
+      markdown_content: last.markdown_content, block_state_json: last.block_state_json })}).submit()).data;
     const final = ledger.acknowledgeSave(last, lastReceipt);
     require(lastReceipt.content_version === 6 && final.markdown_content === newer.markdown_content);
     require(JSON.stringify(final.block_state_json) === JSON.stringify(lastReceipt.block_state_json));
-    await api.prepareCancelManualDraft(requirement, ledger.savedVersion).submit();
+    await api.prepareCancelManualDraft(requirement,probeDocumentId(requirement),probeDraftId(requirement),ledger.savedVersion).submit();
     await cache.clearClosedDraft(requirement, draft.id);
     return { passed: true, writes: sent, peak_inflight: peak, confirmed_draft_version: actual.content_version, states,
       native_cohort: { older_version: olderReceipt.content_version, final_version: lastReceipt.content_version, newer_request: 'CONTENT_VERSION_CONFLICT', retired_proof_refused: retired },

@@ -21,7 +21,7 @@ export class RequirementConversation{
  private value:ConversationState;private readonly listeners=new Set<()=>void>();private readonly releases:(()=>void)[]=[];private readonly batches=new Map<number,{owner:RequirementSuggestionBatch;release:()=>void}>();
  private readonly api:WalleApi;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private closed=false;private reconciling=false;private again=false;private runSignature='';private visibility=0;private batchRead='';
  constructor(detail:DetailSnapshot,api:WalleApi,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,openPanel:()=>void|Promise<void>,drafts=new CardDrafts()){
-  if(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)throw TypeError('Actual owned CURRENT required');this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;
+  if(detail.current!==null&&(detail.current!==null&&(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)))throw TypeError('Actual owned CURRENT required');this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;
   this.value=Object.freeze({detail:snapshotObject(detail) as unknown as DetailSnapshot,visible:false,enabled:true,active:true,lease:null,batch:null,revision:0});
   const adopt=async(actual:DetailSnapshot)=>{if(this.closed)throw Error('Conversation is retired');await this.adoptActual(actual);if(this.closed)throw Error('Conversation is retired');this.adopt(actual);};
   this.read=new RequirementAiRead(detail,api,readActual,adopt,openPanel);
@@ -55,7 +55,7 @@ export class RequirementConversation{
  /** Transient document-adoption busy does not invalidate a command's own
   * confirmed reconciliation. The view may separately disable busy inputs. */
  setView(visible:boolean,enabled=this.value.enabled):void{if(this.closed||visible===this.value.visible&&enabled===this.value.enabled)return;this.visibility++;this.publish({visible,enabled});this.reconcile();}
- adopt(actual:DetailSnapshot):void{if(this.closed)return;if(actual.requirement.id!==this.value.detail.requirement.id||actual.current.document_type!=='CURRENT'||actual.current.requirement_id!==actual.requirement.id)throw TypeError('Actual owned detail required');
+ adopt(actual:DetailSnapshot):void{if(this.closed)return;if(actual.requirement.id!==this.value.detail.requirement.id||actual.current!==null&&(actual.current.document_type!=='CURRENT'||actual.current.requirement_id!==actual.requirement.id))throw TypeError('Actual owned detail required');
   const previous=this.reconciling;this.reconciling=true;try{this.publish({detail:snapshotObject(actual) as unknown as DetailSnapshot});this.composer.adopt(actual);this.read.adopt(actual);for(const entry of this.batches.values())entry.owner.adopt(actual);}finally{this.reconciling=previous;}if(!previous)this.reconcile();else this.again=true;
  }
  receive=(run:Pick<GuideRun,'id'|'requirement_id'>):Promise<void>=>this.read.receive(run);

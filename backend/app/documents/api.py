@@ -14,13 +14,13 @@ doc_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 @doc_router.get('/requirements/{requirement_id}/current-document')
 async def get_current_document_http(request: Request):
     return await read_http(request, GetCurrentDocumentRequest, GetCurrentDocumentResponse,
-        lambda runtime, parsed: queries.get_current_document(runtime.database, parsed.requirement_id, catalog=runtime.catalog))
+        lambda runtime, parsed: queries.get_current_document(runtime.database, parsed.requirement_id, parsed.document_id, catalog=runtime.catalog))
 
 
 @doc_router.get('/requirements/{requirement_id}/manual-draft')
 async def get_manual_draft_http(request: Request):
     return await read_http(request, GetManualDraftRequest, GetManualDraftResponse,
-        lambda runtime, parsed: queries.get_manual_draft(runtime.database, parsed.requirement_id, catalog=runtime.catalog))
+        lambda runtime, parsed: queries.get_manual_draft(runtime.database, parsed.requirement_id, parsed.document_id, catalog=runtime.catalog))
 
 
 @doc_router.post('/requirements/{requirement_id}/manual-draft')
@@ -32,7 +32,7 @@ async def start_manual_draft_http(request: Request):
 @doc_router.put('/requirements/{requirement_id}/manual-draft')
 async def save_manual_draft_http(request: Request):
     return await handle_http(request, SaveManualDraftRequest, SaveManualDraftResponse,
-        lambda runtime, parsed: commands.save_manual_draft(runtime.database, parsed.payload, catalog=runtime.catalog))
+        lambda runtime, parsed: commands.save_manual_draft(runtime.commands(), parsed.payload, catalog=runtime.catalog))
 
 
 @doc_router.delete('/requirements/{requirement_id}/manual-draft')
@@ -45,3 +45,17 @@ async def cancel_manual_draft_http(request: Request):
 async def complete_manual_draft_http(request: Request):
     return await handle_http(request, CompleteManualDraftRequest, CompleteManualDraftResponse,
         lambda runtime, parsed: commands.complete_manual_draft(runtime.commands(), parsed.payload, catalog=runtime.catalog))
+
+
+@doc_router.post('/requirements/{requirement_id}/documents')
+async def create_document_http(request: Request):
+    from .http_models import CreateDocumentRequest, CreateDocumentResponse
+    return await handle_http(request, CreateDocumentRequest, CreateDocumentResponse,
+        lambda runtime, parsed: commands.create_document(runtime.commands(), parsed.payload, catalog=runtime.catalog))
+
+
+@doc_router.patch('/documents/{document_id}')
+async def update_document_metadata_http(request: Request):
+    from .http_models import DocumentMetadataRequest, DocumentMetadataResponse
+    return await handle_http(request, DocumentMetadataRequest, DocumentMetadataResponse,
+        lambda runtime, parsed: commands.update_document_metadata(runtime.commands(), parsed.payload, catalog=runtime.catalog))

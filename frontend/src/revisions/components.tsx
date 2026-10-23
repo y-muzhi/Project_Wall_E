@@ -1,14 +1,14 @@
 import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
 import type {RequirementRevisionSave} from './save.ts';
 import type {RequirementRevisions,Revision} from './read.ts';
-import type {RevisionSummary} from '../api/models.ts';
+import type {RevisionSummary,VersionMarker} from '../api/models.ts';
 import type {DetailSnapshot} from '../requirements/detail-read.ts';
 import {RevisionViewer} from './viewer.ts';
 import {Pagination} from '../shared/pagination.tsx';
 import {localTime} from '../shared/time.ts';
 import {RecordList} from '../shared/record-list.tsx';
 
-export function RevisionSaveControl(props:Readonly<{flow:RequirementRevisionSave;ready:boolean;blocked:boolean;refreshActual():Promise<DetailSnapshot>;saved(receipt:RevisionSummary):Promise<void>}>){
+export function RevisionSaveControl(props:Readonly<{flow:RequirementRevisionSave;ready:boolean;blocked:boolean;refreshActual():Promise<DetailSnapshot>;saved(receipt:VersionMarker):Promise<void>}>){
   const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),pending=useRef(false);
   const locked=props.blocked||busy||state.phase==='SUBMITTING'||state.phase==='READING',editable=['READY','ERROR'].includes(state.phase);
   const submit=async(readOnly=false)=>{
@@ -19,12 +19,12 @@ export function RevisionSaveControl(props:Readonly<{flow:RequirementRevisionSave
     }catch{setError(props.flow.getSnapshot().phase==='CONFIRMED'?'版本已保存，列表暂时无法读取，请重试读取':'实际详情读取失败，版本说明已保留');}
     finally{pending.current=false;setBusy(false);}
   };
-  return <section className="record-version-save" aria-label="保存手动版本">
+  return <section className="record-version-save" aria-label="添加版本说明">
     <label>版本说明（可选）<textarea className="ui-input" aria-label="版本说明（可选）" value={state.description} disabled={locked||!props.ready&&editable} readOnly={!editable} onChange={event=>props.flow.change(event.target.value)}/></label>
-    {editable&&<button className="ui-button" type="button" disabled={locked||!props.ready||!props.flow.allowed} onClick={()=>void submit()}>保存版本</button>}
-    {state.phase==='UNKNOWN'&&<button className="ui-button" type="button" disabled={locked} onClick={()=>void submit()}>重新确认保存版本</button>}
-    {(state.phase==='SUBMITTING'||state.phase==='READING')&&<p role="status">{state.phase==='READING'?'正在核实保存结果…':'正在保存版本…'}</p>}
-    {state.receipt&&<p role="status">版本 V{state.receipt.version_no} 已保存，来源正文 v{state.receipt.source_content_version}。</p>}
+    {editable&&<button className="ui-button" type="button" disabled={locked||!props.ready||!props.flow.allowed} onClick={()=>void submit()}>添加版本说明</button>}
+    {state.phase==='UNKNOWN'&&<button className="ui-button" type="button" disabled={locked} onClick={()=>void submit()}>核实版本说明</button>}
+    {(state.phase==='SUBMITTING'||state.phase==='READING')&&<p role="status">{state.phase==='READING'?'正在核实保存结果…':'正在保存版本说明…'}</p>}
+    {state.receipt&&<p role="status">版本说明已保存。</p>}
     {state.phase==='CONFIRMED'&&error&&<button className="ui-button" type="button" disabled={locked} onClick={()=>void submit(true)}>重新读取版本列表</button>}
     {(error||state.error)&&<p role="alert" className="inline-error">{error??state.error}</p>}
     {state.phase==='ERROR'&&<button className="ui-button" type="button" disabled={locked} onClick={()=>{if(pending.current)return;pending.current=true;setBusy(true);void props.refreshActual().then(actual=>{props.flow.rebase(actual);setError(null);}).catch(()=>setError('实际详情读取失败，版本说明已保留')).finally(()=>{pending.current=false;setBusy(false);});}}>重新读取版本保存条件</button>}
@@ -34,8 +34,8 @@ export function RevisionSaveControl(props:Readonly<{flow:RequirementRevisionSave
 export function RevisionList(props:Readonly<{flow:RequirementRevisions;blocked:boolean;open(summary:RevisionSummary):void}>){
   const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),list=state.list;
   return <RecordList title="版本记录" total={list?.pagination.total??null} loading={state.loading} error={state.error} retry={()=>void props.flow.refresh()} retryDisabled={state.loading||props.blocked}
-   empty={list?.pagination.total?'当前页暂无版本记录':'暂无版本记录。完成初始化后生成基线；进行中且正文空闲时，可保存手动版本。'}
-   items={(list?.items??[]).map(row=>({id:row.id,title:<><span className="record-version-label">V{row.version_no}</span><span>{row.revision_type==='BASELINE'?'初始化基线':'手动版本'}</span></>,metadata:<><span>来源正文 v{row.source_content_version}</span><time dateTime={row.created_at}>{localTime(row.created_at)}</time></>,description:row.description??undefined,selected:state.history.requested?.id===row.id&&state.history.phase!=='CLOSED',disabled:props.blocked||['EXITING','RESTORING'].includes(state.history.phase),label:`查看 V${row.version_no}`,open:()=>props.open(row)}))}
+   empty={list?.pagination.total?'当前页暂无版本记录':'暂无版本记录。文档正式提交后形成内容快照。'}
+   items={(list?.items??[]).map(row=>({id:row.id,title:<><span className="record-version-label">V{row.version_no}</span><span>正文版本</span></>,metadata:<><span>来源正文 v{row.source_content_version}</span><time dateTime={row.created_at}>{localTime(row.created_at)}</time></>,description:[row.change_summary,...row.markers.map(marker=>marker.description)].filter(Boolean).join('；')||undefined,selected:state.history.requested?.id===row.id&&state.history.phase!=='CLOSED',disabled:props.blocked||['EXITING','RESTORING'].includes(state.history.phase),label:`查看 V${row.version_no}`,open:()=>props.open(row)}))}
    footer={list&&(list.pagination.total_pages>1||list.pagination.page>1)&&<Pagination value={list.pagination} compactSingle loading={state.loading||props.blocked} showLoadingStatus={false} change={page=>void props.flow.refresh(page)}/>}/>;
 }
 

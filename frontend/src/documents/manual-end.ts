@@ -1,6 +1,7 @@
 import {ApiRejected,snapshotObject} from '../api/client.ts';
 import type {WalleApi} from '../api/walle.ts';
 import type {Requirement} from '../api/models.ts';
+import type {DocumentEffect} from '../api/models.ts';
 import type {DocumentReadModel} from './contracts.ts';
 import type {EditedSnapshot} from './edited-snapshot.ts';
 import type {ManualDraftAutosave} from './autosave.ts';
@@ -14,7 +15,7 @@ type Cache = Pick<DraftRecoveryStore,'clearClosedDraft'>;
 type Complete = Readonly<{kind:'COMPLETE';action:ReturnType<WalleApi['prepareCompleteManualDraft']>;version:number;snapshot:EditedSnapshot}>;
 type Cancel = Readonly<{kind:'CANCEL';action:ReturnType<WalleApi['prepareCancelManualDraft']>;version:number}>;
 export type ManualEndObservation = Readonly<{requirement:Requirement;current:DocumentReadModel;manual_draft:DocumentReadModel|null}>;
-export type ManualEndOutcome = Readonly<{kind:'COMPLETED';current:DocumentReadModel}|{kind:'CANCELLED';manual_draft_id:number}>;
+export type ManualEndOutcome = Readonly<{kind:'COMPLETED';effect:DocumentEffect}|{kind:'CANCELLED';manual_draft_id:number}>;
 export type ManualEndState = Readonly<{phase:'EDITING'|'PREPARING'|'SUBMITTING'|'UNKNOWN'|'CHECKING'|'ERROR'|'CLOSED';
   operation:'COMPLETE'|'CANCEL'|null;error:string|null;observed:ManualEndObservation|null;outcome:ManualEndOutcome|null;local_cleanup_error:boolean}>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
@@ -48,7 +49,7 @@ export class ManualDraftEnd {
       if(!await this.autosave.freezeAndFlush()){this.publish({phase:'ERROR',error:'最新草稿尚未确认保存，请先处理保存状态'});return false;}
       if(this.disposed)return false;await this.autosave.pauseAndWait();if(this.disposed)return false;
       const version=this.autosave.state.confirmed_version,snapshot=capture(this.autosave.localSnapshot);
-      this.action=Object.freeze({kind:'COMPLETE',version,snapshot,action:this.api.prepareCompleteManualDraft(this.draft.requirement_id,version)});
+      this.action=Object.freeze({kind:'COMPLETE',version,snapshot,action:this.api.prepareCompleteManualDraft(this.draft.requirement_id,this.current.id,this.draft.id,version)});
       return this.submit();
     });
   }
@@ -59,17 +60,17 @@ export class ManualDraftEnd {
       // Read actual latest version after stopping new saves and waiting the
       // owned in-flight save. An old unknown save may still race; native I13
       // version/occupancy guards decide, never a client assumption of rollback.
-      const [root,draft]=await Promise.all([this.api.getRequirement(this.draft.requirement_id),this.api.getManualDraft(this.draft.requirement_id)]);
+      const [root,draft]=await Promise.all([this.api.getRequirement(this.draft.requirement_id),this.api.getManualDraft(this.draft.requirement_id,this.current.id)]);
       if(this.disposed)return false;
       if(root.data.document_work_state!=='MANUAL_EDITING'||root.data.active_operation_id!==this.draft.id||draft.data.id!==this.draft.id)throw Error('Manual occupancy changed');
       const version=draft.data.content_version;
-      this.action=Object.freeze({kind:'CANCEL',version,action:this.api.prepareCancelManualDraft(this.draft.requirement_id,version)});
+      this.action=Object.freeze({kind:'CANCEL',version,action:this.api.prepareCancelManualDraft(this.draft.requirement_id,this.current.id,this.draft.id,version)});
       return this.submit();
     });
   }
   private async observe():Promise<ManualEndObservation>{
     const identity=this.draft.requirement_id;
-    const [requirement,current,draft]=await Promise.allSettled([this.api.getRequirement(identity),this.api.getCurrentDocument(identity),this.api.getManualDraft(identity)]);
+    const [requirement,current,draft]=await Promise.allSettled([this.api.getRequirement(identity),this.api.getCurrentDocument(identity,this.current.id),this.api.getManualDraft(identity,this.current.id)]);
     if(requirement.status==='rejected')throw requirement.reason;if(current.status==='rejected')throw current.reason;
     if(draft.status==='rejected'&&!(draft.reason instanceof ApiRejected&&draft.reason.code==='MANUAL_DRAFT_NOT_FOUND'))throw draft.reason;
     return capture({requirement:requirement.value.data,current:current.value.data,manual_draft:draft.status==='fulfilled'?draft.value.data:null});
@@ -89,10 +90,8 @@ export class ManualDraftEnd {
     try{
       if(original.kind==='COMPLETE'){
         const result=(await original.action.submit()).data;if(this.disposed)return false;
-        if(result.document_type!=='CURRENT'||result.id!==this.current.id||result.requirement_id!==this.draft.requirement_id||result.content_version!==this.current.content_version+1||
-          result.markdown_content!==original.snapshot.markdown_content||result.block_state_json.next_block_id!==original.snapshot.block_state_json.next_block_id||
-          JSON.stringify(result.block_state_json.blocks.map(block=>block.block_id))!==JSON.stringify(original.snapshot.block_state_json.blocks.map(block=>block.block_id)))throw Error('Unconfirmed complete receipt');
-        outcome=Object.freeze({kind:'COMPLETED',current:capture(result)});
+        if(result.document_id!==this.current.id||result.before_content_version!==this.current.content_version||result.result==='CREATED')throw Error('Unconfirmed complete receipt');
+        outcome=Object.freeze({kind:'COMPLETED',effect:capture(result)});
       }else{
         const result=(await original.action.submit()).data;if(this.disposed)return false;
         if(!result.cancelled||result.requirement_id!==this.draft.requirement_id||result.manual_draft_id!==this.draft.id)throw Error('Unconfirmed cancel receipt');

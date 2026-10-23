@@ -17,10 +17,10 @@ const same=(left:unknown,right:unknown)=>JSON.stringify(left)===JSON.stringify(r
  * A changed ordering/location is reread once, then rejected without replacing
  * the last successful page. No synthetic insertion or status filtering. */
 export class RequirementComments{
-  private current:DocumentReadModel;private readonly api:Api;private readonly listeners=new Set<()=>void>();
+  private current:DocumentReadModel|null;private readonly api:Api;private readonly listeners=new Set<()=>void>();
   private value:CommentReadState=Object.freeze({confirmed:null,page:1,selected:null,selection_revision:0,loading:false,active:true,error:null});
   private generation=0;private closed=false;private controller:AbortController|undefined;private pending:Promise<boolean>|undefined;
-  constructor(current:DocumentReadModel,api:Api){this.current=this.ownedCurrent(current);this.api=api;}
+  constructor(current:DocumentReadModel|null,api:Api){this.current=current===null?null:this.ownedCurrent(current);this.api=api;}
   private ownedCurrent(current:DocumentReadModel):DocumentReadModel{positiveInteger(current.id);positiveInteger(current.requirement_id);positiveInteger(current.content_version);if(current.document_type!=='CURRENT')throw TypeError('Actual CURRENT required');return capture(current);}
   getSnapshot=():CommentReadState=>this.value;
   subscribe=(callback:()=>void):(()=>void)=>{this.listeners.add(callback);return()=>this.listeners.delete(callback);};
@@ -34,9 +34,9 @@ export class RequirementComments{
   }
   /** Parent has already adopted a fresh complete detail; never use a draft or
    * historical Revision as the anchor document. Old page remains labelled. */
-  setCurrent(current:DocumentReadModel):void{
-    const next=this.ownedCurrent(current);if(next.requirement_id!==this.current.requirement_id)throw TypeError('Owned requirement required');if(this.closed||same(next,this.current))return;
-    this.generation++;this.controller?.abort();this.pending=undefined;this.current=next;this.publish({loading:false,error:'当前正文已更新，请刷新评论',selected:null});
+  setCurrent(current:DocumentReadModel|null):void{
+    const next=current===null?null:this.ownedCurrent(current);if(next!==null&&this.current!==null&&next.requirement_id!==this.current.requirement_id)throw TypeError('Owned requirement required');if(this.closed||same(next,this.current))return;
+    this.generation++;this.controller?.abort();this.pending=undefined;this.current=next;this.publish({confirmed:null,loading:false,error:next===null?null:'当前正文已更新，请刷新评论',selected:null});
   }
   refresh(page=this.value.page,force=false):Promise<boolean>{
     positiveInteger(page);if(page>100000)throw TypeError('Invalid page');return this.read(page,null,force);
@@ -45,27 +45,28 @@ export class RequirementComments{
   private read(page:number|null,target:number|null,force:boolean):Promise<boolean>{
     if(this.closed)return Promise.resolve(false);if(this.pending&&!force&&page===this.value.page)return this.pending;
     const generation=++this.generation,controller=new AbortController(),current=this.current;this.controller?.abort();this.controller=controller;
+    if(current===null){this.publish({loading:false,error:null});return Promise.resolve(true);}
     const alive=()=>!this.closed&&generation===this.generation;
     const pending=Promise.resolve().then(async()=>{
       if(!alive())return false;
       try{
         for(let attempt=0;attempt<2;attempt++){
           try{
-            const index=(await this.api.getCommentIndex(current.requirement_id,controller.signal)).data;if(!alive())return false;this.index(current,index);
+            const index=(await this.api.getCommentIndex(current.requirement_id,current.id,controller.signal)).data;if(!alive())return false;this.index(current,index);
             let desired=page!;
             if(target!==null){
               const actual=(await this.api.getComment(target,controller.signal)).data;if(!alive())return false;
-              if(actual.id!==target||actual.requirement_id!==current.requirement_id)throw Error('Comment belongs to another requirement');
+              if(actual.id!==target||actual.requirement_id!==current.requirement_id||actual.document_id!==current.id)throw Error('Comment belongs to another requirement');
               if(actual.deleted_at!==null)throw Error('该评论已删除，请刷新列表');
               const ordinal=index.comments.findIndex(row=>row.id===target);if(ordinal<0)throw new Changed('评论列表已变化，请重试定位');desired=Math.floor(ordinal/20)+1;
             }
-            const response=await this.api.listComments(current.requirement_id,desired,controller.signal);if(!alive())return false;
-            const latest=(await this.api.getCommentIndex(current.requirement_id,controller.signal)).data;if(!alive())return false;this.index(current,latest);
+            const response=await this.api.listComments(current.requirement_id,current.id,desired,controller.signal);if(!alive())return false;
+            const latest=(await this.api.getCommentIndex(current.requirement_id,current.id,controller.signal)).data;if(!alive())return false;this.index(current,latest);
             const pagination=response.meta.pagination,items=response.data.items,window=index.comments.slice((desired-1)*20,desired*20);
             if(!pagination||!('page' in pagination)||pagination.page!==desired||pagination.page_size!==20||pagination.total!==index.total_count||pagination.total_pages!==Math.ceil(index.total_count/20)||!same(index,latest)||items.length!==window.length)throw new Changed('评论列表读取期间发生变化，请重试');
             for(let i=0;i<items.length;i++){
               const item=items[i]!,projection=window[i]!;
-              if(item.requirement_id!==current.requirement_id||item.deleted_at!==null)throw Error('Unconfirmed comment ownership');
+              if(item.requirement_id!==current.requirement_id||item.document_id!==current.id||item.deleted_at!==null)throw Error('Unconfirmed comment ownership');
               if(item.id!==projection.id||item.status!==projection.status||item.anchor_status!==projection.anchor_status||!same(item.location,projection.location))throw new Changed('评论位置或顺序已变化，请重试');
               const previous=items[i-1];if(previous&&(previous.created_at>item.created_at||previous.created_at===item.created_at&&previous.id>=item.id))throw Error('Unconfirmed comment ordering');
             }

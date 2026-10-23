@@ -28,25 +28,28 @@ export class ManualDraftSession {
   private constructor(initial:DetailSnapshot,editor:RequirementEditor,autosave:ManualDraftAutosave,cache:DraftRecoveryStore,api:WalleApi){
     if(initial.activity.kind!=='MANUAL')throw new TypeError('Actual manual detail required');
     this.initial=snapshotObject(initial) as unknown as DetailSnapshot;this.editor=editor;this.autosave=autosave;this.cache=cache;
-    this.recovery=new ManualDraftRecovery(initial.requirement,initial.current,initial.activity.draft,api,editor,autosave,cache);
-    this.ending=new ManualDraftEnd(initial.current,initial.activity.draft,api,editor,autosave,cache);
+    this.recovery=new ManualDraftRecovery(initial.requirement,initial.activity.target,initial.activity.draft,api,editor,autosave,cache);
+    this.ending=new ManualDraftEnd(initial.activity.target,initial.activity.draft,api,editor,autosave,cache);
     this.value=Object.freeze({active:true,valid:editor.valid,readonly:editor.readonly,blocked:false,block_reason:null,error:null,selection:null});
     this.releases.push(this.recovery.subscribe(()=>this.sync()),this.ending.subscribe(()=>this.sync()),this.autosave.subscribe(()=>this.sync()));
   }
   static async create(root:HTMLElement,initial:DetailSnapshot,api:WalleApi,diagnostic:Readonly<{cacheName?:string;clock?:PollClock}>={}):Promise<ManualDraftSession>{
-    if(initial.activity.kind!=='MANUAL')throw new TypeError('Actual manual detail required');let session:ManualDraftSession|undefined,cache:DraftRecoveryStore|undefined;
+    if(initial.activity.kind!=='MANUAL')throw new TypeError('Actual manual detail required');const draftId=initial.activity.draft.id,target=initial.activity.target;let session:ManualDraftSession|undefined,cache:DraftRecoveryStore|undefined;
     const editor=await RequirementEditor.create(root,initial.activity.draft,true,{change:()=>session?.autosave.changed(),
-      validity:valid=>session?.publish({valid}),error:error=>{if(error!==null||session?.getSnapshot().block_reason!=='READ_CONFLICT')session?.publish({error});},selection:selection=>session?.publish({selection}),blur:()=>{void session?.flushCurrent();}},initial.requirement.status==='INITIALIZING'?initial.requirement:null);
+      validity:valid=>session?.publish({valid}),error:error=>{if(error!==null||session?.getSnapshot().block_reason!=='READ_CONFLICT')session?.publish({error});},selection:selection=>session?.publish({selection}),blur:()=>{void session?.flushCurrent();}},target.document_kind==='SPECIFICATION'&&target.template_ref!==null?target:null);
     try{
-      cache=editor.action(ctx=>new DraftRecoveryStore(ctx,diagnostic.cacheName?{name:diagnostic.cacheName}:{}));const id=initial.requirement.id;
-      const autosave=new ManualDraftAutosave(initial.activity.draft,editor.ledger!,{read:async()=>(await api.getManualDraft(id)).data,
-        save:async ticket=>(await api.prepareSaveManualDraft(id,{expected_version:ticket.expected_version,markdown_content:ticket.markdown_content,block_state_json:ticket.block_state_json}).submit()).data},cache,diagnostic.clock);
+      const id=initial.requirement.id;
+      cache=editor.action(ctx=>new DraftRecoveryStore(ctx,{requirement_id:id,target_document_id:target.id,manual_draft_id:draftId,base_content_version:target.content_version},diagnostic.cacheName?{name:diagnostic.cacheName}:{}));
+      const saveActions=new WeakMap<import('./edited-snapshot.ts').ManualDraftSubmission,ReturnType<WalleApi['prepareSaveManualDraft']>>();
+      const autosave=new ManualDraftAutosave(initial.activity.draft,editor.ledger!,{read:async()=>(await api.getManualDraft(id,target.id)).data,
+        save:async ticket=>{let action=saveActions.get(ticket);if(!action){action=api.prepareSaveManualDraft(id,{document_id:target.id,draft_id:draftId,expected_version:ticket.expected_version,markdown_content:ticket.markdown_content,block_state_json:ticket.block_state_json});saveActions.set(ticket,action);}return (await action.submit()).data;}},cache,diagnostic.clock);
       session=new ManualDraftSession(initial,editor,autosave,cache,api);
       const owner=root.ownerDocument,visibility=()=>{if(owner.hidden)void session?.flushCurrent();};owner.addEventListener('visibilitychange',visibility);
       session.releases.push(()=>owner.removeEventListener('visibilitychange',visibility));return session;
     }catch(error){await cache?.settle();await editor.destroy();cache?.close();throw error;}
   }
   getSnapshot=():ManualSessionState=>this.value;
+  get endingTargetId():number{if(this.initial.activity.kind!=='MANUAL')throw Error('Manual target invariant failed');return this.initial.activity.target.id;}
   subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
   private publish(changes:Partial<ManualSessionState>):void {
     if(this.closed)return;this.value=Object.freeze({...this.value,...changes});for(const listener of this.listeners){try{listener();}catch(error){console.error('WALL-E manual session observer failed',error);}}
@@ -75,9 +78,9 @@ export class ManualDraftSession {
   revalidate(actual:DetailSnapshot):boolean {
     if(this.closed||this.saving||this.ending.getSnapshot().phase!=='EDITING')return false;
     const root=actual.requirement,expected=this.initial.requirement;
-    if(root.id!==expected.id||root.status==='COMPLETED'||root.document_work_state!=='MANUAL_EDITING'||root.active_operation_type!=='MANUAL_DRAFT'||
+    if(root.id!==expected.id||root.document_work_state!=='MANUAL_EDITING'||root.active_operation_type!=='MANUAL_DRAFT'||
       actual.activity.kind!=='MANUAL'||root.active_operation_id!==this.autosave.confirmedDocument.id||
-      canonical(actual.current)!==canonical(this.initial.current)||canonical(actual.activity.draft)!==canonical(this.autosave.confirmedDocument)){
+      canonical(actual.activity.target)!==canonical(this.initial.activity.kind==='MANUAL'?this.initial.activity.target:null)||canonical(actual.activity.draft)!==canonical(this.autosave.confirmedDocument)){
       this.editor.setReadonly(true);this.publish({blocked:true,block_reason:'READ_CONFLICT',readonly:true,error:'实际正文或草稿已变化，当前内容仍保留，请对照处理'});return false;
     }
     this.publish({blocked:false,block_reason:null,error:null});if(this.chosen()){this.autosave.resumeEditing();this.editor.setReadonly(false);}this.sync();return true;

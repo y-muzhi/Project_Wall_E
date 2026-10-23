@@ -4,12 +4,13 @@ import type {DetailSnapshot} from '../requirements/detail-read.ts';
 import type {RequirementAiRead} from './read-owner.ts';
 import {CardDrafts} from './card-drafts.ts';
 import {InteractionCards} from './cards.ts';
+import type {SourceReadApi} from '../requirements/source-reading.ts';
 export type CardSlot=Readonly<{message_id:number;owner:InteractionCards|null;loading:boolean;error:string|null}>;
 export type CardGroupsState=Readonly<{slots:readonly CardSlot[];available:boolean;active:boolean;syncing:boolean;error:string|null;revision:number}>;
-type Api=Pick<WalleApi,'getGuideRun'|'listMessages'|'prepareCardResponses'>;
+type Api=Pick<WalleApi,'getGuideRun'|'listMessages'|'prepareCardResponses'>&SourceReadApi;
 type Actual=Readonly<{detail:DetailSnapshot;items:readonly Message[]}>;
 const eligible=(message:Message)=>message.message_type==='INTERACTION_CARDS'&&message.structured_content!==null&&message.card_state!==null;
-const signature=(actual:Actual)=>JSON.stringify([actual.detail.requirement,actual.detail.current.id,actual.detail.current.content_version,actual.detail.activity.kind,actual.detail.activity.kind==='GUIDE'?[actual.detail.activity.run.id,actual.detail.activity.run.status]:null,actual.items.filter(message=>eligible(message)||message.message_type==='CARD_RESPONSE')]);
+const signature=(actual:Actual)=>JSON.stringify([actual.detail.requirement,actual.detail.current?.id,actual.detail.current?.content_version,actual.detail.activity.kind,actual.detail.activity.kind==='GUIDE'?[actual.detail.activity.run.id,actual.detail.activity.run.status]:null,actual.items.filter(message=>eligible(message)||message.message_type==='CARD_RESPONSE')]);
 
 /** Connects actual I35 windows to independently retained card owners. The
  * parent owns reads and Run receipts; this collection never inserts/reorders

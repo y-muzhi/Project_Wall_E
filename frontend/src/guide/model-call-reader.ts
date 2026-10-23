@@ -3,6 +3,13 @@ import type {ModelCalls,ModelCall} from '../api/model-calls.ts';
 export type ModelCallApi=Pick<WalleApi,'listModelCalls'|'getModelCall'>;
 export type CallListState=Readonly<{data:ModelCalls|null;loading:boolean;error:string|null}>;
 const empty:CallListState=Object.freeze({data:null,loading:false,error:null});
+/** Provider facts remain readable even when their own totals disagree. */
+export function usageWarning(call:ModelCall):string|null{
+ if(call.call_status!=='SUCCEEDED')return null;
+ if(call.input_tokens===null||call.output_tokens===null||call.total_tokens===null)return '供应方未完整记录用量。';
+ if(call.total_tokens!==call.input_tokens+call.output_tokens||call.cached_tokens!==null&&call.cached_tokens>call.input_tokens)return '供应方用量记录不一致，已保留原始数值。';
+ return null;
+}
 
 /** Deduplicates visible messages sharing one Run; no timer or command API. */
 export class ModelCallReader{

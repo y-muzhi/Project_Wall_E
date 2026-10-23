@@ -17,44 +17,46 @@ def _same_run_root(repository, row, requirement_id):
 def card_state(repository, root, row, protocol, catalog=None):
     replies = repository.formal_responses(row['id'])
     if len(replies) > 1 or any(reply['requirement_id'] != root['id'] or reply['sequence_no'] <= row['sequence_no'] or reply['created_at'] < row['created_at'] for reply in replies):
-        raise ValueError('Formal response ownership or chronology is inconsistent')
-    for reply in replies: _same_run_root(repository, reply, root['id'])
-    if replies: return 'ANSWERED'
-    if repository.latest_card_id(root['id']) != row['id'] or repository.newer_input_exists(row) or row['guide_run_id'] is None: return 'EXPIRED'
-    run = repository.guide(row['guide_run_id'])
-    if run is None or run['requirement_id'] != root['id'] or run['created_at'] > row['created_at']: raise ValueError('Card run ownership is inconsistent')
-    if repository.newer_run_exists(root['id'], run['id']): return 'EXPIRED'
-    initialize = run['action_type'] == 'INITIALIZE'
-    if initialize:
-        if root['status'] != 'INITIALIZING' or root['document_work_state'] != 'IDLE' or run['status'] != 'COMPLETED': return 'EXPIRED'
-        if root['active_operation_type'] is not None or root['active_operation_id'] is not None or root['state_started_at'] is not None or any(repository.activities(root['id']).values()): raise ValueError('Idle root has a dangling activity')
-        function = (catalog if catalog is not None else ResourceCatalog()).freeze(run['action_type'], run['source_type'])
-        if function.function_type != run['function_type'] or run['source_id'] is not None: raise ValueError('Initialization card has an invalid function/source')
-        final = strict_json_object(run['final_result_json'])
-        fields = ('guide_run_id', 'status', 'assistant_message_id', 'current_document', 'suggestion_batch_id')
-        object_fields(final, 'final_result', fields, fields)
-        if final['guide_run_id'] != run['id'] or final['status'] != 'COMPLETED' or final['assistant_message_id'] != row['id'] or final['suggestion_batch_id'] is not None: raise ValueError('Initialization card has inconsistent committed effects')
-        identity = object_fields(final['current_document'], 'current_document', ('id','content_version'), ('id','content_version'))
-    else:
-        lifecycle_allowed = root['status'] == 'ACTIVE' or root['status'] == 'COMPLETED' and run['action_type'] == 'ASK'
-        if not lifecycle_allowed or root['document_work_state'] != 'GUIDE_ACTIVE' or root['active_operation_type'] != 'GUIDE_RUN' or root['active_operation_id'] != run['id'] or run['status'] != 'WAITING_USER': return 'EXPIRED'
-        function = (catalog if catalog is not None else ResourceCatalog()).freeze(run['action_type'], run['source_type'])
-        if function.function_type != run['function_type']: raise ValueError('Card run differs from its frozen function')
-        if repository.activities(root['id']) != {'MANUAL_DRAFT': [], 'GUIDE_RUN': [run['id']], 'SUGGESTION_BATCH': []}: raise ValueError('Card availability requires the unique actual run activity')
-        manifest = function.validate_read_manifest(strict_json_object(run['read_scope_manifest_json']))
-        if manifest['function_type'] != run['function_type'] or manifest['source'] != {'source_type': run['source_type'], 'source_id': run['source_id']}: raise ValueError('Card context differs from its actual run function or source')
-        identity = {'id': manifest['document_id'], 'content_version': manifest['content_version']}
-    strict_integer(identity['id'], 'document_id');strict_integer(identity['content_version'], 'content_version')
-    current = repository.current_identity(root['id'])
-    if len(current) != 1: raise ValueError('Card availability requires a unique actual CURRENT')
-    return 'AVAILABLE' if current[0]['id'] == identity['id'] and current[0]['content_version'] == identity['content_version'] else 'EXPIRED'
+        raise ValueError('Formal answer ownership/chronology is inconsistent')
+    for reply in replies:
+        _same_run_root(repository, reply, root['id'])
+    if replies:
+        return 'ANSWERED'
+    if repository.latest_card_id(root['id']) != row['id'] or repository.newer_input_exists(row) or row['guide_run_id'] is None:
+        return 'EXPIRED'
+    source = repository.guide(row['guide_run_id'])
+    if source is None or source['requirement_id'] != root['id'] or source['function_type'] != 'collaboration_v1':
+        raise ValueError('Card source is not its actual collaboration round')
+    if source['status'] != 'COMPLETED' or repository.newer_run_exists(root['id'], source['id']):
+        return 'EXPIRED'
+    cards = decode_cards(row['structured_content_json'], protocol)
+    binding = cards['program_binding']
+    if root['discussion_version'] != binding['discussion_version']:
+        return 'EXPIRED'
+    if root['document_work_state'] != 'IDLE':
+        return 'EXPIRED'
+    if root['active_operation_type'] is not None or root['active_operation_id'] is not None or any(repository.activities(root['id']).values()):
+        raise ValueError('Card availability requires actual idle ownership')
+    target_version = binding['target_content_version']
+    if target_version is not None:
+        if cards['purpose'] == 'DOCUMENT_ACTION':
+            target = cards['action_payload']['target']
+            target_id = target['document_id'] if target['kind'] == 'EXISTING' else None
+        else:
+            target_id = source['target_document_id']
+        from backend.app.infrastructure.document_repository import DocumentRepository
+        current = None if target_id is None else DocumentRepository(repository.connection).get_current(root['id'], target_id)
+        if current is None or current['content_version'] != target_version or current['archived_at'] is not None:
+            return 'EXPIRED'
+    return 'AVAILABLE'
 
 
 def project_message(repository, root, row, protocol, catalog=None):
-    data = {field: row[field] for field in MESSAGE_FIELDS if field not in ('structured_content', 'card_state')}
+    data = {field: row[field] for field in MESSAGE_FIELDS if field not in ('structured_content', 'card_state', 'topic_refs', 'document_ids', 'program_receipt')}
     if row['requirement_id'] != root['id']: raise ValueError('Message belongs to another requirement')
     _same_run_root(repository, row, root['id'])
-    data.update(structured_content=None, card_state=None)
+    import json
+    data.update(structured_content=None, card_state=None, topic_refs=json.loads(row['topic_refs']), document_ids=json.loads(row['document_ids']), program_receipt=repository.program_receipt(row))
     if row['message_type'] == 'INTERACTION_CARDS':
         try: data['structured_content'] = decode_cards(row['structured_content_json'], protocol)
         except (CardsInvalid, InvalidInput, ProtocolInvalid): pass
@@ -79,7 +81,7 @@ def list_messages(database, payload, *, catalog=None):
             else:
                 repository = MessageRepository(connection)
                 rows = repository.window(root['id'], request.before_sequence_no)
-                protocol = (catalog if catalog is not None else ResourceCatalog()).freeze('ASK','USER_INSTRUCTION') if any(row['message_type'] != 'TEXT' for row in rows) else None
+                protocol = (catalog if catalog is not None else ResourceCatalog()).collaboration if any(row['message_type'] != 'TEXT' for row in rows) else None
                 items = [project_message(repository, root, row, protocol, catalog) for row in rows]
                 more = bool(rows) and repository.older_exists(root['id'], rows[0]['sequence_no'])
                 result = {'code': 'READ_OK', 'data': list_messages_result(items, request, more), 'details': None}

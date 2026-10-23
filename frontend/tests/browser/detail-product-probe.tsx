@@ -1,3 +1,4 @@
+import {probeDocumentId} from './v15-probe-targets.ts';
 import {createRoot} from 'react-dom/client';
 import {ApiUnknown} from '../../src/api/client.ts';
 import type {WalleApi} from '../../src/api/walle.ts';
@@ -22,6 +23,6 @@ export async function mountDetailProductProbe(api:WalleApi){
  return {state(){if(!owner)return null;const regions=owner.regions,document=owner.documents.getSnapshot(),manual=document.manual;return {ready:owner.getSnapshot().ready,error:owner.getSnapshot().error,mode:document.mode,busy:document.busy,detail:document.detail,layout:regions?.layout.getSnapshot(),viewport:regions?.viewport.getSnapshot(),departure:owner.departure.getSnapshot(),composer:regions?.conversation.composer.getSnapshot(),ai:regions?.conversation.read.getSnapshot(),comment:regions?{view:regions.comments.getSnapshot().view,slots:regions.comments.getSnapshot().slots.map(slot=>({identity:slot.identity,state:slot.flow.getSnapshot()})),ready:regions.comments.comments.ready}:null,
    manual:manual?{id:manual.autosave.confirmedDocument.id,status:manual.autosave.state.status,version:manual.autosave.state.confirmed_version,local:manual.autosave.localSnapshot.markdown_content,readonly:manual.editor.readonly,blocked:manual.getSnapshot().blocked,recovery:manual.recovery.getSnapshot().phase}:null,same_session:!!manual&&manual===remembered,back,counts};},
   readFailure(value:boolean){readFailure=value;},saveFailure(value:boolean){saveFailure=value;},remember(){require(!!owner?.documents.getSnapshot().manual);remembered=owner!.documents.getSnapshot().manual;return true;},
-  async inspect(){require(!!owner?.regions);const actual=(await api.getRequirement(2)).data,current=(await api.getCurrentDocument(2)).data;return {passed:true,actual,current,comments:(await api.listComments(2)).data.items,revisions:(await api.listRevisions(2)).data.items,runs:(await api.listGuideRuns(2)).data.items,counts,back};},
+  async inspect(){require(!!owner?.regions);const actual=(await api.getRequirement(2)).data,current=(await api.getCurrentDocument(2,probeDocumentId(2))).data;return {passed:true,actual,current,comments:(await api.listComments(2,probeDocumentId(2))).data.items,revisions:(await api.listRevisions(2,probeDocumentId(2))).data.items,runs:(await api.listGuideRuns(2)).data.items,counts,back};},
   async destroy(){root.unmount();await owner?.retire();container.remove();return {passed:true};}};
 }

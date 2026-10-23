@@ -1,4 +1,5 @@
 import {snapshotObject} from '../api/client.ts';
+import type {WalleApi} from '../api/walle.ts';
 import type {GuideRun} from '../api/models.ts';
 import type {DetailSnapshot} from '../requirements/detail-read.ts';
 import {detailPermissions} from '../requirements/permissions.ts';
@@ -6,13 +7,13 @@ import {RequirementComments} from './read.ts';
 import {CommentCommand} from './commands.ts';
 import type {CommentTarget,CommentOutcome,CommentIntent} from './commands.ts';
 import type {ConfirmedNotice} from '../shared/toast-store.ts';
-type Api=ConstructorParameters<typeof RequirementComments>[1]&ConstructorParameters<typeof CommentCommand>[2];
+type Api=ConstructorParameters<typeof RequirementComments>[1]&ConstructorParameters<typeof CommentCommand>[2]&Pick<WalleApi,'getGuideRun'>;
 export type CommentSlot=Readonly<{key:number;identity:number|null;flow:CommentCommand;open:boolean}>;
 export type CommentPanelState=Readonly<{detail:DetailSnapshot;view:'CURRENT'|'MANUAL'|'HISTORY';suspended:boolean;active:boolean;refreshing:boolean;needs_refresh:boolean;error:string|null;slots:readonly CommentSlot[];revision:number}>;
 type OwnedSlot={slot:CommentSlot;release:()=>void;guideDelivered:boolean;pending?:Promise<void>};
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
-const conflicts=new Set(['STATE_CONFLICT','WORK_STATE_CONFLICT','WORK_STATE_INCONSISTENT','CONTENT_VERSION_CONFLICT','ANCHOR_INVALID','COMMENT_ORPHANED','NOT_FOUND']);
+const conflicts=new Set(['STATE_CONFLICT','WORK_STATE_CONFLICT','WORK_STATE_INCONSISTENT','CONTENT_VERSION_CONFLICT','DISCUSSION_VERSION_CONFLICT','SOURCE_VERSION_CONFLICT','ANCHOR_INVALID','COMMENT_ORPHANED','NOT_FOUND']);
 
 /** One requirement lifetime, one retained intention per comment plus one
  * composer. Actual page changes never manufacture rows or discard commands.
@@ -26,7 +27,7 @@ export class RequirementCommentPanel{
   private value:CommentPanelState;private readonly listeners=new Set<()=>void>();private readonly owners=new Map<number,OwnedSlot>();private nextKey=1;private closed=false;private syncing=false;
   private readonly releaseRead:()=>void;private tail:Promise<unknown>=Promise.resolve();private jobs=0;private refreshPending:Promise<void>|undefined;
   constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,acceptedGuide:(run:GuideRun)=>Promise<void>,notifyConfirmed?:ConfirmedNotice){
-    if(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)throw TypeError('Actual owned detail required');
+    if(detail.current!==null&&(detail.current!==null&&(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)))throw TypeError('Actual owned detail required');
     this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.acceptedGuide=acceptedGuide;this.notifyConfirmed=notifyConfirmed;
     this.value=Object.freeze({detail:capture(detail),view:detail.activity.kind==='MANUAL'?'MANUAL':'CURRENT',suspended:false,active:true,refreshing:false,needs_refresh:false,error:null,slots:Object.freeze([]),revision:0});
     this.comments=new RequirementComments(detail.current,api);this.releaseRead=this.comments.subscribe(()=>{this.syncBaselines();this.publish({});});
@@ -36,8 +37,8 @@ export class RequirementCommentPanel{
   get blocked():boolean{return this.closed||this.value.view==='HISTORY'||this.value.suspended;}
   get writeReady():boolean{return !this.blocked&&!this.value.refreshing&&!this.value.needs_refresh&&this.value.view==='CURRENT'&&this.comments.ready&&detailPermissions(this.value.detail,true).comment_write;}
   get writeUnavailableReason():string|null{
-    if(this.value.detail.requirement.status==='INITIALIZING')return '初始化中暂不支持新增评论；完成初始化后，需求进入进行中且文档空闲时可用。';
-    if(this.value.detail.requirement.status==='COMPLETED')return '需求已完成；重新激活且文档空闲后可新增评论。';
+
+    if(this.value.detail.current===null)return '请先选择文档。';
     if(this.closed||this.value.suspended)return '当前评论操作已暂停。';
     if(this.value.view!=='CURRENT')return '新增评论须回到正式正文，人工草稿和历史版本不支持。';
     if(this.value.detail.requirement.document_work_state!=='IDLE')return '文档正在编辑或处理 AI 任务；恢复空闲后可新增评论。';
@@ -46,7 +47,7 @@ export class RequirementCommentPanel{
   }
   writable(flow:CommentCommand):boolean{
     if(!this.writeReady||!flow.allowed)return false;const intent=flow.intent;
-    return intent.kind==='CREATE'?intent.target.document_id===this.value.detail.current.id&&intent.target.content_version===this.value.detail.current.content_version:
+    return intent.kind==='CREATE'?intent.target.document_id===this.value.detail.current?.id&&intent.target.content_version===this.value.detail.current?.content_version:
       this.comments.getSnapshot().confirmed!.items.some(row=>row.id===intent.comment.id);
   }
   private publish(changes:Partial<CommentPanelState>):void{if(this.closed)return;this.value=Object.freeze({...this.value,...changes,slots:Object.freeze([...this.owners.values()].map(owner=>owner.slot)),revision:this.value.revision+1});for(const callback of this.listeners)try{callback();}catch(error){console.error('WALL-E comment panel observer failed',error);}}
@@ -55,7 +56,7 @@ export class RequirementCommentPanel{
     this.syncing=true;try{for(const owner of this.owners.values()){const intent=owner.slot.flow.intent;if(intent.kind==='CREATE')owner.slot.flow.rebase(this.value.detail);else{const actual=bundle.items.find(row=>row.id===intent.comment.id);if(actual)owner.slot.flow.rebase(this.value.detail,actual);}}}finally{this.syncing=false;}
   }
   adopt(actual:DetailSnapshot):void{
-    if(this.closed)return;if(actual.requirement.id!==this.value.detail.requirement.id||actual.current.requirement_id!==actual.requirement.id||actual.current.document_type!=='CURRENT')throw TypeError('Owned actual detail required');
+    if(this.closed)return;if(actual.requirement.id!==this.value.detail.requirement.id||actual.current!==null&&(actual.current.requirement_id!==actual.requirement.id||actual.current.document_type!=='CURRENT'))throw TypeError('Owned actual detail required');
     this.publish({detail:capture(actual)});this.comments.setCurrent(actual.current);this.syncBaselines();
   }
   setView(view:CommentPanelState['view'],suspended=this.value.suspended):void{
@@ -111,7 +112,9 @@ export class RequirementCommentPanel{
     const [identity,owner]=entry;if(owner.pending)return owner.pending;
     if(flow.intent.kind==='DELETE'&&outcome.kind==='COMMENT')this.notifyConfirmed?.(outcome,'评论已删除');
     const pending=this.enqueue(async()=>{
-      if(outcome.kind==='GUIDE'&&!owner.guideDelivered){await this.acceptedGuide(outcome.run);owner.guideDelivered=true;}
+      if(outcome.kind==='GUIDE'&&!owner.guideDelivered){const actual=(await this.api.getGuideRun(outcome.receipt.guide_run_id)).data;
+        if(actual.requirement_id!==this.value.detail.requirement.id||actual.operation!=='PROPOSE_CHANGES'||actual.source_type!=='COMMENT'||actual.source_id!==outcome.comment_id||actual.target?.kind!=='EXISTING'||actual.target.document_id!==outcome.document_id)throw Error('评论建议运行与原目标不一致');
+        await this.acceptedGuide(actual);owner.guideDelivered=true;}
       await this.readAndAdopt();if(this.closed||this.owners.get(identity)!==owner)throw Error('Retired comment outcome');
       owner.release();flow.dispose();this.owners.delete(identity);this.publish({error:null});
     }).finally(()=>{if(owner.pending===pending)delete owner.pending;});owner.pending=pending;return pending;

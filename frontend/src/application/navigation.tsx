@@ -3,11 +3,11 @@ import {Icon} from '../shared/icon.tsx';
 import {activeModal, registerModal, trapModalTab} from '../shared/modal.ts';
 
 const desktopNavigation = '(min-width: 1480px)';
-const collapsedKey='walle:v1:navigation-collapsed';
+const collapsedKey='walle:v1.5:navigation-collapsed';
 function restoredCollapsed():boolean{try{return window.localStorage.getItem(collapsedKey)==='1';}catch{return false;}}
 
 /** Global navigation is separate from the detail's document outline. Its drawer
- * leaves the original 1024/1280 detail viewport rules and content width intact. */
+ * keeps its preference separate from the measured detail layout. */
 export function ApplicationNavigation({current, navigate,headerHost,headerHeight}: Readonly<{
   current: 'page'|'location'|undefined; navigate(): void;
   headerHost?(element:HTMLDivElement|null):void;headerHeight?(height:number):void;

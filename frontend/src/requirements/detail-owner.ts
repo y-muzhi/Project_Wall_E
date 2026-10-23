@@ -1,5 +1,5 @@
 import type {WalleApi} from '../api/walle.ts';
-import type {RevisionSummary} from '../api/models.ts';
+import type {RevisionSummary,VersionMarker} from '../api/models.ts';
 import {RequirementDetailRead} from './detail-read.ts';
 import type {DetailSnapshot} from './detail-read.ts';
 import {RequirementDocumentOwner} from './document-owner.ts';
@@ -11,10 +11,13 @@ import {detailPermissions} from './permissions.ts';
 import {DetailLayout,DetailViewportGuard} from './detail-layout.ts';
 import type {DetailTab} from './detail-layout.ts';
 import {DetailDeparture} from './departure.ts';
+import {RequirementDiscussion} from './discussion.ts';
+import {DocumentDirectoryCommands} from './document-directory.ts';
 import {ToastStore} from '../shared/toast-store.ts';
 import type {ConfirmedNotice} from '../shared/toast-store.ts';
+import {readSource} from './source-reading.ts';
 
-export type DetailBindings=Readonly<{documents:RequirementDocumentOwner;header:RequirementHeaderCommands;conversation:RequirementConversation;comments:RequirementCommentPanel;layout:DetailLayout;viewport:DetailViewportGuard}>;
+export type DetailBindings=Readonly<{documents:RequirementDocumentOwner;directory:DocumentDirectoryCommands;discussion:RequirementDiscussion;header:RequirementHeaderCommands;conversation:RequirementConversation;comments:RequirementCommentPanel;layout:DetailLayout;viewport:DetailViewportGuard}>;
 export type DetailOwnerState=Readonly<{detail:DetailSnapshot|null;loading:boolean;error:string|null;ready:boolean;revision:number;revisionSave:RequirementRevisionSave|null}>;
 /** A complete actual detail owns all regions. Document adoption completes
  * before siblings receive new facts; inputs and original commands stay owned.
@@ -40,13 +43,15 @@ export class RequirementDetailOwner{
   const layout=new DetailLayout(actual.requirement.status,this.width(),this.storage),viewport=new DetailViewportGuard(this.width(),{blockAndSave:()=>this.documents.blockAndSave(),readAfterSupport:async signal=>{if(signal.aborted)throw Error('Restore aborted');await this.documents.restoreSupported();if(signal.aborted)throw Error('Restore aborted');if(!this.documents.historical&&!await this.bindings!.comments.comments.refresh(this.bindings!.comments.comments.getSnapshot().page,true))throw Error('正文评论标记暂时无法读取');if(signal.aborted)throw Error('Restore aborted');}}),header=new RequirementHeaderCommands(actual,this.api);
   const conversation=new RequirementConversation(actual,this.api,this.readActual,this.adoptActual,()=>{layout.openTab('AI');this.sync();});
   const comments=new RequirementCommentPanel(actual,this.api,this.readActual,this.adoptActual,conversation.receive,this.notifyConfirmed);
-  this.bindings=Object.freeze({documents:this.documents,header,conversation,comments,layout,viewport});
+  const directory=new DocumentDirectoryCommands(actual,this.api,this.refresh,identity=>this.selectDocument(identity));
+  const discussion=new RequirementDiscussion(actual,this.api,this.refresh);
+  this.bindings=Object.freeze({documents:this.documents,directory,discussion,header,conversation,comments,layout,viewport});
   this.releases.push(layout.subscribe(()=>this.sync()),viewport.subscribe(()=>this.sync()),header.subscribe(()=>this.sync()));
  }
  private sync():void{
   if(this.closed||this.syncing)return;this.syncing=true;
   try{const document=this.documents.getSnapshot(),actual=document.detail,regions=this.bindings;
-   if(actual&&regions&&actual!==this.previous){const changedCurrent=this.previous!==null&&JSON.stringify(this.previous.current)!==JSON.stringify(actual.current);this.previous=actual;regions.header.adopt(actual);regions.conversation.adopt(actual);regions.comments.adopt(actual);const saved=this.value.revisionSave;
+   if(actual&&regions&&actual!==this.previous){const changedCurrent=this.previous!==null&&JSON.stringify(this.previous.current)!==JSON.stringify(actual.current);this.previous=actual;regions.directory.adopt(actual);regions.discussion.adopt(actual);regions.header.adopt(actual);regions.conversation.adopt(actual);regions.comments.adopt(actual);const saved=this.value.revisionSave;
     if(saved)saved.rebase(actual);else if(detailPermissions(actual,true).revision_save)this.publish({revisionSave:new RequirementRevisionSave(actual,this.api)});
     if(changedCurrent&&this.supported&&!this.documents.historical)void regions.comments.comments.refresh(regions.comments.comments.getSnapshot().page,true);
    }
@@ -72,17 +77,26 @@ export class RequirementDetailOwner{
    if(this.supported&&!await this.bindings!.comments.comments.refresh(this.bindings!.comments.comments.getSnapshot().page,true))throw Error('正文评论标记暂时无法读取，已确认正文仍保留');return actual;
   })().catch(error=>{this.publish({error:error instanceof Error?error.message:'实际详情无法展示'});throw error;}).finally(()=>{if(this.refreshing===pending){this.refreshing=null;this.publish({loading:this.read.getSnapshot().loading,ready:!!this.bindings&&this.supported&&this.read.writeReady&&this.documents.writeReady&&!this.value.error});}});this.refreshing=pending;this.sync();return pending;
  };
+ async selectDocument(identity:number|null):Promise<void>{
+  if(this.closed||!this.supported||this.refreshing)throw Error('文档选择暂不可用');
+  const saved=await this.documents.prepareLeave();if(!saved.saved)throw Error('草稿尚未确认保存，请继续编辑或处理保存状态');
+  if(this.documents.historical&&!await this.documents.exitHistory())throw Error('请先退出历史并核实当前文档');
+  if(!await this.read.selectDocument(identity))throw Error(this.read.getSnapshot().error??'文档读取失败');
+  await this.adoptActual(this.read.getSnapshot().confirmed!);
+  this.documents.continueAfterFailedLeave();
+ }
  async readPanel(tab:DetailTab,signal:AbortSignal):Promise<void>{const regions=this.bindings;if(!regions||!this.supported||signal.aborted)throw Error('Panel is unavailable');
   if(tab==='AI'){if(this.documents.historical)return;await regions.conversation.refresh();}
   else if(tab==='COMMENTS'){if(this.documents.historical)return;if(!await regions.comments.comments.refresh())throw Error('实际评论暂时无法读取');}
-  else if(!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
+  else if(this.value.detail?.current!==null&&!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
  }
  openComments=():void=>{if(this.supported){this.bindings?.layout.openTab('COMMENTS');this.sync();}};
+ readSource=(source:unknown,signal:AbortSignal)=>{const identity=this.value.detail?.requirement.id;if(this.closed||identity===undefined)throw Error('来源视图已关闭');return readSource(identity,source,this.api,signal);};
  readRunRecord=async(identity:number,signal:AbortSignal)=>{if(this.closed||signal.aborted)throw Error('Record view is unavailable');const run=(await this.api.getGuideRun(identity,signal)).data;if(this.closed||signal.aborted||run.requirement_id!==this.value.detail?.requirement.id)throw Error('Owned run record required');return run;};
  async openHistory(summary:RevisionSummary):Promise<void>{if(!this.supported)return;this.bindings!.layout.openTab('REVISIONS');await this.documents.openHistory(summary);this.sync();}
- async savedRevision(receipt:RevisionSummary):Promise<void>{if(receipt.requirement_id!==this.value.detail?.requirement.id)throw TypeError('Owned revision required');this.notifyConfirmed(receipt,`版本 V${receipt.version_no} 已保存`);if(!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
+ async savedRevision(receipt:VersionMarker):Promise<void>{if(receipt!==this.value.revisionSave?.getSnapshot().receipt)throw TypeError('Actual version marker receipt required');this.notifyConfirmed(receipt,'版本说明已保存');if(!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
   if(this.closed)return;const actual=await this.refresh();
-  const previous=this.value.revisionSave;if(previous?.getSnapshot().receipt?.id===receipt.id){previous.dispose();this.publish({revisionSave:detailPermissions(actual,true).revision_save?new RequirementRevisionSave(actual,this.api):null});}
+  const previous=this.value.revisionSave;if(previous?.getSnapshot().receipt?.event_id===receipt.event_id){previous.dispose();this.publish({revisionSave:detailPermissions(actual,true).revision_save?new RequirementRevisionSave(actual,this.api):null});}
  }
- retire():Promise<void>{if(this.retiring)return this.retiring;this.closed=true;for(const release of this.releases)release();this.departure.dispose();this.bindings?.viewport.dispose();this.bindings?.header.dispose();this.bindings?.conversation.dispose();this.bindings?.comments.dispose();this.value.revisionSave?.dispose();this.read.dispose();this.toasts.dispose();this.listeners.clear();this.retiring=this.documents.retire();return this.retiring;}
+ retire():Promise<void>{if(this.retiring)return this.retiring;this.closed=true;for(const release of this.releases)release();this.departure.dispose();this.bindings?.viewport.dispose();this.bindings?.header.dispose();this.bindings?.directory.dispose();this.bindings?.discussion.dispose();this.bindings?.conversation.dispose();this.bindings?.comments.dispose();this.value.revisionSave?.dispose();this.read.dispose();this.toasts.dispose();this.listeners.clear();this.retiring=this.documents.retire();return this.retiring;}
 }

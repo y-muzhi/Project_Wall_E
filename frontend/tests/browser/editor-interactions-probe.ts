@@ -1,8 +1,8 @@
-import {mountFormatProbe,mountInitializationFormatProbe} from './format-probe.ts';
+import {mountFormatProbe,mountSpecificationFormatProbe} from './format-probe.ts';
 
 /** Isolated in-memory inputs. No business API, storage, autosave or model calls. */
 async function mount(initializing=false){
-  const probe=initializing?await mountInitializationFormatProbe():await mountFormatProbe('# 测试标题\n\n正文测试\n\n插入位置\n');
+  const probe=initializing?await mountSpecificationFormatProbe():await mountFormatProbe('# 测试标题\n\n正文测试\n\n插入位置\n');
   const controls=document.createElement('section');controls.setAttribute('aria-label','隔离编辑器检查控制');
   const output=document.createElement('pre');output.setAttribute('role','status');output.setAttribute('aria-label','编辑器检查状态');
   const button=(name:string,action:()=>void)=>{const element=document.createElement('button');element.type='button';element.className='ui-button';element.textContent=name;element.addEventListener('click',action);controls.append(element);};

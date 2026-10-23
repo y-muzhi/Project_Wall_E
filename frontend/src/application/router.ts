@@ -6,7 +6,7 @@ import {WorkbenchHistory,pageRoute,decodeWorkbenchEntry} from '../requirements/w
 import type {WorkbenchEntry,PageRoute} from '../requirements/workbench-history.ts';
 import type {DetailDeparture} from '../requirements/departure.ts';
 
-type DetailEntry=Readonly<{schema_version:1;kind:'WALLE_DETAIL';entry_id:string;id:number;position:number;from:Readonly<{entry:WorkbenchEntry;position:number}>|null}>;
+type DetailEntry=Readonly<{schema_version:2;kind:'WALLE_DETAIL';entry_id:string;id:number;position:number;from:Readonly<{entry:WorkbenchEntry;position:number}>|null}>;
 type Destination=Readonly<{path:string;state:unknown;position:number|null}>;
 export interface BrowserPort{
  history:Pick<History,'state'|'replaceState'|'pushState'|'go'>&Partial<Pick<History,'scrollRestoration'>>;
@@ -16,7 +16,7 @@ export interface BrowserPort{
 export type ApplicationState=Readonly<{route:PageRoute;epoch:number;workbench:RequirementWorkbench|null;creation:CreateRequirementFlow|null;entry:WorkbenchEntry|null;restoreScroll:number|null;warning:string|null}>;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const entryId=(state:unknown):string|null=>{if(state&&typeof state==='object'&&'entry_id' in state&&typeof state.entry_id==='string'&&uuid.test(state.entry_id))return state.entry_id;return null;};
-const positionKey=(id:string)=>'walle:v1:route-position:'+id;
+const positionKey=(id:string)=>'walle:v1.5:route-position:'+id;
 /** Real route owner: workbench entries belong to browser history positions.
  * Popstate is restored before asking an active detail to save/leave, so a
  * failed save keeps both the mounted editor and its original browser entry. */
@@ -37,7 +37,7 @@ export class ApplicationRouter{
   try{const raw=this.storage?.getItem(positionKey(identity));if(raw!==null&&raw!==undefined){const value=JSON.parse(raw);if(Number.isSafeInteger(value)&&value>=0){this.positions.set(identity,value);return value;}}}catch{/* Actual route remains usable; no guessed predecessor. */}return null;
  }
  private remember(state:unknown,position:number){const identity=entryId(state);if(!identity)return;this.positions.set(identity,position);try{this.storage?.setItem(positionKey(identity),JSON.stringify(position));}catch{this.publish({warning:'浏览器返回位置暂存不可用，刷新后可能无法恢复。'});}}
- private decodeDetail(state:unknown,id:number):DetailEntry|null{try{if(!state||typeof state!=='object')return null;const row=state as DetailEntry;if(row.kind!=='WALLE_DETAIL'||row.schema_version!==1||row.id!==id||!uuid.test(row.entry_id)||!Number.isSafeInteger(row.position)||row.position<0)return null;
+ private decodeDetail(state:unknown,id:number):DetailEntry|null{try{if(!state||typeof state!=='object')return null;const row=state as DetailEntry;if(row.kind!=='WALLE_DETAIL'||row.schema_version!==2||row.id!==id||!uuid.test(row.entry_id)||!Number.isSafeInteger(row.position)||row.position<0)return null;
   if(row.from!==null){if(!row.from||!Number.isSafeInteger(row.from.position)||row.from.position<0||row.from.position>=row.position)return null;
    // Use the same strict public browser-entry decoder, not a second query definition.
    decodeWorkbenchEntry(row.from.entry);}
@@ -48,7 +48,7 @@ export class ApplicationRouter{
    if(path==='/'){this.browser.history.replaceState(this.browser.history.state,'','/requirements');path='/requirements';}
    entry=this.history.enter(restore?'RESTORE':'DEFAULT');workbench=this.lists.get(entry.entry_id)??new RequirementWorkbench(this.api,entry.query);this.lists.set(entry.entry_id,workbench);creation=new CreateRequirementFlow(this.api);this.remember(entry,this.position);
   }else if(route.kind==='DETAIL'){
-   this.detailEntry=this.decodeDetail(this.browser.history.state,route.id)??Object.freeze({schema_version:1,kind:'WALLE_DETAIL',entry_id:this.identify(),id:route.id,position:this.position,from:null});
+   this.detailEntry=this.decodeDetail(this.browser.history.state,route.id)??Object.freeze({schema_version:2,kind:'WALLE_DETAIL',entry_id:this.identify(),id:route.id,position:this.position,from:null});
    this.browser.history.replaceState(this.detailEntry,'',path);this.remember(this.detailEntry,this.position);
   }
   this.currentPath=path;this.currentState=this.browser.history.state;this.browser.scrollTop();this.publish({route,workbench,creation,entry,restoreScroll:restore&&entry?entry.scroll:null,epoch:prior.epoch+1,warning:this.history.storageWarning});
@@ -60,7 +60,7 @@ export class ApplicationRouter{
  private allowed(next:()=>void){if(this.closed)return;if(this.value.route.kind==='DETAIL'&&this.departure){void this.departure.request(next);return;}if(this.blocked&&!this.value.creation?.state.result){this.publish({warning:'请先在新建需求抽屉中确认输入或恢复原请求。'});return;}next();}
  openRequirement=(id:number):void=>{if(pageRoute('/requirements/'+id).kind!=='DETAIL')throw TypeError('Canonical requirement ID required');this.allowed(()=>{
   if(this.value.entry&&this.value.workbench)this.saveEntry(this.value.workbench.state.requested,this.browser.scroll());const from=this.value.entry?Object.freeze({entry:this.value.entry,position:this.position}):null;
-  const entry:DetailEntry=Object.freeze({schema_version:1,kind:'WALLE_DETAIL',entry_id:this.identify(),id,position:this.position+1,from});this.browser.history.pushState(entry,'','/requirements/'+id);this.position++;this.apply('/requirements/'+id,true);
+  const entry:DetailEntry=Object.freeze({schema_version:2,kind:'WALLE_DETAIL',entry_id:this.identify(),id,position:this.position+1,from});this.browser.history.pushState(entry,'','/requirements/'+id);this.position++;this.apply('/requirements/'+id,true);
  });};
  mainNavigation=():void=>{this.allowed(()=>{this.browser.history.pushState(null,'','/requirements');this.position++;this.apply('/requirements',false);});};
  /** Called by the detail component only after its own departure succeeded. */

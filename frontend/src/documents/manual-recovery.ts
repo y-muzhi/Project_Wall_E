@@ -26,7 +26,7 @@ export class ManualDraftRecovery {
   private readonly listeners=new Set<()=>void>();private pending:Promise<boolean>|undefined;private pendingOperation:'INSPECT'|'RESTORE'|'DISCARD'|undefined;private disposed=false;private confirmedFacts=false;
   private value:ManualRecoveryState=Object.freeze({phase:'LOADING',checking:false,local:null,server:null,error:null,storage_error:false});
   constructor(root:Requirement,current:DocumentReadModel,draft:DocumentReadModel,api:Api,editor:Editor,autosave:Autosave,cache:Cache){
-    if(root.document_work_state!=='MANUAL_EDITING'||root.status==='COMPLETED'||root.active_operation_type!=='MANUAL_DRAFT'||root.active_operation_id!==draft.id||
+    if(root.document_work_state!=='MANUAL_EDITING'||root.active_operation_type!=='MANUAL_DRAFT'||root.active_operation_id!==draft.id||
       current.document_type!=='CURRENT'||draft.document_type!=='MANUAL_DRAFT'||current.id===draft.id||current.requirement_id!==root.id||draft.requirement_id!==root.id||
       autosave.state.confirmed_version!==draft.content_version||autosave.state.local_revision!==0||!pairSame(autosave.localSnapshot,draft))throw new TypeError('Fresh actual manual session required');
     this.current=capture(current);this.draft=capture(draft);this.api=api;this.editor=editor;this.autosave=autosave;this.cache=cache;editor.setReadonly(true);
@@ -45,13 +45,13 @@ export class ManualDraftRecovery {
   private async read():Promise<boolean>{
     this.confirmedFacts=false;this.publish({checking:true,error:null});
     const id=this.draft.requirement_id;
-    const [root,current,draft,local]=await Promise.allSettled([this.api.getRequirement(id),this.api.getCurrentDocument(id),this.api.getManualDraft(id),this.cache.get(id,this.draft.id)]);
+    const [root,current,draft,local]=await Promise.allSettled([this.api.getRequirement(id),this.api.getCurrentDocument(id,this.current.id),this.api.getManualDraft(id,this.current.id),this.cache.get(id,this.draft.id)]);
     if(this.disposed)return false;
     if(root.status==='rejected'||current.status==='rejected'||draft.status==='rejected'){
       this.publish({phase:'ERROR',checking:false,error:'暂时无法确认实际编辑会话，本地内容仍保留'});return false;
     }
     const r=root.value.data,c=current.value.data,d=draft.value.data;
-    if(r.id!==id||r.status==='COMPLETED'||r.document_work_state!=='MANUAL_EDITING'||r.active_operation_type!=='MANUAL_DRAFT'||r.active_operation_id!==this.draft.id||
+    if(r.id!==id||r.document_work_state!=='MANUAL_EDITING'||r.active_operation_type!=='MANUAL_DRAFT'||r.active_operation_id!==this.draft.id||
       c.document_type!=='CURRENT'||c.id!==this.current.id||c.requirement_id!==id||c.content_version!==this.current.content_version||
       d.document_type!=='MANUAL_DRAFT'||d.id!==this.draft.id||d.requirement_id!==id||d.created_at!==this.draft.created_at){
       this.publish({phase:'ERROR',checking:false,error:'编辑会话或正式正文已变化，请重新读取详情；本地内容仍保留'});return false;

@@ -16,12 +16,13 @@ class ListCommentsRequest:
 
     @classmethod
     def parse(cls, request):
-        payload = request_query(request, singles=('page',))
+        payload = request_query(request, singles=('document_id', 'page'))
+        payload['document_id'] = decimal_integer(payload.get('document_id'), 'document_id')
         payload['requirement_id'] = decimal_integer(request.path_params['requirement_id'], 'requirement_id')
         if 'page' in payload:
             payload['page'] = decimal_integer(payload['page'], 'page', maximum=100000)
         validated = list_comments_input(payload)
-        return cls({'requirement_id': validated.requirement_id, 'page': validated.page})
+        return cls({'requirement_id': validated.requirement_id, 'document_id': validated.document_id, 'page': validated.page})
 
 
 class ListCommentsResponse:
@@ -31,7 +32,7 @@ class ListCommentsResponse:
     def project(data, request):
         def item(value):
             projected = comment_list_item(value)
-            if projected['requirement_id'] != request.payload['requirement_id']:
+            if projected['requirement_id'] != request.payload['requirement_id'] or projected['document_id'] != request.payload['document_id']:
                 raise ValueError('Comments must belong to the requested requirement')
             return projected
         return page(data, item, request.payload['page'])
@@ -61,11 +62,12 @@ class GetCommentResponse:
 @dataclass(frozen=True)
 class GetCommentIndexRequest:
     requirement_id: int
+    document_id: int
 
     @classmethod
     def parse(cls, request):
-        request_query(request)
-        return cls(decimal_integer(request.path_params['requirement_id'], 'requirement_id'))
+        query = request_query(request, singles=('document_id',))
+        return cls(decimal_integer(request.path_params['requirement_id'], 'requirement_id'), decimal_integer(query.get('document_id'), 'document_id'))
 
 
 class GetCommentIndexResponse:
@@ -74,14 +76,14 @@ class GetCommentIndexResponse:
     @staticmethod
     def project(data, request):
         value = comment_index_model(data)
-        if value['requirement_id'] != request.requirement_id:
+        if value['requirement_id'] != request.requirement_id or value['document_id'] != request.document_id:
             raise ValueError('Index response belongs to another requirement')
         return value, None
 
 
 class CreateCommentRequest(CommandRequest):
-    body_fields = ('expected_content_version', 'content', 'anchor_type', 'block_id', 'selection')
-    mandatory = ('expected_content_version', 'content', 'anchor_type', 'block_id')
+    body_fields = ('document_id', 'expected_content_version', 'content', 'anchor_type', 'block_id', 'selection')
+    mandatory = ('document_id', 'expected_content_version', 'content', 'anchor_type', 'block_id')
     validate = staticmethod(create_comment_input)
     normalize = staticmethod(lambda payload, validated: {**validated.business_input(), 'idempotency_key': validated.idempotency_key})
 
@@ -94,7 +96,7 @@ class CreateCommentResponse:
     @staticmethod
     def project(data, request):
         value = comment_read_model(data)
-        if value['requirement_id'] != request.payload['requirement_id'] or value['status'] != 'OPEN' or value['anchor_status'] != 'ATTACHED' or value['deleted_at'] is not None:
+        if value['requirement_id'] != request.payload['requirement_id'] or value['document_id'] != request.payload['document_id'] or value['status'] != 'OPEN' or value['anchor_status'] != 'ATTACHED' or value['deleted_at'] is not None:
             raise ValueError('Creation response must reflect the accepted new comment')
         return value, None
 

@@ -3,14 +3,13 @@ import type {WalleApi} from '../api/walle.ts';
 import type {DetailSnapshot} from './detail-read.ts';
 import {RequirementPropertyEdit} from './property-edit.ts';
 import {RequirementLifecycle} from './lifecycle.ts';
-import type {LifecycleOperation} from './lifecycle.ts';
 import {ManualDraftStart} from '../documents/manual-start.ts';
 import {detailPermissions} from './permissions.ts';
 
 export type HeaderOwner='TITLE'|'LIFECYCLE'|'MANUAL';
 export type HeaderCommandState=Readonly<{detail:DetailSnapshot;lifecycle:RequirementLifecycle|null;manual:ManualDraftStart|null;revision:number;lifecycle_generation:number;manual_generation:number}>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
-const signature=(detail:DetailSnapshot)=>JSON.stringify([detail.requirement.status,detail.requirement.document_work_state,detail.current.id,detail.current.content_version]);
+const signature=(detail:DetailSnapshot)=>JSON.stringify([detail.requirement.status,detail.requirement.metadata_version,detail.requirement.document_work_state,detail.current?.id,detail.current?.content_version]);
 
 /** Owns header intentions for one requirement. Actual full detail replaces
  * facts, not unsent input or an unknown original command. Never touches the
@@ -46,7 +45,7 @@ export class RequirementHeaderCommands {
    * when source changes; uncertain actions keep their original version/key. */
   adopt(detail:DetailSnapshot):void{
     if(this.closed)return;const old=this.value;
-    if(detail.requirement.id!==old.detail.requirement.id||detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)throw TypeError('Owned complete detail required');
+    if(detail.requirement.id!==old.detail.requirement.id||detail.current!==null&&(detail.current!==null&&(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)))throw TypeError('Owned complete detail required');
     const actual=capture(detail),nextSignature=signature(actual),permissions=detailPermissions(actual,true);
     this.adopting=true;
     try{
@@ -54,13 +53,13 @@ export class RequirementHeaderCommands {
       let lifecycle=old.lifecycle,manual=old.manual;
       const protectedLife=lifecycle&&['SUBMITTING','READING','UNKNOWN'].includes(lifecycle.getSnapshot().phase);
       if(!protectedLife&&(!lifecycle||this.lifecycleSignature!==nextSignature||['ERROR','CONFIRMED'].includes(lifecycle.getSnapshot().phase))){
-        this.lifecycleRelease?.();lifecycle?.dispose();const operation:LifecycleOperation|null=permissions.complete_initialization?'INITIALIZATION':permissions.complete_requirement?'COMPLETE':permissions.reactivate?'REACTIVATE':null;
-        lifecycle=operation?new RequirementLifecycle(operation,actual,this.api):null;this.lifecycleSignature=nextSignature;
+        this.lifecycleRelease?.();lifecycle?.dispose();
+        lifecycle=new RequirementLifecycle(actual.requirement.status,actual,this.api);this.lifecycleSignature=nextSignature;
         this.lifecycleRelease=lifecycle?.subscribe(()=>this.notify());
       }
       const protectedStart=manual&&['SUBMITTING','CHECKING','UNKNOWN'].includes(manual.getSnapshot().phase);
       if(!protectedStart&&(!manual||this.manualSignature!==nextSignature||['ERROR','STARTED'].includes(manual.getSnapshot().phase))){
-        this.manualRelease?.();manual?.dispose();manual=permissions.manual_start?new ManualDraftStart(actual.requirement,actual.current,this.api):null;
+        this.manualRelease?.();manual?.dispose();manual=permissions.manual_start&&actual.current!==null?new ManualDraftStart(actual.requirement,actual.current,this.api):null;
         this.manualSignature=nextSignature;this.manualRelease=manual?.subscribe(()=>this.notify());
       }
       this.value=Object.freeze({detail:actual,lifecycle,manual,revision:old.revision,lifecycle_generation:old.lifecycle_generation+(lifecycle!==old.lifecycle?1:0),manual_generation:old.manual_generation+(manual!==old.manual?1:0)});

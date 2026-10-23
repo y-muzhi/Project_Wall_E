@@ -53,7 +53,7 @@ export function DetailFrame(props: DetailFrameProps) {
     void Promise.resolve().then(() => callbacks.current.readPanel(state.right_tab,controller.signal)).catch(() => { if(!controller.signal.aborted)setPanelError(true); });
     return () => controller.abort();
   },[supported,state.right_open,state.right_tab,panelRetry]);
-  const sizes = `${state.left_open ? '200px 6px ' : ''}minmax(640px, 1fr)${state.right_open ? ` 6px ${state.right_width}px` : ''}`;
+  const sizes = state.split_view ? `${state.left_open&&!state.left_drawer ? '200px 6px ' : ''}minmax(640px, 1fr)${state.right_open ? ` 6px ${state.right_width}px` : ''}` : 'minmax(0,1fr)';
   const panels: Record<DetailTab,ReactNode> = {AI:props.ai,COMMENTS:props.comments,REVISIONS:props.revisions};
   return <main className="requirement-detail-frame" data-layout={state.mode} data-viewport-phase={guard.phase}>
     <PageHeader><header className="detail-header" role="group" aria-label="需求工作栏"><div className="detail-title-row"><div className="detail-return"><button className="ui-button" type="button" aria-label="返回需求工作台" title="返回需求工作台" onClick={props.back} data-focus-fallback><Icon name="left"/>工作台</button></div>
@@ -75,11 +75,16 @@ export function DetailFrame(props: DetailFrameProps) {
         </div>}
       </div>
     </div>
-    <div className="detail-columns" ref={columns} hidden={!visible} inert={!supported} aria-busy={!supported} style={{gridTemplateColumns:sizes} as CSSProperties}>
-      <aside id="detail-outline" className="detail-outline" hidden={!state.left_open} aria-label="文档大纲"><header className="outline-heading detail-outline-heading"><button ref={outlineClose} className="ui-button icon-button" type="button" aria-label="收起大纲" title="收起大纲" aria-expanded={state.left_open} aria-controls="detail-outline" onClick={toggleOutline}><Icon name="collapseLeft"/></button><strong>大纲</strong></header>{props.outline}</aside>
-      <div className="detail-left-divider" hidden={!state.left_open} />
-      <section className="detail-document-region" aria-label="需求正文"><div className="detail-outline-reopen" hidden={state.left_open}><button ref={outlineOpen} className="ui-button" type="button" aria-label="展开大纲" title="展开文档大纲" aria-expanded={state.left_open} aria-controls="detail-outline" onClick={toggleOutline}><Icon name="outline"/>大纲</button></div><div className="detail-document-content">{props.document}</div></section>
-      <div className="detail-resizer" data-resizing={resizing} hidden={!state.right_open} role="separator" aria-label="调整辅助面板宽度" title="拖动调整辅助面板宽度；方向键每次调整20px" aria-orientation="vertical"
+    <div className="detail-view-controls" hidden={!visible} inert={!supported}>
+      <button ref={outlineOpen} className="ui-button" hidden={!state.left_drawer&&state.left_open} type="button" aria-label="展开文档导航" aria-expanded={state.left_open} aria-controls="detail-outline" onClick={toggleOutline}><Icon name="outline"/>文档导航</button>
+      {!state.split_view&&<div role="group" aria-label="阅读视图"><button className="ui-button" type="button" aria-pressed={state.document_open} onClick={()=>props.layout.showDocument()}>文档</button><button className="ui-button" type="button" aria-pressed={state.right_open} onClick={()=>props.layout.openTab('AI')}>AI 对话</button></div>}
+    </div>
+    <div className="detail-columns" ref={columns} data-navigation-drawer={state.left_drawer} hidden={!visible} inert={!supported} aria-busy={!supported} style={{gridTemplateColumns:sizes} as CSSProperties}>
+      {state.left_drawer&&state.left_open&&<button type="button" className="detail-navigation-backdrop" aria-label="关闭文档导航" onClick={toggleOutline}/>}
+      <aside id="detail-outline" className="detail-outline" hidden={!state.left_open} aria-label="文档导航" onKeyDown={event=>{if(state.left_drawer&&event.key==='Escape'){event.preventDefault();toggleOutline();}}}><header className="outline-heading detail-outline-heading"><button ref={outlineClose} className="ui-button icon-button" type="button" aria-label="收起文档导航" title="收起文档导航" aria-expanded={state.left_open} aria-controls="detail-outline" onClick={toggleOutline}><Icon name="collapseLeft"/></button><strong>文档导航</strong></header>{props.outline}</aside>
+      <div className="detail-left-divider" hidden={!state.left_open||state.left_drawer} />
+      <section className="detail-document-region" hidden={!state.document_open} aria-label="需求正文"><div className="detail-document-content">{props.document}</div></section>
+      <div className="detail-resizer" data-resizing={resizing} hidden={!state.right_open||!state.split_view} role="separator" aria-label="调整辅助面板宽度" title="拖动调整辅助面板宽度；方向键每次调整20px" aria-orientation="vertical"
         aria-valuemin={360} aria-valuemax={Math.floor(state.right_max)} aria-valuenow={Math.round(state.right_width)} tabIndex={state.right_open ? 0 : -1}
         onPointerDown={event => { if(event.button!==0)return;event.preventDefault();drag.current={id:event.pointerId,x:event.clientX,width:state.right_width};setResizing(true);event.currentTarget.setPointerCapture(event.pointerId); }}
         onPointerMove={event => {const start=drag.current;if(start&&start.id===event.pointerId)props.layout.resizeRight(start.width+start.x-event.clientX);}}
@@ -89,7 +94,7 @@ export function DetailFrame(props: DetailFrameProps) {
           if(value!==null){event.preventDefault();props.layout.resizeRight(value);}
         }} />
       <aside className="detail-panel" hidden={!state.right_open} aria-label="辅助面板">
-        <div className="detail-panel-heading"><button className="ui-button icon-button detail-panel-width" type="button" disabled={!supported||state.right_max<380} aria-label={state.right_width<state.right_max-1?'展开辅助面板宽度':'收窄辅助面板宽度'} title={state.right_max<380?'当前窗口没有足够的调宽空间':state.right_width<state.right_max-1?'展开至当前可用最大宽度':'收窄至360px'} onClick={()=>props.layout.resizeRight(state.right_width<state.right_max-1?state.right_max:360)}><Icon name="panel"/></button><div className="detail-panel-tabs" role="tablist" aria-label="辅助功能">{tabs.map(item => <button className="ui-button" key={item.value} type="button" role="tab"
+        <div className="detail-panel-heading"><button className="ui-button icon-button detail-panel-width" type="button" disabled={!supported||!state.split_view||state.right_max<380} aria-label={state.right_width<state.right_max-1?'展开辅助面板宽度':'收窄辅助面板宽度'} title={state.right_max<380?'当前窗口没有足够的调宽空间':state.right_width<state.right_max-1?'展开至当前可用最大宽度':'收窄至360px'} onClick={()=>props.layout.resizeRight(state.right_width<state.right_max-1?state.right_max:360)}><Icon name="panel"/></button><div className="detail-panel-tabs" role="tablist" aria-label="辅助功能">{tabs.map(item => <button className="ui-button" key={item.value} type="button" role="tab"
           id={`detail-tab-${item.value}`} aria-controls={`detail-panel-${item.value}`} aria-selected={state.right_tab===item.value}
           tabIndex={state.right_tab===item.value?0:-1} onKeyDown={event=>{
             const index=tabs.findIndex(tab=>tab.value===item.value),next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;

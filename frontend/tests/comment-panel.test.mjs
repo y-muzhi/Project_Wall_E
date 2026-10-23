@@ -3,27 +3,24 @@ import assert from 'node:assert/strict';
 import {RequirementCommentPanel} from '../src/comments/panel-owner.ts';
 import {ApiUnknown,ApiRejected} from '../src/api/client.ts';
 const at='2026-10-06T04:00:00.000Z',location={status:'ATTACHED',block_id:7,start_offset:null,end_offset:null};
-const item=id=>({id,requirement_id:1,content:'评论'+id,anchor_type:'BLOCK',block_id:7,anchor_ref:{block_markdown_snapshot:'原引用'},anchor_status:'ATTACHED',status:'OPEN',resolved_at:null,deleted_at:null,created_at:at,updated_at:at,location});
-const current={id:2,requirement_id:1,document_type:'CURRENT',content_version:3,markdown_content:'实际正文',block_state_json:{blocks:[{block_id:7},{block_id:8}]}};
-const detail={requirement:{id:1,status:'ACTIVE',document_work_state:'IDLE'},current,activity:{kind:'IDLE'},comment_index:{}};
+const item=id=>({id,requirement_id:1,document_id:2,content:'评论'+id,anchor_type:'BLOCK',block_id:7,anchor_ref:{block_markdown_snapshot:'原引用'},anchor_status:'ATTACHED',status:'OPEN',resolved_at:null,deleted_at:null,created_at:at,updated_at:at,location});
+const current={id:2,requirement_id:1,document_type:'CURRENT',archived_at:null,content_version:3,markdown_content:'实际正文',block_state_json:{blocks:[{block_id:7},{block_id:8}]}};
+const detail={requirement:{id:1,discussion_version:1,status:'PLANNING',document_work_state:'IDLE'},current,activity:{kind:'IDLE'},comment_index:{}};
 const target={document_id:2,content_version:3,block_id:7,anchor_type:'BLOCK',selection:null,quote:'原引用'};
 const defer=()=>{let resolve;const promise=new Promise(yes=>resolve=yes);return {promise,resolve};};
-test('comment availability explains lifecycle gates without granting initialization or completed writes',async()=>{
- for(const status of ['INITIALIZING','COMPLETED']){
-  const blocked={...detail,requirement:{...detail.requirement,status}},f=fixture(0);
-  const panel=new RequirementCommentPanel(blocked,f.api,async()=>blocked,f.adopt,async()=>{});
-  assert(!panel.writeReady);assert.match(panel.writeUnavailableReason,status==='INITIALIZING'?/完成初始化/:/重新激活/);
-  assert.equal(panel.create(target),null);panel.dispose();
+test('all five manual statuses permit idle comment work after actual read; non-CURRENT viewing stays read only',async()=>{
+ for(const status of ['PLANNING','READY','IMPLEMENTING','COMPLETED','CLOSED']){
+  const actual={...detail,requirement:{...detail.requirement,status}},f=fixture(0);
+  const panel=new RequirementCommentPanel(actual,f.api,async()=>actual,f.adopt,async()=>{});
+  assert.match(panel.writeUnavailableReason,/未就绪/);await panel.refresh();assert(panel.writeReady);assert.equal(panel.writeUnavailableReason,null);
+  panel.setView('MANUAL');assert.match(panel.writeUnavailableReason,/正式正文/);assert(!panel.writeReady);panel.dispose();
  }
- const f=fixture(0),panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async()=>{});
- assert.match(panel.writeUnavailableReason,/未就绪/);await panel.refresh();assert(panel.writeReady);assert.equal(panel.writeUnavailableReason,null);
- panel.setView('MANUAL');assert.match(panel.writeUnavailableReason,/正式正文/);assert(!panel.writeReady);panel.dispose();
 });
 const flush=async()=>{for(let i=0;i<16;i++)await Promise.resolve();};
 function fixture(count=25){
  const facts={rows:Array.from({length:count},(_,i)=>item(i+1)),detail,reads:0,adopts:0,lists:0,drop:false};
  const api={getCommentIndex:async()=>{const rows=facts.rows,open=rows.filter(row=>row.status==='OPEN');return {data:{requirement_id:1,document_id:2,content_version:facts.detail.current.content_version,total_count:rows.length,open_count:open.length,blocks:open.length?[{block_id:7,open_count:open.length,comment_ids:open.map(row=>row.id)}]:[],comments:rows.map(({id,status,anchor_status,location})=>({id,status,anchor_status,location}))}};},
- listComments:async(_id,page)=>{facts.lists++;if(facts.drop){facts.drop=false;throw Error('Dropped list');}return {data:{items:facts.rows.slice((page-1)*20,page*20)},meta:{pagination:{page,page_size:20,total:facts.rows.length,total_pages:Math.ceil(facts.rows.length/20)}}};},
+ listComments:async(_id,documentId,page)=>{facts.lists++;if(facts.drop){facts.drop=false;throw Error('Dropped list');}return {data:{items:facts.rows.slice((page-1)*20,page*20)},meta:{pagination:{page,page_size:20,total:facts.rows.length,total_pages:Math.ceil(facts.rows.length/20)}}};},
  getComment:async id=>({data:facts.rows.find(row=>row.id===id)})};
  const read=async()=>{facts.reads++;return facts.detail;},adopt=async()=>{facts.adopts++;};
  return {facts,api,read,adopt};
@@ -50,13 +47,13 @@ test('positive list adoption failure keeps confirmed owner; exact receipt retry 
  await panel.finish(flow,outcome);assert.equal(panel.slot(1),null);assert.equal(sends,1);assert.equal(panel.comments.getSnapshot().confirmed.items[0].content,'新正文');panel.dispose();
 });
 test('GUIDE delivery acknowledges once, even when subsequent actual parent/page adoption fails',async()=>{
- const f=fixture(1),run={id:9,requirement_id:1,source_type:'COMMENT',source_id:1,function_type:'MODIFY_FROM_COMMENT',action_type:'MODIFY',status:'RUNNING',current_step:'PREPARING',scope:{scope_type:'BLOCK',scope_ref:{block_id:7}}};let deliveries=0,sends=0;
- f.api.prepareModifyFromComment=()=>({submit:async()=>{sends++;return {data:run};}});const panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async actual=>{assert.equal(actual.id,9);deliveries++;});await panel.refresh();
+ const f=fixture(1),run={id:9,requirement_id:1,source_type:'COMMENT',source_id:1,function_type:'collaboration_v1',action_type:'MODIFY',operation:'PROPOSE_CHANGES',target:{kind:'EXISTING',document_id:2,expected_content_version:3},status:'RUNNING',current_step:'PREPARING',scope:{scope_type:'BLOCK',scope_ref:{block_id:7}}};let deliveries=0,sends=0;
+ f.api.getGuideRun=async()=>({data:run});f.api.prepareModifyFromComment=()=>({submit:async()=>{sends++;return {data:{processing:'MODEL',guide_run_id:9,user_message_id:10}};}});const panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async actual=>{assert.equal(actual.id,9);deliveries++;});await panel.refresh();
  const flow=panel.begin(1,'MODIFY');assert(await flow.submit());f.facts.drop=true;await assert.rejects(panel.finish(flow,flow.getSnapshot().outcome));assert.equal(deliveries,1);await panel.finish(flow,flow.getSnapshot().outcome);assert.equal(deliveries,1);assert.equal(sends,1);assert.equal(f.facts.rows[0].status,'OPEN');panel.dispose();
 });
 test('unacknowledged Guide receiver failure retains original receipt and can retry the same Run before any parent adoption',async()=>{
- const f=fixture(1),run={id:9,requirement_id:1,source_type:'COMMENT',source_id:1,function_type:'MODIFY_FROM_COMMENT',action_type:'MODIFY',status:'RUNNING',current_step:'PREPARING',scope:{scope_type:'BLOCK',scope_ref:{block_id:7}}};let calls=0,accepted=null;
- f.api.prepareModifyFromComment=()=>({submit:async()=>({data:run})});const panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async actual=>{calls++;accepted??=actual.id;assert.equal(actual.id,accepted);if(calls===1)throw Error('Receiver adoption incomplete');});await panel.refresh();
+ const f=fixture(1),run={id:9,requirement_id:1,source_type:'COMMENT',source_id:1,function_type:'collaboration_v1',action_type:'MODIFY',operation:'PROPOSE_CHANGES',target:{kind:'EXISTING',document_id:2,expected_content_version:3},status:'RUNNING',current_step:'PREPARING',scope:{scope_type:'BLOCK',scope_ref:{block_id:7}}};let calls=0,accepted=null;
+ f.api.getGuideRun=async()=>({data:run});f.api.prepareModifyFromComment=()=>({submit:async()=>({data:{processing:'MODEL',guide_run_id:9,user_message_id:10}})});const panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async actual=>{calls++;accepted??=actual.id;assert.equal(actual.id,accepted);if(calls===1)throw Error('Receiver adoption incomplete');});await panel.refresh();
  const flow=panel.begin(1,'MODIFY');assert(await flow.submit());await assert.rejects(panel.finish(flow,flow.getSnapshot().outcome),/incomplete/);assert.equal(f.facts.adopts,1);assert.equal(panel.slot(1).flow,flow);await panel.finish(flow,flow.getSnapshot().outcome);assert.equal(calls,2);assert.equal(accepted,9);assert.equal(panel.slot(1),null);panel.dispose();
 });
 test('history while parent read is pending suppresses adoption and retains confirmed receipt for fresh restoration',async()=>{

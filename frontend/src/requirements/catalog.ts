@@ -2,6 +2,8 @@ import resource from '../../../backend/resources/v7/templates/catalog.v4.json' w
 import headingLegacyResource from '../../../backend/resources/v6/templates/catalog.v3.json' with { type: 'json' };
 import fullLegacyResource from '../../../backend/resources/v3/templates/catalog.v2.json' with { type: 'json' };
 import legacyResource from '../../../backend/resources/v2/templates/catalog.v1.json' with { type: 'json' };
+import collaborationManifest from '../../../backend/resources/v9/manifest.json' with {type:'json'};
+import {resourceRef} from '../api/models.ts';
 import { array, bool, checked, choices, distinct, id, nonempty, require, shape } from '../api/decoding.ts';
 import { snapshotObject } from '../api/client.ts';
 const types = ['NEW', 'CHANGE'] as const, modes = ['IDEATION', 'DESIGN'] as const;
@@ -15,6 +17,12 @@ const installed = catalog(snapshotObject(resource));
 require(!installed.proposal); distinct(installed.requirement_types.map(option => option.value)); distinct(installed.initialization_modes.map(option => option.value));
 distinct(installed.templates.map(value => value.template_key + ':' + value.template_version));
 export const requirementCatalog = installed;
+export const documentStructureRefs=Object.freeze(Object.fromEntries(['REQUIREMENT_BRIEF','DESIGN','SPECIFICATION'].map((kind,index)=>{
+  const key='structure.'+['brief','design','specification'][index];
+  const entry=collaborationManifest.files.find(file=>file.resource_ref.key===key);if(!entry)throw Error('Document structure is unavailable');
+  return [kind,resourceRef(entry.resource_ref)];
+})));
+export const documentKindLabels=Object.freeze({REQUIREMENT_BRIEF:'需求说明',DESIGN:'设计文档',SPECIFICATION:'规格说明'} as const);
 /** Historical initialization still resolves its exact frozen template. */
 export const initializationTemplates = Object.freeze([...catalog(snapshotObject(legacyResource)).templates, ...catalog(snapshotObject(fullLegacyResource)).templates, ...catalog(snapshotObject(headingLegacyResource)).templates, ...installed.templates]
   .filter((value, index, values) => values.findIndex(item => item.template_key === value.template_key && item.template_version === value.template_version) === index));

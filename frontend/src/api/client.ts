@@ -11,6 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const ERROR_STATUS: Readonly<Record<string, number>> = {
   VALIDATION_FAILED: 422, NOT_FOUND: 404, MANUAL_DRAFT_NOT_FOUND: 404,
   STATE_CONFLICT: 409, WORK_STATE_CONFLICT: 409, WORK_STATE_INCONSISTENT: 409, CONTENT_VERSION_CONFLICT: 409,
+  METADATA_VERSION_CONFLICT: 409, DISCUSSION_VERSION_CONFLICT: 409, SOURCE_VERSION_CONFLICT: 409,
   TEMPLATE_INVALID: 422, DOCUMENT_INVALID: 422, ANCHOR_INVALID: 422, SCOPE_INVALID: 422, SOURCE_INVALID: 422,
   PATCH_INVALID: 422, TARGET_STALE: 409, BATCH_PENDING: 422, COMMENT_ORPHANED: 409,
   CARD_ALREADY_ANSWERED: 409, CARD_EXPIRED: 409, CONFIG_INVALID: 503, STORAGE_UNAVAILABLE: 503,
@@ -88,6 +89,12 @@ export function snapshotObject(value: unknown): JsonObject {
   freeze(copied); return copied;
 }
 function errorDetails(code: string, value: unknown): JsonObject | null {
+  if (['METADATA_VERSION_CONFLICT','DISCUSSION_VERSION_CONFLICT','SOURCE_VERSION_CONFLICT'].includes(code) && value !== null) {
+    const result = exact(value, ['expected_version','actual_version','resource_kind','resource_id']);
+    for (const field of ['expected_version','actual_version','resource_id']) positiveInteger(result[field]);
+    if (!['Requirement','RequirementDocument','Discussion','Revision'].includes(result.resource_kind as string)) throw new TypeError('Invalid version conflict target');
+    return result as JsonObject;
+  }
   if (code === 'CARD_ALREADY_ANSWERED') {
     const result = exact(value, ['response_message_id']); positiveInteger(result.response_message_id); return result as JsonObject;
   }
@@ -140,7 +147,7 @@ function meta(value: unknown): ApiMeta {
 
 /** Opaque command handle. Snapshot/string/key remain private and never mutate. */
 export type PreparedCommand = Readonly<{ kind: 'WALLE_COMMAND' }>;
-type FrozenCommand = { method: CommandMethod; path: string; body: string | null; key: string | null; success_status: number };
+type FrozenCommand = { method: CommandMethod; path: string; body: string | null; key: string | null; success_status: readonly number[] };
 
 export class ApiClient {
   private readonly commands = new WeakMap<PreparedCommand, FrozenCommand>();
@@ -149,16 +156,17 @@ export class ApiClient {
     this.send = send; this.uuid = uuid;
   }
 
-  prepare(method: CommandMethod, target: string, body: JsonObject | null, options: { idempotent: boolean; success_status: 200 | 201 | 202 }): PreparedCommand {
+  prepare(method: CommandMethod, target: string, body: JsonObject | null, options: { idempotent: boolean; success_status: 200 | 201 | 202 | readonly (200 | 201 | 202)[] }): PreparedCommand {
     if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) throw new TypeError('Invalid command method');
     const location = path(target);
-    if (typeof options.idempotent !== 'boolean' || ![200, 201, 202].includes(options.success_status)) throw new TypeError('Invalid command policy');
+    const statuses=typeof options.success_status==='number'?[options.success_status]:[...options.success_status];
+    if (typeof options.idempotent !== 'boolean'||statuses.length===0||new Set(statuses).size!==statuses.length||statuses.some(status=>![200,201,202].includes(status)))throw new TypeError('Invalid command policy');
     if (body !== null) object(body);
     const frozenBody = body === null ? null : JSON.stringify(snapshot(body));
     const key = options.idempotent ? this.uuid() : null;
     if (key !== null && !UUID.test(key)) throw new TypeError('Invalid action key');
     const action = Object.freeze({ kind: 'WALLE_COMMAND' as const });
-    this.commands.set(action, { method, path: location, body: frozenBody, key, success_status: options.success_status });
+    this.commands.set(action, { method, path: location, body: frozenBody, key, success_status: Object.freeze(statuses) });
     return action;
   }
 
@@ -171,9 +179,9 @@ export class ApiClient {
     const parameters = new URLSearchParams();
     for (const [key, value] of query) parameters.append(key, value);
     const encoded = parameters.toString();
-    return this.request(path(target) + (encoded ? '?' + encoded : ''), 'GET', null, null, 200, decode, signal);
+    return this.request(path(target) + (encoded ? '?' + encoded : ''), 'GET', null, null, [200], decode, signal);
   }
-  private async request<T>(target: string, method: string, body: string | null, key: string | null, successStatus: number,
+  private async request<T>(target: string, method: string, body: string | null, key: string | null, successStatus: readonly number[],
                            decode: Decoder<T>, signal?: AbortSignal): Promise<ApiSuccess<T>> {
     const mutation = method !== 'GET';
     try {
@@ -187,7 +195,7 @@ export class ApiClient {
       if (response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') throw new TypeError('Expected API JSON');
       const parsed: unknown = JSON.parse(await response.text()); jsonValue(parsed);
       const envelope = exact(parsed, ['success', 'data', 'error', 'meta']), context = meta(envelope.meta);
-      if (envelope.success === true && envelope.error === null && response.status === successStatus) {
+      if (envelope.success === true && envelope.error === null && successStatus.includes(response.status)) {
         return { data: decode(envelope.data), meta: context, status: response.status };
       }
       if (envelope.success !== false || envelope.data !== null || Object.hasOwn(context, 'pagination') || response.status < 400 || response.status > 599) throw new TypeError('Invalid response');

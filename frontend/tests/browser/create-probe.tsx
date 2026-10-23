@@ -45,7 +45,7 @@ export function mountCreateProbe(api: WalleApi) {
       const result=active.state.result; require(result !== null && prepared === 1 && submissions === 2 && dropped);
       const [current,list]=await Promise.all([api.getRequirement(result.requirement.id),api.listRequirements({keyword:'真实抽屉😀'})]);
       require(list.data.items.length === 1 && list.data.items[0]!.id === result.requirement.id && current.data.title === '真实抽屉😀');
-      return {passed:true,id:result.requirement.id,guide_run_id:result.guide_run_id,prepared,submissions,dropped,actual_list_count:list.data.items.length,
+      return {passed:true,id:result.requirement.id,initial_message_id:result.initial_message_id,prepared,submissions,dropped,actual_list_count:list.data.items.length,
         scope:'Actual native 201 discarded locally then exact original action replay; no Provider or whole product acceptance'};
     },
     destroy() { active.dispose(); toast.dispose(); root.unmount(); element.remove(); },

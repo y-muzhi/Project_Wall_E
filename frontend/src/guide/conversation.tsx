@@ -36,7 +36,7 @@ export function GuideConversation({owner,documents,toasts}:Readonly<{owner:Requi
   <div className="conversation-workspace" hidden={!!batch&&!showMessages} inert={!!batch&&!showMessages}>
    <div className="conversation-reading-region">
    <div className="conversation-discussion" ref={setScrollPort} role="region" aria-label="对话阅读区" tabIndex={0}>
-    <div className="conversation-content" ref={setScrollContent}><AiReadPanel scrollPort={scrollPort} scrollContent={scrollContent} owner={owner.read} structured={message=><CardMessage groups={owner.cards} message={message} busy={document.busy}/>} commands={()=><RunControls owner={owner.runs}/>} renderMarkdown={renderMarkdown}/></div>
+    <div className="conversation-content" ref={setScrollContent}><AiReadPanel scrollPort={scrollPort} scrollContent={scrollContent} owner={owner.read} structured={message=><CardMessage groups={owner.cards} message={message} documents={documents} busy={document.busy}/>} commands={()=><RunControls owner={owner.runs}/>} renderMarkdown={renderMarkdown}/></div>
    </div>
    </div>
    <GuideComposer owner={owner.composer} documents={documents} review={read.run} viewingHistory={read.selection==='HISTORY'?read.selected:null}/>

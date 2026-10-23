@@ -1,29 +1,20 @@
-import {useRef,useState,useSyncExternalStore} from 'react';
-import type {RequirementLifecycle,LifecycleOutcome} from './lifecycle.ts';
-import {Confirmation} from '../shared/confirmation.tsx';
-const labels={INITIALIZATION:'完成初始化',COMPLETE:'完成需求',REACTIVATE:'重新激活'} as const;
-const descriptions={INITIALIZATION:'将当前正文保存为初始化基线，解除初始化模板结构锁定并进入正式维护阶段。',COMPLETE:'完成后正文和评论将只读，仍可提问和查看历史版本。',REACTIVATE:'重新激活后可以继续维护需求；正文和已有版本记录保持不变。'} as const;
+import {useState,useSyncExternalStore} from 'react';
+import type {RequirementLifecycle,LifecycleOutcome,LifecycleOperation} from './lifecycle.ts';
+import {requirementStatuses} from '../api/models.ts';
+import {SingleSelect} from '../shared/single-select.tsx';
+import {REQUIREMENT_STATUS_LABELS} from '../shared/status-labels.ts';
 
-/** Parent keeps this flow through unknown results and supplies actual full
- * detail/revision refresh. blocked is a viewport/history/read guard, not an
- * inferred rollback or new status made from the historical receipt. */
 export function RequirementLifecycleControl(props:Readonly<{flow:RequirementLifecycle;blocked:boolean;writeReady?:boolean;changed(outcome:LifecycleOutcome):void|Promise<void>}>){
-  const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),[open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),pending=useRef(false);
-  const active=busy||['SUBMITTING','READING'].includes(state.phase),label=labels[props.flow.operation];
-  const refresh=async()=>{const outcome=props.flow.getSnapshot().outcome;if(outcome)await props.changed(outcome);};
-  const execute=async(readOnly=false)=>{
-    if(pending.current||props.blocked||!readOnly&&state.phase!=='UNKNOWN'&&props.writeReady===false)return;pending.current=true;setBusy(true);setError(null);
-    try{const confirmed=readOnly?true:state.phase==='UNKNOWN'?await props.flow.retryUnknown():await props.flow.submit();if(confirmed){setOpen(false);await refresh();}}
-    catch{setError('变更已确认，实际详情暂时无法读取，请重试读取');}finally{pending.current=false;setBusy(false);}
-  };
-  return <div className="requirement-lifecycle-control">
-    <button className="ui-button" type="button" disabled={props.blocked||active||state.phase==='CONFIRMED'||state.phase!=='UNKNOWN'&&props.writeReady===false} onClick={()=>setOpen(true)}>{state.phase==='UNKNOWN'?'确认生命周期变更结果':label}</button>
-    {state.phase==='CONFIRMED'&&<p role="status">{label}已确认，{error?'详情尚未重新读取。':'正在读取实际详情。'}</p>}
-    {state.phase==='CONFIRMED'&&error&&<button className="ui-button" type="button" disabled={props.blocked||active} onClick={()=>void execute(true)}>重新读取实际详情</button>}
-    {error&&<p role="alert" className="inline-error">{error}</p>}
-    {state.error&&!open&&<p role="alert" className="inline-error">{state.error}</p>}
-    <Confirmation open={open} title={`${label}？`} description={descriptions[props.flow.operation]} busy={active} confirmDisabled={props.blocked||state.phase!=='UNKNOWN'&&props.writeReady===false}
-      error={state.error} confirmLabel={state.phase==='UNKNOWN'?'重新确认结果':'确认'+label} cancelLabel={state.phase==='UNKNOWN'?'保留请求并关闭弹窗':'取消'}
-      cancel={()=>setOpen(false)} confirm={()=>void execute()}/>
-  </div>;
+ const state=useSyncExternalStore(props.flow.subscribe,props.flow.getSnapshot),[refreshError,setRefreshError]=useState<string|null>(null);
+ const busy=['SUBMITTING','READING'].includes(state.phase);
+ const adopt=async()=>{const outcome=props.flow.getSnapshot().outcome;if(!outcome)return;try{await props.changed(outcome);setRefreshError(null);}catch{setRefreshError('状态已保存，暂时无法读取最新详情');}};
+ const select=async(value:string)=>{if(await props.flow.select(value as LifecycleOperation))await adopt();};
+ return <div className="requirement-lifecycle-control">
+  <SingleSelect label="需求状态" value={state.actual.status} options={requirementStatuses.map(value=>({value,label:REQUIREMENT_STATUS_LABELS[value]}))}
+   disabled={props.blocked||props.writeReady===false||busy||['UNKNOWN','CONFIRMED'].includes(state.phase)} change={value=>void select(value)}/>
+  {busy&&<span role="status">正在保存状态…</span>}
+  {state.phase==='UNKNOWN'&&<button className="ui-button" type="button" disabled={busy||props.blocked} onClick={()=>void props.flow.retryUnknown().then(async confirmed=>{if(confirmed)await adopt();})}>核实状态变更</button>}
+  {state.error&&<p role="alert" className="inline-error">{state.error}</p>}
+  {refreshError&&<><p role="alert" className="inline-error">{refreshError}</p><button className="ui-button" type="button" onClick={()=>void adopt()}>重新读取详情</button></>}
+ </div>;
 }

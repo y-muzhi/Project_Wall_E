@@ -1,8 +1,8 @@
 # 前端实施边界
 
-2026-10-18收口状态：当前前端规格sync12；请求详情移除重复上下文概览，保留请求上下文与Token明细，采用正式系统文案。见[版本收口](../docs/project/版本收口_V_1.0.md)。最近UI修订仅有静态与Vite模块读取检查，生产dist本轮未重建；下文均为历史实施及专项范围，不能据此声明当前版本全量验收通过。
+2026-10-18收口状态：当前前端规格sync12；请求详情移除重复上下文概览，保留请求上下文与Token明细，采用正式系统文案。见[版本收口](../docs/project/v1.0/版本收口_V_1.0.md)。最近UI修订仅有静态与Vite模块读取检查，生产dist本轮未重建；下文均为历史实施及专项范围，不能据此声明当前版本全量验收通过。
 
-已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。实际根入口 `index.html` / `src/main.tsx` / `application` 已连接工作台、新建需求和完整详情，所有业务读取及写入使用正式 API。`npm run build` 进行 TypeScript 检查及实际 Vite 生产构建；正式运行及开发模式见 [运行说明](../docs/operations/运行说明.md)。根页面浏览器验证使用 `node tools/verify-product-browser.mjs`，与下述各历史诊断探针分开记录。
+已按D-003安装精确依赖，完整传递依赖锁定在package-lock.json。实际根入口 `index.html` / `src/main.tsx` / `application` 已连接工作台、新建需求和完整详情，所有业务读取及写入使用正式 API。`npm run build` 进行 TypeScript 检查及实际 Vite 生产构建；正式运行及开发模式见 [运行说明](../docs/operations/v1.0/运行说明.md)。根页面浏览器验证使用 `node tools/verify-product-browser.mjs`，与下述各历史诊断探针分开记录。
 
 在项目根运行：
 
@@ -12,7 +12,7 @@ node tools/verify-editor-browser.mjs
 node tools/verify-api-browser.mjs
 ```
 
-实际API探针使用独立SQLite文件、正式后端factory/后台与uvicorn、Vite同源代理及真实浏览器/Crepe解析。37接口均实际到达，明确包含缺资源及非法状态拒绝；7份正文/草稿与1份历史快照通过真实Markdown/元数据配对，草稿4与CURRENT2独立；缺模型配置真实失败且LLMUse为0。该探针是测试工具，不是业务页面或真实模型效果验收，结束关闭自有浏览器/Vite/API服务。详细范围见[验证说明](../docs/verification/frontend-api-notes.md)。
+实际API探针使用独立SQLite文件、正式后端factory/后台与uvicorn、Vite同源代理及真实浏览器/Crepe解析。37接口均实际到达，明确包含缺资源及非法状态拒绝；7份正文/草稿与1份历史快照通过真实Markdown/元数据配对，草稿4与CURRENT2独立；缺模型配置真实失败且LLMUse为0。该探针是测试工具，不是业务页面或真实模型效果验收，结束关闭自有浏览器/Vite/API服务。详细范围见[验证说明](../docs/verification/v1.0/frontend-api-notes.md)。
 
 在本目录重新安装/检查：
 
@@ -44,7 +44,7 @@ edited-snapshot.ts的EditedSnapshotLedger只接受完整MANUAL_DRAFT与同次绑
 
 自动链接生产规则使用原始源上的micromark tokenizer，保留表格/任务/删除线并处理真实表格chunk与转义竖线，不靠实体解码后替换AST文本。专项运行`node tools/verify-editor-browser.mjs --autolink-check`：48个独立预期与3个真实编辑后的输出，51对完整快照交给后端验证。完整默认模式再运行原编辑/身份/键盘及输入门禁，共100对；最新证据editor-browser-2026-10-03T14-08-31-198Z.json，29输入前后hash一致。24项独立前端测试及TS通过，另在development条件运行4自动链接测试以覆盖Vite使用的解析器断言。
 
-`--autolink-baseline`仍只采集当前22例，BASELINE COLLECTED不表示合规；修复前5处前端/16处后端差异的历史证据不覆写。原源及星号/协议边界修复已验证上述有限范围，Unicode域、更多括号语境、GFM其他边界和完整组件仍待补齐。详细记录docs/verification/autolink-baseline-notes.md；没有产品页面启动命令。
+`--autolink-baseline`仍只采集当前22例，BASELINE COLLECTED不表示合规；修复前5处前端/16处后端差异的历史证据不覆写。原源及星号/协议边界修复已验证上述有限范围，Unicode域、更多括号语境、GFM其他边界和完整组件仍待补齐。详细记录docs/verification/v1.0/autolink-baseline-notes.md；没有产品页面启动命令。
 
 单双删除线另有18独立例，专项运行`node tools/verify-editor-browser.mjs --strikethrough-check`。inline-marks.ts在生产sourceRemark中展平重复delete样式，避免Milkdown关闭内层时把外层剩余文字漏划；原始tildes由源码层保存。21对专项输出与完整模式121对通过后端校验，最新editor-browser-2026-10-03T14-30-29-473Z.json，33输入hash不变；25前端测试/完整TS通过。不表示全部键入规则或产品视觉验收通过。
 

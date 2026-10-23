@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import { normalizeOrdinary, ordinaryInput } from '../src/shared/text.ts';
 import { RequirementWorkbench, defaultWorkbenchQuery, workbenchQuery } from '../src/requirements/workbench.ts';
 import { CreateRequirementFlow, createPayload, emptyCreateDraft } from '../src/requirements/create.ts';
-import { requirementCatalog } from '../src/requirements/catalog.ts';
 import { ApiRejected, ApiUnknown } from '../src/api/client.ts';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred() { let resolve, reject; const promise = new Promise((yes,no) => { resolve=yes;reject=no; }); return {promise,resolve,reject}; }
@@ -28,8 +27,8 @@ test('workbench canonical all filters omit HTTP parameters, duplicate/current qu
   await tick();assert.deepEqual(port.calls[0].input,{page:1});port.calls[0].resolve(page());await first;
   assert.equal(controller.phase,'READY');assert(Object.isFrozen(controller.state.confirmed.status));await controller.query();assert.equal(port.calls.length,1);
   const refresh=controller.refresh();await tick();assert.equal(port.calls.length,2);assert.equal(controller.phase,'REFRESHING');port.calls[1].resolve(page());await refresh;
-  assert.deepEqual(workbenchQuery(query({status:['COMPLETED','INITIALIZING'],keyword:'\u0085词\u0085'})).status,['INITIALIZING','COMPLETED']);
-  assert.throws(()=>workbenchQuery(query({status:[]})));assert.throws(()=>workbenchQuery(query({status:['ACTIVE','ACTIVE']})));
+  assert.deepEqual(workbenchQuery(query({status:['COMPLETED','PLANNING'],keyword:'\u0085词\u0085'})).status,['PLANNING','COMPLETED']);
+  assert.throws(()=>workbenchQuery(query({status:[]})));assert.throws(()=>workbenchQuery(query({status:['IMPLEMENTING','IMPLEMENTING']})));
   assert.throws(()=>workbenchQuery(query({page:0})));assert.throws(()=>workbenchQuery(query({keyword:'😀'.repeat(101)})));controller.dispose();
 });
 test('inverse old success/failure/finally cannot change new rows, error or loading and abort only owned read', async () => {
@@ -51,31 +50,32 @@ test('refresh failure retains last successful condition and rows, differentiates
   run=controller.query(query({page:99}));await tick();port.calls[4].resolve(page(99,21,[]));await run;assert.equal(controller.phase,'OUT_OF_RANGE');
   run=controller.refresh();await tick();const before=controller.state;controller.dispose();assert.equal(port.calls[5].signal.aborted,true);port.calls[5].resolve(page(99,0,[]));await run;assert.equal(controller.state,before);
 });
-function validDraft() { const template=requirementCatalog.templates.find(value=>value.requirement_types.includes('NEW'));return {title:' 标题😀 ',type:'NEW',template:{template_key:template.template_key,template_version:template.template_version},idea:'\u0085初始\r\n想法\u0085',mode:'DESIGN'}; }
+function validDraft() {return {title:' 标题😀 ',type:'NEW',idea:'\u0085初始\r\n想法\u0085'};}
 function createPort() { const prepared=[],calls=[];return {prepared,calls,api:{prepareCreateRequirement(payload) {const id=prepared.length+1;prepared.push(payload);return {submit() {const wait=deferred();calls.push({id,payload,...wait});return wait.promise;}};}}}; }
-test('five fields validate in display order with native codepoint bounds and fixed catalog type/template mapping', async () => {
-  assert.deepEqual(Object.keys(createPayload(emptyCreateDraft).fields),['title','type','template','idea','mode']);
+test('three fields preserve native codepoint bounds and never require a template or mode', async () => {
+  assert.deepEqual(Object.keys(createPayload(emptyCreateDraft).fields),['title','type','idea']);
   const port=createPort(),flow=new CreateRequirementFlow(port.api);assert.equal(flow.hasInput,false);await flow.submit();assert.equal(port.prepared.length,0);
-  flow.edit({...emptyCreateDraft,type:'NEW'});assert.equal(flow.state.draft.template.template_key,'new-requirement');assert.equal(flow.state.draft.mode,null);
-  flow.edit({...flow.state.draft,type:'CHANGE'});assert.equal(flow.state.draft.template.template_key,'change-requirement');
-  flow.edit({...flow.state.draft,type:null});assert.equal(flow.state.draft.template,null);assert.equal(flow.hasInput,false);
+  flow.edit({...emptyCreateDraft,type:'NEW'});assert.equal(flow.state.draft.type,'NEW');assert.equal(flow.hasInput,true);
+  flow.edit({...emptyCreateDraft});assert.equal(flow.hasInput,false);
   const valid=validDraft(),payload=createPayload(valid).payload;assert.equal(payload.title,'标题😀');assert.equal(payload.initial_idea,'初始\n想法');
+  assert.deepEqual(Object.keys(payload).sort(),['initial_idea','requirement_type','title']);
   assert.deepEqual(createPayload({...valid,title:'😀'.repeat(20),idea:'😀'.repeat(10000)}).fields,{});
   assert.deepEqual(Object.keys(createPayload({...valid,title:'😀'.repeat(21),idea:'😀'.repeat(10001)}).fields),['title','idea']);
-  assert.equal(createPayload({...valid,type:'CHANGE'}).payload,null);flow.dispose();
+  assert.equal(createPayload({...valid,type:'CHANGE'}).payload.requirement_type,'CHANGE');
+  assert.throws(()=>flow.edit({...emptyCreateDraft,template:null}));flow.dispose();
 });
 test('pending create coalesces, unknown preserves exact prepared action/input and retries same operation; known success locks edits', async () => {
   const port=createPort(),flow=new CreateRequirementFlow(port.api),draft=validDraft();flow.edit(draft);draft.title='外部修改';assert.equal(flow.state.draft.title,' 标题😀 ');
   const first=flow.submit();assert.equal(flow.submit(),first);assert.equal(flow.state.busy,true);assert.throws(()=>flow.edit(validDraft()));await tick();
   port.calls[0].reject(new ApiUnknown(true));await first;assert.equal(flow.state.unknown,true);assert.throws(()=>flow.edit(validDraft()));
   const retry=flow.submit();await tick();assert.equal(port.prepared.length,1);assert.equal(port.calls[1].id,port.calls[0].id);assert.equal(port.calls[1].payload,port.calls[0].payload);
-  const result=Object.freeze({requirement:{id:3},guide_run_id:7});port.calls[1].resolve({data:result});await retry;
+  const result=Object.freeze({requirement:{id:3},initial_message_id:7,documents:[]});port.calls[1].resolve({data:result});await retry;
   assert.equal(flow.state.result,result);assert.equal(flow.state.unknown,false);assert.throws(()=>flow.edit(validDraft()));await flow.submit();assert.equal(port.calls.length,2);flow.dispose();
 });
 test('definite server field errors map to form, edits prepare new action; disposal ignores late success without abort or false rollback', async () => {
   const port=createPort(),flow=new CreateRequirementFlow(port.api);flow.edit(validDraft());let pending=flow.submit();await tick();
-  port.calls[0].reject(new ApiRejected('VALIDATION_FAILED','不合法',{field_errors:[{field:'template_version',reason:'INVALID_FORMAT',message:'版本不合法'}]},'diagnostic',422));await pending;
-  assert.equal(flow.state.unknown,false);assert.deepEqual(flow.state.fields,{template:'版本不合法'});assert.equal(flow.state.error,null);
+  port.calls[0].reject(new ApiRejected('VALIDATION_FAILED','不合法',{field_errors:[{field:'initial_idea',reason:'INVALID_FORMAT',message:'初始想法不合法'}]},'diagnostic',422));await pending;
+  assert.equal(flow.state.unknown,false);assert.deepEqual(flow.state.fields,{idea:'初始想法不合法'});assert.equal(flow.state.error,null);
   flow.edit({...flow.state.draft,title:'新标题'});pending=flow.submit();await tick();assert.equal(port.prepared.length,2);const before=flow.state;flow.dispose();
-  port.calls[1].resolve({data:{requirement:{id:9},guide_run_id:10}});await pending;assert.equal(flow.state,before);
+  port.calls[1].resolve({data:{requirement:{id:9},initial_message_id:10,documents:[]}});await pending;assert.equal(flow.state,before);
 });

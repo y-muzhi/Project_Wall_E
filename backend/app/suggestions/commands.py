@@ -3,10 +3,9 @@ from backend.app.documents.guards import assert_idle
 from backend.app.infrastructure.batch_repository import BatchRepository
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.infrastructure.idempotency import Idempotency, Success
-from backend.app.infrastructure.resources import FUNCTIONS
 from backend.app.shared.command_execution import Rejected, execute_idempotent, operation_time
 from backend.app.shared.validation import InvalidInput
-from .contracts import discard_batch_input, discard_batch_result, batch_metadata, METADATA_FIELDS, counts_model, suggestion_counts, DECISIONS
+from .contracts import discard_batch_input, discard_batch_result, counts_model, suggestion_counts, DECISIONS
 from backend.app.shared.validation import strict_enum
 from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.documents.markdown import parse_markdown, DocumentInvalid
@@ -16,26 +15,26 @@ from backend.app.shared.validation import strict_json_object
 from .contracts import decide_suggestion_input, decide_suggestion_result, suggestion_from_row
 from .contracts import complete_batch_input, complete_batch_result, stored_patch
 from backend.app.infrastructure.document_repository import DocumentRepository
-from backend.app.infrastructure.identifiers import increment
 from backend.app.documents.guards import current_at_version
 from backend.app.documents.sources import DocumentSources
-from backend.app.documents.contracts import get_current_document_result
 from backend.app.documents.snapshot import validate_snapshot
 from backend.app.documents.scopes import restore_authority, ScopeInvalid
 from backend.app.documents.patch_validation import validate_patch, validate_combination
 from backend.app.documents.patch_application import Adoption, apply_adoptions
 from backend.app.documents.patch_errors import TargetStale
-from backend.app.comments.commands import revalidate_anchors
 from backend.app.documents.patch_errors import PATCH_MESSAGES
+from .contracts import metadata_from_row
+from backend.app.documents.content import commit_content
+import json
 
 
 def _pending_owned_batch(connection, repository, row):
-    batch = batch_metadata({field: row[field] for field in METADATA_FIELDS})
+    batch = metadata_from_row(row)
     root = RequirementRepository(connection).get(batch['requirement_id'])
     if root is None: raise Rejected('NOT_FOUND')
-    if root['status'] != 'ACTIVE' or batch['status'] != 'PENDING': raise Rejected('STATE_CONFLICT')
+    if batch['status'] != 'PENDING': raise Rejected('STATE_CONFLICT')
     parent = repository.parent(row)
-    if parent is None or parent['requirement_id'] != root['id'] or parent['action_type'] != 'MODIFY' or parent['status'] != 'COMPLETED' or parent['source_type'] != batch['source_type'] or parent['source_id'] != batch['source_id'] or parent['function_type'] != FUNCTIONS.get(('MODIFY', batch['source_type']), (None,))[0]:
+    if parent is None or parent['requirement_id'] != root['id'] or parent['action_type'] != 'MODIFY' or parent['operation'] != 'PROPOSE_CHANGES' or parent['status'] != 'COMPLETED' or parent['source_type'] != batch['source_type'] or parent['source_id'] != batch['source_id'] or parent['function_type'] != 'collaboration_v1' or parent['target_document_id'] != batch['target_document_id']:
         raise Rejected('WORK_STATE_INCONSISTENT')
     try: assert_idle(connection, root, remaining_conflicts=frozenset())
     except Rejected as error:
@@ -43,6 +42,29 @@ def _pending_owned_batch(connection, repository, row):
     if root['document_work_state'] != 'SUGGESTION_REVIEWING' or root['active_operation_type'] != 'SUGGESTION_BATCH' or root['active_operation_id'] != batch['id']:
         raise Rejected('WORK_STATE_CONFLICT')
     return batch, root
+
+
+def _target_snapshot(connection, repository, row, batch, resources, expected_version=None):
+    current = current_at_version(connection, batch['requirement_id'], expected_version or batch['base_content_version'], document_id=batch['target_document_id'])
+    if current['archived_at'] is not None:
+        raise Rejected('STATE_CONFLICT')
+    if current['content_version'] != batch['base_content_version']:
+        raise Rejected('CONTENT_VERSION_CONFLICT')
+    sources = DocumentSources(connection, batch['requirement_id'], resources, document_id=current['id'])
+    snapshot = validate_snapshot(current['markdown_content'], strict_json_object(current['block_state_json']), sources)
+    from backend.app.guide.collaboration_context import read_canonical
+    parent = repository.parent(row);basis = read_canonical(connection, parent['id'], resources, require_current=False)
+    authorization = basis['authorization'];scope = authorization['scope']
+    if authorization['operation'] != 'PROPOSE_CHANGES' or authorization['target_document_id'] != current['id'] or authorization['expected_content_version'] != current['content_version'] or basis['source_refs'] != batch['source_refs']:
+        raise Rejected('WORK_STATE_INCONSISTENT')
+    try:
+        ref = scope['scope_ref']
+        if scope['scope_type'] == 'SECTION': ref = {'block_id': ref['heading_block_id']}
+        authority = restore_authority(snapshot, 'MODIFY', scope['scope_type'], ref, {'schema_version': 1, 'targets': authorization['allowed_targets']})
+        if json.loads(parent['allowed_targets_json']) != {'schema_version': 1, 'targets': authorization['allowed_targets']}:
+            raise Rejected('WORK_STATE_INCONSISTENT')
+    except (ScopeInvalid, InvalidInput): raise Rejected('TARGET_STALE') from None
+    return current, sources, snapshot, authority
 
 
 def decide_suggestion(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
@@ -55,7 +77,9 @@ def decide_suggestion(executor: Idempotency, payload: object, *, catalog=None, c
         stored_batch = repository.get(row['batch_id'])
         if stored_batch is None: raise Rejected('NOT_FOUND')
         batch, root = _pending_owned_batch(connection, repository, stored_batch)
-        protocol = (catalog if catalog is not None else ResourceCatalog()).freeze('MODIFY', batch['source_type'])
+        resources = catalog if catalog is not None else ResourceCatalog()
+        protocol = resources.collaboration
+        current, sources, snapshot, authority = _target_snapshot(connection, repository, stored_batch, batch, resources)
         item = suggestion_from_row(row, protocol=protocol)
         if request.decision == 'EDITED':
             try:
@@ -67,6 +91,9 @@ def decide_suggestion(executor: Idempotency, payload: object, *, catalog=None, c
                 elif len(parse_markdown(request.edited_content).blocks) != 1:
                     raise PatchInvalid('编辑内容必须为恰好一个顶层区块')
             except (InvalidInput, PatchInvalid, DocumentInvalid): raise Rejected('PATCH_INVALID') from None
+        if request.decision != 'REJECTED':
+            try: validate_patch(snapshot, stored_patch(item), authority, edited_content=request.edited_content)
+            except (PatchInvalid, TargetStale) as error: raise Rejected(error.code) from None
         items = repository.suggestions(batch['id'])
         counts_model(suggestion_counts(items))
         at = operation_time(clock)
@@ -75,7 +102,7 @@ def decide_suggestion(executor: Idempotency, payload: object, *, catalog=None, c
         updated = repository.decide(row, request.decision, request.edited_content, at)
         return Success(decide_suggestion_result(updated, repository.suggestions(batch['id']), protocol=protocol), 200)
     return execute_idempotent(executor, 'APP-BATCH-CMD-C01', request, operation, target_identity=f'Suggestion:{request.suggestion_id}',
-        allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'PATCH_INVALID'}))
+        allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'TARGET_STALE', 'PATCH_INVALID'}))
 
 
 def discard_batch(executor: Idempotency, payload: object, *, clock=None) -> dict:
@@ -109,21 +136,12 @@ def complete_batch(executor: Idempotency, payload: object, *, catalog=None, cloc
         row = repository.get(request.batch_id)
         if row is None: raise Rejected('NOT_FOUND')
         batch, root = _pending_owned_batch(connection, repository, row)
-        current = current_at_version(connection, root['id'], request.expected_content_version)
-        if current['content_version'] != batch['base_content_version']: raise Rejected('CONTENT_VERSION_CONFLICT')
         resources = catalog if catalog is not None else ResourceCatalog()
-        protocol = resources.freeze('MODIFY', batch['source_type'])
+        current, sources, snapshot, authority = _target_snapshot(connection, repository, row, batch, resources, request.expected_content_version)
+        protocol = resources.collaboration
         items = [suggestion_from_row(item, protocol=protocol) for item in repository.suggestions(batch['id'])]
         counts = counts_model(suggestion_counts(items))
         if counts['pending']: raise Rejected('BATCH_PENDING')
-        sources = DocumentSources(connection, root['id'], resources)
-        model = get_current_document_result(current, sources)
-        snapshot = validate_snapshot(model['markdown_content'], model['block_state_json'], sources)
-        parent = repository.authority(row)
-        try:
-            reference = None if parent['scope_ref_json'] is None else strict_json_object(parent['scope_ref_json'])
-            authority = restore_authority(snapshot, 'MODIFY', parent['scope_type'], reference, parent['allowed_targets_json'])
-        except (ScopeInvalid, InvalidInput): raise Rejected('TARGET_STALE') from None
         adoptions, checked, errors = [], [], []
         for item in items:
             if item['status'] == 'REJECTED': continue
@@ -141,12 +159,12 @@ def complete_batch(executor: Idempotency, payload: object, *, catalog=None, cloc
         try: adopted = apply_adoptions(snapshot, adoptions, authority, batch['id'], at, sources)
         except (PatchInvalid, TargetStale) as error: raise Rejected(error.code) from None
         except DocumentInvalid: raise Rejected('DOCUMENT_INVALID') from None
-        changed = adopted is not snapshot
-        if changed:
-            current = DocumentRepository(connection).replace_current(current, adopted, increment(current['content_version']), at)
-            revalidate_anchors(connection, {'requirement_id': root['id'], 'new_document': {'markdown_content': adopted.parsed.markdown, 'block_state_json': adopted.state}}, catalog=resources)
+        effect = commit_content(connection, current, adopted, resources=resources, source_type='SUGGESTION_BATCH', source_id=batch['id'],
+            source_refs=batch['source_refs'], summary=batch['summary'], key=request.idempotency_key, at=at)
+        changed = effect['result'] != 'NO_CHANGE'
+        current = DocumentRepository(connection).get_current(root['id'], batch['target_document_id'])
         completed = repository.complete(batch['id'], current['content_version'] if changed else None, at)
         RequirementRepository(connection).recover_occupancy(root, None, None, at)
-        return Success(complete_batch_result(completed, items, current, sources), 200)
+        return Success(complete_batch_result(completed, items, current, sources, effect), 200)
     return execute_idempotent(executor, 'APP-BATCH-CMD-C02', request, operation, target_identity=f'SuggestionBatch:{request.batch_id}',
         allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'BATCH_PENDING', 'TARGET_STALE', 'PATCH_INVALID', 'DOCUMENT_INVALID'}))

@@ -12,14 +12,13 @@ from pathlib import Path
 import re
 import sqlite3
 from typing import Iterator
-from uuid import uuid4
 
 from backend.app.shared.time import utc_milliseconds
 from .process_lock import ProcessLock
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_MIGRATION = Path(__file__).with_name('migrations') / '001_initial.sql'
-SCHEMA_VERSION = 4
+DEFAULT_MIGRATION = Path(__file__).with_name('schemas') / 'v1_5.sql'
+SCHEMA_VERSION = 150
 
 
 class SchemaMismatch(RuntimeError):
@@ -37,7 +36,7 @@ class CommitOutcomeUnknown(StorageUnavailable):
 @dataclass(frozen=True)
 class Migration:
     path: Path = DEFAULT_MIGRATION
-    version: int = 1
+    version: int = SCHEMA_VERSION
 
     @property
     def sql(self) -> str:
@@ -48,11 +47,14 @@ class Migration:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
 
 
-MIGRATIONS = (Migration(), Migration(DEFAULT_MIGRATION.with_name('002_idempotency_guards.sql'), 2), Migration(DEFAULT_MIGRATION.with_name('003_manual_edit_sources.sql'), 3), Migration(DEFAULT_MIGRATION.with_name('004_manual_identity_proofs.sql'), 4))
+MIGRATIONS = (Migration(),)
 
 
 def configured_path() -> Path:
-    return Path(os.environ.get('WALLE_DATABASE_PATH', ROOT / 'data' / 'wall-e.sqlite')).expanduser().resolve()
+    value = os.environ.get('WALLE_DATABASE_PATH')
+    if not value or not Path(value).is_absolute():
+        raise SchemaMismatch('V1.5 requires an explicit absolute WALLE_DATABASE_PATH; existing databases are never selected implicitly')
+    return Path(value).expanduser().resolve()
 
 
 def _statements(sql: str) -> Iterator[str]:
@@ -95,23 +97,27 @@ class Database:
                 connection.close()
             raise StorageUnavailable('Cannot establish database access') from error
 
-    def _check_schema(self, connection: sqlite3.Connection, *, allow_previous: bool = False) -> int:
+    def _check_schema(self, connection: sqlite3.Connection) -> int:
         try:
             rows = connection.execute('SELECT version, checksum FROM schema_migrations ORDER BY version').fetchall()
         except sqlite3.Error as error:
             raise SchemaMismatch('Missing schema version metadata; explicit initialization required') from error
-        if not rows or len(rows) > len(self.migrations) or not allow_previous and len(rows) != len(self.migrations) or any(row['version'] != migration.version or row['checksum'] != migration.checksum for row, migration in zip(rows, self.migrations)):
+        if len(rows) != len(self.migrations) or any(row['version'] != migration.version or row['checksum'] != migration.checksum for row, migration in zip(rows, self.migrations)):
             raise SchemaMismatch('Database version or migration checksum differs; preserve data and review migration')
         actual = {row['name']: (row['type'], row['sql']) for row in connection.execute("SELECT name,type,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'")}
+        expected_names = set()
         for statement in (statement for migration in self.migrations[:len(rows)] for statement in _statements(migration.sql)):
             match = re.search(r'CREATE\s+(TABLE|TRIGGER|(?:UNIQUE\s+)?INDEX)\s+([a-z_0-9]+)\b', statement)
             if match is None:
                 continue
             name = match[2]
+            expected_names.add(name)
             expected = statement[match.start():].strip().removesuffix(';')
             kind = 'index' if 'INDEX' in match[1] else match[1].lower()
             if name not in actual or actual[name] != (kind, expected):
                 raise SchemaMismatch(f'Missing or altered schema object: {name}; preserve database for review')
+        if set(actual) != expected_names:
+            raise SchemaMismatch('Unexpected schema objects; preserve database for review')
         mode = connection.execute('PRAGMA journal_mode').fetchone()[0]
         if mode.lower() != 'wal':
             raise SchemaMismatch('Database must use the approved WAL configuration')
@@ -127,26 +133,16 @@ class Database:
         statements = [list(_statements(migration.sql)) for migration in self.migrations]
         checksum = self.migrations[-1].checksum
         connection = self._connect(create=True)
-        backup_path = None
         try:
             tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
             if tables:
-                applied = self._check_schema(connection, allow_previous=True)
-                if applied == len(self.migrations):
-                    return {'schema_version': self.migrations[-1].version, 'checksum': checksum, 'initialized': False, 'migrated': False, 'path': str(self.path)}
-                backup_path = self.path.with_name(self.path.name + f'.before-v{self.migrations[-1].version}-{uuid4().hex}.backup.sqlite')
-                target = sqlite3.connect(backup_path)
-                try:
-                    connection.backup(target)
-                finally:
-                    target.close()
-            else:
-                applied = 0
+                self._check_schema(connection)
+                return {'schema_version': self.migrations[-1].version, 'checksum': checksum, 'initialized': False, 'migrated': False, 'path': str(self.path)}
             mode = connection.execute('PRAGMA journal_mode=WAL').fetchone()[0]
             if mode.lower() != 'wal':
                 raise StorageUnavailable('WAL configuration could not be enabled')
             connection.execute('BEGIN IMMEDIATE')
-            for migration, statements_for_migration in zip(self.migrations[applied:], statements[applied:]):
+            for migration, statements_for_migration in zip(self.migrations, statements):
                 for statement in statements_for_migration:
                     connection.execute(statement)
                 connection.execute('INSERT INTO schema_migrations(version,checksum,applied_at) VALUES (?,?,?)', (migration.version, migration.checksum, utc_milliseconds(datetime.now(timezone.utc))))
@@ -155,7 +151,7 @@ class Database:
             except sqlite3.Error as error:
                 raise CommitOutcomeUnknown('Initialization commit must be verified before retry') from error
             self._check_schema(connection)
-            return {'schema_version': self.migrations[-1].version, 'checksum': checksum, 'initialized': not tables, 'migrated': bool(tables), 'backup_path': str(backup_path) if backup_path else None, 'path': str(self.path)}
+            return {'schema_version': self.migrations[-1].version, 'checksum': checksum, 'initialized': True, 'migrated': False, 'path': str(self.path)}
         except (SchemaMismatch, StorageUnavailable):
             if connection.in_transaction:
                 connection.rollback()
@@ -167,7 +163,7 @@ class Database:
         except OSError as error:
             if connection.in_transaction:
                 connection.rollback()
-            raise StorageUnavailable('Migration backup could not complete; preserve database') from error
+            raise StorageUnavailable('Initialization could not complete; preserve database') from error
         finally:
             connection.close()
 
@@ -237,9 +233,11 @@ def main() -> None:
     import json
     parser = argparse.ArgumentParser(description='Initialize or verify the approved WALL-E SQLite schema without overwriting existing data')
     parser.add_argument('command', choices=['init', 'check'])
-    parser.add_argument('--database', type=Path, default=configured_path())
+    parser.add_argument('--database', type=Path)
     arguments = parser.parse_args()
-    database = Database(arguments.database)
+    if arguments.database is not None and not arguments.database.is_absolute():
+        parser.error('--database must be an explicit absolute V1.5 database path')
+    database = Database(arguments.database if arguments.database is not None else configured_path())
     if arguments.command == 'init':
         print(json.dumps(database.initialize(), ensure_ascii=False))
     else:

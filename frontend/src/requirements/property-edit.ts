@@ -12,20 +12,20 @@ export type PropertyEditState=Readonly<{phase:'VIEW'|'EDITING'|'SUBMITTING'|'UNK
 type Api=Pick<WalleApi,'prepareUpdateRequirement'|'getRequirement'>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 
-/** I04 has no idempotency key. Unknown PATCH is never replayed automatically.
- * A GET confirms present attributes only; the original intention remains
- * visible until explicit continue/cancel, and each Save is a new action. */
+/** An uncertain PATCH retains its original version, body and key. A read is
+ * only an observation; replaying that same action proves the original result. */
 export class RequirementPropertyEdit {
   readonly field:RequirementProperty;private readonly api:Api;private detail:DetailSnapshot;
   private value:PropertyEditState;private readonly listeners=new Set<()=>void>();private disposed=false;
-  private pending:Promise<boolean>|undefined;private pendingKind:'SAVE'|'READ'|undefined;private controller:AbortController|undefined;
+  private pending:Promise<boolean>|undefined;private pendingKind:'SAVE'|'READ'|undefined;
+  private action:ReturnType<Api['prepareUpdateRequirement']>|undefined;
   constructor(field:RequirementProperty,detail:DetailSnapshot,api:Api){
     if(field!=='title')throw TypeError('Only title may be edited after creation');
     this.field=field;this.detail=capture(detail);this.api=api;this.check(detail);
     this.value=Object.freeze({phase:'VIEW',actual:this.detail.requirement,draft:this.detail.requirement[field],error:null,error_code:null,receipt:null,submitted:null});
   }
   private check(detail:DetailSnapshot):void{
-    if(detail.requirement.id!==this.detail.requirement.id||detail.current.requirement_id!==detail.requirement.id||detail.current.document_type!=='CURRENT')throw TypeError('Owned actual detail required');
+    if(detail.requirement.id!==this.detail.requirement.id||detail.current!==null&&(detail.current!==null&&(detail.current.requirement_id!==detail.requirement.id||detail.current.document_type!=='CURRENT')))throw TypeError('Owned actual detail required');
   }
   getSnapshot=():PropertyEditState=>this.value;
   subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
@@ -59,9 +59,9 @@ export class RequirementPropertyEdit {
       try{value=ordinaryInput(this.value.draft,'title',1,20,false);
       }catch(error){this.publish({error:error instanceof Error?error.message:'属性输入不合法',error_code:'INVALID_INPUT'});return false;}
       const submitted=Object.freeze({field:this.field,value});
-      const body={title:value};
+      const body={expected_metadata_version:this.value.actual.metadata_version,changes:{title:value}};
       let action:ReturnType<Api['prepareUpdateRequirement']>;
-      try{action=this.api.prepareUpdateRequirement(this.value.actual.id,body);}
+      try{action=this.api.prepareUpdateRequirement(this.value.actual.id,body);this.action=action;}
       catch{this.publish({error:'暂时无法准备保存，输入已保留',error_code:'INVALID_INPUT'});return false;}
       this.publish({phase:'SUBMITTING',submitted,error:null,error_code:null,receipt:null});
       try{
@@ -71,20 +71,19 @@ export class RequirementPropertyEdit {
       }catch(error){
         if(this.disposed)return false;
         if(error instanceof ApiRejected&&error.code!=='REQUEST_IN_PROGRESS')this.publish({phase:'EDITING',error:error.message,error_code:error.code});
-        else this.publish({phase:'UNKNOWN',submitted,error:'保存结果待核实，请先读取实际属性；本次请求不会自动重发',error_code:null});return false;
+        else this.publish({phase:'UNKNOWN',submitted,error:'保存结果待核实，请核实原请求',error_code:null});return false;
       }
     });
   }
   inspectUnknown():Promise<boolean>{
     if(this.value.phase!=='UNKNOWN'&&!(this.pending&&this.pendingKind==='READ'))return Promise.resolve(false);
     return this.run('READ',async()=>{
-      const controller=new AbortController();this.controller=controller;this.publish({phase:'READING',error:null});
-      try{const actual=(await this.api.getRequirement(this.detail.requirement.id,controller.signal)).data;if(this.disposed)return false;
-        if(actual.id!==this.detail.requirement.id)throw Error('Unconfirmed ownership');
-        this.publish({phase:'OBSERVED',actual:capture(actual),receipt:null,error:null,error_code:null});return true;
-      }catch{this.publish({phase:'UNKNOWN',error:'暂时无法读取实际属性，本次输入和未知结果已保留'});return false;}
-      finally{if(this.controller===controller)this.controller=undefined;}
+      this.publish({phase:'READING',error:null});
+      try{const actual=(await this.action!.submit()).data;if(this.disposed)return false;
+        if(actual.id!==this.detail.requirement.id||actual.title!==this.value.submitted?.value)throw Error('Unconfirmed ownership or original title');
+        this.publish({phase:'CONFIRMED',actual:capture(actual),receipt:capture(actual),error:null,error_code:null});this.action=undefined;return true;
+      }catch{this.publish({phase:'UNKNOWN',error:'暂时无法核实原请求，本次输入和未知结果已保留'});return false;}
     });
   }
-  dispose():void{this.disposed=true;this.controller?.abort();this.listeners.clear();}
+  dispose():void{this.disposed=true;this.listeners.clear();}
 }

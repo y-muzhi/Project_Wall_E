@@ -8,7 +8,6 @@ import {RequirementPropertyControl} from './property-control.tsx';
 import {Icon} from '../shared/icon.tsx';
 import {activeModal} from '../shared/modal.ts';
 import type {ConfirmedNotice} from '../shared/toast-store.ts';
-const completed={INITIALIZATION:'初始化已完成',COMPLETE:'需求已完成',REACTIVATE:'需求已重新激活'} as const;
 
 /** Real header fields and available command owners. Other business regions
  * remain the detail parent's responsibility; no fake action handlers. */
@@ -32,7 +31,7 @@ export function RequirementHeader(props:Readonly<{tools?:ReactNode;documentActio
   const closeTools=()=>{setToolsOpen(false);toolsToggle.current?.focus({preventScroll:true});};
   return <section className="requirement-header" aria-label="需求属性和操作">
     <div className="requirement-operations">{props.documentActions}<div className="requirement-action-group" aria-label="生命周期与人工编辑">
-    {life&&(!props.history||life.getSnapshot().phase!=='READY')&&<RequirementLifecycleControl key={'lifecycle-'+state.lifecycle_generation} flow={life} blocked={external||props.commands.blockedFor('LIFECYCLE')} writeReady={ready} changed={async outcome=>{props.notifyConfirmed?.(outcome,completed[outcome.kind]);if(outcome.kind==='INITIALIZATION')await props.refreshRevisions();await refresh();}}/>}
+    {life&&<RequirementLifecycleControl key={'lifecycle-'+state.lifecycle_generation} flow={life} blocked={props.blocked||props.commands.blockedFor('LIFECYCLE')} writeReady={ready} changed={async outcome=>{props.notifyConfirmed?.(outcome,'需求状态已保存');await refresh();}}/>}
     {manual&&(!props.history||manual.getSnapshot().phase!=='READY')&&<ManualStartControl key={'manual-'+state.manual_generation} flow={manual} disabled={external||props.commands.blockedFor('MANUAL')} writeReady={ready} started={async()=>{await refresh();}}/>}
     </div><div className="requirement-tools" ref={toolsHost} onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented&&!activeModal()&&!editingTitle&&expanded){event.preventDefault();event.stopPropagation();closeTools();}}}>
       <button ref={toolsToggle} className="ui-button icon-button" type="button" aria-label="更多操作" title={editingTitle?'请先完成或取消标题编辑':'更多操作'} aria-expanded={expanded} aria-controls={toolsId} disabled={editingTitle} onClick={()=>setToolsOpen(value=>!value)}><Icon name="more"/></button>

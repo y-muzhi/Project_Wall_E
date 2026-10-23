@@ -25,7 +25,7 @@ class BatchRepository:
         return self.connection.execute('SELECT * FROM suggestions WHERE batch_id=? ORDER BY order_no,id', (identity,)).fetchall()
 
     def parent(self, row: sqlite3.Row) -> sqlite3.Row | None:
-        return self.connection.execute('SELECT id,requirement_id,action_type,function_type,status,source_type,source_id FROM guide_runs WHERE id=?', (row['guide_run_id'],)).fetchone()
+        return self.connection.execute('SELECT * FROM guide_runs WHERE id=?', (row['guide_run_id'],)).fetchone()
 
     def authority(self, row: sqlite3.Row) -> sqlite3.Row | None:
         return self.connection.execute('SELECT scope_type,scope_ref_json,allowed_targets_json FROM guide_runs WHERE id=?', (row['guide_run_id'],)).fetchone()

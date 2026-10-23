@@ -42,7 +42,7 @@ def artifacts() -> list[Path]:
 
 def historical_summary(paths: list[Path]) -> None:
     reports = [p for p in paths if p.suffix.lower() == ".json" and p.is_relative_to(ROOT / "docs/verification")]
-    target = ROOT / "docs/verification/历史测试报告摘要.md"
+    target = ROOT / "docs/verification/v1.0/历史测试报告摘要.md"
     if not reports or target.exists():
         return
     lines = [

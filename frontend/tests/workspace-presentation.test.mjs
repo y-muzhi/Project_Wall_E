@@ -8,7 +8,7 @@ import {headingOutline} from '../src/documents/navigation.ts';
 import {visibleOutline} from '../src/documents/outline-display.ts';
 
 const card=(key,required=true)=>({card_key:key,card_type:'MULTI_SELECT',question:'问题'+key,context:'上下文',required,options:[{option_key:'a',label:'选项A',description:'说明',impact:'影响',risks:'风险'},{option_key:'b',label:'选项B',description:'说明',impact:'影响',risks:'风险'}],selection_rule:{min:1,max:2},custom_answer:{enabled:true,max_length:200},recommendation:{option_keys:['a'],reason:'仅推荐'},related_spec_context:[]});
-const definition=()=>decodeCards({schema_version:1,intro:'请选择',cards:[card('required'),card('optional',false)]});
+const definition=()=>decodeCards({schema_version:1,intro:'请选择',purpose:'CLARIFICATION',action_payload:null,program_binding:{discussion_version:1,target_content_version:null,source_heads:[]},cards:[card('required'),card('optional',false)]});
 test('local readiness never counts recommendations or silently skipped optional questions',()=>{
  const cards=definition(),answers=structuredClone(blankAnswers(cards)),before=structuredClone(answers),progress=cardProgress(cards,answers);
  assert.deepEqual(progress,{ready:[],required:['required'],remaining:['required','optional'],total:2});assert.deepEqual(answers,before);

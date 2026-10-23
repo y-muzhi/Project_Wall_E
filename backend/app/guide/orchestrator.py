@@ -1,36 +1,24 @@
 """ORCH S01-S06: actual short audit stages, one wire attempt, sole C07 writer.
 
-Private injected compiler/compatibility/Gateway/sleep are diagnostic boundaries.
+Private injected profile, counter and Gateway are diagnostic boundaries.
 Default execution keeps approved budgets and requires versioned AI admission.
 No HTTP input may select these dependencies or a model endpoint.
 """
 import asyncio
 from functools import partial
-from dataclasses import replace
 import sqlite3
 
-from backend.app.infrastructure.audit_repository import AuditRepository, _owned
-from backend.app.infrastructure.counting_journal import CountingJournal
-from backend.app.infrastructure.execution_lease import ExecutionRetired
+from backend.app.infrastructure.audit_repository import AuditRepository
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
-from backend.app.infrastructure.model_gateway import ModelGateway
 from backend.app.infrastructure.model_profile import ModelProfile
-from backend.app.infrastructure.tokenization import TokenCounts, restore_measurement
-from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.process_lock import ProcessLock
-from backend.app.infrastructure.practical_usage import validate_practical_usage
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.shared.command_execution import Rejected, operation_time
 from backend.app.shared.http_errors import ERRORS
 from backend.app.shared.validation import InvalidInput
-from .context_builder import build_context, ContextLimitExceeded
-from .context_builder import assemble_input
-from .counted_context import CountedContext, compile_counted_candidate, counting_release_for_function
-from .model_context import read_context
-from .trusted_output import produce_trusted_output
-from .response_display import persist_returned_response, response_text
-from .commands import persist_ai_result, fail_guide_run
+from .context_builder import ContextLimitExceeded
+from .commands import fail_guide_run
 from .contracts import GUIDE_STATUSES, GUIDE_STEPS, TASK_ERROR_CODES, execute_guide_run_input, execute_guide_run_result
 
 
@@ -72,21 +60,6 @@ async def _native(function, *args, **kwargs):
         raise
 
 
-def _context(database, identity, resources):
-    with database.transaction() as connection:
-        actual = read_context(connection, identity, resources)['data']
-        row = actual['run']
-        function = resources.restore(row['function_type'], row['prompt_version'],
-            prompt_version=row['prompt_version'], context_template=row['context_template_key']+'@'+row['context_template_version'])
-        return actual, function
-
-
-def _prepare(database, identity, function, profile, context, resources, clock, call_no):
-    with database.transaction(write=True) as connection:
-        return dict(AuditRepository(connection).prepare(identity, function, profile, context,
-            operation_time(clock), catalog=resources, call_no=call_no))
-
-
 def _transport(database, identity, value, profile, clock):
     with database.transaction(write=True) as connection:
         return dict(AuditRepository(connection).record_transport(identity, value.raw_response, operation_time(clock),
@@ -100,72 +73,12 @@ def _parse(database, identity, clock):
         return AuditRepository(connection).parse_response(identity, operation_time(clock))
 
 
-def _admission_failure(database, identity, clock):
-    with database.transaction(write=True) as connection:
-        AuditRepository(connection).record_admission_failure(identity,operation_time(clock))
-
-
-def _retry_context(database, identity, resources, original, profile, compiler):
-    # Re-read all actual source/current/owner facts before sleeping or sending;
-    # Builder keeps whole input and the same frozen protocol and approved gates.
-    with database.transaction() as connection:
-        run = GuideRepository(connection).get(identity); _owned(connection, run)
-    actual, function = _context(database, identity, resources)
-    if function != original: raise Rejected('CONFIG_INVALID')
-    return compiler(actual, function)
-
-
-def _retry_actual(database, identity, resources, original):
-    with database.transaction() as connection:
-        _owned(connection,GuideRepository(connection).get(identity))
-    actual,function=_context(database,identity,resources)
-    if function!=original:raise Rejected('CONFIG_INVALID')
-    return actual,function
-
-
-def _count_state(database, actual, function, resources):
-    current,restored=_retry_actual(database,actual['run']['id'],resources,function)
-    if canonical_input(assemble_input(current,restored))!=canonical_input(assemble_input(actual,function)):
-        raise Rejected('SOURCE_INVALID')
-
-
-class _AuditedCounter:
-    def __init__(self,database,process_lock,actual,function,resources,counter,clock):
-        self.database,self.actual,self.function,self.resources,self.counter,self.clock=database,actual,function,resources,counter,clock
-        self.journal=CountingJournal(database,process_lock)
-
-    async def count(self,profile,texts):
-        await _native(_count_state,self.database,self.actual,self.function,self.resources)
-        identity=await _native(self.journal.prepare,self.actual,self.function,profile,texts,operation_time(self.clock))
-        # A cancellation/source change during audit fsync does not permit count
-        # I/O. PREPARED alone remains an explicitly unknown request outcome.
-        try:
-            await _native(_count_state,self.database,self.actual,self.function,self.resources)
-            receipt=await self.counter.count(profile,texts)
-            if type(receipt) is not TokenCounts:raise ConfigInvalid('Exact count receipt required')
-            restore_measurement(receipt.evidence,texts,expected_model=profile.model_name)
-        except asyncio.CancelledError:
-            try:await _native(self.journal.finish,identity,profile,operation_time(self.clock),status='INTERRUPTED')
-            except (ExecutionRetired,StorageUnavailable):pass
-            raise
-        except ExecutionRetired:raise
-        except Exception:
-            await _native(self.journal.finish,identity,profile,operation_time(self.clock),status='FAILED')
-            raise
-        receipt=replace(receipt,journal_id=identity)
-        await _native(self.journal.finish,identity,profile,operation_time(self.clock),status='SUCCEEDED',measurement=receipt.evidence)
-        return receipt
-
-
 async def execute_guide_run(database, payload, *, process_lock, catalog=None, profile=None,
-                      gateway=None, context_compiler=build_context, compatibility_check=None,
-                      counting_counter=None, counting_compatibility_check=None,
-                      clock=None, sleep=asyncio.sleep):
-    """One logical input; WAITING_USER resumes only via its real accepting command.
+                      gateway=None, counting_counter=None, clock=None):
+    """One accepted V1.5 run, bounded counts and at most one actual Chat.
 
-    A missing compatibility check is an explicit unresolved production dependency,
-    never authorization to send a paid request. Diagnostic tests install an
-    offline check and expanded-budget compiler together with loopback transport.
+    Explicit private offline dependencies cannot bypass the release gate.
+    Continuation/retry commands create a new run; no loop resumes old input.
     """
     try:
         identity = execute_guide_run_input(payload)
@@ -201,92 +114,14 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
         if row['current_step'] != 'PREPARING':
             return {'code': 'STATE_CONFLICT', 'data': None, 'details': None}
         resources = ResourceCatalog() if catalog is None else catalog
-        actual, function = await _native(_context, database, identity, resources)
         frozen_profile = ModelProfile.from_environment() if profile is None else profile
         if type(frozen_profile) is not ModelProfile: raise ConfigInvalid('Frozen profile is required')
-        async def compile_context(actual,function):
-            if counting_counter is None:return await _native(context_compiler,actual,function)
-            # Private diagnostic injection only. No HTTP/environment selector
-            # bypasses either the before-count proof gate or final send gate.
-            if context_compiler is not build_context or compatibility_check is None or counting_compatibility_check is None:
-                raise ConfigInvalid('Counted execution requires both compatibility gates')
-            release=await _native(counting_release_for_function,frozen_profile,function)
-            if await _native(counting_compatibility_check,frozen_profile,function,release) is not True:
-                raise ConfigInvalid('Same-model Chat framing compatibility is unavailable')
-            counter=_AuditedCounter(database,process_lock,actual,function,resources,counting_counter,clock)
-            return await compile_counted_candidate(actual,function,frozen_profile,counter=counter)
-        context = await compile_context(actual, function)
-        if compatibility_check is None: raise ConfigInvalid('Approved same-model tokenizer/framing proof is unavailable')
-        if await _native(compatibility_check, frozen_profile, context, function) is not True:
-            raise ConfigInvalid('Counting compatibility was not proved')
-        adapter = ModelGateway() if gateway is None else gateway
-        call_no = None
-        for attempt in range(1, 4):
-            prepared = await _native(_prepare, database, identity, function, frozen_profile, context, resources, clock, call_no)
-            call_no = prepared['call_no']
-            # The request fact is now committed; network I/O owns no SQL txn.
-            wire = await adapter.send(frozen_profile, context)
-            await _native(_transport, database, prepared['id'], wire, frozen_profile, clock)
-            row, last = await state()
-            if row['status'] != 'RUNNING': return _result('AI_STOPPED', row, last)
-            if wire.succeeded:
-                # Actual usage is recorded first. A v3 budget/model mismatch
-                # terminates the run before parse/adoption and cannot retry.
-                try:
-                    validate_practical_usage(wire.raw_response, profile=frozen_profile,
-                        counting=context.counting_evidence if type(context) is CountedContext else None,
-                        input_tokens=wire.input_tokens,output_tokens=wire.output_tokens)
-                except ConfigInvalid:
-                    await _native(_admission_failure,database,prepared['id'],clock)
-                    if response_text(wire.raw_response) is None:raise
-                    outcome=await _native(persist_returned_response,database,prepared['id'],process_lock=process_lock,clock=clock)
-                    return _result('AI_FINISHED',{'id':identity,'status':'COMPLETED','current_step':'FINISHED'},call_no)
-            error_code = 'MODEL_ERROR'
-            retryable = wire.retryable
-            if wire.succeeded:
-                parsed = await _native(_parse, database, prepared['id'], clock)
-                error_code = 'OUTPUT_INVALID'
-                retryable = wire.category != 'CONTENT_FILTER'
-                if parsed is not None:
-                    receipt = await _native(produce_trusted_output, database, prepared['id'], process_lock=process_lock,
-                        profile=frozen_profile, catalog=resources, clock=clock)
-                    if receipt is not None:
-                        outcome = await _native(persist_ai_result, database, {'guide_run_id': identity,
-                            'llm_use_id': prepared['id'], 'trusted_output': receipt}, process_lock=process_lock,
-                            profile=frozen_profile, catalog=resources, clock=clock)
-                        if outcome['code'] == 'AI_RESULT_PERSISTED':
-                            status = outcome['data']['status']
-                            code = 'AI_WAITING_USER' if status == 'WAITING_USER' else 'AI_FINISHED'
-                            # Return this actual commit receipt even if the
-                            # user already continued/cancelled the waiting run.
-                            return _result(code, {'id': identity, 'status': status,
-                                'current_step': 'WAITING_USER' if status == 'WAITING_USER' else 'FINISHED'}, call_no)
-                        # Business state changes and storage/commit ambiguity
-                        # never authorize an additional model request.
-                        if outcome['code'] not in ('OUTPUT_INVALID','PATCH_INVALID','TARGET_STALE'):
-                            return await fail(outcome['code'])
-            # Any actual assistant return is delivered once. Output formatting,
-            # repeated questions and rejected writes never cause paid retries.
-            if response_text(wire.raw_response) is not None:
-                outcome=await _native(persist_returned_response,database,prepared['id'],process_lock=process_lock,clock=clock)
-                return _result('AI_FINISHED',{'id':identity,'status':'COMPLETED','current_step':'FINISHED'},call_no)
-            if not retryable or attempt == 3: return await fail(error_code)
-            if counting_counter is None:
-                context = await _native(_retry_context, database, identity, resources, function, frozen_profile, context_compiler)
-            else:
-                # Read-only pre-backoff check, never a paid count that will be
-                # thrown away. Each next Chat attempt gets its own fresh count.
-                await _native(_retry_actual,database,identity,resources,function)
-            await sleep(2 if attempt == 1 else 5)
-            # A cancellation/version/source change during the backoff is
-            # caught before the next persisted request or external send.
-            if counting_counter is None:
-                context = await _native(_retry_context, database, identity, resources, function, frozen_profile, context_compiler)
-            else:
-                actual,restored=await _native(_retry_actual,database,identity,resources,function)
-                context=await compile_context(actual,restored)
-            if await _native(compatibility_check, frozen_profile, context, function) is not True:
-                raise ConfigInvalid('Counting compatibility was not proved')
+        if row['function_type'] != 'collaboration_v1':
+            raise ConfigInvalid('Only the current collaboration protocol can execute')
+        from .collaboration_execution import execute_collaboration
+        return await execute_collaboration(database, identity, process_lock=process_lock, catalog=resources,
+            profile=frozen_profile, gateway=gateway, counting_counter=counting_counter,
+            native=_native, state=state, fail=fail, clock=clock)
     except asyncio.CancelledError:
         raise
     except ContextLimitExceeded:

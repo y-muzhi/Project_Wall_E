@@ -23,9 +23,9 @@ export function RequirementPropertyControl(props:Readonly<{flow:RequirementPrope
     {state.phase==='VIEW'?<button className="ui-button" type="button" disabled={locked||!props.flow.allowed||props.writeReady===false} onClick={()=>props.flow.begin()}>修改{label}</button>:<>
       <label>待保存标题<input className="ui-input" aria-label="待保存标题" value={state.draft} disabled={locked||!props.flow.allowed||props.writeReady===false} readOnly={unresolved} onChange={event=>props.flow.change(event.target.value)}/></label>
       {state.phase==='SUBMITTING'&&<p role="status">保存中…</p>}
-      {state.phase==='READING'&&<p role="status">正在读取实际属性…</p>}
+      {state.phase==='READING'&&<p role="status">正在核实原请求…</p>}
       {state.phase==='EDITING'&&<><button className="ui-button" type="button" disabled={locked||!props.flow.allowed||readError!==null||props.writeReady===false} onClick={()=>void execute('SAVE')}>保存</button><button className="ui-button" type="button" disabled={locked} onClick={()=>props.flow.cancel()}>取消</button></>}
-      {state.phase==='UNKNOWN'&&<button className="ui-button" type="button" disabled={locked} onClick={()=>void execute('INSPECT')}>读取实际属性</button>}
+      {state.phase==='UNKNOWN'&&<button className="ui-button" type="button" disabled={locked} onClick={()=>void execute('INSPECT')}>核实保存结果</button>}
       {state.phase==='OBSERVED'&&<><p role="status">已读取当前实际属性，本次保存结果仍未确认。可继续编辑后显式保存，或取消本次输入。</p><button className="ui-button" type="button" disabled={locked||!!readError||!props.flow.allowed||props.writeReady===false} onClick={()=>props.flow.continueEditing()}>继续编辑</button><button className="ui-button" type="button" disabled={locked||!!readError||props.writeReady===false} onClick={()=>props.flow.cancel()}>取消</button></>}
       {state.phase==='CONFIRMED'&&<p role="status">属性保存已确认，{readError?'详情尚未重新读取。':'正在读取实际详情。'}</p>}
     </>}

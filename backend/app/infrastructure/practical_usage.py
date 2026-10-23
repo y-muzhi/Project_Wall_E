@@ -48,3 +48,34 @@ def validate_practical_usage(raw, *, profile, counting, input_tokens, output_tok
             raise ValueError('Observed framing exceeds admitted reserve')
     except (ValueError, KeyError, TypeError, IndexError) as error:
         raise ConfigInvalid('Actual AI usage failed the approved practical budget gate') from error
+
+
+def validate_collaboration_measurements(raw, *, model, release, counts, input_tokens, output_tokens):
+    """Shared small recorded values; no context reconstruction or provider IO."""
+    try:
+        if type(raw) is not dict or raw.get('model') != model or raw.get('object') != 'chat.completion':
+            raise ValueError('Actual model/envelope differs')
+        usage = raw['usage']
+        prompt = _integer(usage['prompt_tokens']);completion = _integer(usage['completion_tokens']);total = _integer(usage['total_tokens'])
+        if prompt != _integer(input_tokens) or completion != _integer(output_tokens) or total != prompt + completion:
+            raise ValueError('Actual usage differs')
+        if prompt > release['input_limit'] or completion > release['output_limit'] or total > release['total_limit']:
+            raise ValueError('Actual usage exceeds collaboration limits')
+        details = usage.get('prompt_tokens_details')
+        if details is not None:
+            if type(details) is not dict:
+                raise ValueError('Cache usage details are invalid')
+            if details.get('cached_tokens') is not None and _integer(details['cached_tokens']) > prompt:
+                raise ValueError('Cached input exceeds the actual input')
+        if type(counts) is not list or len(counts) != 8 or not 0 <= prompt - _integer(counts[0]) - _integer(counts[1]) <= release['framing_reserve']:
+            raise ValueError('Observed framing exceeds the admitted reserve')
+    except (ValueError, KeyError, TypeError, IndexError) as error:
+        raise ConfigInvalid('Actual collaboration usage failed its release gate') from error
+
+
+def validate_collaboration_usage(raw, *, profile, context, catalog, input_tokens, output_tokens):
+    """Repeat exact candidate proof before trusting any business result."""
+    from backend.app.guide.collaboration_counting import verify_counted
+    evidence = verify_counted(context, catalog, profile)
+    validate_collaboration_measurements(raw, model=profile.model_name, release=catalog.collaboration.counting,
+        counts=evidence['count_attempts'][-1]['measurement']['counts'], input_tokens=input_tokens, output_tokens=output_tokens)
