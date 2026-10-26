@@ -5,7 +5,7 @@ import {RequirementDetailOwner} from './detail-owner.ts';
 import {DetailFrame} from './detail-frame.tsx';
 import {RequirementHeader} from './header.tsx';
 import {OwnedDocumentControls} from './document-controls.tsx';
-import {DocumentDirectory,DocumentMetadataBar,NewDocumentButton} from './document-directory-view.tsx';
+import {DocumentCreationProvider,DocumentDirectory,DocumentMetadataBar,NewDocumentButton} from './document-directory-view.tsx';
 import {CommentPanel,CommentDocumentTools} from '../comments/panel.tsx';
 import {RevisionList,RevisionSaveControl} from '../revisions/components.tsx';
 import {GuideConversation} from '../guide/conversation.tsx';
@@ -14,6 +14,7 @@ import {ToastViewport} from '../shared/toast.tsx';
 import {localTime} from '../shared/time.ts';
 import {DocumentRecords} from './document-records.tsx';
 import {DiscussionProgress} from './discussion-view.tsx';
+import {activeModal} from '../shared/modal.ts';
 
 function DocumentMount({host}:Readonly<{host:HTMLElement}>){const container=useRef<HTMLDivElement>(null);useLayoutEffect(()=>{container.current!.append(host);return()=>host.remove();},[host]);return <div className="detail-document-host" ref={container}/>;}
 function SaveStatus({owner}:Readonly<{owner:RequirementDetailOwner}>){
@@ -29,27 +30,32 @@ function ManualSaveStatus({session,retained}:Readonly<{session:NonNullable<Retur
 }
 function LoadedDetail({owner,host,back}:Readonly<{owner:RequirementDetailOwner;host:HTMLElement;back():void}>){
  const [documentActionHost,setDocumentActionHost]=useState<HTMLDivElement|null>(null);
+ const product=useRef<HTMLDivElement>(null);
+ const composerFocus=useRef(false);
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),document=useSyncExternalStore(owner.documents.subscribe,owner.documents.getSnapshot),departure=useSyncExternalStore(owner.departure.subscribe,owner.departure.getSnapshot),regions=owner.regions!;
  const geometry=useSyncExternalStore(regions.layout.subscribe,regions.layout.getSnapshot),viewport=useSyncExternalStore(regions.viewport.subscribe,regions.viewport.getSnapshot),historical=owner.documents.historical;
  const supported=geometry.mode!=='BLOCKED'&&viewport.phase==='SUPPORTED',blocked=!supported||departure.phase!=='IDLE',actual=state.detail!,activity=actual.activity.kind==='GUIDE'?('AI 运行中'):actual.activity.kind==='BATCH'?'待处理建议':null;
  useEffect(()=>{const protect=(event:BeforeUnloadEvent)=>{const session=owner.documents.getSnapshot().manual;if(session&&(session.autosave.state.status!=='SAVED'||!['EDITING','CLOSED'].includes(session.ending.getSnapshot().phase))){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',protect);return()=>window.removeEventListener('beforeunload',protect);},[owner]);
- return <div className="detail-product">
+ const discuss=()=>{composerFocus.current=true;regions.layout.openTab('AI');};
+ useEffect(()=>{if(!composerFocus.current)return;if(geometry.right_tab!=='AI'||!geometry.right_open){composerFocus.current=false;return;}if(!supported||state.loading||!state.ready||document.busy||activeModal())return;const input=product.current?.querySelector<HTMLTextAreaElement>('[aria-label="给 AI 的消息"]');if(input&&!input.disabled){composerFocus.current=false;input.focus({preventScroll:true});}},[supported,state.loading,state.ready,document.busy,geometry.right_open,geometry.right_tab]);
+ return <DocumentCreationProvider owner={owner}><div className="detail-product" ref={product} data-requirement-id={actual.requirement.id}>
   <DetailFrame layout={regions.layout} viewport={regions.viewport} title={actual.requirement.title} status={<div className="requirement-metadata"><span>{actual.requirement.requirement_no}</span><span>{actual.requirement.requirement_type==='NEW'?'需求新增':'需求改造'}</span><span className="requirement-state-badge" data-state={actual.requirement.status}>{REQUIREMENT_STATUS_LABELS[actual.requirement.status]}</span></div>}
    actions={null} properties={<RequirementHeader documentActions={<div className="requirement-document-actions" ref={setDocumentActionHost}/>} commands={regions.header} ready={state.ready} blocked={blocked||document.busy} history={historical} refresh={owner.refresh} refreshRevisions={async()=>{if(!await owner.documents.revisions.refresh())throw Error('实际版本列表暂时无法读取');}} notifyConfirmed={owner.notifyConfirmed}
     tools={<><button className="ui-button" type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button></>}/>}
-   outline={<DocumentDirectory owner={owner}/>}
-   document={<><DocumentMetadataBar owner={owner}/><OwnedDocumentControls actionHost={documentActionHost} showSaveStatus={false} owner={owner.documents} blocked={blocked} auxiliary={document.mode!=='CURRENT'||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
-    {state.error&&<p className="inline-error" role="alert">{state.error}</p>}{document.mode==='EMPTY'&&<section className="document-empty-workspace"><h2>{actual.documents.length?'尚未选择文档':'尚无文档'}</h2><NewDocumentButton owner={owner}/></section>}<DocumentMount host={host}/></>}
-   ai={<><DiscussionProgress owner={owner} blocked={blocked||document.busy||historical}/><GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/></>}
+   outline={<DocumentDirectory owner={owner}/>} outlineActions={<NewDocumentButton owner={owner} iconOnly/>}
+   document={navigation=><><DocumentMetadataBar owner={owner} navigation={actual.current?navigation:null}/><OwnedDocumentControls actionHost={documentActionHost} showSaveStatus={false} owner={owner.documents} blocked={blocked} auxiliary={document.mode!=='CURRENT'||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
+    {state.error&&<p className="inline-error" role="alert">{state.error}</p>}{document.mode==='EMPTY'&&<section className="document-empty-workspace"><h2>{actual.documents.length?'选择一份文档开始阅读':'先梳理需求，再形成文档'}</h2><p>{actual.documents.length?'从文档导航选择已有文档，也可以新建空白或框架文档。':'初始想法已保存在对话中。可以先讨论目标与范围，也可以直接手动创建文档。'}</p><div className="document-empty-actions">{!actual.current&&navigation}{!actual.documents.length&&<button className="ui-button primary" type="button" disabled={blocked} onClick={discuss}>前往讨论</button>}<NewDocumentButton owner={owner} label="手动新建文档"/></div></section>}<DocumentMount host={host}/></>}
+   ai={<GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
+   progress={<DiscussionProgress owner={owner} active={supported&&geometry.right_open&&geometry.right_tab==='PROGRESS'} blocked={blocked||document.busy||historical} discuss={discuss}/>}
    comments={<CommentPanel panel={regions.comments} documents={owner.documents}/>}
-   revisions={<DocumentRecords modelCallApi={regions.conversation.modelCallApi} requirementId={actual.requirement.id} active={supported&&geometry.right_open&&geometry.right_tab==='REVISIONS'} blocked={blocked||document.busy} revisions={owner.documents.revisions} history={regions.conversation.read.history} readRun={owner.readRunRecord}
+   revisions={<DocumentRecords cache={regions.conversation.modelCalls} modelCallApi={regions.conversation.modelCallApi} requirementId={actual.requirement.id} active={supported&&geometry.right_open&&geometry.right_tab==='REVISIONS'} blocked={blocked||document.busy} revisions={owner.documents.revisions} history={regions.conversation.read.history} readRun={owner.readRunRecord}
     versions={<>{state.revisionSave&&<RevisionSaveControl flow={state.revisionSave} ready={state.ready&&state.revisionSave.allowed} blocked={blocked||historical} refreshActual={owner.refresh} saved={receipt=>owner.savedRevision(receipt)}/>}
      <RevisionList flow={owner.documents.revisions} blocked={blocked||document.busy} open={summary=>void owner.openHistory(summary).catch(()=>undefined)}/></>}/>}
    activity={activity} saveStatus={<SaveStatus owner={owner}/>} back={()=>void owner.departure.request(back)} readPanel={(tab,signal)=>owner.readPanel(tab,signal)}/>
   {departure.phase==='SAVING'&&<p className="detail-leave-status" role="status">正在保存草稿，确认后离开…</p>}
   <Confirmation open={departure.phase==='WARNING'} title="仍有未同步的编辑内容" description={departure.local_protected?'后端草稿仍保留，本地最新内容已暂存。可以继续编辑，或明确离开后在此浏览器恢复。':'后端草稿仍保留，但最新本地内容尚未确认能够跨页面恢复。请继续编辑或先复制需要的文字；明确离开可能丢失尚未同步内容。'} busy={false} dangerous confirmLabel="仍然离开" cancelLabel="继续编辑" error={departure.error} confirm={()=>owner.departure.confirmLeave()} cancel={()=>owner.departure.continueEditing()}/>
   <ToastViewport store={owner.toasts}/>
- </div>;
+ </div></DocumentCreationProvider>;
 }
 
 /** Route-local lifetime. Required real reads precede any editable document.

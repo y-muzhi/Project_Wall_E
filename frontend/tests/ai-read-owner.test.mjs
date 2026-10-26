@@ -74,3 +74,20 @@ test('local run history read does not reread/adopt detail, refresh messages or r
  assert(await owner.history.refresh({status:['FAILED']}));await flush();
  assert.deepEqual({parents:f.facts.parents,adopts:f.facts.adopts,queries:f.facts.queries,messageReads,selected:owner.getSnapshot().selected,run:owner.getSnapshot().run},before);owner.dispose();
 });
+
+test('a write invalidating an in-flight message read waits for commit and reconciles once without leaving a false read error',async()=>{
+ const f=fixture();let release,fail,writing=false,reads=0;const barrier=new Promise(resolve=>release=resolve),old=new Promise((_,reject)=>fail=reject);
+ f.api.detailReadEpoch=0;f.api.waitForDetailWrites=()=>writing?barrier:Promise.resolve();
+ const messages=f.api.listMessages;f.api.listMessages=async(...args)=>{if(++reads===1)return old;return messages(...args);};
+ const owner=new RequirementAiRead(detail,f.api,f.read,f.adopt,f.open,f.timing);owner.setVisible(true);await flush();assert.equal(reads,1);
+ const pending=owner.refresh();writing=true;f.api.detailReadEpoch++;fail(new DOMException('Write barrier','AbortError'));await flush();assert.equal(reads,1);
+ writing=false;f.api.detailReadEpoch++;release();await pending;await flush();
+ assert.equal(owner.getSnapshot().error,null);assert.equal(owner.messages.getSnapshot().error,null);assert.equal(reads,2);owner.dispose();
+});
+
+test('reopening an unselected conversation revalidates cached empty history so a new failed run cannot disappear',async()=>{
+ const f=fixture(),history=f.api.listGuideRuns;let empty=true,queries=0;
+ f.api.listGuideRuns=async(...args)=>{queries++;return empty?{data:{items:[]},meta:{pagination:{page:1,page_size:20,total:0,total_pages:0}}}:history(...args);};
+ const owner=new RequirementAiRead(detail,f.api,f.read,f.adopt,f.open,f.timing);owner.setVisible(true);await flush();assert.equal(owner.getSnapshot().selected,null);
+ owner.setVisible(false);empty=false;owner.setVisible(true);await flush();assert.equal(owner.getSnapshot().selected,3);assert.equal(owner.getSnapshot().run.status,'FAILED');assert.equal(queries,2);owner.dispose();
+});

@@ -1,6 +1,7 @@
 import {Icon} from './icon.tsx';
 import { useLayoutEffect, useId, useRef, useState } from 'react';
 import { normalizeOrdinary } from './text.ts';
+import {useMotionPresence} from './motion-react.ts';
 
 export type FilterValue = string | number;
 export type FilterOption<T extends FilterValue> = Readonly<{ value: T; label: string }>;
@@ -17,6 +18,7 @@ export function MultiFilter<T extends FilterValue>({ name, options, value, disab
   const all = canonical.length === options.length;
   const label = `${name}：${all ? '全部' : value.length === 1 ? options.find(option => Object.is(option.value, value[0]))!.label : '已选 ' + value.length + ' 项'}`;
   const compatible=!!draft&&equal(draft.baseline,canonical)&&equal(draft.choices,choices),open=compatible&&!disabled;
+  const present=useMotionPresence(open),lastDraft=useRef(draft);if(open)lastDraft.current=draft;const shownDraft=open?draft:lastDraft.current;
   const pending=useRef(draft),current=useRef({canonical,choices,disabled,change});pending.current=draft;current.current={canonical,choices,disabled,change};
   const updateDraft=(next:Draft|null)=>{pending.current=next;setDraft(next);};
   const finish=(apply:boolean)=>{
@@ -49,11 +51,11 @@ export function MultiFilter<T extends FilterValue>({ name, options, value, disab
     }}>
       <span>{label}</span><Icon name={open && !disabled ? 'up' : 'down'}/></button>
     <span className="sr-only" id={id+'-help'}>勾选后关闭筛选器应用，Esc取消；未选任何项表示全部。</span>
-    {open && draft && <div ref={menu} id={id} role="group" className={'filter-menu' + (upwards ? ' filter-upwards' : '')} aria-label={name + '筛选'}>
+    {present && shownDraft && <div ref={menu} id={id} role="group" inert={!open} aria-hidden={!open} data-motion-open={open} className={'filter-menu' + (upwards ? ' filter-upwards' : '')} aria-label={name + '筛选'}>
       <div className="filter-options">{options.map((option, index) => {
-        const selected = draft.selected.some(item => Object.is(item, option.value));
+        const selected = shownDraft.selected.some(item => Object.is(item, option.value));
         return <label key={index} title={option.label} className={selected ? 'selected' : ''}>
-          <input className="ui-input" type="checkbox" checked={selected} onChange={() => updateDraft({...draft,selected:selected?draft.selected.filter(item=>!Object.is(item,option.value)):[...draft.selected,option.value]})} />
+          <input className="ui-input" type="checkbox" checked={selected} onChange={() => {if(open)updateDraft({...shownDraft,selected:selected?shownDraft.selected.filter(item=>!Object.is(item,option.value)):[...shownDraft.selected,option.value]});}} />
           <span>{option.label}</span></label>;
       })}</div></div>}
   </div>;

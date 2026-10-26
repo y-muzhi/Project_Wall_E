@@ -46,3 +46,38 @@ test('whole-read coalescing, force supersession and pause ignore retired results
  assert(!await changing.refresh());assert.equal(changing.phase,'CONTENT_VERSION_CONFLICT');changing.dispose();
  const held=deferred(),s=port();s.api.getRequirementDetail=async()=>held.promise;const retired=new RequirementDetailRead(1,s.api);const pending=retired.refresh();await settle();retired.pause();held.resolve({data:s.bundle(root())});assert(!await pending);assert.equal(s.calls.length,0);retired.dispose();
 });
+
+
+test('observation reuses only matching last-known content while explicit reads still refresh the comment index',async()=>{
+ const p=port(),reader=new RequirementDetailRead(1,p.api);assert(await reader.refresh());p.calls.length=0;
+ p.input.root=root({discussion_version:2});assert(await reader.observe());
+ assert.deepEqual(p.calls.map(row=>row.method),['getRequirementDetail','getRequirementDetail']);
+ const before=reader.getSnapshot().confirmed.current;p.calls.length=0;p.input.index=index({total_count:1});
+ assert(await reader.refresh());assert(p.calls.some(row=>row.method==='getCommentIndex'));assert.equal(reader.getSnapshot().confirmed.comment_index.total_count,1);
+ p.calls.length=0;p.input.current=doc({content_version:8});p.input.index=index({content_version:8});
+ p.api.getRequirementDetail=async()=>{p.calls.push({method:'getRequirementDetail'});return {data:{...p.bundle(),documents:[{id:2,requirement_id:1,archived_at:null,content_version:8}]}};};
+ assert(await reader.observe());assert.equal(reader.getSnapshot().confirmed.current.content_version,8);assert.notEqual(reader.getSnapshot().confirmed.current,before);assert(p.calls.some(row=>row.method==='getCurrentDocument'));reader.dispose();
+});
+test('an explicit read supersedes advisory work and a write epoch cannot join a read started before the command',async()=>{
+ const p=port(),reader=new RequirementDetailRead(1,p.api);p.api.detailReadEpoch=0;assert(await reader.refresh());
+ const held=deferred(),read=p.api.getRequirementDetail;let first=true;
+ p.api.getRequirementDetail=async(...args)=>{if(first){first=false;return held.promise;}return read(...args);};
+ const old=reader.observe();await settle();p.api.detailReadEpoch++;
+ const after=reader.refresh();assert(await after);held.resolve({data:p.bundle()});assert(!await old);assert(reader.writeReady);
+ first=true;const waiting=deferred();p.api.getRequirementDetail=async(...args)=>{if(first){first=false;return waiting.promise;}return read(...args);};
+ const advisory=reader.observe();await settle();assert(await reader.refresh());waiting.resolve({data:p.bundle()});assert(!await advisory);reader.dispose();
+});
+test('a changed summary at the end of an advisory read cannot publish mismatched metadata with reused content',async()=>{
+ const p=port(),reader=new RequirementDetailRead(1,p.api);assert(await reader.refresh());const previous=reader.getSnapshot().confirmed;
+ let count=0;p.api.getRequirementDetail=async()=>({data:{...p.bundle(),documents:[{id:2,requirement_id:1,archived_at:null,content_version:7,...(++count===2?{metadata_version:2}:{})}]}});
+ assert(!await reader.observe());assert.equal(reader.getSnapshot().confirmed,previous);assert.equal(reader.phase,'CONTENT_VERSION_CONFLICT');reader.dispose();
+});
+
+test('updating another document cannot cause a read of A, but mutable metadata and manual occupancy require a full read',async()=>{
+ const p=port(),read=p.api.getRequirementDetail;let otherVersion=1;
+ p.api.getRequirementDetail=async(...args)=>{const response=await read(...args);return {data:{...response.data,documents:[...response.data.documents,{id:9,requirement_id:1,content_version:otherVersion,archived_at:null}]}};};
+ const reader=new RequirementDetailRead(1,p.api);assert(await reader.refresh());p.calls.length=0;otherVersion=2;
+ assert(await reader.observe());assert(!p.calls.some(row=>row.method==='getCurrentDocument'));assert.equal(reader.getSnapshot().confirmed.current.id,2);
+ p.input.root=root({document_work_state:'MANUAL_EDITING',active_operation_type:'MANUAL_DRAFT',active_operation_id:3,state_started_at:at});p.calls.length=0;
+ assert(await reader.observe());assert(p.calls.some(row=>row.method==='getCurrentDocument'));assert(p.calls.some(row=>row.method==='getManualDraft'));reader.dispose();
+});

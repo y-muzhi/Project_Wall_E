@@ -28,7 +28,7 @@ export class RequirementDetailOwner{
  private readonly api:WalleApi;private readonly width:()=>number;private readonly storage:Pick<Storage,'getItem'|'setItem'>|null;private bindings:DetailBindings|null=null;private readonly listeners=new Set<()=>void>();private readonly releases:(()=>void)[]=[];
  private value:DetailOwnerState=Object.freeze({detail:null,loading:false,error:null,ready:false,revision:0,revisionSave:null});private closed=false;private syncing=false;private previous:DetailSnapshot|null=null;private priorHistory=false;private refreshing:Promise<DetailSnapshot>|null=null;private retiring:Promise<void>|null=null;
  constructor(identity:number,api:WalleApi,host:HTMLElement,width:()=>number,storage:Pick<Storage,'getItem'|'setItem'>|null,scrollport:HTMLElement|null=null){
-  this.api=api;this.width=width;this.storage=storage;this.read=new RequirementDetailRead(identity,api);this.documents=new RequirementDocumentOwner(host,identity,api,this.readActual,scrollport);this.departure=new DetailDeparture(this.documents);
+  this.api=api.forDetailReads();api=this.api;this.width=width;this.storage=storage;this.read=new RequirementDetailRead(identity,api);this.documents=new RequirementDocumentOwner(host,identity,api,this.readActual,scrollport);this.departure=new DetailDeparture(this.documents);
   this.releases.push(this.read.subscribe(()=>this.sync()),this.documents.subscribe(()=>this.sync()),this.documents.revisions.subscribe(()=>this.sync()),this.departure.subscribe(()=>this.sync()));
  }
  getSnapshot=():DetailOwnerState=>this.value;subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
@@ -39,9 +39,10 @@ export class RequirementDetailOwner{
  get supported():boolean{return !!this.bindings&&this.bindings.layout.getSnapshot().mode!=='BLOCKED'&&this.bindings.viewport.getSnapshot().phase==='SUPPORTED'&&this.departure.getSnapshot().phase==='IDLE';}
  private publish(changes:Partial<DetailOwnerState>){if(this.closed)return;this.value=Object.freeze({...this.value,...changes,revision:this.value.revision+1});for(const listener of this.listeners)try{listener();}catch(error){console.error('WALL-E detail observer failed',error);}}
  readActual=async():Promise<DetailSnapshot>=>{if(this.closed||!await this.read.refresh())throw Error(this.read.getSnapshot().error??'实际详情暂时无法读取');if(this.closed)throw Error('Detail is retired');return this.read.getSnapshot().confirmed!;};
+ readObserved=async():Promise<DetailSnapshot>=>{if(this.closed||!await this.read.observe())throw Error(this.read.getSnapshot().error??'实际详情暂时无法读取');if(this.closed)throw Error('Detail is retired');return this.read.getSnapshot().confirmed!;};
  private createRegions(actual:DetailSnapshot):void{
   const layout=new DetailLayout(actual.requirement.status,this.width(),this.storage),viewport=new DetailViewportGuard(this.width(),{blockAndSave:()=>this.documents.blockAndSave(),readAfterSupport:async signal=>{if(signal.aborted)throw Error('Restore aborted');await this.documents.restoreSupported();if(signal.aborted)throw Error('Restore aborted');if(!this.documents.historical&&!await this.bindings!.comments.comments.refresh(this.bindings!.comments.comments.getSnapshot().page,true))throw Error('正文评论标记暂时无法读取');if(signal.aborted)throw Error('Restore aborted');}}),header=new RequirementHeaderCommands(actual,this.api);
-  const conversation=new RequirementConversation(actual,this.api,this.readActual,this.adoptActual,()=>{layout.openTab('AI');this.sync();});
+  const conversation=new RequirementConversation(actual,this.api,this.readActual,this.adoptActual,()=>{layout.openTab('AI');this.sync();},undefined,this.readObserved);
   const comments=new RequirementCommentPanel(actual,this.api,this.readActual,this.adoptActual,conversation.receive,this.notifyConfirmed);
   const directory=new DocumentDirectoryCommands(actual,this.api,this.refresh,identity=>this.selectDocument(identity));
   const discussion=new RequirementDiscussion(actual,this.api,this.refresh);
@@ -88,7 +89,7 @@ export class RequirementDetailOwner{
  async readPanel(tab:DetailTab,signal:AbortSignal):Promise<void>{const regions=this.bindings;if(!regions||!this.supported||signal.aborted)throw Error('Panel is unavailable');
   if(tab==='AI'){if(this.documents.historical)return;await regions.conversation.refresh();}
   else if(tab==='COMMENTS'){if(this.documents.historical)return;if(!await regions.comments.comments.refresh())throw Error('实际评论暂时无法读取');}
-  else if(this.value.detail?.current!==null&&!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
+  else if(tab==='REVISIONS'&&this.value.detail?.current!==null&&!await this.documents.revisions.refresh())throw Error('实际版本记录暂时无法读取');
  }
  openComments=():void=>{if(this.supported){this.bindings?.layout.openTab('COMMENTS');this.sync();}};
  readSource=(source:unknown,signal:AbortSignal)=>{const identity=this.value.detail?.requirement.id;if(this.closed||identity===undefined)throw Error('来源视图已关闭');return readSource(identity,source,this.api,signal);};
@@ -98,5 +99,5 @@ export class RequirementDetailOwner{
   if(this.closed)return;const actual=await this.refresh();
   const previous=this.value.revisionSave;if(previous?.getSnapshot().receipt?.event_id===receipt.event_id){previous.dispose();this.publish({revisionSave:detailPermissions(actual,true).revision_save?new RequirementRevisionSave(actual,this.api):null});}
  }
- retire():Promise<void>{if(this.retiring)return this.retiring;this.closed=true;for(const release of this.releases)release();this.departure.dispose();this.bindings?.viewport.dispose();this.bindings?.header.dispose();this.bindings?.directory.dispose();this.bindings?.discussion.dispose();this.bindings?.conversation.dispose();this.bindings?.comments.dispose();this.value.revisionSave?.dispose();this.read.dispose();this.toasts.dispose();this.listeners.clear();this.retiring=this.documents.retire();return this.retiring;}
+ retire():Promise<void>{if(this.retiring)return this.retiring;this.closed=true;for(const release of this.releases)release();this.departure.dispose();this.bindings?.viewport.dispose();this.bindings?.header.dispose();this.bindings?.directory.dispose();this.bindings?.discussion.dispose();this.bindings?.conversation.dispose();this.bindings?.comments.dispose();this.value.revisionSave?.dispose();this.read.dispose();this.api.disposeDetailReads();this.toasts.dispose();this.listeners.clear();this.retiring=this.documents.retire();return this.retiring;}
 }

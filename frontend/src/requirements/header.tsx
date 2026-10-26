@@ -35,7 +35,7 @@ export function RequirementHeader(props:Readonly<{tools?:ReactNode;documentActio
     {manual&&(!props.history||manual.getSnapshot().phase!=='READY')&&<ManualStartControl key={'manual-'+state.manual_generation} flow={manual} disabled={external||props.commands.blockedFor('MANUAL')} writeReady={ready} started={async()=>{await refresh();}}/>}
     </div><div className="requirement-tools" ref={toolsHost} onKeyDown={event=>{if(event.key==='Escape'&&!event.defaultPrevented&&!activeModal()&&!editingTitle&&expanded){event.preventDefault();event.stopPropagation();closeTools();}}}>
       <button ref={toolsToggle} className="ui-button icon-button" type="button" aria-label="更多操作" title={editingTitle?'请先完成或取消标题编辑':'更多操作'} aria-expanded={expanded} aria-controls={toolsId} disabled={editingTitle} onClick={()=>setToolsOpen(value=>!value)}><Icon name="more"/></button>
-      <div id={toolsId} className="requirement-tools-popover" role="region" aria-label="详情工具" hidden={!expanded}>
+      <div id={toolsId} className="requirement-tools-popover" role="region" aria-label="详情工具" hidden={!expanded} inert={!expanded} aria-hidden={!expanded}>
         <p className="requirement-tools-caption">需求属性与工具</p>
         <RequirementPropertyControl flow={props.commands.title} showValue={false} blocked={external||props.commands.blockedFor('TITLE')} writeReady={ready} refresh={refresh}/>
         {props.tools&&<div className="requirement-tool-actions" onClick={event=>{if(event.target instanceof Element&&event.target.closest('button'))closeTools();}}>{props.tools}</div>}

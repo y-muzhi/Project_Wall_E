@@ -9,6 +9,7 @@ import type {GuideTarget} from './scope.ts';
 type Operation=CreateGuide['operation'];
 type NewTarget=Extract<NonNullable<CreateGuide['target']>,{kind:'NEW'}>;
 type Submitted=Readonly<{kind:'CREATE';body:CreateGuide;raw:string}|{kind:'CONTINUE';parent:GuideRun;instruction:string;version:number;raw:string}>;
+type Settings=Pick<ComposerState,'action'|'target'|'new_target'|'source_refs'|'review'|'parent'|'binding_loaded'>;
 export type ComposerState=Readonly<{detail:DetailSnapshot;action:Operation;target:GuideTarget|null;new_target:NewTarget;source_refs:CreateGuide['source_refs'];
  review:GuideRun|null;parent:GuideRun|null;instruction:string;draft_warning:string|null;available:boolean;
  phase:'READY'|'ERROR'|'SUBMITTING'|'UNKNOWN'|'READING'|'CONFIRMED';submitted:Submitted|null;outcome:RunReceipt|null;user_message:Message|null;
@@ -25,7 +26,9 @@ export class RequirementGuideComposer{
  private readonly receive:(run:Pick<GuideRun,'id'|'requirement_id'>)=>Promise<void>;private readonly refreshMessages:()=>Promise<void>;
  private command:ApiAction<RunReceipt>|undefined;private pending:Promise<boolean>|undefined;private work:string|undefined;
  private readonly listeners=new Set<()=>void>();private closed=false;private epoch=0;private controller:AbortController|undefined;private delivered=false;private configured=false;
- constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:(run:Pick<GuideRun,'id'|'requirement_id'>)=>Promise<void>,refreshMessages:()=>Promise<void>,drafts=new ComposerDrafts()){
+ private settings:Readonly<{value:Settings;configured:boolean}>|undefined;
+ private readonly readAccepted:()=>Promise<DetailSnapshot>;
+ constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:(run:Pick<GuideRun,'id'|'requirement_id'>)=>Promise<void>,refreshMessages:()=>Promise<void>,drafts=new ComposerDrafts(),readAccepted=readActual){this.readAccepted=readAccepted;
   this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.receive=receive;this.refreshMessages=refreshMessages;this.drafts=drafts;
   const draft=drafts.load(detail.requirement.id);
   this.value=Object.freeze({detail:capture(detail),action:'DISCUSS',target:null,new_target:{kind:'NEW' as const,name:'',document_kind:'brief' as const,template_ref:null},source_refs:[],review:null,parent:null,
@@ -48,6 +51,12 @@ export class RequirementGuideComposer{
  adopt(detail:DetailSnapshot):void{if(detail.requirement.id!==this.value.detail.requirement.id)throw TypeError('Owned actual detail required');this.publish({detail:capture(detail)});}
  setAvailable(available:boolean):void{if(this.closed||available===this.value.available)return;this.epoch++;this.publish({available});if(!available)this.controller?.abort();}
  change(instruction:string):void{if(this.editable)this.publish({instruction,draft_warning:this.drafts.save(this.value.detail.requirement.id,instruction),error:null,error_code:null});}
+ beginSettings():void{if(!this.editable||this.settings)return;const {action,target,new_target,source_refs,review,parent,binding_loaded}=this.value;
+  this.settings={value:capture({action,target,new_target,source_refs,review,parent,binding_loaded}),configured:this.configured};}
+ endSettings(cancel=false):void{const original=this.settings;this.settings=undefined;if(!cancel||!original||!this.editable)return;
+  // Invalidate the opening GET as well: an escaped draft must not return later.
+  this.epoch++;this.controller?.abort();this.configured=original.configured;
+  this.publish({...original.value,error:null,error_code:null});}
  choose(action:Operation):void{if(this.editable&&operations.includes(action)){this.configured=true;this.publish({action,parent:null,review:null,error:null,error_code:null});}}
  configureNew(name:string,kind:NewTarget['document_kind'],framework:boolean):void{if(this.editable){this.configured=true;this.publish({new_target:{kind:'NEW',name,document_kind:kind,template_ref:framework?{key:'structure.'+kind,version:'v1'}:null}});}}
  chooseReferences(identities:readonly number[]):void{if(!this.editable)return;this.configured=true;const refs=identities.map(identity=>{const document=this.value.detail.documents.find(item=>item.id===identity);if(!document)throw TypeError('Actual source document required');return sourceRef({kind:'REVISION',document_id:identity,revision_id:document.current_revision_id,block_ids:null});});
@@ -88,7 +97,7 @@ export class RequirementGuideComposer{
      scope:state.action==='GENERATE'?null:wire,source_refs:state.source_refs,proposal_ref:null,acknowledge_source_changes:false};
     this.publish({submitted:capture({kind:'CREATE',body,raw:state.instruction}),outcome:null});this.command=this.api.prepareCreateGuide(state.detail.requirement.id,body);}
   }catch(error){this.publish({phase:'ERROR',error:error instanceof Error?error.message:'无法准备发送。',error_code:'INVALID_INPUT'});return false;}
-  return await this.send()?this.finishWork():false;
+  this.endSettings();return await this.send()?this.finishWork():false;
  });}
  private async send():Promise<boolean>{this.publish({phase:'SUBMITTING',error:null,error_code:null});try{
   const receipt=runReceipt((await this.command!.submit()).data);if(this.closed)return false;this.command=undefined;
@@ -112,7 +121,7 @@ export class RequirementGuideComposer{
   if(!alive())throw Error('消息已接受，恢复面板后读取实际结果。');const receipt=this.value.outcome!,submitted=this.value.submitted!;
   const run=(await this.api.getGuideRun(receipt.guide_run_id)).data;if(!alive())throw Error('View hidden');
   if(run.requirement_id!==this.value.detail.requirement.id||submitted.kind==='CONTINUE'&&run.parent_guide_run_id!==submitted.parent.id||submitted.kind==='CREATE'&&run.operation!==submitted.body.operation)throw Error('运行与原操作不一致。');
-  if(!this.delivered){await this.receive(run);this.delivered=true;}if(!alive())throw Error('View hidden');const actual=await this.readActual();if(!alive())throw Error('View hidden');await this.adoptActual(actual);await this.refreshMessages();if(!alive())throw Error('View hidden');
+  if(!this.delivered){await this.receive(run);this.delivered=true;}if(!alive())throw Error('View hidden');const actual=await this.readAccepted();if(!alive())throw Error('View hidden');await this.adoptActual(actual);await this.refreshMessages();if(!alive())throw Error('View hidden');
   this.publish({detail:capture(actual),phase:'READY',instruction:'',submitted:null,outcome:null,user_message:null,parent:null,observed:null,error:null,error_code:null,needs_refresh:false});return true;
  }catch(error){this.publish({error:error instanceof Error?error.message:'已接受发送，实际资源暂时无法读取。'});return false;}finally{this.publish({refreshing:false});}}
  dispose():void{if(this.closed)return;this.publish({active:false,available:false});this.closed=true;this.epoch++;this.controller?.abort();this.listeners.clear();}

@@ -5,6 +5,7 @@ import type {Node} from '@milkdown/kit/prose/model';
 import {listCommand} from './format-commands.ts';
 import {installEditorInteractions} from './editor-interactions.ts';
 import {createSingleSelect} from '../shared/single-select.ts';
+import {setMotionOpen} from '../shared/motion.ts';
 import {lift} from '@milkdown/kit/prose/commands';
 import {undo,redo} from '@milkdown/kit/prose/history';
 import {deleteRow,deleteColumn,deleteTable} from '@milkdown/kit/prose/tables';
@@ -28,7 +29,8 @@ export function installFormatToolbar(root:HTMLElement,owner:Owner,report:(messag
   const shortcuts:Record<string,string>={'加粗':'Ctrl/⌘+B','斜体':'Ctrl/⌘+I','无序列表':'Ctrl/⌘+Shift+8','有序列表':'Ctrl/⌘+Shift+7','撤销':'Ctrl/⌘+Z','重做':'Ctrl+Y / ⌘+Shift+Z'};
   const commonLabels=new Set(['加粗','斜体','无序列表','有序列表','撤销','重做']);
   const icons:Record<string,string>={'无序列表':'M6 4h8M6 8h8M6 12h8M2 4h1M2 8h1M2 12h1','有序列表':'M7 4h7M7 8h7M7 12h7M2 2h1v4M2 9q2-2 2 0l-2 3h2','撤销':'M6 3 2 7l4 4M2 7h7a4 4 0 0 1 4 4','重做':'m10 3 4 4-4 4M14 7H7a4 4 0 0 0-4 4'};
-  const expand=(open:boolean)=>{extra.hidden=!open;more.setAttribute('aria-expanded',String(open));};
+  const expand=(open:boolean)=>{setMotionOpen(extra,open);more.setAttribute('aria-expanded',String(open));};
+  expand(false);
   more.addEventListener('mousedown',event=>event.preventDefault());more.addEventListener('click',()=>expand(extra.hidden!==false));
   toolbar.addEventListener('keydown',event=>{if(event.key==='Escape'&&!extra.hidden&&!event.defaultPrevented){event.preventDefault();expand(false);more.focus({preventScroll:true});}});
   const outside=(event:PointerEvent)=>{if(event.target instanceof document.defaultView!.Node&&!toolbar.contains(event.target))expand(false);};document.addEventListener('pointerdown',outside);
@@ -77,9 +79,10 @@ export function installFormatToolbar(root:HTMLElement,owner:Owner,report:(messag
   const href=document.createElement('input');href.type='url';href.className='ui-input';href.placeholder='https://example.com';href.required=true;linkLabel.append(href);form.append(linkLabel);
   const apply=document.createElement('button');apply.type='submit';apply.className='ui-button';apply.textContent='应用链接';form.append(apply);
   const cancel=document.createElement('button');cancel.type='button';cancel.className='ui-button';cancel.textContent='取消';form.append(cancel);
-  const closeLink=()=>{form.hidden=true;linkButton.setAttribute('aria-expanded','false');owner.action(ctx=>ctx.get(editorViewCtx).focus());};
+  const closeLink=()=>{setMotionOpen(form,false);linkButton.setAttribute('aria-expanded','false');owner.action(ctx=>ctx.get(editorViewCtx).focus());};
+  setMotionOpen(form,false);
   cancel.addEventListener('click',closeLink);
-  linkButton.addEventListener('click',()=>{form.hidden=!form.hidden;linkButton.setAttribute('aria-expanded',String(!form.hidden));if(!form.hidden)href.focus();});
+  linkButton.addEventListener('click',()=>{setMotionOpen(form,form.hidden!==false);linkButton.setAttribute('aria-expanded',String(!form.hidden));if(!form.hidden)href.focus();});
   form.addEventListener('submit',event=>{event.preventDefault();if(!owner.formattingReady)return;let value:URL;try{value=new URL(href.value);}catch{report('请输入完整的 http、https 或 mailto 链接。');return;}
     if(!['http:','https:','mailto:'].includes(value.protocol)){report('链接仅支持 http、https 或 mailto。');return;}
     run(()=> (state,dispatch)=>{const type=state.schema.marks.link;if(!type)return false;const mark=type.create({href:href.value});
@@ -100,7 +103,7 @@ export function installFormatToolbar(root:HTMLElement,owner:Owner,report:(messag
     owner.action(ctx=>{const view=ctx.get(editorViewCtx),state=view.state,selection=state.selection;
       let inTable=selection instanceof Object&&'node' in selection&&(selection.node as Node).type.name==='table';
       for(let depth=selection.$from.depth;depth>0;depth--)if(selection.$from.node(depth).type.name==='table')inTable=true;
-      table.hidden=!inTable;
+      setMotionOpen(table,inTable);
       style.update({...styleConfig,disabled,value:selection.$from.parent.type.name==='heading'?String(selection.$from.parent.attrs.level):'0'});
       for(const item of buttons){item.element.disabled=disabled||!item.command(ctx)(state,undefined,view);
         item.element.title=item.element.disabled?(disabled?'当前正文尚不可编辑，请先处理恢复提示或等待状态同步。':'当前选区不支持此操作，请选择合适的正文位置。'):(item.element.getAttribute('aria-label')??item.element.textContent??'')+(shortcuts[item.element.getAttribute('aria-label')??'']?`（${shortcuts[item.element.getAttribute('aria-label')??'']}）`:'');

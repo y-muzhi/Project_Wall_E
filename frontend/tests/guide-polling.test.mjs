@@ -21,6 +21,14 @@ function timing() {
 const flush = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); };
 function deferred() { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { resolve, reject, promise }; }
 
+test('a local write barrier resumes observation without reporting a connection error or consuming failure backoff',async()=>{
+ const clock=timing();let reads=0;
+ const poll=new GuideRunPolling(2,async()=>{reads++;if(reads===1)throw new DOMException('Write barrier','AbortError');if(reads===2)return run();throw Error('network');},clock);
+ poll.setVisible(true);await flush();assert(!poll.state.connection_error);assert.deepEqual(clock.delays,[0]);
+ clock.next();await flush();assert.equal(poll.state.confirmed.status,'RUNNING');assert.deepEqual(clock.delays,[0,1000]);
+ clock.next();await flush();assert(poll.state.connection_error);assert.deepEqual(clock.delays,[0,1000,2000]);poll.dispose();
+});
+
 test('hiding or disposing before the start microtask prevents even an owned read from starting', async () => {
   for (const operation of ['hide', 'dispose']) {
     let calls = 0; const clock = timing();

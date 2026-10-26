@@ -7,6 +7,8 @@ import {ApplicationRouter} from './application/router.ts';
 import {Application} from './application/app.tsx';
 import {installFocusFeedback} from './shared/focus-feedback.ts';
 import './shared/styles.css';
+import './shared/motion.css';
+import './requirements/discussion-progress.css';
 
 installFocusFeedback(document);
 const container=document.getElementById('root')!;

@@ -75,6 +75,7 @@ def test_eight_saved_wire_sections_actual_count_measurements_and_read_only_http(
     # The direct reads above prove no socket use; HTTP retains compile guard.
     monkeypatch.setattr(socket.socket, 'connect', original_connect)
     app = FastAPI();app.state.walle_runtime = HttpRuntime(workspace[0], workspace[2], workspace[1]);app.include_router(guide_router)
+    monkeypatch.setattr('backend.app.infrastructure.collaboration_resources.CollaborationResources.load', forbidden)
     with TestClient(app) as client:
         response = client.get('/api/v1/model-calls/1');assert response.status_code == 200, response.text
         assert response.json()['data'] == detail

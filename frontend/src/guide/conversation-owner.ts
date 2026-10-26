@@ -8,6 +8,7 @@ import {RequirementGuideComposer} from './composer.ts';
 import {RequirementRunActions} from './run-actions.ts';
 import {RequirementCardGroups} from './card-groups.ts';
 import {CardDrafts} from './card-drafts.ts';
+import {ModelCallCache} from './model-call-reader.ts';
 
 export type ConversationState=Readonly<{detail:DetailSnapshot;visible:boolean;enabled:boolean;active:boolean;lease:string|null;batch:RequirementSuggestionBatch|null;revision:number}>;
 const retained=(phase:string)=>['SUBMITTING','READING','UNKNOWN','CONFIRMED'].includes(phase);
@@ -17,18 +18,18 @@ const retained=(phase:string)=>['SUBMITTING','READING','UNKNOWN','CONFIRMED'].in
  * actual activity; no refresh or competing button replaces that request. */
 export class RequirementConversation{
  get modelCallApi():Pick<WalleApi,'listModelCalls'|'getModelCall'>{return this.api;}
- readonly read:RequirementAiRead;readonly composer:RequirementGuideComposer;readonly runs:RequirementRunActions;readonly cards:RequirementCardGroups;
+ readonly modelCalls:ModelCallCache;readonly read:RequirementAiRead;readonly composer:RequirementGuideComposer;readonly runs:RequirementRunActions;readonly cards:RequirementCardGroups;
  private value:ConversationState;private readonly listeners=new Set<()=>void>();private readonly releases:(()=>void)[]=[];private readonly batches=new Map<number,{owner:RequirementSuggestionBatch;release:()=>void}>();
  private readonly api:WalleApi;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private closed=false;private reconciling=false;private again=false;private runSignature='';private visibility=0;private batchRead='';
- constructor(detail:DetailSnapshot,api:WalleApi,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,openPanel:()=>void|Promise<void>,drafts=new CardDrafts()){
-  if(detail.current!==null&&(detail.current!==null&&(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)))throw TypeError('Actual owned CURRENT required');this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;
+ constructor(detail:DetailSnapshot,api:WalleApi,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,openPanel:()=>void|Promise<void>,drafts=new CardDrafts(),observeActual=readActual){
+  if(detail.current!==null&&(detail.current!==null&&(detail.current.document_type!=='CURRENT'||detail.current.requirement_id!==detail.requirement.id)))throw TypeError('Actual owned CURRENT required');this.api=api;this.modelCalls=new ModelCallCache(detail.requirement.id);this.readActual=readActual;this.adoptActual=adoptActual;
   this.value=Object.freeze({detail:snapshotObject(detail) as unknown as DetailSnapshot,visible:false,enabled:true,active:true,lease:null,batch:null,revision:0});
   const adopt=async(actual:DetailSnapshot)=>{if(this.closed)throw Error('Conversation is retired');await this.adoptActual(actual);if(this.closed)throw Error('Conversation is retired');this.adopt(actual);};
-  this.read=new RequirementAiRead(detail,api,readActual,adopt,openPanel);
+  this.read=new RequirementAiRead(detail,api,observeActual,adopt,openPanel);
   const refreshMessages=async()=>{if(!await this.read.messages.refresh())throw Error('实际消息暂时无法读取');};
-  this.composer=new RequirementGuideComposer(detail,api,readActual,adopt,this.read.receive,refreshMessages);
-  this.runs=new RequirementRunActions(detail,api,readActual,adopt,this.read.receive);
-  this.cards=new RequirementCardGroups(this.read,api,drafts,readActual,adopt,this.read.receive,refreshMessages,owner=>this.permitted('CARD:'+owner.getSnapshot().message.id));
+  this.composer=new RequirementGuideComposer(detail,api,readActual,adopt,this.read.receive,refreshMessages,undefined,observeActual);
+  this.runs=new RequirementRunActions(detail,api,readActual,adopt,this.read.receive,observeActual);
+  this.cards=new RequirementCardGroups(this.read,api,drafts,readActual,adopt,this.read.receive,refreshMessages,owner=>this.permitted('CARD:'+owner.getSnapshot().message.id),observeActual);
   for(const owner of [this.read,this.composer,this.runs,this.cards])this.releases.push(owner.subscribe(()=>this.reconcile()));this.reconcile();
  }
  getSnapshot=():ConversationState=>this.value;subscribe=(listener:()=>void):(()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
@@ -61,5 +62,5 @@ export class RequirementConversation{
  receive=(run:Pick<GuideRun,'id'|'requirement_id'>):Promise<void>=>this.read.receive(run);
  batch(identity:number):RequirementSuggestionBatch|null{return this.batches.get(identity)?.owner??null;}
  async refresh():Promise<void>{if(this.closed||!this.value.visible||!this.value.enabled)throw Error('Conversation is hidden');await this.read.refresh();const batch=this.value.batch;if(batch&&['READY','ERROR'].includes(batch.getSnapshot().phase)&&!await batch.refresh())throw Error('实际建议读取失败');}
- dispose():void{if(this.closed)return;this.publish({active:false,visible:false,enabled:false});this.closed=true;for(const release of this.releases)release();for(const entry of this.batches.values()){entry.release();entry.owner.dispose();}this.cards.dispose();this.runs.dispose();this.composer.dispose();this.read.dispose();this.listeners.clear();}
+ dispose():void{if(this.closed)return;this.publish({active:false,visible:false,enabled:false});this.closed=true;for(const release of this.releases)release();for(const entry of this.batches.values()){entry.release();entry.owner.dispose();}this.modelCalls.clear();this.cards.dispose();this.runs.dispose();this.composer.dispose();this.read.dispose();this.listeners.clear();}
 }

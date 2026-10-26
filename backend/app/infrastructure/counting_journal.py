@@ -16,7 +16,7 @@ from .audit_data import audit_json, MAX_AUDIT_BYTES
 from .database import StorageUnavailable
 from .model_profile import ModelProfile
 from .process_lock import ProcessLock
-from .tokenization import ENDPOINT, measurement_summary
+from .tokenization import ENDPOINT, measurement_summary, COUNT_FAILURE_REASONS, provider_error_value
 from backend.app.documents.snapshot import _time
 from backend.app.guide.context_builder import restore_transport_input
 from backend.app.shared.validation import strict_integer, strict_json_object
@@ -91,10 +91,23 @@ class CountingJournal:
         self._create(record['id'], 'prepared', record, profile)
         return record['id']
 
-    def finish(self, identity, profile, at, *, status, measurement=None):
+    def finish(self, identity, profile, at, *, status, measurement=None, failure_reason=None, http_status=None, provider_error=None):
         _time(at)
         if status not in ('SUCCEEDED','FAILED','INTERRUPTED') or (status=='SUCCEEDED')!=(measurement is not None):raise ValueError('Count outcome must be explicit')
         record={'schema_version':1,'id':identity,'phase':status,'at':at,'measurement':measurement}
+        if status == 'SUCCEEDED' and type(measurement) is dict and 'response_sha256' in measurement and 'response' not in measurement:
+            record['raw_omitted_reason'] = 'AUDIT_CAPACITY'
+        if failure_reason is not None:
+            if status == 'SUCCEEDED' or failure_reason not in COUNT_FAILURE_REASONS or (http_status is not None and
+                    (failure_reason != 'HTTP_STATUS' or type(http_status) is not int or not 100 <= http_status <= 599)):
+                raise ValueError('Count failure facts must be bounded')
+            record.update(failure_reason=failure_reason, http_status=http_status)
+        elif http_status is not None:
+            raise ValueError('HTTP status requires a count failure reason')
+        if provider_error is not None:
+            if failure_reason != 'HTTP_STATUS' or http_status is None:
+                raise ValueError('Provider details require a known failed HTTP status')
+            record['provider_error'] = provider_error_value(provider_error)
         self._create(identity,'finished',record,profile)
 
     def prune_raw(self, at):
@@ -111,8 +124,13 @@ class CountingJournal:
                     with path.open('rb') as handle:raw=handle.read(MAX_AUDIT_BYTES+1)
                     if len(raw)>MAX_AUDIT_BYTES:raise StorageUnavailable('Counting audit record exceeds its capacity')
                     record=strict_json_object(raw);_time(record['at'])
-                    if record.get('id')!=match[1] or record.get('phase')!='SUCCEEDED' or record['at']>=cutoff or type(record.get('measurement')) is not dict or 'response' not in record['measurement']:continue
-                    record['measurement']=measurement_summary(record['measurement']);record['raw_pruned_at']=at
+                    if record.get('id')!=match[1] or record['at']>=cutoff:continue
+                    if record.get('phase')=='SUCCEEDED' and type(record.get('measurement')) is dict and 'response' in record['measurement']:
+                        record['measurement']=measurement_summary(record['measurement']);record['raw_pruned_at']=at
+                    elif record.get('phase') in ('FAILED','INTERRUPTED') and type(record.get('provider_error')) is dict and record['provider_error'].get('message') is not None:
+                        details=provider_error_value(record['provider_error']);details['message']=None
+                        record['provider_error']=details;record['provider_message_pruned_at']=at
+                    else:continue
                     encoded=audit_json(record).encode('utf-8')
                     temporary=self.root/(uuid4().hex+'.tmp')
                     # Both absolute paths are checked within this owned journal;

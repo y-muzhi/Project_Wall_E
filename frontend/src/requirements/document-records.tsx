@@ -8,16 +8,16 @@ import {GuideRunPolling} from '../guide/polling.ts';
 import {Icon} from '../shared/icon.tsx';
 import {localTime} from '../shared/time.ts';
 import {ModelCallsProvider,RequestCallRecord} from '../guide/model-call-view.tsx';
-import type {ModelCallApi} from '../guide/model-call-reader.ts';
+import type {ModelCallApi,ModelCallCache} from '../guide/model-call-reader.ts';
 
 type RunReader=(identity:number,signal:AbortSignal)=>Promise<GuideRun>;
 const tabs=[{value:'VERSIONS',label:'版本记录'},{value:'RUNS',label:'运行记录'}] as const;
-function RunRecordDetail({identity,read,active,back,modelCallApi,requirementId}:Readonly<{identity:number;read:RunReader;active:boolean;back():void;modelCallApi:ModelCallApi;requirementId:number}>){
+function RunRecordDetail({identity,read,active,back,modelCallApi,requirementId,cache}:Readonly<{identity:number;read:RunReader;active:boolean;back():void;modelCallApi:ModelCallApi;requirementId:number;cache?:ModelCallCache|undefined}>){
  const polling=useMemo(()=>new GuideRunPolling(identity,read),[identity,read]);
  const state=useSyncExternalStore(listener=>polling.subscribe(()=>listener()),()=>polling.state),run=state.confirmed;
  useEffect(()=>()=>polling.dispose(),[polling]);
  useEffect(()=>{polling.setVisible(active);return()=>polling.setVisible(false);},[polling,active]);
- return <ModelCallsProvider api={modelCallApi} requirementId={requirementId} active={active} current={run}><section className="record-detail" aria-label={`运行 #${identity} 详情`} aria-busy={state.querying}>
+ return <ModelCallsProvider cache={cache} api={modelCallApi} requirementId={requirementId} active={active} current={run}><section className="record-detail" aria-label={`运行 #${identity} 详情`} aria-busy={state.querying}>
   <header className="record-detail-heading"><button className="ui-button" type="button" onClick={back}><Icon name="left"/>运行列表</button><span>运行 #{identity}</span><span className="read-status" role="status">{state.querying?'正在读取…':''}</span></header>
   {!run&&!state.connection_error&&<p role="status">正在读取运行详情…</p>}
   {state.connection_error&&<p className="inline-error" role="alert">读取异常，已确认的状态仍保留。<button className="ui-button" type="button" disabled={!active||state.querying} onClick={()=>polling.refresh()}>重试读取</button></p>}
@@ -26,9 +26,9 @@ function RunRecordDetail({identity,read,active,back,modelCallApi,requirementId}:
 }
 /** Local record navigation retains lists, filters, selected identity and version
  * save input. The run viewer reads status only and never selects the AI task. */
-export function DocumentRecords({active,blocked,revisions,history,readRun,versions,modelCallApi,requirementId}:Readonly<{
+export function DocumentRecords({active,blocked,revisions,history,readRun,versions,modelCallApi,requirementId,cache}:Readonly<{
  active:boolean;blocked:boolean;revisions:RequirementRevisions;history:RequirementRunHistory;readRun:RunReader;versions:ReactNode;
- modelCallApi:ModelCallApi;requirementId:number;
+ modelCallApi:ModelCallApi;requirementId:number;cache?:ModelCallCache|undefined;
 }>){
  const [tab,setTab]=useState<typeof tabs[number]['value']>('VERSIONS'),[selected,setSelected]=useState<number|null>(null),[detailOpen,setDetailOpen]=useState(false),id=useId();
  const version=useSyncExternalStore(revisions.subscribe,revisions.getSnapshot);
@@ -43,7 +43,7 @@ export function DocumentRecords({active,blocked,revisions,history,readRun,versio
   <div className="document-record-content" role="tabpanel" id={`${id}-panel-VERSIONS`} aria-labelledby={`${id}-VERSIONS`} hidden={tab!=='VERSIONS'} inert={tab!=='VERSIONS'}>{versions}</div>
   <div className="document-record-content run-record-content" role="tabpanel" id={`${id}-panel-RUNS`} aria-labelledby={`${id}-RUNS`} hidden={tab!=='RUNS'} inert={tab!=='RUNS'}>
    <div hidden={detailOpen} inert={detailOpen}><RunHistory history={history} available={runActive} selected={selected} open={run=>{setSelected(run.id);setDetailOpen(true);}}/></div>
-   <div className="run-record-detail-host" hidden={!detailOpen} inert={!detailOpen}>{selected!==null&&<RunRecordDetail key={selected} identity={selected} requirementId={requirementId} modelCallApi={modelCallApi} read={readRun} active={runActive&&detailOpen} back={()=>{setDetailOpen(false);if(runActive)void history.refresh();}}/>}</div>
+   <div className="run-record-detail-host" hidden={!detailOpen} inert={!detailOpen}>{selected!==null&&<RunRecordDetail cache={cache} key={selected} identity={selected} requirementId={requirementId} modelCallApi={modelCallApi} read={readRun} active={runActive&&detailOpen} back={()=>{setDetailOpen(false);if(runActive)void history.refresh();}}/>}</div>
   </div>
  </section>;
 }

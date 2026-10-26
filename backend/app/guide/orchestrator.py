@@ -14,6 +14,7 @@ from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.model_profile import ModelProfile
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
+from backend.app.infrastructure.tokenization import ExactCountUnavailable
 from backend.app.shared.command_execution import Rejected, operation_time
 from backend.app.shared.http_errors import ERRORS
 from backend.app.shared.validation import InvalidInput
@@ -26,6 +27,8 @@ SAFE_MESSAGES = {key: value[2] for key, value in ERRORS.items()} | {
     'MODEL_ERROR': '模型请求未能完成', 'OUTPUT_INVALID': '模型输出未能通过程序校验',
     'CONTEXT_LIMIT_EXCEEDED': '必要上下文超出已批准预算',
 }
+COUNT_FAILURE_MESSAGE = 'Token 计数未完成，请检查计数服务配置或缩小输入范围。'
+COUNT_PROVIDER_LIMIT_MESSAGE = '计数文本超过当前服务的 800,000 字节容量上限，请缩小所选范围。当前计数批次未发送，模型请求已停止。'
 
 
 def _state(database, identity):
@@ -87,20 +90,20 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
 
     async def state(): return await _native(_state, database, identity)
 
-    async def write_failure(code):
+    async def write_failure(code, safe_message=None):
         row, last = await state()
         if row['status'] != 'RUNNING': return _result('AI_STOPPED', row, last)
         code = code if code in TASK_ERROR_CODES else 'INTERNAL_ERROR'
         outcome = await _native(fail_guide_run, database, {'guide_run_id': identity, 'error_code': code,
-            'safe_message': SAFE_MESSAGES.get(code, SAFE_MESSAGES['INTERNAL_ERROR'])}, process_lock=process_lock, clock=clock)
+            'safe_message': safe_message or SAFE_MESSAGES.get(code, SAFE_MESSAGES['INTERNAL_ERROR'])}, process_lock=process_lock, clock=clock)
         if outcome['code'] not in ('RUN_FAILED', 'RUN_FINAL_UNCHANGED'): return outcome
         row, last = await state()
         if outcome['code'] == 'RUN_FINAL_UNCHANGED': return _result('AI_STOPPED', row, last)
         if row['status'] != 'FAILED' or row['error_code'] != code: raise ValueError('Failure receipt disagrees with actual state')
         return {'code': 'AI_FAILED', 'data': None, 'details': {'guide_run_id': identity, 'error_code': code}}
 
-    async def fail(code):
-        try: return await write_failure(code)
+    async def fail(code, safe_message=None):
+        try: return await write_failure(code, safe_message)
         except asyncio.CancelledError: raise
         except Rejected as error: return {'code': error.code, 'data': None, 'details': None}
         except (StorageUnavailable, sqlite3.Error): return {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None}
@@ -126,6 +129,8 @@ async def execute_guide_run(database, payload, *, process_lock, catalog=None, pr
         raise
     except ContextLimitExceeded:
         return await fail('CONTEXT_LIMIT_EXCEEDED')
+    except ExactCountUnavailable as error:
+        return await fail('CONFIG_INVALID', COUNT_PROVIDER_LIMIT_MESSAGE if error.reason == 'PROVIDER_INPUT_LIMIT' else COUNT_FAILURE_MESSAGE)
     except (ConfigInvalid, ProtocolInvalid):
         return await fail('CONFIG_INVALID')
     except Rejected as error:

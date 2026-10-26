@@ -1,6 +1,7 @@
 import {useId, useLayoutEffect, useRef, useState} from 'react';
 import {Icon} from '../shared/icon.tsx';
 import {activeModal, registerModal, trapModalTab} from '../shared/modal.ts';
+import {useLayoutMotion} from '../shared/motion-react.ts';
 
 const desktopNavigation = '(min-width: 1480px)';
 const collapsedKey='walle:v1.5:navigation-collapsed';
@@ -19,6 +20,7 @@ export function ApplicationNavigation({current, navigate,headerHost,headerHeight
   const toggle = useRef<HTMLButtonElement>(null), destination = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLDialogElement>(null), release = useRef<(() => void) | null>(null);
   const header=useRef<HTMLDivElement>(null);
+  const navigationElement=useRef<HTMLElement>(null),motion=useLayoutMotion();
   useLayoutEffect(()=>{
     const element=header.current;if(!element||!headerHeight)return;
     const measure=()=>headerHeight(Math.ceil(element.getBoundingClientRect().height));
@@ -51,7 +53,7 @@ export function ApplicationNavigation({current, navigate,headerHost,headerHeight
     if (open) close();
     navigate();
   };
-  const fold=()=>{const next=!collapsed;setCollapsed(next);try{window.localStorage.setItem(collapsedKey,next?'1':'0');}catch{/* The current tab still retains this preference. */}};
+  const fold=()=>{const next=!collapsed;motion.run([{element:header.current?.closest<HTMLElement>('.application')??null,properties:['grid-template-columns']},{element:header.current,properties:['grid-template-columns']},{element:navigationElement.current,properties:['width','padding-left','padding-right']}],()=>setCollapsed(next));try{window.localStorage.setItem(collapsedKey,next?'1':'0');}catch{/* The current tab still retains this preference. */}};
   const toggleNavigation=()=>{setHint(false);if(wide)fold();else if(open)close();else setOpen(true);};
   useLayoutEffect(()=>{
     const keydown=(event:KeyboardEvent)=>{
@@ -61,7 +63,7 @@ export function ApplicationNavigation({current, navigate,headerHost,headerHeight
     };
     window.addEventListener('keydown',keydown,true);return()=>window.removeEventListener('keydown',keydown,true);
   },[wide,collapsed,open]);
-  const navigation = <nav className={'application-navigation'+(wide&&collapsed?' is-collapsed':'')} aria-label="主导航" id={wide ? id : undefined}>
+  const navigation = <nav ref={navigationElement} className={'application-navigation'+(wide&&collapsed?' is-collapsed':'')} aria-label="主导航" id={wide ? id : undefined}>
     <button ref={destination} type="button" className="ui-button application-navigation-item" aria-label="需求工作台" title="需求工作台" aria-current={current} onClick={visit}>
       <Icon name="workbench"/><span className="application-navigation-label">需求工作台</span>
     </button>
@@ -81,7 +83,7 @@ export function ApplicationNavigation({current, navigate,headerHost,headerHeight
       </span>
       </div><div className="application-page-header" ref={headerHost}/>
     </div>
-    {wide ? navigation : <dialog ref={drawer} id={id} className="application-navigation-drawer" aria-label="主导航菜单" tabIndex={-1}
+    {wide ? navigation : <dialog ref={drawer} id={id} className="application-navigation-drawer" aria-label="主导航菜单" tabIndex={-1} inert={!open} aria-hidden={!open}
       onKeyDown={trapModalTab} onCancel={event => { event.preventDefault(); close(); }}
       onClick={event => { if (event.target === event.currentTarget) {
         const rect = event.currentTarget.getBoundingClientRect();

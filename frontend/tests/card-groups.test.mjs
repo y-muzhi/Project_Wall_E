@@ -26,7 +26,7 @@ test('own UNKNOWN remains the same owner and original immutable action through a
  update([message(8,6,'ANSWERED'),formal,message(10,8)]);assert(await groups.ready());assert.equal(groups.get(8).owner,owner);assert.equal(owner.getSnapshot().phase,'UNKNOWN');assert.equal(owner.getSnapshot().formal.id,9);assert.equal(memory.size,0);assert.equal(f.prepares,1);assert.equal(f.sends,1);assert.equal(f.receives,0);assert.deepEqual(owner.getSnapshot().submitted.responses[0].selected_option_keys,['b']);groups.dispose();
 });
 test('source read failure retains existing draft/owner, disables writes and retries the actual source',async()=>{
- const {groups,f,update}=fixture();await groups.ready();const owner=groups.get(8).owner;owner.custom('choice','仍在');f.fail=true;update([message(8,6,'AVAILABLE'),message(10,7)]);assert(!await groups.ready());assert.equal(groups.get(8).owner,owner);assert.equal(owner.getSnapshot().answers.responses[0].custom_answer,'仍在');assert(!owner.allowed);assert(groups.get(8).error);f.fail=false;assert(await groups.retry());assert.equal(groups.get(8).owner,owner);assert(owner.allowed);groups.dispose();
+ const {groups,f,update}=fixture();await groups.ready();const owner=groups.get(8).owner;owner.custom('choice','仍在');f.fail=true;update([message(8,6,'AVAILABLE'),message(10,7)]);assert(!await groups.ready());assert.equal(groups.get(8).owner,owner);assert.equal(owner.getSnapshot().answers.responses[0].custom_answer,'仍在');assert(owner.allowed);assert(groups.get(10).error);assert(!await groups.retry());assert(!owner.allowed);assert(groups.get(8).error);f.fail=false;assert(await groups.retry());assert.equal(groups.get(8).owner,owner);assert(owner.allowed);groups.dispose();
 });
 test('damaged history has no interactive slot, keeps its readable article and never exposes a retained stale owner',async()=>{
  const {groups,update,hide}=fixture();await groups.ready();const owner=groups.get(8).owner;owner.custom('choice','保留在当前内存');update([{...message(8),structured_content:null,card_state:null}]);await groups.ready();assert.equal(groups.get(8),null);assert(!owner.allowed);hide(false);hide(true);await groups.ready();assert(!owner.allowed);groups.dispose();
@@ -43,4 +43,16 @@ test('accepted answers are not undone by an older AVAILABLE window and the recei
  api.getGuideRun=async id=>({data:id===7?{...source(7),parent_guide_run_id:6}:source(id)});
  await groups.ready();const owner=groups.get(8).owner;owner.toggle('choice','b',true);assert(!await owner.submit());assert.equal(owner.getSnapshot().phase,'CONFIRMED');assert.equal(owner.getSnapshot().message.card_state,'ANSWERED');
  update([original,message(10,8)]);await groups.ready();assert.equal(owner.getSnapshot().message.card_state,'ANSWERED');assert.equal(owner.getSnapshot().formal,null);assert.equal(owner.getSnapshot().outcome.user_message_id,9);assert.equal(f.receives,1);groups.dispose();
+});
+
+
+test('unchanged terminal history scales by new unique runs rather than old card count and does not loosen stale card permissions',async()=>{
+ for(const size of [0,10,50]){
+  const initial=Array.from({length:size},(_,i)=>message(20+i,6+i,'EXPIRED'));
+  const {groups,f,update}=fixture(initial);assert(await groups.ready());f.queries.length=0;
+  update([...initial,message(500,100),message(501,100)]);assert(await groups.ready());assert.deepEqual(f.queries,[100]);
+  f.queries.length=0;update([...initial,message(500,100,'ANSWERED'),message(501,100,'EXPIRED')]);
+  // Missing formal ANSWERED input stays invalid; no cached source can invent it.
+  await groups.ready();assert(!groups.get(500).owner?.allowed);assert(!groups.get(501).owner?.allowed);assert.equal(f.prepares,0);groups.dispose();
+ }
 });

@@ -96,7 +96,7 @@ export function ManualDraftControls(props:ManualDraftControlsProps) {
         {recovery.phase==='AVAILABLE'&&<button className="ui-button" type="button" disabled={locked||error!==null||ending.phase!=='EDITING'} onClick={()=>void execute(()=>props.recovery.restore())}>恢复本地内容</button>}
         <button className="ui-button" type="button" disabled={locked} aria-expanded={comparison} onClick={()=>setComparison(value=>!value)}>对照内容</button>
         <button className="ui-button" type="button" disabled={locked||error!==null||ending.phase!=='EDITING'} onClick={()=>setDialog('LOCAL')}>使用后端草稿</button>
-        {comparison&&sourcePair}
+        <div className="motion-disclosure" hidden={!comparison} inert={!comparison} aria-hidden={!comparison}>{sourcePair}</div>
       </>}
       {!recovery.local&&props.recovery.canContinueServer&&<><p>本地暂存无法检查。可以继续服务器已保存的草稿，正式正文保持不变。</p><button className="ui-button" type="button" disabled={locked||ending.phase!=='EDITING'} onClick={()=>void execute(()=>props.recovery.continueServerWithoutLocal(),afterServer)}>继续已保存的草稿</button></>}
       {!recovery.local&&recovery.phase==='COMPARE'&&<p role="alert" className="inline-error">服务器草稿版本已变化，当前编辑保持锁定，请重新进入详情后核对最新内容。</p>}

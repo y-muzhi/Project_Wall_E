@@ -5,7 +5,7 @@ import json
 from backend.app.infrastructure.collaboration_resources import sha256
 from backend.app.infrastructure.resources import ConfigInvalid
 from backend.app.infrastructure.schema_transport import compact
-from backend.app.infrastructure.tokenization import TokenCounts, restore_measurement
+from backend.app.infrastructure.tokenization import TokenCounts, restore_measurement, ExactCountUnavailable
 from backend.app.infrastructure.idempotency import canonical_input
 from .collaboration_context import CollaborationContext, compile_context
 from .context_builder import ContextLimitExceeded
@@ -18,6 +18,21 @@ class CountedCollaborationContext(CollaborationContext):
     @property
     def counting_evidence(self):
         return json.loads(self.counting_json)
+
+
+def restore_candidate_measurement(value, texts, profile, catalog):
+    """Summary-only evidence can prove rejection, never an accepted request."""
+    raw = type(value) is dict and 'response' in value
+    measurement = restore_measurement(value, texts, raw_required=raw, expected_model=profile.model_name)
+    counts = measurement.counts
+    if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0:
+        raise ConfigInvalid('Eight actual diagnostic counts required')
+    release = catalog.collaboration.counting
+    predicted = counts[0] + counts[1] + release['framing_reserve']
+    accepted = predicted <= release['input_limit'] and predicted + release['output_limit'] <= release['total_limit']
+    if not raw and accepted:
+        raise ExactCountUnavailable('AUDIT_CAPACITY')
+    return measurement
 
 
 async def compile_counted(canonical, catalog, profile, *, counter, admission_guard=None):
@@ -40,9 +55,9 @@ async def compile_counted(canonical, catalog, profile, *, counter, admission_gua
         receipt = await counter.count(profile, context.texts)
         if type(receipt) is not TokenCounts:
             raise ConfigInvalid('Exact immutable count receipt required')
-        measurement = restore_measurement(receipt.evidence, context.texts, expected_model=profile.model_name)
+        measurement = restore_candidate_measurement(receipt.evidence, context.texts, profile, catalog)
         counts = measurement.counts
-        if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0 or any(not text and count != 0 for text, count in zip(context.texts, counts)):
+        if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0:
             raise ConfigInvalid('Eight actual diagnostic counts required')
         predicted = counts[0] + counts[1] + release['framing_reserve']
         accepted = predicted <= release['input_limit'] and predicted + release['output_limit'] <= release['total_limit']
@@ -89,8 +104,8 @@ def verify_counted(context, catalog, profile, *, expected_canonical=None):
             raise ConfigInvalid('Candidate sequence or actual bytes differ')
         if attempt.get('selected') != candidate.basis['selected'] or attempt.get('omitted') != candidate.basis['omitted']:
             raise ConfigInvalid('Candidate selection differs from its snapshot')
-        counts = restore_measurement(attempt['measurement'], candidate.texts, expected_model=profile.model_name).counts
-        if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0 or any(not text and count for text, count in zip(candidate.texts, counts)):
+        counts = restore_candidate_measurement(attempt['measurement'], candidate.texts, profile, catalog).counts
+        if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0:
             raise ConfigInvalid('Count dimensions or empty diagnostics differ')
         predicted = counts[0] + counts[1] + resources.counting['framing_reserve']
         accepted = predicted <= resources.counting['input_limit'] and predicted + resources.counting['output_limit'] <= resources.counting['total_limit']

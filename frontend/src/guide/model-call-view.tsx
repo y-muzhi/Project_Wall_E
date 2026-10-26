@@ -3,11 +3,13 @@ import type {ReactNode} from 'react';
 import type {GuideRun} from '../api/models.ts';
 import type {ModelCallDetail} from '../api/model-calls.ts';
 import {ModelCallReader,tokenTotal,usageWarning} from './model-call-reader.ts';
-import type {ModelCallApi} from './model-call-reader.ts';
+import type {ModelCallApi,ModelCallCache} from './model-call-reader.ts';
 import {localTime} from '../shared/time.ts';
 import {Icon} from '../shared/icon.tsx';
 import {operationNames} from './operation-labels.ts';
 import {SingleSelect} from '../shared/single-select.tsx';
+import {useMotionPresence} from '../shared/motion-react.ts';
+import {motionTiming} from '../shared/motion.ts';
 
 const runNames={RUNNING:'运行中',WAITING_USER:'等待回复',COMPLETED:'已完成',FAILED:'失败',CANCELLED:'已取消'};
 const callNames={RUNNING:'调用中',SUCCEEDED:'模型已返回',FAILED:'调用失败',CANCELLED:'已取消'};
@@ -17,14 +19,15 @@ type Selection=Readonly<{run:number;call:number}>;
 type Surface=Readonly<{reader:ModelCallReader;active:boolean;current:GuideRun|null;open(selection:Selection,button:HTMLButtonElement):void}>;
 const CallsContext=createContext<Surface|null>(null);
 
-export function ModelCallsProvider({api,requirementId,active,current=null,children}:Readonly<{api:ModelCallApi;requirementId:number;active:boolean;current?:GuideRun|null;children:ReactNode}>){
- const reader=useMemo(()=>new ModelCallReader(api,requirementId),[api,requirementId]);
+export function ModelCallsProvider({api,requirementId,active,current=null,children,cache}:Readonly<{api:ModelCallApi;requirementId:number;active:boolean;current?:GuideRun|null;children:ReactNode;cache?:ModelCallCache|undefined}>){
+ const reader=useMemo(()=>new ModelCallReader(api,requirementId,cache),[api,requirementId,cache]);
  const [selection,setSelection]=useState<Selection|null>(null),returnFocus=useRef<HTMLButtonElement|null>(null);
+ const present=useMotionPresence(selection!==null),lastSelection=useRef(selection);if(selection)lastSelection.current=selection;const shown=selection??lastSelection.current;
  useEffect(()=>()=>reader.dispose(),[reader]);useLayoutEffect(()=>reader.setActive(active),[reader,active]);
  const surface=useMemo<Surface>(()=>({reader,active,current,open:(next,button)=>{returnFocus.current=button;setSelection(next);void reader.load(next.run,'open',true);}}),[reader,active,current]);
  const close=()=>{setSelection(null);requestAnimationFrame(()=>returnFocus.current?.isConnected&&returnFocus.current.focus({preventScroll:true}));};
  return <CallsContext.Provider value={surface}><div className="model-calls-surface"><div className="model-calls-underlay" inert={selection!==null} aria-hidden={selection!==null}>{children}</div>
-  {selection&&<ModelCallDrawer key={`${selection.run}:${selection.call}`} surface={surface} selection={selection} select={call=>setSelection({...selection,call})} close={close}/>}</div></CallsContext.Provider>;
+  {present&&shown&&<ModelCallDrawer key={`${shown.run}:${shown.call}`} open={selection!==null} surface={selection?surface:{...surface,active:false}} selection={shown} select={call=>{if(selection)setSelection({...selection,call});}} close={close}/>}</div></CallsContext.Provider>;
 }
 
 export function RequestCallRecord({runId,messageId=null}:Readonly<{runId:number;messageId?:number|null}>){
@@ -84,13 +87,13 @@ function ContextText({section,detail}:Readonly<{section:ModelCallDetail['section
  return <pre className="model-context-text">{pretty(section.content)}</pre>;
 }
 function ContextSection({section,detail,search}:Readonly<{section:ModelCallDetail['sections'][number];detail:ModelCallDetail;search:string}>){
- const [expanded,setExpanded]=useState(false);
+ const [expanded,setExpanded]=useState(false),present=useMotionPresence(expanded,motionTiming.disclosure);
  const documentPart=section.key==='documents'||section.key.endsWith(':current_document')||section.key.endsWith(':document_context');
  const headings=useMemo(()=>{if(!documentPart)return null;const part=json(section.content) as {read_blocks?:{heading_level?:number|null;block_type?:string}[]}|null;const blocks=part?.read_blocks;if(!Array.isArray(blocks))return null;return blocks.filter(block=>block&&(block.block_type==='heading'||typeof block.heading_level==='number'&&block.heading_level>0)).length;},[documentPart,section.content]);
  const unit=documentPart?'个区块':section.key==='recent_history'||section.key.endsWith(':history')||section.key.endsWith(':recent_history')?'条历史':'项';
  const index=search?section.content.toLocaleLowerCase().indexOf(search.toLocaleLowerCase()):-1;
  return <details className="model-context-section" onToggle={event=>setExpanded(event.currentTarget.open)}><summary><strong>{section.title}</strong><span>{headings===null?'':`${headings} 个章节标题 · `}{section.item_count===null?'':`${section.item_count} ${unit} · `}{number(section.characters)} 字符</span>{index>=0&&<span className="model-search-excerpt">{section.content.slice(Math.max(0,index-70),index+search.length+100)}</span>}</summary>
-  {expanded&&<><div className="model-section-tools"><CopyButton content={section.content}/></div><ContextText section={section} detail={detail}/></>}
+  {present&&<div inert={!expanded} aria-hidden={!expanded}><div className="model-section-tools"><CopyButton content={section.content}/></div><ContextText section={section} detail={detail}/></div>}
  </details>;
 }
 function TokenDetails({detail}:Readonly<{detail:ModelCallDetail}>){
@@ -100,9 +103,10 @@ function TokenDetails({detail}:Readonly<{detail:ModelCallDetail}>){
   <h4>请求预检</h4><dl className="model-property-grid"><dt>预检输入（含预留量）</dt><dd>{number(preflight.input_tokens)}</dd><dt>输入上限</dt><dd>{number(budget?.input_tokens??null)}</dd><dt>输出上限</dt><dd>{number(budget?.output_tokens??null)}</dd><dt>输入与输出总上限</dt><dd>{number(budget?.total_tokens??null)}</dd>{names.map((name,index)=><div className="model-property-pair" key={name}><dt>{name}</dt><dd>{number(preflight.counts[index]??null)}</dd></div>)}</dl><p className="field-help">预检计数用于发送前预算校验，不代表实际用量。本轮输入、来源、模板和历史消息的分项计数已包含在上下文内容中，不可重复累加。</p>
  </section>;
 }
-function ModelCallDrawer({surface,selection,select,close}:Readonly<{surface:Surface;selection:Selection;select(call:number):void;close():void}>){
+function ModelCallDrawer({surface,selection,open,select,close}:Readonly<{surface:Surface;selection:Selection;open:boolean;select(call:number):void;close():void}>){
  const list=useCallList(surface,selection.run),[detail,setDetail]=useState<ModelCallDetail|null>(null),[error,setError]=useState<string|null>(null),[retry,setRetry]=useState(0),[loading,setLoading]=useState(false),[search,setSearch]=useState(''),[rawOpen,setRawOpen]=useState(false),[formatted,setFormatted]=useState(true),closeButton=useRef<HTMLButtonElement|null>(null);
- useEffect(()=>{closeButton.current?.focus({preventScroll:true});},[]);
+ const rawPresent=useMotionPresence(rawOpen,motionTiming.disclosure);
+ useEffect(()=>{if(open)closeButton.current?.focus({preventScroll:true});},[open]);
  const callVersion=JSON.stringify(list.data?.items.find(call=>call.id===selection.call)??null);
  useEffect(()=>{if(!surface.active)return;const controller=new AbortController();setLoading(true);setError(null);
   void surface.reader.api.getModelCall(selection.call,controller.signal).then(result=>{if(controller.signal.aborted)return;const data=result.data;if(data.call.id!==selection.call||data.call.guide_run_id!==selection.run||data.requirement_id!==surface.reader.requirementId)throw Error('调用身份不一致');setDetail(data);},()=>{if(!controller.signal.aborted)setError('上下文读取失败，重试不会调用模型');}).catch(()=>{if(!controller.signal.aborted)setError('上下文身份不一致，请重新读取');}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
@@ -110,7 +114,7 @@ function ModelCallDrawer({surface,selection,select,close}:Readonly<{surface:Surf
  },[surface.reader,surface.active,selection.run,selection.call,retry,callVersion]);
  const sections=useMemo(()=>detail?.sections.filter(section=>!search||section.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())||section.content.toLocaleLowerCase().includes(search.toLocaleLowerCase()))??[],[detail,search]);
  const raw=detail?.raw_request_json??null,rawContent=useMemo(()=>raw===null?null:formatted?pretty(raw):raw,[raw,formatted]);
- return <section className="model-call-drawer" role="dialog" aria-modal="false" aria-label="模型请求详情" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();close();}}}>
+ return <section className="model-call-drawer" role="dialog" inert={!open} aria-hidden={!open} data-motion-open={open} aria-modal="false" aria-label="模型请求详情" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();close();}}}>
   <header className="model-drawer-heading"><div><strong>模型请求详情</strong><span>运行 #{selection.run} · 调用记录 #{selection.call}</span></div><button ref={closeButton} className="ui-button icon-button" type="button" aria-label="关闭请求详情，返回对话" onClick={close}><Icon name="close"/></button></header>
   <div className="model-drawer-body" aria-busy={loading}><div className="model-call-picker"><SingleSelect label="选择调用" value={String(selection.call)} disabled={!surface.active||!list.data} change={value=>select(Number(value))} options={(list.data?.items??[]).map(call=>({value:String(call.id),label:`调用 ${call.call_no} · 尝试 ${call.attempt_no} · ${localTime(call.started_at)} · ${callNames[call.call_status]}`}))}/></div>
    {loading&&<p role="status">正在读取保存的请求快照…</p>}{error&&<p role="alert" className="inline-error">{error} <button type="button" className="ui-button" disabled={!surface.active||loading} onClick={()=>setRetry(value=>value+1)}>重读详情</button></p>}
@@ -120,7 +124,7 @@ function ModelCallDrawer({surface,selection,select,close}:Readonly<{surface:Surf
      {search&&<p role="status">匹配 {sections.length} 个上下文部分</p>}{sections.map(section=><ContextSection key={section.key} section={section} detail={detail} search={search}/>)}</section>
     {detail.selection_summary&&'selected_materials' in detail.selection_summary&&<details className="model-detail-section"><summary>材料选择与资源版本</summary><p>计数批次：{number(detail.selection_summary.count_attempts)} · 期望输入目标：{number(detail.selection_summary.soft_input_target)}</p><h4>已携带材料</h4><pre className="model-context-text">{JSON.stringify(detail.selection_summary.selected_materials,null,2)}</pre><h4>省略材料与原因</h4><pre className="model-context-text">{JSON.stringify(detail.selection_summary.omitted_materials,null,2)}</pre><h4>资源版本</h4><pre className="model-context-text">{JSON.stringify(detail.selection_summary.resource_refs,null,2)}</pre></details>}
     {usageWarning(detail.call)&&<p className="inline-error" role="status">{usageWarning(detail.call)}</p>}
-    <TokenDetails detail={detail}/><details className="model-detail-section model-raw-request" onToggle={event=>setRawOpen(event.currentTarget.open)}><summary>原始请求</summary>{rawOpen&&(rawContent===null?<p>此记录未保存可读取的请求对象。</p>:<><div className="model-section-tools"><label><input type="checkbox" checked={formatted} onChange={event=>setFormatted(event.target.checked)}/>格式化 JSON</label><CopyButton content={rawContent}/></div><pre className="model-context-text">{rawContent}</pre></>)}</details>
+    <TokenDetails detail={detail}/><details className="model-detail-section model-raw-request" onToggle={event=>setRawOpen(event.currentTarget.open)}><summary>原始请求</summary>{rawPresent&&<div inert={!rawOpen} aria-hidden={!rawOpen}>{rawContent===null?<p>此记录未保存可读取的请求对象。</p>:<><div className="model-section-tools"><label><input type="checkbox" checked={formatted} onChange={event=>setFormatted(event.target.checked)}/>格式化 JSON</label><CopyButton content={rawContent}/></div><pre className="model-context-text">{rawContent}</pre></>}</div>}</details>
    </>}
   </div>
  </section>;

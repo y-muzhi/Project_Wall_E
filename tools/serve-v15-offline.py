@@ -44,8 +44,13 @@ def main():
         request = context.input['current_request'];operation = request['operation']
         target = request['target']
         if operation == 'GENERATE':
+            markdown = '# 目标\n\n记录电影、评分并推荐下一部电影。\n\n# 范围\n\n先支持个人记录与评分。\n'
+            if '[layout]' in (request['content'] or ''):
+                markdown += '\n# 明细\n\n| 记录 | 说明 | 约束 |\n| --- | --- | --- |\n'
+                markdown += ''.join('| '+str(index)+' | '+'推荐规则与长说明'*12+' | 保留用户记录 |\n' for index in range(1, 41))
+                markdown += '\n# 补充说明\n\n'+'\n\n'.join('第'+str(index)+'段：保留文档阅读位置与独立对话输入。' for index in range(1, 81))+'\n'
             return output(context, response_type='DOCUMENT_RESULT', document_result={'name': target['name'], 'document_kind': target['document_kind'],
-                'markdown_content': '# 目标\n\n记录电影、评分并推荐下一部电影。\n\n# 范围\n\n先支持个人记录与评分。\n', 'change_summary': '离线浏览器明确生成'})
+                'markdown_content': markdown, 'change_summary': '离线浏览器明确生成'})
         if operation in ('REVISE', 'PROPOSE_CHANGES'):
             document = next(item for item in context.input['documents'] if 'TARGET' in item['roles'])
             block = next(item for item in document['blocks'] if item['writable'] and item['block_type'] == 'paragraph')
@@ -62,9 +67,49 @@ def main():
         if operation in ('COMPARE', 'REVIEW'):
             return output(context, response_type='ANALYSIS', analysis={'conclusion': 'RESULT', 'summary': '离线检查无新增修改', 'findings': [],
                 'covered_refs': [document['ref'] for document in context.input['documents']], 'unresolved': []})
+        if '[fact]' in (request['content'] or ''):
+            document = next(item for item in context.input['documents'] if item['document_id'] == target['document_id'])
+            # Discussion grants no direct model write; C06 separately proves
+            # the exact proposal and the user's formal program confirmation.
+            block = next(item for item in document['blocks'] if item['block_type'] == 'paragraph')
+            patch = {'title': '确认推荐范围', 'explanation': '按本轮用户原话更新', 'impact': None,
+                'patch_operation': 'REPLACE_BLOCK', 'target_ref': {'block_id': block['block_id']},
+                'selector_json': None, 'original_content': block['markdown_content'],
+                'proposed_markdown': '首版仅推荐尚未观看的电影。\n', 'proposed_data_json': None}
+            return output(context, cards=group('FACT_CONFIRMATION', {'confirmed_fact_patches': [{'patch': patch,
+                'evidence': [{'message_id': request['message_id'], 'quoted_text': '仅推荐尚未观看的电影'}]}]}))
         if '[phase]' in (request['content'] or ''):
             return output(context, cards=group('PHASE_CHANGE', {'phase_kind': 'SOLUTION', 'closure_summary': '用户确认后进入方案',
                 'unresolved_refs': [], 'basis_discussion_version': request['basis_ref']['discussion_version']}))
+        if '[progress-layout]' in (request['content'] or ''):
+            # Rich presentation fixture travels through the ordinary C07 path.
+            # It cannot be selected in the product or reach a real provider.
+            progress = delta(context)
+            progress['topic_changes'] = [
+                topic('new_t1', title='电影推荐的核心目标', purpose='明确准确推荐与探索新片的关系', assessment='SUPPORTED',
+                    expected_outcomes=[{'outcome_ref': 'new_o1', 'text': '形成推荐目标', 'criterion': '区分用户喜欢与探索未知的结果。'}]),
+                topic('new_t2', mainline_ref='actors', title='主要使用者与首次使用场景', purpose='梳理新用户进入与已有偏好用户的使用入口',
+                    evidence_refs=['new_e2'], unresolved_impacts=['首次使用时是否允许跳过偏好录入？']),
+                topic('new_t3', mainline_ref='core_flow', title='推荐结果的反馈闭环与跨设备观看历史如何共同影响下一轮推荐',
+                    purpose='先明确从打开小程序、看到推荐到反馈结果的一条主路径', assessment='REVIEW_REQUIRED',
+                    evidence_refs=['new_e3'], dependencies=['new_t1'],
+                    unresolved_impacts=['反馈入口是否同时包含喜欢、不喜欢和已看过？', '跨设备观看历史尚未确认同步方式。'],
+                    expected_outcomes=[{'outcome_ref': 'new_o1', 'text': '明确主流程', 'criterion': '描述触发、主要操作、结果与反馈。'},
+                                       {'outcome_ref': 'new_o2', 'text': '确定异常处理边界', 'criterion': '标出无结果与反馈失败时的处理范围。'}]),
+                topic('new_t4', mainline_ref='scope', title='首版范围', purpose='整理版本包含和暂不包含的内容',
+                    assessment='NOT_STARTED', evidence_refs=[]),
+            ]
+            progress['evidence_changes'] = [
+                evidence(assertion='推荐目标优先考虑用户已有偏好，探索新片作为独立方向。', source_refs=[request['message_ref']]),
+                evidence(ref='new_e2', assertion='首版以个人使用为主；首次使用的偏好建立过程仍需讨论。',
+                    applies_to=['new_t2'], topic_refs=['new_t2'], source_refs=[request['message_ref']]),
+                evidence(ref='new_e3', assertion='建议把喜欢、不喜欢与已看过放在同一反馈入口，并保留独立的数据含义。',
+                    origin='AI_PROPOSAL', nature='PROPOSAL', applies_to=['new_t3'], topic_refs=['new_t3'], source_refs=[request['message_ref']]),
+            ]
+            progress['focus_topic_ref'] = 'new_t3'
+            progress['next_step'] = {'action': 'ASK_DECISION', 'topic_ref': 'new_t3',
+                'reason': '先确定反馈入口的三种动作，再核对观看历史的同步边界。', 'unresolved_impacts': []}
+            return output(context, progress_delta=progress)
         guide = catalog.collaboration.guide(context.input['project_position']['phase_kind'])
         progress = delta(context)
         progress['topic_changes'] = [topic('new_t1', mainline_ref=guide['mainlines'][0]['ref'])]

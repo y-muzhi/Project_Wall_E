@@ -42,7 +42,7 @@ export class RequirementMessages{
     for(const row of received){const previous=merged.get(row.id);if(previous&&origin(previous)!==origin(row))throw Error('Immutable message changed');merged.set(row.id,capture(row));}
     const items=[...merged.values()].sort((a,b)=>a.sequence_no-b.sequence_no);if(new Set(items.map(row=>row.sequence_no)).size!==items.length)throw Error('Sequence identity collision');
     this.publish({items:Object.freeze(items),next_cursor:pagination.next_cursor,has_more:pagination.has_more,loading:false,error:null,revision:this.value.revision+1});return true;
-   }catch{if(alive())this.publish({loading:false,error:kind==='OLDER'?'更早消息读取失败，当前会话及原游标仍保留，请重试':'消息读取失败，已显示会话仍保留，请重试'});return false;}
+   }catch(error){if(alive()&&error instanceof DOMException&&error.name==='AbortError'){this.publish({loading:false});return false;}if(alive())this.publish({loading:false,error:kind==='OLDER'?'更早消息读取失败，当前会话及原游标仍保留，请重试':'消息读取失败，已显示会话仍保留，请重试'});return false;}
   }).finally(()=>{if(this.pending===pending)this.pending=undefined;if(this.controller===controller)this.controller=undefined;});
   this.pending=pending;this.publish({loading:true,active:true,error:null,request:kind});return pending;
  }

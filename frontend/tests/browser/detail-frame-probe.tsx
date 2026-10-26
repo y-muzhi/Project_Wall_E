@@ -39,18 +39,18 @@ export async function mountDetailFrameProbe(api: WalleApi,identity: number) {
   let readPanel:(tab:DetailTab,signal:AbortSignal)=>Promise<void>=async()=>{};
   function App(){
     const save=useSyncExternalStore(listener=>autosave ? autosave.subscribe(()=>listener()) : ()=>{},()=>autosave?.state??null);
-    const [panels,setPanels]=useState<Record<DetailTab,string>>({AI:'正在读取实际消息…',COMMENTS:'正在读取实际评论…',REVISIONS:'正在读取实际版本…'});
+    const [panels,setPanels]=useState<Record<DetailTab,string>>({AI:'正在读取实际消息…',PROGRESS:'正在读取实际进展…',COMMENTS:'正在读取实际评论…',REVISIONS:'正在读取实际版本…'});
     readPanel=async(tab,signal)=>{
       panelReads.push(tab);
-      const text=tab==='AI' ? (await api.listMessages(identity,null,signal)).data.items.map(m=>m.content).join('\n') :
+      const text=tab==='PROGRESS' ? JSON.stringify((await api.getRequirementDetail(identity,signal,true)).data.discussion) : tab==='AI' ? (await api.listMessages(identity,null,signal)).data.items.map(m=>m.content).join('\n') :
         tab==='COMMENTS' ? (await api.listComments(identity,probeDocumentId(identity),1,signal)).data.items.map(c=>c.content).join('\n') :
           (await api.listRevisions(identity,probeDocumentId(identity),1,signal)).data.items.map(r=>r.markers.map(marker=>marker.description).join('；')).join('\n');
       if(!signal.aborted)setPanels(previous=>({...previous,[tab]:text||'实际接口返回空列表'}));
     };
     return <DetailFrame layout={layout} viewport={guard} title={requirement.title} status={`${requirement.requirement_no} · 布局诊断宿主`}
       actions={<button type="button" onClick={()=>events.push('layout-only')}>布局诊断操作</button>}
-      outline={<p>大纲槽位诊断；本单元不实现章节业务。</p>} document={<div id="detail-frame-editor" />}
-      ai={<p>{panels.AI}</p>} comments={<p>{panels.COMMENTS}</p>} revisions={<p>{panels.REVISIONS}</p>}
+      outline={<p>大纲槽位诊断；本单元不实现章节业务。</p>} document={navigation=><>{navigation}<div id="detail-frame-editor" /></>}
+      ai={<p>{panels.AI}</p>} progress={<p>{panels.PROGRESS}</p>} comments={<p>{panels.COMMENTS}</p>} revisions={<p>{panels.REVISIONS}</p>}
       activity="运行状态诊断提示" saveStatus={<span>{save?.status??'正在载入实际草稿…'}</span>}
       back={()=>events.push('back-intent')} readPanel={(tab,signal)=>readPanel(tab,signal)} />;
   }

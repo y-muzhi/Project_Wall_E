@@ -37,7 +37,7 @@ function CardActions({panel,comment}:Readonly<{panel:RequirementCommentPanel;com
   }}>
     <button className="ui-button" type="button" disabled={!allowed} onClick={()=>execute(comment.status==='OPEN'?'RESOLVE':'REOPEN')}>{comment.status==='OPEN'?'解决评论':'重新打开评论'}</button>
     <button className="ui-button" type="button" ref={trigger} disabled={panel.blocked} aria-expanded={open} aria-controls={id} onClick={()=>setOpen(value=>!value)}><Icon name="more"/>更多</button>
-    <div id={id} className="comment-more-actions" hidden={!open} inert={!open}>
+    <div id={id} className="comment-more-actions motion-disclosure" hidden={!open} inert={!open} aria-hidden={!open}>
       {comment.status==='OPEN'&&<><button className="ui-button" type="button" disabled={!allowed} onClick={()=>panel.begin(comment.id,'EDIT')}>编辑评论</button>
         {!orphan&&<button className="ui-button" type="button" disabled={!allowed} onClick={()=>execute('MODIFY')}>让 AI 修改</button>}</>}
       <button className="ui-button" type="button" disabled={!allowed} onClick={()=>panel.begin(comment.id,'DELETE')}>删除评论</button>

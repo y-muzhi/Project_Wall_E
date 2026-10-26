@@ -10,6 +10,7 @@ import type { Decoder } from './decoding.ts';
 import * as models from './models.ts';
 import {modelCalls,modelCallDetail} from './model-calls.ts';
 import {suggestionMarkdown} from '../suggestions/preview.ts';
+import {DetailReadScope} from './detail-read-scope.ts';
 
 export type ApiAction<T> = Readonly<{ submit: (signal?: AbortSignal) => Promise<ApiSuccess<T>> }>;
 const sameJson=(left:unknown,right:unknown)=>JSON.stringify(left,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value)===JSON.stringify(right,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value);
@@ -46,17 +47,25 @@ function query(filters: RequirementFilters | GuideFilters): readonly (readonly [
 }
 
 export class WalleApi {
-  private readonly client: ApiClient; private readonly ctx: Ctx;
-  constructor(client: ApiClient, ctx: Ctx) { this.client = client; this.ctx = ctx; }
+  private readonly client: ApiClient; private readonly ctx: Ctx;private readonly readScope:DetailReadScope|undefined;
+  constructor(client: ApiClient, ctx: Ctx,readScope?:DetailReadScope) { this.client = client; this.ctx = ctx;this.readScope=readScope; }
+  forDetailReads():WalleApi{return new WalleApi(this.client,this.ctx,new DetailReadScope());}
+  get detailReadEpoch():number{return this.readScope?.generation??0;}
+  invalidateDetailReads():void{this.readScope?.invalidate();}
+  waitForDetailWrites():Promise<void>{return this.readScope?.afterWrites()??Promise.resolve();}
+  disposeDetailReads():void{this.readScope?.dispose();}
+  private readTogether<T>(key:string,signal:AbortSignal|undefined,load:(signal?:AbortSignal)=>Promise<T>):Promise<T>{return this.readScope?this.waitForDetailWrites().then(()=>this.readScope!.read(key,signal,owned=>load(owned).then(value=>snapshotObject(value as object) as unknown as T))):load(signal);}
   previewMarkdown(markdown:string,columns?:number):DocumentFragment { return suggestionMarkdown(this.ctx,markdown,columns); }
   private action<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body: unknown | null,
                     decoder: (original: JsonObject | null) => Decoder<T>, status: 200 | 201 | 202 | readonly (200|201|202)[] = 200, keyed = true): ApiAction<T> {
     const original = body === null ? null : snapshotObject(body);
     const decode = decoder(original), handle = this.client.prepare(method, path, original, { idempotent: keyed, success_status: status });
     return Object.freeze({ submit: async (signal?: AbortSignal) => {
-      const response = await this.client.commit(handle, decode, signal);
-      if (response.meta.pagination !== undefined) throw new ApiUnknown(true);
-      return response;
+      this.readScope?.beginWrite();
+      try{const response = await this.client.commit(handle, decode, signal);
+        if (response.meta.pagination !== undefined) throw new ApiUnknown(true);
+        return response;
+      }finally{this.readScope?.endWrite();}
     } });
   }
   private async single<T>(path: string, decode: Decoder<T>, signal?: AbortSignal,parameters:readonly(readonly[string,string])[]=[]) {
@@ -86,24 +95,24 @@ export class WalleApi {
     const decode=checked(models.requirementDetail,value=>{
       require(value.requirement.id===identity);require(expandDiscussion===(value.discussion!==null));
     });
-    return this.single(target('requirements',identity),decode,signal,expandDiscussion?[['expand','discussion']]:[]);
+    return this.readTogether(`requirement:${identity}:${expandDiscussion}`,signal,owned=>this.single(target('requirements',identity),decode,owned,expandDiscussion?[['expand','discussion']]:[]));
   }
   async getRequirement(identity: number, signal?: AbortSignal) { const response=await this.getRequirementDetail(identity,signal);return {...response,data:response.data.requirement}; }
-  getCurrentDocument(identity: number,documentId:number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/current-document'), checked(this.current(identity),document=>require(document.id===documentId)), signal,[['document_id',String(id(documentId))]]); }
+  getCurrentDocument(identity: number,documentId:number, signal?: AbortSignal) { return this.readTogether(`document:${identity}:${documentId}`,signal,owned=>this.single(target('requirements', identity, '/current-document'), checked(this.current(identity),document=>require(document.id===documentId)), owned,[['document_id',String(id(documentId))]])); }
   getManualDraft(identity: number,documentId:number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/manual-draft'), checked(this.draft(identity),draft=>require(draft.target_document_id===documentId)), signal,[['document_id',String(id(documentId))]]); }
   listRevisions(identity: number,documentId:number, page = 1, signal?: AbortSignal) { return this.page(target('requirements', identity, '/revisions'), checked(owned(models.revisionSummary, identity),row=>require(row.document_id===documentId)), [['document_id',String(id(documentId))],['page', String(page)]], page, signal); }
   getRevision(identity: number, signal?: AbortSignal) { return this.single(target('revisions', identity), identified(models.revisionDecoder(this.ctx), identity), signal); }
   listComments(identity: number,documentId:number, page = 1, signal?: AbortSignal) { return this.page(target('requirements', identity, '/comments'), checked(owned(models.commentItem, identity),comment=>require(comment.document_id===documentId)), [['document_id',String(id(documentId))],['page', String(page)]], page, signal); }
   getComment(identity: number, signal?: AbortSignal) { return this.single(target('comments', identity), identified(models.comment, identity), signal); }
-  getGuideRun(identity: number, signal?: AbortSignal) { return this.single(target('guide-runs', identity), identified(models.guideRun, identity), signal); }
-  listModelCalls(identity:number,signal?:AbortSignal){return this.single(target('guide-runs',identity,'/model-calls'),identified(modelCalls,identity),signal);}
+  getGuideRun(identity: number, signal?: AbortSignal) { return this.readTogether(`run:${identity}`,signal,owned=>this.single(target('guide-runs', identity), identified(models.guideRun, identity), owned)); }
+  listModelCalls(identity:number,signal?:AbortSignal){return this.readTogether(`calls:${identity}`,signal,owned=>this.single(target('guide-runs',identity,'/model-calls'),identified(modelCalls,identity),owned));}
   getModelCall(identity:number,signal?:AbortSignal){return this.single(target('model-calls',identity),checked(modelCallDetail,value=>require(value.call.id===identity)),signal);}
   listGuideRuns(identity: number, filters: GuideFilters = {}, signal?: AbortSignal) { return this.page(target('requirements', identity, '/guide-runs'), owned(models.guideSummary, identity), query(filters), filters.page ?? 1, signal); }
   getBatch(identity: number, signal?: AbortSignal) { return this.single(target('suggestion-batches', identity), identified(models.batch, identity), signal); }
-  getCommentIndex(identity: number,documentId:number, signal?: AbortSignal) { return this.single(target('requirements', identity, '/comment-index'), checked(owned(models.commentIndex, identity),index=>require(index.document_id===documentId)), signal,[['document_id',String(id(documentId))]]); }
+  getCommentIndex(identity: number,documentId:number, signal?: AbortSignal) { return this.readTogether(`comment-index:${identity}:${documentId}`,signal,signal=>this.single(target('requirements', identity, '/comment-index'), checked(owned(models.commentIndex, identity),index=>require(index.document_id===documentId)), signal,[['document_id',String(id(documentId))]])); }
   async listMessages(identity: number, before: number | null = null, signal?: AbortSignal) {
     const parameters: [string, string][] = before === null ? [] : [['before_sequence_no', String(id(before))]];
-    const response = await this.client.read(target('requirements', identity, '/messages'), shape({ items: array(owned(models.message, identity), 20) }), parameters, signal);
+    const response = await this.readTogether(`messages:${identity}:${before}`,signal,ownedSignal=>this.client.read(target('requirements', identity, '/messages'), shape({ items: array(owned(models.message, identity), 20) }), parameters, ownedSignal));
     try {
       const pagination = response.meta.pagination; require(pagination !== undefined && 'has_more' in pagination);
       const sequences = response.data.items.map(item => item.sequence_no); distinct(sequences); distinct(response.data.items.map(item => item.id));

@@ -15,8 +15,8 @@ from .resources import ConfigInvalid, _validate
 from .schema_transport import compact, named_schema, declared_json
 from backend.app.shared.validation import strict_json_object
 
-ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v10'
-MANIFEST_SHA256 = '07e4364b97c980ba1b3e5dbc8f17b75ab1873eded1a85ddbe1b4df352ddfa755'
+ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v15'
+MANIFEST_SHA256 = 'a8c5087236d8e4b4b40d62a92643832fe37cc2b5e426725f1ddde7d5670abc40'
 OUTPUTS = MappingProxyType({'DISCUSS': 'OutputDiscuss', 'GENERATE': 'OutputGenerate',
     'REVISE': 'OutputRevise', 'PROPOSE_CHANGES': 'OutputPropose',
     'COMPARE': 'OutputCompare', 'REVIEW': 'OutputReview'})
@@ -67,7 +67,7 @@ class CollaborationResources:
 
     @property
     def bundle(self):
-        return strict_json_object(self._texts['schemas/collaboration-contract.v1.json'])
+        return strict_json_object(self.content(self.reference('collaboration.contract')))
 
     @property
     def release(self):

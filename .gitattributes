@@ -4,7 +4,7 @@ backend/resources/** -text
 backend/app/infrastructure/migrations/** -text
 backend/app/infrastructure/schemas/** -text
 docs/proposals/** -text
-docs/verification/** -text
+docs/verification/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 docs/resource-adoption-v1.json -text
 docs/manual-edit-source-adoption-v1.json -text
 docs/manual-identity-adoption-v1.json -text
@@ -30,3 +30,5 @@ docs/design/WALL-E.*_V_1.0.md -text
 # Version directories preserve original design and source metadata byte identities.
 docs/design/** -text
 docs/sources/**/*.json -text
+docs/sources/v1.5/prepare-v15-evaluation-v12-frozen.py -text
+docs/sources/v1.5/run-v15-evaluation-v14-frozen.py -text

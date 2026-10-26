@@ -100,16 +100,24 @@ def main(argv=None):
     parser.add_argument('--allow-count-batches', type=int, choices=(1, 2, 3))
     parser.add_argument('--allow-chat-calls', type=int, choices=(1,))
     parser.add_argument('--max-total-tokens', type=int, choices=(139264,))
+    parser.add_argument('--credential-file', type=Path, help='Explicit local credential import for execution only; never evaluated as code')
     args = parser.parse_args(argv)
     supplied = (args.output_dir, args.allow_count_batches, args.allow_chat_calls, args.max_total_tokens)
     if args.execute and any(value is None for value in supplied):
         parser.error('--execute requires an explicit new output directory and every allowance')
-    if not args.execute and any(value is not None for value in supplied):
+    if not args.execute and (any(value is not None for value in supplied) or args.credential_file is not None):
         parser.error('Execution allowances require --execute; default mode is an offline preview')
     catalog = ResourceCatalog()
     if args.execute:
         try:
-            result = observe_once(args.output_dir, profile=ModelProfile.from_environment(), catalog=catalog,
+            environment = None
+            if args.credential_file is not None:
+                import os
+                from backend.app.infrastructure.local_credentials import read_local_credential
+                if not args.credential_file.is_absolute():
+                    raise ValueError('Credential file must be an explicit absolute path')
+                environment = {**os.environ, 'WALLE_MODEL_API_KEY': read_local_credential(args.credential_file)}
+            result = observe_once(args.output_dir, profile=ModelProfile.from_environment(environment), catalog=catalog,
                 count_batches=args.allow_count_batches, chat_calls=args.allow_chat_calls, total_tokens=args.max_total_tokens)
         except Exception as error:
             # Credentials/provider payloads must not appear in console errors.

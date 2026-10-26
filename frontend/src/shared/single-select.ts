@@ -17,7 +17,7 @@ export function createSingleSelect(document:Document,initial:SingleSelectConfig)
   trigger.setAttribute('role','combobox');trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-controls',key);
   text.className='single-select-text';arrow.setAttribute('viewBox','0 0 16 16');arrow.setAttribute('aria-hidden','true');
   path.setAttribute('d','m4 6 4 4 4-4');arrow.append(path);trigger.append(text,arrow);
-  panel.className='single-select-panel';panel.id=key;panel.setAttribute('role','listbox');panel.setAttribute('popover','manual');panel.hidden=true;
+  panel.className='single-select-panel';panel.id=key;panel.setAttribute('role','listbox');panel.setAttribute('popover','manual');panel.hidden=true;panel.inert=true;panel.setAttribute('aria-hidden','true');
   element.append(trigger,panel);
   let config=initial,opened=false,active=-1,rows:HTMLDivElement[]=[],signature='';
   const enabled=()=>config.options.map((option,index)=>option.disabled?-1:index).filter(index=>index>=0);
@@ -42,13 +42,13 @@ export function createSingleSelect(document:Document,initial:SingleSelectConfig)
   function scroll(event:Event){if(event.target instanceof browser.Node&&panel.contains(event.target))return;position();}
   function close(){
     if(!opened)return;opened=false;trigger.setAttribute('aria-expanded','false');trigger.removeAttribute('aria-activedescendant');
-    if(panel.matches(':popover-open'))panel.hidePopover();panel.hidden=true;
+    panel.inert=true;panel.setAttribute('aria-hidden','true');if(panel.matches(':popover-open'))panel.hidePopover();panel.hidden=true;
     document.removeEventListener('pointerdown',outside,true);document.removeEventListener('focusin',focusOutside);
     document.removeEventListener('scroll',scroll,true);browser.removeEventListener('resize',position);
   }
   function open(){
     if(config.disabled||!enabled().length||opened)return;
-    opened=true;panel.hidden=false;trigger.setAttribute('aria-expanded','true');
+    opened=true;panel.hidden=false;panel.inert=false;panel.removeAttribute('aria-hidden');trigger.setAttribute('aria-expanded','true');
     active=config.options.findIndex(option=>option.value===config.value&&!option.disabled);if(active<0)active=enabled()[0]??-1;
     panel.showPopover();position();highlight();trigger.focus({preventScroll:true});
     document.addEventListener('pointerdown',outside,true);document.addEventListener('focusin',focusOutside);

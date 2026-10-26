@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {modelCall,modelCalls,modelCallDetail} from '../src/api/model-calls.ts';
-import {ModelCallReader,tokenTotal,usageWarning} from '../src/guide/model-call-reader.ts';
+import {ModelCallReader,ModelCallCache,tokenTotal,usageWarning} from '../src/guide/model-call-reader.ts';
 const at='2026-10-11T12:00:00.000Z';
 const call=(changes={})=>({id:20,guide_run_id:17,call_no:1,attempt_no:1,model_name:'saved-model',call_status:'SUCCEEDED',parse_status:'SUCCEEDED',validation_status:'FAILED',started_at:at,ended_at:at,user_message_id:37,document_version:2,input_tokens:100,output_tokens:12,total_tokens:112,cached_tokens:50,duration_ms:44,...changes});
 const list=(changes={})=>({id:17,requirement_id:3,action_type:'ASK',operation:'DISCUSS',status:'COMPLETED',current_step:'FINISHED',trigger_message_id:18,program_processed:false,items:[call()],...changes});
@@ -54,4 +54,19 @@ test('failure preserves previously read facts and foreign identities are rejecte
  await reader.load(17,'v1');next=null;await reader.load(17,'v2');assert.equal(reader.get(17).data.items[0].id,20);assert(reader.get(17).error);
  next=list({requirement_id:4});await reader.load(17,'v3');assert.equal(reader.get(17).data.requirement_id,3);assert(reader.get(17).error);
  next=list();await reader.load(17,'v3',true);assert.equal(reader.get(17).error,null);reader.dispose();
+});
+
+
+test('terminal call summaries are shared across providers, while live empty summaries and forced reads remain fresh',async()=>{
+ let reads=0,next=list();const api={listModelCalls:async()=>{reads++;return {data:next};}},cache=new ModelCallCache(3);
+ const first=new ModelCallReader(api,3,cache);await first.load(17,'ended');first.setActive(false);
+ const second=new ModelCallReader(api,3,cache);await second.load(17,'initial');assert.equal(reads,1);assert.equal(second.get(17).data.items[0].total_tokens,112);
+ next=list({status:'RUNNING',items:[]});await second.load(17,'live',true);assert.equal(reads,2);second.setActive(false);second.setActive(true);await second.load(17,'live');assert.equal(reads,3);
+ next=list();await second.load(17,'done',true);assert.equal(reads,4);first.setActive(true);await first.load(17,'initial');assert.equal(reads,4);
+ assert.throws(()=>new ModelCallReader(api,4,cache),/Foreign/);first.dispose();second.dispose();cache.clear();
+});
+test('a failed version is never marked fresh and cannot cause a loading-effect retry loop',async()=>{
+ let reads=0,fail=true;const reader=new ModelCallReader({listModelCalls:async()=>{reads++;if(fail)throw Error('offline');return {data:list()};}},3);
+ await reader.load(17,'v1');assert(reader.get(17).error);await reader.load(17,'v1');assert.equal(reads,1);
+ fail=false;await reader.load(17,'v1',true);assert.equal(reads,2);assert.equal(reader.get(17).error,null);reader.dispose();
 });

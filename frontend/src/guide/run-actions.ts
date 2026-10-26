@@ -18,7 +18,8 @@ const sameOrigin=(left:GuideRun,right:GuideRun)=>left.id===right.id&&left.requir
 export class RequirementRunActions{
  private value:RunActionState;private readonly api:Api;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private readonly receive:(run:GuideAccepted|GuideRun)=>Promise<void>;
  private action:ApiAction<GuideAccepted|GuideRun|RetryReceipt>|undefined;private readonly listeners=new Set<()=>void>();private pending:Promise<boolean>|undefined;private work:'SEND'|'RECOVER'|'FINISH'|'REFRESH'|undefined;private controller:AbortController|undefined;private delivered=false;private closed=false;private visibility=0;
- constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:(run:GuideAccepted|GuideRun)=>Promise<void>){
+ private readonly readAccepted:()=>Promise<DetailSnapshot>;
+ constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:(run:GuideAccepted|GuideRun)=>Promise<void>,readAccepted=readActual){this.readAccepted=readAccepted;
   this.assertDetail(detail);this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.receive=receive;
   this.value=Object.freeze({detail:capture(detail),run:null,available:false,phase:'READY',operation:null,origin:null,outcome:null,error:null,error_code:null,refreshing:false,observed:null,active:true});
  }
@@ -88,7 +89,7 @@ export class RequirementRunActions{
   const epoch=this.visibility,alive=()=>!this.closed&&this.value.available&&epoch===this.visibility;
   this.publish({refreshing:true});try{if(!alive())throw Error('操作界面已隐藏，已确认回执仍保留');
    if(!this.delivered){const outcome=this.value.outcome!;const actual='processing' in outcome?(await this.api.getGuideRun(outcome.guide_run_id)).data:outcome;this.owned(actual);if('processing' in outcome&&(!('retry_of_guide_run_id' in actual)||actual.retry_of_guide_run_id!==this.value.origin!.id))throw Error('Retry linkage differs from the actual run');await this.receive(actual);if(this.closed)return false;this.delivered=true;}
-   if(!alive())throw Error('操作界面已隐藏，已确认回执仍保留');const actual=await this.readActual();if(!alive())throw Error('操作界面已隐藏，已确认回执仍保留');this.assertDetail(actual);if(actual.requirement.id!==this.value.detail.requirement.id)throw Error('Ownership');
+   if(!alive())throw Error('操作界面已隐藏，已确认回执仍保留');const actual=await this.readAccepted();if(!alive())throw Error('操作界面已隐藏，已确认回执仍保留');this.assertDetail(actual);if(actual.requirement.id!==this.value.detail.requirement.id)throw Error('Ownership');
    await this.adoptActual(actual);if(!alive())throw Error('操作界面已隐藏，已确认回执仍保留');this.publish({detail:capture(actual),phase:'READY',operation:null,origin:null,outcome:null,error:null,error_code:null,observed:null});return true;
   }catch(error){this.publish({error:error instanceof Error?error.message:'已确认运行操作，实际详情暂时无法读取，请重试读取'});return false;}finally{this.publish({refreshing:false});}
  }

@@ -93,10 +93,12 @@ def _sections(request):
     return sections, wire
 
 
-def _collaboration_detail(row, snapshot):
+def _collaboration_detail(row, snapshot, *, catalog=None):
     """Project saved bytes and measurements only; never compile or count on GET."""
-    from backend.app.infrastructure.resources import ResourceCatalog
-    resources = ResourceCatalog().collaboration
+    if catalog is None:
+        from backend.app.infrastructure.resources import ResourceCatalog
+        catalog = ResourceCatalog()
+    resources = catalog.collaboration
     request = snapshot.get('request');protocol = snapshot.get('protocol') or {}
     counting = snapshot.get('counting') or {};basis = snapshot.get('context_basis') or {}
     sections = [];wire = None
@@ -146,7 +148,7 @@ def _collaboration_detail(row, snapshot):
         'preflight': {'input_tokens': _number(counting.get('input_tokens_candidate')), 'budget': budget, 'counts': counts}}
 
 
-def get_model_call(database, llm_use_id):
+def get_model_call(database, llm_use_id, *, catalog=None):
     try: identity = strict_integer(llm_use_id, 'llm_use_id')
     except InvalidInput as error: return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
     try:
@@ -156,7 +158,7 @@ def get_model_call(database, llm_use_id):
             snapshot = _json(row['request_snapshot_json'])
             snapshot = snapshot if isinstance(snapshot, dict) else {}
             if snapshot.get('protocol', {}).get('function_type') == 'collaboration_v1':
-                return {'code': 'READ_OK', 'data': _collaboration_detail(row, snapshot), 'details': None}
+                return {'code': 'READ_OK', 'data': _collaboration_detail(row, snapshot, catalog=catalog), 'details': None}
             request = snapshot.get('request')
             # The audited Chat body is the snapshot source. Profile and
             # count-journal internals are outside this object and stay private.

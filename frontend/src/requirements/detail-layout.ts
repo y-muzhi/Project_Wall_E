@@ -1,4 +1,4 @@
-export type DetailTab = 'AI' | 'COMMENTS' | 'REVISIONS';
+export type DetailTab = 'AI' | 'PROGRESS' | 'COMMENTS' | 'REVISIONS';
 export type DetailPreferences = Readonly<{ schema_version: 1; left_open: boolean; right_open: boolean; right_tab: DetailTab; right_width: number }>;
 export type DetailGeometry = Readonly<{ mode: 'DESKTOP' | 'COMPACT' | 'BLOCKED'; left_open: boolean; right_open: boolean;
   left_drawer: boolean; split_view: boolean; document_open: boolean;
@@ -6,7 +6,7 @@ export type DetailGeometry = Readonly<{ mode: 'DESKTOP' | 'COMPACT' | 'BLOCKED';
 export const preferencesKey = 'walle:v1.5:preferences';
 type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 function dimension(value: number): number { if (!Number.isFinite(value) || value < 0) throw new TypeError('Invalid CSS width'); return value; }
-function tab(value: unknown): DetailTab { if (value !== 'AI' && value !== 'COMMENTS' && value !== 'REVISIONS') throw new TypeError('Invalid panel tab'); return value; }
+function tab(value: unknown): DetailTab { if (value !== 'AI' && value !== 'PROGRESS' && value !== 'COMMENTS' && value !== 'REVISIONS') throw new TypeError('Invalid panel tab'); return value; }
 export function decodeDetailPreferences(value: unknown): DetailPreferences {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Invalid preferences');
   const record = value as Record<string, unknown>;

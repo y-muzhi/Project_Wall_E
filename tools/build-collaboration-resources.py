@@ -20,7 +20,7 @@ def compact(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
 
 
-def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', release_version='v1'):
+def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', release_version='v1', contract_version='v1', output_version='v1'):
     from backend.app.infrastructure.model_profile import ModelProfile, DEFAULT_PROFILE
     from backend.app.infrastructure.schema_transport import named_schema
     from backend.app.infrastructure.resources import _validate
@@ -55,14 +55,14 @@ def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', relea
         _validate(named_schema(schema, entry).schema_json, value)
         return add(path, compact(value), key)
 
-    add('schemas/collaboration-contract.v1.json', compact(schema), 'collaboration.contract')
+    add('schemas/collaboration-contract.'+contract_version+'.json', compact(schema), 'collaboration.contract', contract_version)
     canonical = add('schemas/collaboration-canonical.v1.json', named_schema(schema, 'Canonical').schema_json, 'collaboration.canonical')
     wire = add('schemas/collaboration-wire.v1.json', named_schema(schema, 'Wire').schema_json, 'collaboration.wire')
     add('schemas/collaboration-basis.v1.json', named_schema(schema, 'ContextBasis').schema_json, 'collaboration.basis')
     message = add('schemas/collaboration-messages.v1.json', named_schema(schema, 'MessageStructures').schema_json, 'collaboration.messages')
     outputs = []
     for operation, entry in (('DISCUSS', 'OutputDiscuss'), ('GENERATE', 'OutputGenerate'), ('REVISE', 'OutputRevise'), ('PROPOSE_CHANGES', 'OutputPropose'), ('COMPARE', 'OutputCompare'), ('REVIEW', 'OutputReview')):
-        ref = add('schemas/output-' + operation.lower() + '.v1.json', named_schema(schema, entry).schema_json, 'collaboration.output.' + operation.lower())
+        ref = add('schemas/output-' + operation.lower() + '.'+output_version+'.json', named_schema(schema, entry).schema_json, 'collaboration.output.' + operation.lower(), output_version)
         outputs.append({'operation': operation, 'schema_ref': ref})
     guide_refs = [{'phase_kind': value['phase_kind'], 'resource_ref': add_json('guides/' + value['key'] + '.v1.json', value, value['key'], 'GuideDefinition')} for value in guides]
     structure_refs = [add_json('structures/' + value['key'] + '.v1.json', value, value['key'], 'StructureProfile') for value in structures]
@@ -104,9 +104,19 @@ def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', relea
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] == ['--v10']:
+    if sys.argv[1:] == ['--v15']:
+        build(batch='v15', design_sha256='9f7e6476861e8d954fc6be675973c6e829988b2c582a107367b3d764fb90bcdd', prompt_version='v6', release_version='v7', contract_version='v3', output_version='v3')
+    elif sys.argv[1:] == ['--v14']:
+        build(batch='v14', design_sha256='8c818b009879ce902b9ef2e2692028013437cc47a801d32b5ac7e484c38e80f0', prompt_version='v5', release_version='v6', contract_version='v3', output_version='v3')
+    elif sys.argv[1:] == ['--v13']:
+        build(batch='v13', design_sha256='901f0ed4684cae2324aec53810f24e558b3f0c720a2e80b09d72794ce54a482e', prompt_version='v4', release_version='v5', contract_version='v3', output_version='v3')
+    elif sys.argv[1:] == ['--v12']:
+        build(batch='v12', design_sha256='ab7c7812c6ff730ee4d072c8b52e105b4c2e1792046c3ddaf4d66a2ec85644b6', prompt_version='v3', release_version='v4', contract_version='v2', output_version='v2')
+    elif sys.argv[1:] == ['--v11']:
+        build(batch='v11', design_sha256='de47073e2dc7294831aa016a9e0d4ce840900da7bfb720dc3977efc75b7de307', prompt_version='v3', release_version='v3')
+    elif sys.argv[1:] == ['--v10']:
         build(batch='v10', design_sha256='ec48d4b36869d11b7fa8032e9b6b60ad2b80e0021a47398d93b1106fb9db8e9c', prompt_version='v2', release_version='v2')
     elif not sys.argv[1:]:
         build()
     else:
-        raise SystemExit('Usage: build-collaboration-resources.py [--v10]')
+        raise SystemExit('Usage: build-collaboration-resources.py [--v10|--v11|--v12|--v13|--v14|--v15]')

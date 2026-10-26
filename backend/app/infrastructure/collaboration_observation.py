@@ -53,6 +53,8 @@ class CollaborationObservation:
             async def count(self, profile, texts):
                 if profile.snapshot != permit.profile or permit.count_calls >= permit.count_limit:
                     raise ConfigInvalid('Observation count allowance is exhausted')
+                from .tokenization import check_text_capacity
+                check_text_capacity(profile, texts)
                 permit.count_calls += 1
                 return await delegate.count(profile, texts)
         return Counter()

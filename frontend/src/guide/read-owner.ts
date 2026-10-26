@@ -7,10 +7,10 @@ import {RequirementRunHistory} from './history.ts';
 import {GuideRunPolling} from './polling.ts';
 import type {PollClock} from './polling.ts';
 type RunIdentity=Readonly<{id:number;requirement_id:number}>;
-type Api=Pick<WalleApi,'getGuideRun'|'listGuideRuns'|'listMessages'>;
+type Api=Pick<WalleApi,'getGuideRun'|'listGuideRuns'|'listMessages'>&Partial<Pick<WalleApi,'detailReadEpoch'|'waitForDetailWrites'>>;
 export type AiReadState=Readonly<{detail:DetailSnapshot;selected:number|null;selection:'ACTIVITY'|'ACCEPTED'|'HISTORY'|null;run:GuideRun|null;querying:boolean;connection_error:boolean;polling:boolean;visible:boolean;refreshing:boolean;error:string|null;active:boolean}>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
-const changes=(run:GuideRun)=>JSON.stringify([run.status,run.latest_assistant_message_id,run.suggestion_batch_id,run.final_result]);
+const changes=(run:GuideRun)=>JSON.stringify([run.status,run.latest_assistant_message_id,run.suggestion_batch_id,run.final_result,run.application_result,run.progress_result,run.progress_error,run.document_effect]);
 
 /** A real AI read lifetime and idempotent acceptance receiver. Acceptance
  * only selects/opens a Run and installs its real I16 polling; it never creates
@@ -18,7 +18,7 @@ const changes=(run:GuideRun)=>JSON.stringify([run.status,run.latest_assistant_me
 export class RequirementAiRead{
  readonly messages:RequirementMessages;readonly history:RequirementRunHistory;
  private readonly api:Api;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private readonly openPanel:()=>void|Promise<void>;private readonly timing:PollClock|undefined;
- private value:AiReadState;private readonly listeners=new Set<()=>void>();private poll:GuideRunPolling|undefined;private releasePoll:(()=>void)|undefined;private pollSignature:string|null=null;private generation=0;private visibilityGeneration=0;private closed=false;private pending:Promise<void>|undefined;private pendingGeneration=0;private dirty=false;
+ private value:AiReadState;private readonly listeners=new Set<()=>void>();private poll:GuideRunPolling|undefined;private releasePoll:(()=>void)|undefined;private pollSignature:string|null=null;private generation=0;private visibilityGeneration=0;private closed=false;private pending:Promise<void>|undefined;private pendingGeneration=0;private dirty=false;private restoreHistory=true;
  constructor(detail:DetailSnapshot,api:Api,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,openPanel:()=>void|Promise<void>,timing?:PollClock){
   positiveInteger(detail.requirement.id);if(detail.current!==null&&(detail.current.requirement_id!==detail.requirement.id||detail.current.document_type!=='CURRENT'))throw TypeError('Owned actual detail required');
   this.api=api;this.readActual=readActual;this.adoptActual=adoptActual;this.openPanel=openPanel;this.timing=timing;this.messages=new RequirementMessages(detail.requirement.id,api);this.history=new RequirementRunHistory(detail.requirement.id,api);
@@ -53,7 +53,7 @@ export class RequirementAiRead{
  setVisible(visible:boolean):void{
   if(this.closed||visible===this.value.visible)return;this.visibilityGeneration++;this.publish({visible});this.poll?.setVisible(visible);
   if(!visible){this.messages.pause();this.history.pause();}
-  else{this.dirty=true;void this.refresh().catch(()=>undefined);}
+  else{this.restoreHistory=true;this.dirty=true;void this.refresh().catch(()=>undefined);}
  }
  refresh():Promise<void>{
   if(this.closed||!this.value.visible)return Promise.reject(Error('AI view is hidden or retired'));
@@ -69,11 +69,15 @@ export class RequirementAiRead{
   }
   const generation=this.visibilityGeneration,alive=()=>!this.closed&&this.value.visible&&generation===this.visibilityGeneration;
   const pending=Promise.resolve().then(async()=>{
-   do{this.dirty=false;if(!alive())throw Error('AI view is hidden or retired');const actual=await this.readActual();if(!alive())throw Error('AI read was hidden');
+   do{this.dirty=false;await this.api.waitForDetailWrites?.();if(!alive())throw Error('AI view is hidden or retired');const epoch=this.api.detailReadEpoch??0;try{const actual=await this.readActual();if(!alive())throw Error('AI read was hidden');
     if(actual.requirement.id!==this.value.detail.requirement.id)throw TypeError('Owned actual detail required');await this.adoptActual(actual);if(!alive())throw Error('AI adoption was hidden');this.adopt(actual);
-    const results=await Promise.all([this.messages.refresh(),this.history.refresh()]);if(!alive())throw Error('AI resources were hidden');if(results.some(ok=>!ok))throw Error('会话或运行记录暂时无法读取，已确认内容仍保留');
-    const latest=this.history.getSnapshot().confirmed?.items[0];
+    // Initial history also restores the latest failed run. Later observations
+    // leave list filters/pagination to the visible records panel.
+    this.history.invalidate();
+    const results=await Promise.all([this.messages.refresh(),(this.history.getSnapshot().confirmed===null||this.restoreHistory&&this.value.selected===null)?this.history.refresh():Promise.resolve(true)]);if(!alive())throw Error('AI resources were hidden');if(results.some(ok=>!ok))throw Error('会话或运行记录暂时无法读取，已确认内容仍保留');
+    this.restoreHistory=false;const latest=this.history.getSnapshot().confirmed?.items[0];
     if(this.value.selected===null&&latest?.status==='FAILED')this.select(latest,'ACCEPTED');
+    }catch(error){if(alive()&&epoch!==(this.api.detailReadEpoch??0)){this.dirty=true;continue;}throw error;}
    }while(this.dirty);this.publish({error:null});
   }).catch(error=>{if(alive())this.publish({error:error instanceof Error?error.message:'实际AI状态暂时无法读取，已确认内容仍保留'});throw error;}).finally(()=>{if(this.pending===pending)this.pending=undefined;this.publish({refreshing:false});if(!this.closed&&this.value.visible&&generation!==this.visibilityGeneration)void this.refresh().catch(()=>undefined);});
   this.pending=pending;this.pendingGeneration=generation;this.publish({refreshing:true});return pending;

@@ -6,13 +6,13 @@ from backend.app.infrastructure.audit_repository import AuditRepository
 from backend.app.infrastructure.counting_journal import CountingJournal
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.model_gateway import ModelGateway
-from backend.app.infrastructure.tokenization import TokenizationGateway, TokenCounts, restore_measurement
+from backend.app.infrastructure.tokenization import TokenizationGateway, TokenCounts, ExactCountUnavailable, check_text_capacity
 from backend.app.infrastructure.resources import ConfigInvalid
 from backend.app.infrastructure.execution_lease import ExecutionRetired
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.shared.command_execution import Rejected, operation_time
 from .collaboration_context import read_canonical, compile_context
-from .collaboration_counting import compile_counted
+from .collaboration_counting import compile_counted, restore_candidate_measurement
 from .collaboration_results import persist_collaboration_result
 from .response_display import response_text
 
@@ -47,10 +47,11 @@ class _Counter:
         try:
             await self.admission_guard()
             await self.native(self.check)
+            check_text_capacity(profile, texts)
             receipt = await self.counter.count(profile, texts)
             if type(receipt) is not TokenCounts:
                 raise ConfigInvalid('Exact count receipt required')
-            restore_measurement(receipt.evidence, texts, expected_model=profile.model_name)
+            restore_candidate_measurement(receipt.evidence, texts, profile, self.catalog)
         except asyncio.CancelledError:
             try:
                 await self.native(self.journal.finish, record, profile, operation_time(self.clock), status='INTERRUPTED')
@@ -58,6 +59,11 @@ class _Counter:
                 pass
             raise
         except ExecutionRetired:
+            raise
+        except ExactCountUnavailable as error:
+            await self.native(self.journal.finish, record, profile, operation_time(self.clock),
+                status='INTERRUPTED' if error.reason == 'TRANSPORT_ERROR' else 'FAILED',
+                failure_reason=error.reason, http_status=error.http_status, provider_error=error.provider_error)
             raise
         except Exception:
             await self.native(self.journal.finish, record, profile, operation_time(self.clock), status='FAILED')

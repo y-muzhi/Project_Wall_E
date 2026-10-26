@@ -4,7 +4,7 @@ import type { Requirement, RequirementDetail, GuideRun, Batch, DocumentView, Man
 import {ReadingSelection} from '../documents/reading-selection.ts';
 
 type CommentIndex = Awaited<ReturnType<WalleApi['getCommentIndex']>>['data'];
-type ReadApi = Pick<WalleApi,'getRequirementDetail'|'getRequirement'|'getCurrentDocument'|'getManualDraft'|'getGuideRun'|'getBatch'|'getCommentIndex'>;
+type ReadApi = Pick<WalleApi,'getRequirementDetail'|'getRequirement'|'getCurrentDocument'|'getManualDraft'|'getGuideRun'|'getBatch'|'getCommentIndex'>&Partial<Pick<WalleApi,'detailReadEpoch'>>;
 export type DetailActivity = Readonly<{kind:'IDLE'} | {kind:'MANUAL';draft:ManualDraft;target:DocumentView} | {kind:'GUIDE';run:GuideRun} | {kind:'BATCH';batch:Batch}>;
 export type DetailSnapshot = RequirementDetail&Readonly<{current:DocumentView|null;selected_document_id:number|null;activity:DetailActivity;comment_index:CommentIndex|null}>;
 export type DocumentDetailSnapshot=DetailSnapshot&Readonly<{current:DocumentView}>;
@@ -29,7 +29,7 @@ export class RequirementDetailRead {
   private value:DetailReadState=Object.freeze({confirmed:null,loading:false,active:true,error:null,error_kind:null});
   private readonly listeners=new Set<()=>void>();private generation=0;private closed=false;
   private controller:AbortController|undefined;private pending:Promise<boolean>|undefined;
-  private selected:number|null|undefined;
+  private selected:number|null|undefined;private pendingEpoch=-1;private pendingReuse=false;
   private readonly reading:ReadingSelection;
   constructor(identity:number,api:ReadApi,storage?:()=>Pick<Storage,'getItem'|'setItem'>){this.identity=positiveInteger(identity);this.api=api;this.reading=new ReadingSelection(identity,storage);this.selected=this.reading.load();}
   selectDocument(identity:number|null):Promise<boolean>{
@@ -52,8 +52,14 @@ export class RequirementDetailRead {
     if(this.closed)return;this.value=Object.freeze({...this.value,...changes});
     for(const listener of this.listeners){try{listener();}catch(error){console.error('WALL-E detail read observer failed',error);}}
   }
-  refresh(force=false):Promise<boolean>{
-    if(this.closed)return Promise.resolve(false);if(this.pending&&!force)return this.pending;
+  /** Observation may reuse a matching last-known body/index. Explicit and
+   * recovery reads still acquire the complete bundle, including comments. */
+  observe():Promise<boolean>{return this.refresh(false,true);}
+  refresh(force=false,reuseContent=false):Promise<boolean>{
+    if(this.closed)return Promise.resolve(false);
+    const epoch=this.api.detailReadEpoch??0;
+    if(this.pending&&!force&&this.pendingEpoch===epoch&&(reuseContent||!this.pendingReuse))return this.pending;
+    this.pendingEpoch=epoch;this.pendingReuse=reuseContent;
     const generation=++this.generation,controller=new AbortController();this.controller?.abort();this.controller=controller;
     let rootConfirmed=false;
     const pending=Promise.resolve().then(async()=>{
@@ -66,7 +72,11 @@ export class RequirementDetailRead {
         const documentId=this.selected;
         if(documentId!==null)requireRelation(detail.documents.some(document=>document.id===documentId));
         let current:DocumentView|null=null,index:CommentIndex|null=null;
-        if(documentId!==null){
+        const previous=this.value.confirmed;
+        const reused=reuseContent&&root.document_work_state!=='MANUAL_EDITING'&&previous?.activity.kind!=='MANUAL'&&previous?.current?.id===documentId&&previous.comment_index!==null&&
+          JSON.stringify(previous.documents.find(row=>row.id===documentId))===JSON.stringify(detail.documents.find(row=>row.id===documentId));
+        if(reused){current=previous!.current;index=previous!.comment_index;}
+        else if(documentId!==null){
           const [documentResponse,indexResponse]=await Promise.all([this.api.getCurrentDocument(this.identity,documentId,controller.signal),this.api.getCommentIndex(this.identity,documentId,controller.signal)]);
           if(this.closed||generation!==this.generation)return false;
           current=captured(documentResponse.data);index=captured(indexResponse.data);
@@ -104,8 +114,9 @@ export class RequirementDetailRead {
         if(this.closed||generation!==this.generation)return false;
         const latest=captured((await this.api.getRequirementDetail(this.identity,controller.signal)).data);
         if(occupancy(root)!==occupancy(latest.requirement))throw new ReadMismatch('CHANGED');
+        if(reused&&JSON.stringify(detail.documents.find(row=>row.id===documentId))!==JSON.stringify(latest.documents.find(row=>row.id===documentId)))throw new ReadMismatch('CHANGED');
         for(const document of [current,activity.kind==='MANUAL'?activity.target:null]){
-          if(document!==null&&latest.documents.find(summary=>summary.id===document.id)?.content_version!==document.content_version)throw new ReadMismatch('CHANGED');
+          if(document!==null){const summary=latest.documents.find(summary=>summary.id===document.id);if(summary?.content_version!==document.content_version||summary?.metadata_version!==document.metadata_version)throw new ReadMismatch('CHANGED');}
         }
         const confirmed:DetailSnapshot=Object.freeze({...latest,current,selected_document_id:documentId,activity,comment_index:index});
         this.reading.save(documentId);this.publish({confirmed,loading:false,error:null,error_kind:null});return true;

@@ -30,7 +30,28 @@ def carried_aliases(context):
             refs.update(ref+':'+answer['card_key'] for answer in message['formal_answers'])
     # Formal answers in long-term selected text have their exact card alias.
     refs.update(item['ref'] for item in basis['selected'] if item['kind'] == 'CARD_ANSWER')
-    return {item['ref']: item for item in basis['aliases'] if item['ref'] in refs}
+    aliases = {item['ref']: item for item in basis['aliases'] if item['ref'] in refs}
+    # Section references are public Wire identities too. Resolve them only to
+    # the actually transmitted blocks, never to an unread remainder or to the
+    # private Canonical document. Navigation-only ancestor titles are excluded.
+    # Deriving this view preserves historic counted request/basis bytes.
+    for document in wire['documents']:
+        sections = {item['section_ref']: item for item in document['sections']}
+        visible = {block['block_id'] for block in document['blocks']}
+        for ref, section in sections.items():
+            if section['heading_block_id'] not in visible:
+                continue
+            members = []
+            for block in document['blocks']:
+                parent = block['section_ref'];visited = set()
+                while parent in sections and parent not in visited:
+                    if parent == ref:
+                        members.append(block['block_id']);break
+                    visited.add(parent);parent = sections[parent]['parent_ref']
+            aliases[ref] = {'ref': ref, 'source_refs': [{'kind': 'REVISION',
+                'document_id': document['document_id'], 'revision_id': document['revision_id'],
+                'block_ids': members}]}
+    return aliases
 
 
 def resolve_sources(refs, context):

@@ -56,8 +56,11 @@ export class GuideRunPolling {
         if (result.id !== this.identity) throw new TypeError('Status belongs to another run');
         this.failures = 0; next = result.status === 'RUNNING' ? 1000 : null;
         this.publish({ confirmed: result, querying: false, connection_error: false, polling: next !== null });
-      } catch {
+      } catch (error) {
         if (generation !== this.generation || this.disposed || !this.visible) return;
+        // A local write barrier retires the observation, not the connection.
+        // The scoped reader waits for commit before this next read can send.
+        if(error instanceof DOMException&&error.name==='AbortError'){next=0;this.publish({querying:false,polling:true});return;}
         next = delays[Math.min(this.failures++, delays.length - 1)]!;
         this.publish({ querying: false, connection_error: true, polling: true });
       } finally {

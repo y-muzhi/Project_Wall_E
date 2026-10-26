@@ -5,11 +5,13 @@ import { registerModal, trapModalTab } from '../shared/modal.ts';
 import { requirementCatalog } from './catalog.ts';
 import type { CreateDraft, CreateState } from './create.ts';
 import {SingleSelect} from '../shared/single-select.tsx';
+import {useMotionPresence} from '../shared/motion-react.ts';
 
 export function CreateRequirementDrawer({ open, state, edit, create, cancel }: Readonly<{ open: boolean; state: CreateState;
   edit(draft: CreateDraft): void; create(): void; cancel(): void }>) {
   const dialog = useRef<HTMLDialogElement>(null), composing = useRef(false), id = useId();
-  const locked = state.busy || state.unknown;
+  const present=useMotionPresence(open);
+  const locked = !open || state.busy || state.unknown;
   useLayoutEffect(() => {
     if (!open) return;
     const element = dialog.current!, original = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -22,13 +24,13 @@ export function CreateRequirementDrawer({ open, state, edit, create, cancel }: R
     const first = (['title','type','idea'] as const).find(field => state.fields[field]);
     if (first) dialog.current?.querySelector<HTMLElement>(`[data-field="${first}"]`)?.focus();
   }, [open, state.fields]);
-  if (!open) return null;
+  if (!present) return null;
   const field = (name: keyof CreateDraft) => ({ id: id + '-' + name, 'data-field': name,
     'aria-invalid': !!state.fields[name], 'aria-describedby': state.fields[name] ? id + '-error-' + name : undefined, 'aria-required': true });
   const error = (name: keyof CreateDraft) => state.fields[name] && <p id={id + '-error-' + name} className="inline-error" role="alert">! {state.fields[name]}</p>;
   const selectField=(name:keyof CreateDraft)=>({id:id+'-'+name,field:name,invalid:!!state.fields[name],describedBy:state.fields[name]?id+'-error-'+name:undefined,required:true});
   const draft = state.draft;
-  return createPortal(<dialog ref={dialog} className="create-drawer" tabIndex={-1} aria-labelledby={id + '-heading'} onKeyDown={trapModalTab}
+  return createPortal(<dialog ref={dialog} className="create-drawer" tabIndex={-1} inert={!open} aria-hidden={!open} aria-labelledby={id + '-heading'} onKeyDown={trapModalTab}
     onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
     onCancel={event => { event.preventDefault(); if (!locked) cancel(); }}>
     <form noValidate onSubmit={event => { event.preventDefault(); if (!state.busy && !composing.current) create(); }}>

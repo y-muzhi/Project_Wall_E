@@ -8,7 +8,7 @@
 
 AI-RESOURCE给出四阶段完整JSON、三结构资源内容、89个Schema类型、私有Canonical／ContextBasis与模型Wire、六种操作输出入口、消息及卡片绑定、确定序列化与Schema闭包、八项计数及裁剪／准入定义。原四项待确认清单移除；发布与实际证据留在实施／验收范围，不冒充本轮已执行。
 
-独立追踪见[迭代记录](../../iterations/pending/v1.5/WALL-E.AI协作规则定案与技术定义迭代_V_1.5.md)。
+独立追踪见[迭代记录](../../archive/iterations/v1.5/WALL-E.AI协作规则定案与技术定义迭代_V_1.5.md)。
 
 ## 执行方式与结果
 

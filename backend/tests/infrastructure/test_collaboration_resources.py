@@ -32,6 +32,10 @@ def test_resources_match_the_complete_design_source(resources):
     structures = next(value for value in blocks if isinstance(value, list) and len(value) == 3 and value[0].get('key') == 'structure.brief')
     for structure in structures:
         assert resources.structure(structure['document_kind']) == structure
+    prompt_section = design.split('**Prompt正式定义**', 1)[1].split('| 当前阶段 |', 1)[0]
+    paragraphs = [value.replace('\n> ', '\n') for value in re.findall(r'^> (.+(?:\n> .+)*)', prompt_section, re.M)]
+    assert len(paragraphs) == 5
+    assert resources.prompt == '\n\n'.join(paragraphs)
     assert len(resources.bundle['$defs']) == 89
 
 
@@ -143,12 +147,14 @@ def test_offline_ready_never_grants_live_dispatch(resources):
         resources.require_live({**profile, 'max_tokens': 16384})
 
 
-@pytest.mark.parametrize('target', ['manifest.json', 'schemas/output-generate.v1.json', 'guides/collaboration.discovery.v1.json'])
+@pytest.mark.parametrize('target', ['manifest.json', 'collaboration.output.generate', 'collaboration.discovery'])
 def test_corrupt_resource_fails_closed_and_temporary_output_is_removed(target):
     with TemporaryDirectory(prefix='walle-v15-resource-') as directory:
         copy = Path(directory) / 'v9'
         shutil.copytree(ROOT, copy)
-        path = copy / target
+        manifest = json.loads((copy/'manifest.json').read_text(encoding='utf-8'))
+        relative = target if target == 'manifest.json' else next(item['path'] for item in manifest['files'] if item['resource_ref']['key'] == target)
+        path = copy / relative
         path.write_bytes(path.read_bytes() + b' ')
         with pytest.raises(ConfigInvalid):
             CollaborationResources.load(copy)
@@ -158,3 +164,42 @@ def test_parser_does_not_repair_or_accept_duplicate_keys():
     for text in ('```json\n{}\n```', '{}{}', '{"a":1,"a":2}'):
         with pytest.raises(InvalidInput):
             strict_json_object(text)
+
+
+@pytest.mark.parametrize('ref', ['m1', 'm2', 'new_t1', 'new_e0', 'e0', 'e1suffix', 'e1\n'])
+def test_model_visible_progress_schema_rejects_message_or_malformed_evidence_refs(resources, ref):
+    from backend.tests.guide.test_v15_progress import delta
+    value = delta();value['topic_changes'][0]['evidence_refs'] = [ref]
+    with pytest.raises(ProtocolInvalid):resources.validate('Progress', value)
+
+
+def test_model_visible_progress_schema_keeps_valid_ref_formats_and_local_closure(resources):
+    from backend.tests.guide.test_v15_progress import delta
+    for refs in ([], ['e1'], ['new_e1'], ['e1', 'new_e2']):
+        value = delta();value['topic_changes'][0]['evidence_refs'] = refs
+        resources.validate('Progress', value)
+    # Format validity is not existence or user authorization; C07 still has to
+    # resolve actual same-round evidence and prove its carried message sources.
+    for operation in OUTPUTS:
+        schema = json.loads(resources.output_schema(operation))
+        assert schema['$defs']['TopicChange'] == resources.bundle['$defs']['TopicChange']
+
+
+@pytest.mark.parametrize('change', [
+    {'applies_to': ['core_flow']}, {'applies_to': ['d1v2']}, {'topic_refs': ['m1']},
+    {'supersedes': ['m1']}, {'supersedes': ['e1']},
+    {'change': 'PROPOSE_SUPERSEDE', 'supersedes': []}, {'ref': 'e1'},
+])
+def test_evidence_schema_distinguishes_topic_source_and_supersession_namespaces(resources, change):
+    from backend.tests.guide.test_v15_progress import evidence
+    with pytest.raises(ProtocolInvalid):resources.validate('EvidenceChange', evidence(**change))
+
+
+def test_model_visible_rules_explain_user_events_and_exact_row_original(resources):
+    from backend.tests.guide.test_v15_progress import evidence
+    resources.validate('EvidenceChange', evidence())
+    resources.validate('EvidenceChange', evidence(change='PROPOSE_SUPERSEDE', supersedes=['e1']))
+    schema = json.loads(resources.output_schema('GENERATE'))
+    assert 'formal_answers' in schema['$defs']['EvidenceChange']['properties']['origin']['description']
+    assert 'USER_STATEMENT' in resources.prompt and 'original_content' in resources.prompt
+    assert '不是整张表' in resources.prompt

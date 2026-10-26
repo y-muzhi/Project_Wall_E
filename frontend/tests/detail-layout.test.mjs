@@ -33,6 +33,19 @@ test('drawer overlays the same split and single view preserves panel selection a
   const saved=JSON.parse(storage.values.get(preferencesKey)),fresh=new DetailLayout('CLOSED',1600,storage);
   assert.deepEqual(fresh.getSnapshot().preferences,saved);assert.equal(fresh.getSnapshot().right_tab,'COMMENTS');
 });
+test('progress has its own persisted panel and preserves geometry through single view and reopen',()=>{
+  const storage=store(),layout=new DetailLayout('PLANNING',1600,storage);
+  layout.resizeRight(500);layout.openTab('PROGRESS');
+  const fresh=new DetailLayout('PLANNING',1600,storage);
+  assert.equal(fresh.getSnapshot().right_tab,'PROGRESS');assert.equal(fresh.getSnapshot().preferences.right_width,500);
+  fresh.viewport(1100,980);assert(fresh.getSnapshot().document_open);
+  fresh.openTab('PROGRESS');assert(fresh.getSnapshot().right_open&&!fresh.getSnapshot().document_open);
+  fresh.toggleRight();assert(fresh.getSnapshot().document_open);
+  fresh.toggleRight();assert.equal(fresh.getSnapshot().right_tab,'PROGRESS');
+  fresh.openTab('AI');assert.equal(fresh.getSnapshot().right_tab,'AI');
+  assert.equal(fresh.getSnapshot().preferences.right_width,500);
+});
+
 test('malformed or unavailable preference storage is visible without preventing in-memory interaction or writing defaults on mount',()=>{
   for(const v of [{schema_version:1,left_open:true,right_open:true,right_tab:'INVALID',right_width:420},{schema_version:1,left_open:true,right_open:true,right_tab:'AI',right_width:359},{schema_version:1,left_open:true,right_open:true,right_tab:'AI',right_width:Infinity},{schema_version:2,left_open:true,right_open:true,right_tab:'AI',right_width:420}])assert.throws(()=>decodeDetailPreferences(v));
   const storage=store();storage.values.set(preferencesKey,'broken');const layout=new DetailLayout('READY',1280,storage);assert(layout.getSnapshot().warning);assert.equal(storage.writes.length,0);

@@ -30,7 +30,7 @@ export function GuideConversation({owner,documents,toasts}:Readonly<{owner:Requi
  // A different actual batch is a new display selection; original batches and
  // their drafts/unknown requests remain retained in the owner.
  useEffect(()=>setShowMessages(false),[batch]);
- return <ModelCallsProvider api={owner.modelCallApi} requirementId={state.detail.requirement.id} active={state.visible&&state.enabled} current={read.run}><section className="guide-conversation" aria-label="需求 AI 辅助区">
+ return <ModelCallsProvider cache={owner.modelCalls} api={owner.modelCallApi} requirementId={state.detail.requirement.id} active={state.visible&&state.enabled} current={read.run}><section className="guide-conversation" aria-label="需求 AI 辅助区">
   {batch&&<div className="conversation-view-switch"><button className="ui-button" type="button" aria-pressed={!showMessages} onClick={()=>setShowMessages(false)}>修改建议</button><button className="ui-button" type="button" aria-pressed={showMessages} onClick={()=>setShowMessages(true)}>对话消息</button></div>}
   <div className="conversation-suggestions" hidden={!batch||showMessages} inert={!batch||showMessages}>{batch&&<BatchView key={batch.batchId} owner={batch} documents={documents} toasts={toasts}/>}</div>
   <div className="conversation-workspace" hidden={!!batch&&!showMessages} inert={!!batch&&!showMessages}>

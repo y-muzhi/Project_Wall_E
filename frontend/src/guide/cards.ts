@@ -19,7 +19,8 @@ const identity=(message:Message)=>JSON.stringify([message.id,message.requirement
 export class InteractionCards{
  private value:CardsState;private readonly api:Api;private readonly drafts:CardDrafts;private readonly readActual:()=>Promise<DetailSnapshot>;private readonly adoptActual:(actual:DetailSnapshot)=>Promise<void>;private readonly receive:(run:GuideRun)=>Promise<void>;private readonly refreshMessages:()=>Promise<void>;
  private readonly origin:string;private action:ApiAction<Accepted>|undefined;private responseReference:number|null=null;private delivered=false;private closed=false;private epoch=0;private controller:AbortController|undefined;private pending:Promise<boolean>|undefined;private work:string|undefined;private readonly listeners=new Set<()=>void>();
- constructor(message:Message,source:GuideRun,detail:DetailSnapshot,api:Api,drafts:CardDrafts,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:(run:GuideRun)=>Promise<void>,refreshMessages:()=>Promise<void>){
+ private readonly readAccepted:()=>Promise<DetailSnapshot>;
+ constructor(message:Message,source:GuideRun,detail:DetailSnapshot,api:Api,drafts:CardDrafts,readActual:()=>Promise<DetailSnapshot>,adoptActual:(actual:DetailSnapshot)=>Promise<void>,receive:(run:GuideRun)=>Promise<void>,refreshMessages:()=>Promise<void>,readAccepted=readActual){this.readAccepted=readAccepted;
   if(message.role!=='ASSISTANT'||message.message_type!=='INTERACTION_CARDS'||message.structured_content===null||message.card_state===null||message.requirement_id!==detail.requirement.id||source.requirement_id!==message.requirement_id||source.id!==message.guide_run_id)throw TypeError('Owned actual card message and source Run required');
   this.assertDetail(detail,message.requirement_id);const cards=decodeCards(message.structured_content);this.origin=identity(message);this.api=api;this.drafts=drafts;this.readActual=readActual;this.adoptActual=adoptActual;this.receive=receive;this.refreshMessages=refreshMessages;
   const loaded=message.card_state==='AVAILABLE'?drafts.load(message.requirement_id,message.id,cards):{answers:null,error:drafts.clear(message.requirement_id,message.id)};
@@ -85,10 +86,10 @@ export class InteractionCards{
   if(receipt.user_message_id===this.value.message.id||receipt.processing==='MODEL'&&receipt.guide_run_id===this.value.source.id||receipt.processing==='PROGRAM'&&(receipt.requirement_id!==this.value.message.requirement_id||receipt.purpose!==this.value.cards.purpose))throw TypeError('Receipt contradicts the owned card action');
   this.action=undefined;this.publish({phase:'CONFIRMED',outcome:capture(receipt),formal:null,message:capture({...this.value.message,card_state:'ANSWERED'}),storage_error:this.drafts.clear(this.value.message.requirement_id,this.value.message.id)});return true;
  }catch(error){if(this.closed)return false;if(error instanceof ApiRejected&&error.code!=='REQUEST_IN_PROGRESS'){this.action=undefined;const reference=error.details?.response_message_id;this.responseReference=error.code==='CARD_ALREADY_ANSWERED'&&typeof reference==='number'?reference:null;this.publish({phase:'ERROR',error:error.message,error_code:error.code,needs_refresh:true});}else this.publish({phase:'UNKNOWN',error:'整组提交结果待核实，原答案与请求已保留'});return false;}}
- private async observe():Promise<Readonly<{detail:DetailSnapshot;message:Message;source:GuideRun;formal:Message|null}>>{
+ private async observe(confirmed=false):Promise<Readonly<{detail:DetailSnapshot;message:Message;source:GuideRun;formal:Message|null}>>{
   const epoch=this.epoch,alive=()=>!this.closed&&this.value.available&&epoch===this.epoch;if(!alive())throw Error('卡片已暂停');const controller=new AbortController();this.controller=controller;
   try{
-   const detail=await this.readActual();if(!alive())throw Error('Old card read');this.assertDetail(detail);const source=(await this.api.getGuideRun(this.value.source.id,controller.signal)).data;if(!alive())throw Error('Old card read');
+   const detail=await (confirmed?this.readAccepted():this.readActual());if(!alive())throw Error('Old card read');this.assertDetail(detail);const source=(await this.api.getGuideRun(this.value.source.id,controller.signal)).data;if(!alive())throw Error('Old card read');
    let cursor:number|null=null,message:Message|null=null,formal:Message|null=null;const seen=new Set<number>();
    for(;;){const result=await this.api.listMessages(this.value.message.requirement_id,cursor,controller.signal);if(!alive())throw Error('Old card read');const pagination=result.meta.pagination,rows=result.data.items;
     if(!pagination||!('has_more' in pagination)||pagination.page_size!==20||rows.length>20)throw Error('Actual message cursor required');let sequence=0;
@@ -108,7 +109,7 @@ export class InteractionCards{
   if(receipt.processing==='MODEL'&&!this.delivered){const actual=(await this.api.getGuideRun(receipt.guide_run_id)).data;
    if(actual.id===this.value.source.id||actual.requirement_id!==this.value.message.requirement_id||actual.parent_guide_run_id!==this.value.source.id)throw Error('新运行与原卡片不一致');
    await this.receive(actual);if(this.closed)return false;this.delivered=true;}
-  if(!alive())throw Error('回答已保存，恢复面板后读取实际状态');const actual=await this.observe();if(!alive())throw Error('Old confirmed read');
+  if(!alive())throw Error('回答已保存，恢复面板后读取实际状态');const actual=await this.observe(true);if(!alive())throw Error('Old confirmed read');
   if(actual.message.card_state!=='ANSWERED'||actual.formal?.id!==receipt.user_message_id)throw Error('已接受回答，正式读取尚未确认');
   this.assertFormal(actual.formal,this.value.submitted!);
   if(receipt.processing==='MODEL'?actual.formal.guide_run_id!==receipt.guide_run_id:actual.formal.guide_run_id!==null||actual.formal.program_receipt?.purpose!==receipt.purpose)throw Error('正式回答与已接受回执不一致');

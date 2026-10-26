@@ -25,7 +25,7 @@ async def list_model_calls_http(request: Request):
 @guide_router.get('/model-calls/{llm_use_id}')
 async def get_model_call_http(request: Request):
     return await read_http(request, GetModelCallRequest, GetModelCallResponse,
-        lambda runtime, parsed: model_calls.get_model_call(runtime.database, parsed.llm_use_id))
+        lambda runtime, parsed: model_calls.get_model_call(runtime.database, parsed.llm_use_id, catalog=runtime.catalog))
 
 
 @guide_router.get('/guide-runs/{guide_run_id}')

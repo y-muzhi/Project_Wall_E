@@ -57,3 +57,25 @@ test('the existing guide route transports a strict receipt and a frozen body/key
  await assert.rejects(action.submit(),ApiUnknown);body.instruction='改变';assert.deepEqual((await action.submit()).data,receipt);
  assert.equal(requests[0].path,'/api/v1/requirements/1/guide-runs');assert.equal(requests[0].init.body,requests[1].init.body);assert.equal(JSON.parse(requests[0].init.body).instruction,' 原话 ');
 });
+
+test('Escape restores the opening configuration without discarding text or changing actual reading',()=>{
+ const actual={...detail([doc(2),doc(3)]),current:doc(3)}, {owner,counts}=fixture(actual);
+ owner.selectDocument(2);owner.choose('REVISE');owner.chooseReferences([3]);owner.change('保留输入');
+ owner.beginSettings();owner.choose('GENERATE');owner.configureNew('未提交新稿','brief',false);owner.chooseReferences([]);owner.change('仍需保留的最新输入');
+ owner.endSettings(true);const state=owner.getSnapshot();assert.equal(state.action,'REVISE');assert.equal(state.target.document_id,2);
+ assert.equal(state.source_refs[0].document_id,3);assert.equal(state.instruction,'仍需保留的最新输入');assert.equal(state.detail.current.id,3);
+ assert.equal(counts.prepares,0);assert.equal(counts.sends,0);owner.dispose();
+});
+
+test('Escape invalidates a late opening binding GET without reporting a false refresh error',async()=>{
+ const pending=deferred(),{owner}=fixture(detail([doc(2)]),{getRequirementDetail:()=>pending.promise});
+ owner.beginSettings();const read=owner.loadBinding();owner.endSettings(true);
+ pending.resolve({data:{requirement:root,discussion:{binding:{target_document_id:2,scope:null,source_refs:[]}}}});
+ assert.equal(await read,false);assert.equal(owner.getSnapshot().target,null);assert.equal(owner.getSnapshot().error,null);assert.equal(owner.getSnapshot().needs_refresh,false);owner.dispose();
+});
+
+test('closing settings keeps the selected operation, and later Escape cannot undo an accepted send',async()=>{
+ const {owner,bodies,counts}=fixture();owner.beginSettings();owner.choose('GENERATE');owner.configureNew('已选稿件','brief',false);owner.endSettings();
+ owner.change('明确生成');assert.equal(await owner.submit(),true);owner.endSettings(true);
+ assert.equal(bodies[0].operation,'GENERATE');assert.equal(bodies[0].target.name,'已选稿件');assert.equal(counts.sends,1);owner.dispose();
+});

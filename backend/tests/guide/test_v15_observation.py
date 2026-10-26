@@ -96,8 +96,11 @@ def test_budget_debits_before_io_and_cannot_retry_unknown_failure(workspace):
         async def send(self, *args): self.chat_calls += 1;raise TimeoutError()
     delegate = Delegate();counter = permit.counter(delegate);gateway = permit.gateway(delegate)
     async def run():
-        with pytest.raises(TimeoutError): await counter.count(PROFILE, [])
-        with pytest.raises(ConfigInvalid): await counter.count(PROFILE, [])
+        from backend.app.infrastructure.tokenization import ExactCountUnavailable
+        with pytest.raises(ExactCountUnavailable): await counter.count(PROFILE, ('x'*800001,))
+        assert delegate.count_calls == permit.count_calls == 0
+        with pytest.raises(TimeoutError): await counter.count(PROFILE, ('text',))
+        with pytest.raises(ConfigInvalid): await counter.count(PROFILE, ('text',))
         with pytest.raises(TimeoutError): await gateway.send(PROFILE, None)
         with pytest.raises(ConfigInvalid): await gateway.send(PROFILE, None)
     asyncio.run(run())
@@ -129,3 +132,19 @@ def test_ordinary_worker_and_command_cannot_install_observation(workspace):
     result = create_guide_run(workspace[1], body(observation={'chat_calls': 1}), catalog=workspace[2])
     assert result['code'] == 'INVALID_INPUT'
     assert counts(workspace[0])['guide_runs'] == counts(workspace[0])['llm_uses'] == 0
+
+
+def test_explicit_local_credential_import_stays_private_and_preview_never_reads_it(tmp_path, monkeypatch, capsys):
+    import os
+    module = tool();secret = 'private-observation-cli-fixture-key'
+    credential = tmp_path/'local.env';credential.write_text('WALLE_MODEL_API_KEY='+secret+'\n', encoding='utf-8')
+    before = os.environ.get('WALLE_MODEL_API_KEY');seen = []
+    def observed(directory, **options):
+        seen.append(options['profile'].api_key)
+        return {'mode': 'ISOLATED_OBSERVATION', 'admission': 'LIVE_VERIFIED'}
+    monkeypatch.setattr(module, 'observe_once', observed)
+    assert module.main(['--execute', '--output-dir', str(tmp_path/'slot'), '--allow-count-batches', '1',
+        '--allow-chat-calls', '1', '--max-total-tokens', '139264', '--credential-file', str(credential)]) == 0
+    assert seen == [secret] and os.environ.get('WALLE_MODEL_API_KEY') == before
+    assert secret not in capsys.readouterr().out
+    with pytest.raises(SystemExit): module.main(['--credential-file', str(credential)])

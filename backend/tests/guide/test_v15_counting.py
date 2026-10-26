@@ -66,6 +66,21 @@ def offline_gate(monkeypatch):
     return calls
 
 
+def test_empty_diagnostic_provider_boundary_tokens_are_preserved_not_rejected_or_rewritten(workspace, monkeypatch):
+    offline_gate(monkeypatch);canonical = inputs(workspace);profile = ModelProfile('private-count-fixture', DEFAULT_PROFILE)
+    class BoundaryCounter:
+        def __init__(self): self.calls = []
+        async def count(self, profile, texts):
+            self.calls.append(texts)
+            return measurement(profile, texts, [500, 500, 1, 1, 1, 1, 1, 1])
+    counter = BoundaryCounter()
+    counted = asyncio.run(compile_counted(canonical, workspace[2], profile, counter=counter))
+    evidence = verify_counted(counted, workspace[2], profile)
+    assert len(counter.calls) == 1 and any(text == '' for text in counter.calls[0])
+    assert evidence['count_attempts'][0]['measurement']['counts'] == [500, 500, 1, 1, 1, 1, 1, 1]
+    assert evidence['input_tokens_candidate'] == 500+500+1024
+
+
 def test_offline_release_blocks_before_the_first_count(workspace):
     counter = Counter(['OK']);canonical = inputs(workspace)
     with pytest.raises(ConfigInvalid):
@@ -119,3 +134,30 @@ def test_actual_usage_requires_the_new_release_eight_counts_and_bounded_observed
             {'prompt_tokens': 1200, 'completion_tokens': 8193, 'total_tokens': 9393}]:
         with pytest.raises(ConfigInvalid):
             validate_collaboration_usage({**raw, 'usage': usage}, profile=profile, context=context, catalog=workspace[2], input_tokens=usage['prompt_tokens'], output_tokens=usage['completion_tokens'])
+
+
+def test_summary_only_receipt_can_reject_but_cannot_approve_or_replay_accepted_candidate(workspace, monkeypatch):
+    from backend.app.infrastructure.tokenization import measurement_summary, restore_measurement, ExactCountUnavailable
+    offline_gate(monkeypatch);canonical = inputs(workspace, history=True)
+    profile = ModelProfile('offline', DEFAULT_PROFILE)
+    class Summaries(Counter):
+        async def count(self, profile, texts):
+            receipt = await super().count(profile, texts)
+            if len(self.calls) == 1:
+                return restore_measurement(measurement_summary(receipt.evidence), texts,
+                    raw_required=False, expected_model=profile.model_name)
+            return receipt
+    rejected = Summaries(['HIGH', 'OK'])
+    result = asyncio.run(compile_counted(canonical, workspace[2], profile, counter=rejected))
+    assert len(rejected.calls) == 2
+    assert verify_counted(result, workspace[2], profile) == result.counting_evidence
+    assert 'response_sha256' in result.counting_evidence['count_attempts'][0]['measurement']
+    assert 'response' in result.counting_evidence['count_attempts'][1]['measurement']
+    with pytest.raises(ExactCountUnavailable, match='Exact model text counts') as failure:
+        asyncio.run(compile_counted(canonical, workspace[2], profile, counter=Summaries(['OK'])))
+    assert failure.value.reason == 'AUDIT_CAPACITY'
+    # Removing raw proof from the accepted persisted request also fails closed.
+    evidence = result.counting_evidence
+    evidence['count_attempts'][-1]['measurement'] = measurement_summary(evidence['count_attempts'][-1]['measurement'])
+    with pytest.raises(ExactCountUnavailable):
+        verify_counted(replace(result, counting_json=json.dumps(evidence)), workspace[2], profile)
