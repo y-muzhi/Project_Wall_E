@@ -216,6 +216,20 @@ def modify_from_comment(executor: Idempotency, payload: object, *, catalog=None,
             raise Rejected('COMMENT_ORPHANED')
         scope = {'scope_type': comment['anchor_type'], 'scope_ref': {'block_id': comment['block_id']} |
             ({} if comment['anchor_type'] == 'BLOCK' else comment['anchor_ref'])}
+        if request.scope_mode == 'DOCUMENT':
+            scope = {'scope_type': 'DOCUMENT', 'scope_ref': None}
+        elif request.scope_mode == 'BLOCK':
+            scope = {'scope_type': 'BLOCK', 'scope_ref': {'block_id': comment['block_id']}}
+        elif request.scope_mode == 'SECTION':
+            heading_id = None
+            for identity, (block, _) in snapshot.by_id.items():
+                if block.block_type == 'heading':
+                    heading_id = identity
+                if identity == comment['block_id']:
+                    break
+            if heading_id is None:
+                raise Rejected('SCOPE_INVALID')
+            scope = {'scope_type': 'SECTION', 'scope_ref': {'heading_block_id': heading_id}}
         internal = create_guide_run_input({'requirement_id': root['id'], 'expected_discussion_version': request.expected_discussion_version,
             'operation': 'PROPOSE_CHANGES', 'instruction': comment['content'],
             'target': {'kind': 'EXISTING', 'document_id': current['id'], 'expected_content_version': current['content_version']},

@@ -8,13 +8,14 @@ import {readSource} from '../requirements/source-reading.ts';
 import type {SourceReadApi} from '../requirements/source-reading.ts';
 
 export type Decision='ACCEPTED'|'REJECTED'|'EDITED';
-type Operation='DECIDE'|'COMPLETE'|'DISCARD';
+type Operation='DECIDE'|'ACCEPT_PENDING'|'COMPLETE'|'DISCARD';
 type DecisionReceipt=Awaited<ReturnType<ReturnType<WalleApi['prepareDecideSuggestion']>['submit']>>['data'];
 type CompleteReceipt=Awaited<ReturnType<ReturnType<WalleApi['prepareCompleteBatch']>['submit']>>['data'];
 type DiscardReceipt=Awaited<ReturnType<ReturnType<WalleApi['prepareDiscardBatch']>['submit']>>['data'];
-type Receipt=DecisionReceipt|CompleteReceipt|DiscardReceipt;
+type AcceptPendingReceipt=Awaited<ReturnType<ReturnType<WalleApi['prepareAcceptPendingBatch']>['submit']>>['data'];
+type Receipt=DecisionReceipt|CompleteReceipt|DiscardReceipt|AcceptPendingReceipt;
 type Intent=Readonly<{operation:Operation;batch:Batch;current:DocumentReadModel|null;suggestion:Suggestion|null;decision:Decision|null;content:string|null}>;
-type Api=Pick<WalleApi,'getBatch'|'prepareDecideSuggestion'|'prepareCompleteBatch'|'prepareDiscardBatch'|'getCurrentDocument'>&SourceReadApi;
+type Api=Pick<WalleApi,'getBatch'|'prepareDecideSuggestion'|'prepareAcceptPendingBatch'|'prepareCompleteBatch'|'prepareDiscardBatch'|'getCurrentDocument'>&SourceReadApi;
 export type SuggestionBatchState=Readonly<{detail:DetailSnapshot;target:DocumentView|null;batch:Batch|null;available:boolean;active:boolean;phase:'READY'|'ERROR'|'SUBMITTING'|'UNKNOWN'|'READING'|'CONFIRMED';loading:boolean;error:string|null;error_code:string|null;needs_refresh:boolean;stale:boolean;intent:Intent|null;receipt:Receipt|null;observed:Batch|null;drafts:Readonly<Record<number,string>>;item_errors:Readonly<Record<number,string>>}>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 const fixedBatch=(value:Pick<Batch,'id'|'requirement_id'|'guide_run_id'|'source_type'|'source_id'|'title'|'summary'|'base_content_version'|'created_at'|'target_document_id'|'source_refs'>)=>JSON.stringify([value.id,value.requirement_id,value.guide_run_id,value.source_type,value.source_id,value.title,value.summary,value.base_content_version,value.created_at,value.target_document_id,value.source_refs]);
@@ -45,9 +46,12 @@ export class RequirementSuggestionBatch{
  setAvailable(available:boolean):void{if(this.closed||available===this.value.available)return;this.visibility++;this.publish({available});if(!available)this.controller?.abort();}
  private ownedPending():boolean{const {detail,batch,available}=this.value,root=detail.requirement;return !this.closed&&available&&batch?.status==='PENDING'&&root.document_work_state==='SUGGESTION_REVIEWING'&&root.active_operation_type==='SUGGESTION_BATCH'&&root.active_operation_id===this.identity&&detail.activity.kind==='BATCH'&&detail.activity.batch.id===this.identity;}
  get editable():boolean{return this.ownedPending()&&!this.value.loading&&!this.value.needs_refresh&&!this.value.stale&&['READY','ERROR'].includes(this.value.phase)&&this.value.target?.content_version===this.value.batch!.base_content_version;}
+ get hasPendingDrafts():boolean{return this.value.batch?.suggestions.some(item=>item.status==='PENDING'&&Object.hasOwn(this.value.drafts,item.id))??false;}
+ get canAcceptPending():boolean{return this.editable&&this.value.batch!.counts.pending>0&&!this.hasPendingDrafts;}
  get canComplete():boolean{return this.editable&&this.value.batch!.counts.pending===0;}
  get canDiscard():boolean{return this.ownedPending()&&!this.value.loading&&['READY','ERROR'].includes(this.value.phase);}
  draft(identity:number,content:string):void{positiveInteger(identity);if(!this.editable||!this.value.batch?.suggestions.some(item=>item.id===identity&&item.patch_operation!=='DELETE_BLOCK'))return;this.publish({drafts:Object.freeze({...this.value.drafts,[identity]:content})});}
+ cancelDraft(identity:number):void{if(!this.editable)return;const drafts={...this.value.drafts};delete drafts[identity];this.publish({drafts:Object.freeze(drafts)});}
  private enqueue(work:string,job:()=>Promise<boolean>):Promise<boolean>{
   if(this.closed)return Promise.resolve(false);if(this.pending)return work===this.work?this.pending:Promise.resolve(false);
   const pending=Promise.resolve().then(()=>this.closed?false:job()).finally(()=>{if(this.pending===pending)this.pending=undefined;});this.pending=pending;this.work=work;return pending;
@@ -75,26 +79,39 @@ export class RequirementSuggestionBatch{
   }
   return this.start({operation:'DECIDE',batch:this.value.batch!,current:this.value.target,suggestion:item,decision,content});
  }
+ acceptPending(expectedIds?:readonly number[]):Promise<boolean>{
+  if(!this.canAcceptPending)return Promise.resolve(false);
+  const ids=this.value.batch!.suggestions.filter(item=>item.status==='PENDING').map(item=>item.id);
+  if(expectedIds&&JSON.stringify(ids)!==JSON.stringify(expectedIds)){this.publish({phase:'ERROR',error:'待处理建议已变化，请关闭确认并重新核对',needs_refresh:true});return Promise.resolve(false);}
+  return this.start({operation:'ACCEPT_PENDING',batch:this.value.batch!,current:this.value.target,suggestion:null,decision:null,content:null});
+ }
  complete():Promise<boolean>{return this.canComplete?this.start({operation:'COMPLETE',batch:this.value.batch!,current:this.value.target,suggestion:null,decision:null,content:null}):Promise.resolve(false);}
  discard():Promise<boolean>{return this.canDiscard?this.start({operation:'DISCARD',batch:this.value.batch!,current:this.value.target,suggestion:null,decision:null,content:null}):Promise.resolve(false);}
  private start(intent:Intent):Promise<boolean>{
   if(this.pending)return Promise.resolve(false);this.publish({phase:'SUBMITTING',intent:capture(intent),receipt:null,observed:null,error:null,error_code:null,item_errors:Object.freeze({})});
   return this.enqueue('SEND',async()=>{if(!this.ownedPending()||this.value.loading||intent.operation!=='DISCARD'&&(this.value.needs_refresh||this.value.stale||this.value.target?.content_version!==intent.batch.base_content_version||intent.operation==='COMPLETE'&&this.value.batch!.counts.pending!==0)){this.publish({phase:'ERROR',error:'当前批次或显示状态已变化，未发送，请重新读取',needs_refresh:true});return false;}
-   try{this.action=intent.operation==='DECIDE'?this.api.prepareDecideSuggestion(intent.suggestion!.id,{decision:intent.decision!,...(intent.decision==='EDITED'?{edited_content:intent.content!}:{})}):intent.operation==='COMPLETE'?this.api.prepareCompleteBatch(this.identity,intent.batch.base_content_version):this.api.prepareDiscardBatch(this.identity);}
+   try{this.action=intent.operation==='DECIDE'?this.api.prepareDecideSuggestion(intent.suggestion!.id,{decision:intent.decision!,...(intent.decision==='EDITED'?{edited_content:intent.content!}:{})}):intent.operation==='ACCEPT_PENDING'?this.api.prepareAcceptPendingBatch(this.identity,intent.batch.base_content_version,intent.batch.suggestions.filter(item=>item.status==='PENDING').map(item=>item.id)):intent.operation==='COMPLETE'?this.api.prepareCompleteBatch(this.identity,intent.batch.base_content_version):this.api.prepareDiscardBatch(this.identity);}
    catch{this.publish({phase:'ERROR',error:'无法准备建议操作，原编辑内容保留',error_code:'INVALID_INPUT'});return false;}return await this.send()?this.finishWork():false;
   });
  }
  private async send():Promise<boolean>{
   this.publish({phase:'SUBMITTING',error:null,error_code:null});try{const receipt=(await this.action!.submit()).data;if(this.closed)return false;const intent=this.value.intent!;
    if(intent.operation==='DECIDE'){const result=receipt as DecisionReceipt;if(result.suggestion.batch_id!==this.identity||result.suggestion.id!==intent.suggestion!.id||fixedSuggestion(result.suggestion)!==fixedSuggestion(intent.suggestion!)||result.suggestion.status!==intent.decision||result.suggestion.user_edited_content!==intent.content)throw Error('Invalid decision receipt');}
+   else if(intent.operation==='ACCEPT_PENDING'){
+    const result=receipt as AcceptPendingReceipt,batch=this.checked(result.batch,this.value.detail),ids=intent.batch.suggestions.filter(item=>item.status==='PENDING').map(item=>item.id);
+    if(batch.status!=='PENDING'||batch.counts.pending!==0||JSON.stringify(ids)!==JSON.stringify(result.accepted_suggestion_ids))throw Error('Invalid bulk receipt');
+    for(const item of intent.batch.suggestions){const actual=batch.suggestions.find(row=>row.id===item.id)!;
+     if(item.status==='PENDING'&&(actual.status!=='ACCEPTED'||actual.user_edited_content!==null))throw Error('Bulk target decision differs');
+    }
+   }
    else{const result=receipt as DiscardReceipt;if(fixedBatch(result.batch)!==fixedBatch(intent.batch)||result.batch.id!==this.identity||result.batch.status!==(intent.operation==='DISCARD'?'DISCARDED':'COMPLETED'))throw Error('Invalid batch receipt');if(intent.operation==='COMPLETE'){const completed=receipt as CompleteReceipt;const document=completed.current_document;const adopted=intent.batch.suggestions.filter(item=>item.status==='ACCEPTED'||item.status==='EDITED').map(item=>item.id);if(JSON.stringify(completed.applied_suggestion_ids)!==JSON.stringify(adopted))throw Error('Adopted suggestions changed');if(document.id!==intent.current?.id||document.requirement_id!==intent.batch.requirement_id||document.content_version!==(result.batch.applied_content_version??intent.batch.base_content_version)||result.batch.completion_result==='NO_CHANGE'&&(document.markdown_content!==intent.current.markdown_content||JSON.stringify(document.block_state_json)!==JSON.stringify(intent.current.block_state_json)))throw Error('Invalid document receipt');}}
-   if(receipt.counts.total!==intent.batch.counts.total)throw Error('Invalid receipt membership');
+   if(('counts' in receipt?receipt.counts.total:receipt.batch.counts.total)!==intent.batch.counts.total)throw Error('Invalid receipt membership');
    this.publish({phase:'CONFIRMED',receipt:capture(receipt),needs_refresh:false});this.action=undefined;return true;
   }catch(error){if(this.closed)return false;
    if(error instanceof ApiRejected&&!['REQUEST_IN_PROGRESS','STORAGE_UNAVAILABLE','INTERNAL_ERROR'].includes(error.code)){
     this.action=undefined;const errors:Record<number,string>={};const rows=error.details?.suggestion_errors;if(Array.isArray(rows))for(const row of rows){if(row&&typeof row==='object'&&!Array.isArray(row)&&this.value.batch!.suggestions.some(item=>item.id===row.suggestion_id))errors[Number(row.suggestion_id)]=String(row.message);}
     this.publish({phase:'ERROR',error:error.message,error_code:error.code,needs_refresh:!['PATCH_INVALID','INVALID_INPUT','VALIDATION_FAILED'].includes(error.code),stale:this.value.stale||['TARGET_STALE','CONTENT_VERSION_CONFLICT'].includes(error.code),item_errors:Object.freeze(errors)});
-   }else this.publish({phase:'UNKNOWN',error:'本批修改结果待核实，原请求与编辑内容已保留；请复查后按原请求恢复',error_code:error instanceof ApiRejected?error.code:null});return false;
+   }else this.publish({phase:'UNKNOWN',error:this.value.intent?.operation==='ACCEPT_PENDING'?'批量接受结果待核实，原请求与已有决定已保留，请按原请求重新确认。':'本批修改结果待核实，原请求与编辑内容已保留；请复查后按原请求恢复',error_code:error instanceof ApiRejected?error.code:null});return false;
   }
  }
  recover():Promise<boolean>{if(this.value.phase!=='UNKNOWN'||!this.action||!this.value.available)return Promise.resolve(false);return this.enqueue('RECOVER',async()=>{const epoch=this.visibility;this.publish({phase:'READING',error:null});try{const actual=await this.observe();if(this.closed)return false;this.publish({observed:actual.batch});if(!this.value.available||epoch!==this.visibility)throw Error('Observation hidden before replay');}catch{this.publish({phase:'UNKNOWN',error:'实际批次或正文暂时无法读取，未重发；原请求保留'});return false;}return await this.send()?this.finishWork():false;});}

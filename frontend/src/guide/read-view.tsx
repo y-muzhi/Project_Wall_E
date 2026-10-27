@@ -18,6 +18,9 @@ export const actions={GENERATE:'生成',ASK:'讨论',REVIEW:'检查',MODIFY:'修
 import {operationNames} from './operation-labels.ts';
 const steps={PREPARING:'正在准备',CALLING_MODEL:'正在调用模型',VALIDATING:'正在校验结果',PERSISTING:'正在提交结果',FINISHED:'运行结束'} as const;
 const scopeNames={DOCUMENT:'整篇文档',SECTION:'章节',BLOCK:'区块',SELECTION:'选区'} as const;
+function ProposalResultNotice({run}:Readonly<{run:GuideRun}>){
+ return run.operation==='PROPOSE_CHANGES'&&run.application_result==='NOT_APPLIED'?<p role="status" className="run-response-notice inline-error">修改建议未生成，本轮正文未变。可在本次请求的详情中查看处理结果。</p>:null;
+}
 function failure(run:GuideRun):string|null{return run.status!=='FAILED'?null:run.error_code==='EXECUTION_TIMEOUT'?'运行长时间没有进展，已停止本次运行':run.error_code==='INTERRUPTED'?'服务中断，本次运行未完成':run.error_message;}
 export function RunHistory({history,available,selected,open}:Readonly<{history:RequirementRunHistory;available:boolean;selected:number|null;open(run:GuideSummary):void}>){
  const state=useSyncExternalStore(history.subscribe,history.getSnapshot),query=state.confirmed?.query??state.requested;
@@ -33,7 +36,7 @@ export function RunRecordSummary({run}:Readonly<{run:GuideRun}>){
   {run.source_type==='COMMENT'&&<p>来自评论的修改请求，评论处理状态保持独立。</p>}
   {run.status==='FAILED'&&<p role="alert" className="inline-error">{failure(run)}</p>}{run.status==='CANCELLED'&&<p>本次运行已取消。</p>}
   {run.application_result==='APPLIED'&&<p>{run.suggestion_batch_id!==null?'修改建议已生成，等待审阅。':`文档已保存为 V${run.document_effect!.after_content_version}。`}</p>}
-  {run.application_result==='NO_CHANGE'&&<p>未产生正文变化。</p>}{run.application_result==='NOT_APPLIED'&&<p className="inline-error">本轮未写入文档。</p>}
+  {run.application_result==='NO_CHANGE'&&<p>未产生正文变化。</p>}{run.application_result==='NOT_APPLIED'&&<p className="inline-error">{run.operation==='PROPOSE_CHANGES'?'修改建议未生成，本轮正文未变。':'本轮未写入文档。'}</p>}
   {run.progress_result==='APPLIED'&&<p>讨论进度已更新。</p>}{run.progress_result==='REJECTED'&&<p role="alert" className="inline-error">{run.progress_error}</p>}
   {run.final_result?.analysis&&<details className="run-result"><summary>查看分析结果</summary><AnalysisResult value={run.final_result.analysis}/></details>}
   {run.final_result&&<details className="run-result"><summary>查看运行结果摘要</summary><p className="run-summary">{run.final_result.summary}</p></details>}</>;
@@ -58,7 +61,8 @@ export function AiReadPanel({owner,structured,commands,renderMarkdown,scrollPort
    {run&&<><RunRecordSummary run={run}/>{commands?.(run)}{run.status!=='FAILED'&&run.returned_responses.length>0&&<ReturnedResponses run={run}/>} {!messages.items?.some(message=>message.role==='USER'&&message.guide_run_id===run.id)&&<RequestCallRecord runId={run.id}/>}</>}
    {state.connection_error&&<p role="alert" className="inline-error">运行连接异常，保留最后确认状态。<button className="ui-button" type="button" disabled={!state.visible||state.querying} onClick={()=>owner.readRun()}>重读运行</button></p>}
   </section>}
-  <MessageTimeline {...(scrollPort!==undefined?{scrollPort}:{})} {...(scrollContent!==undefined?{scrollContent}:{})} messages={owner.messages} requestRecord={message=>message.role==='USER'&&message.guide_run_id!==null?<RequestCallRecord runId={message.guide_run_id} messageId={message.id}/>:null} {...(run?.latest_assistant_message_id?{reply:{message_id:run.latest_assistant_message_id,guide_run_id:run.id}}:{})} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/>
+  <MessageTimeline {...(scrollPort!==undefined?{scrollPort}:{})} {...(scrollContent!==undefined?{scrollContent}:{})} messages={owner.messages} resultNotice={message=>run&&message.role==='ASSISTANT'&&message.id===run.latest_assistant_message_id&&message.guide_run_id===run.id?<ProposalResultNotice run={run}/>:null} requestRecord={message=>message.role==='USER'&&message.guide_run_id!==null?<RequestCallRecord runId={message.guide_run_id} messageId={message.id}/>:null} {...(run?.latest_assistant_message_id?{reply:{message_id:run.latest_assistant_message_id,guide_run_id:run.id}}:{})} {...(structured?{structured}:{})} {...(renderMarkdown?{renderMarkdown}:{})}/>
+  {run&&run.latest_assistant_message_id===null&&<ProposalResultNotice run={run}/>}
   {run?.status==='FAILED'&&<section role="status" className="run-response-notice"><p className="inline-error">本次运行失败：{failure(run)}</p><ReturnedResponses run={run}/></section>}
  </section>;
 }

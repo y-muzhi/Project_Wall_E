@@ -71,3 +71,13 @@ test('retirement cancels queued parent reads and never substitutes an actual obs
  const f=fixture(1),panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async()=>{});const queued=panel.refresh(),rejected=assert.rejects(queued);panel.dispose();await rejected;assert.equal(f.facts.reads,0);
  const wrong=new RequirementCommentPanel(detail,f.api,async()=>({...detail,requirement:{...detail.requirement,id:99}}),f.adopt,async()=>{});await assert.rejects(wrong.observe(),/Owned/);assert.equal(f.facts.adopts,0);wrong.dispose();
 });
+
+
+test('comment settings retain independent scope on collapse/page/hide; cancel retires only unsent settings',async()=>{
+ const f=fixture(2);let prepares=0;f.api.prepareModifyFromComment=()=>{prepares++;throw Error('No implicit request');};
+ const panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async()=>{});await panel.refresh();
+ const first=panel.begin(1,'MODIFY');first.changeScope('DOCUMENT');panel.collapse(first);assert.equal(panel.slot(1).open,false);
+ panel.setView('HISTORY');panel.setView('CURRENT');await panel.refresh();assert.equal(panel.begin(1,'MODIFY'),first);assert.equal(first.getSnapshot().scope_mode,'DOCUMENT');
+ const second=panel.begin(2,'MODIFY');assert.equal(second.getSnapshot().scope_mode,'COMMENT');assert(panel.close(first));assert.equal(panel.begin(1,'MODIFY').getSnapshot().scope_mode,'COMMENT');
+ assert.equal(prepares,0);panel.dispose();
+});

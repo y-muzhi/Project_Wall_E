@@ -8,6 +8,7 @@ from backend.app.shared.http_boundary import idempotency_header
 from backend.app.shared.validation import object_fields
 from .contracts import decide_suggestion_input, suggestion_read_model
 from .contracts import complete_batch_input
+from .contracts import accept_pending_input
 from backend.app.shared.http_projection import document
 
 
@@ -30,6 +31,38 @@ class GetBatchResponse:
         if value['id'] != request.batch_id:
             raise ValueError('Batch response belongs to another request')
         return value, None
+
+
+@dataclass(frozen=True)
+class AcceptPendingRequest:
+    payload: dict
+    body_fields = ('expected_content_version', 'expected_pending_ids')
+
+    @classmethod
+    def parse(cls, request, body):
+        request_query(request)
+        fields = cls.body_fields
+        value = object_fields(body, 'body', fields, fields)
+        parsed = accept_pending_input({**value, 'batch_id': decimal_integer(request.path_params['batch_id'], 'batch_id'),
+            'idempotency_key': idempotency_header(request)})
+        return cls({**parsed.business_input(), 'idempotency_key': parsed.idempotency_key})
+
+
+class AcceptPendingResponse:
+    success_code = 'SUGGESTIONS_ACCEPTED'
+    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT',
+        'CONTENT_VERSION_CONFLICT', 'TARGET_STALE', 'PATCH_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS',
+        'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+
+    @staticmethod
+    def project(data, request):
+        value = object_fields(data, 'data', ('batch', 'accepted_suggestion_ids'), ('batch', 'accepted_suggestion_ids'))
+        batch = batch_read_model(value['batch']);ids = value['accepted_suggestion_ids']
+        if (batch['id'] != request.payload['batch_id'] or batch['status'] != 'PENDING' or batch['counts']['pending'] != 0
+            or batch['base_content_version'] != request.payload['expected_content_version'] or ids != request.payload['expected_pending_ids']
+            or any(next((item['status'] for item in batch['suggestions'] if item['id'] == identity), None) != 'ACCEPTED' for identity in ids)):
+            raise ValueError('Bulk acceptance must preserve actual same-batch decisions')
+        return {'batch': batch, 'accepted_suggestion_ids': ids}, None
 
 
 @dataclass(frozen=True)

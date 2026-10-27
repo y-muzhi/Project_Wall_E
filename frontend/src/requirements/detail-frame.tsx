@@ -7,14 +7,16 @@ import {PageHeader} from '../application/header.tsx';
 import {activeModal} from '../shared/modal.ts';
 import {useLayoutMotion,useMotionPresence} from '../shared/motion-react.ts';
 import {motionTiming} from '../shared/motion.ts';
+import {readVisiblePanel} from './panel-read.ts';
 
 export interface DetailFrameProps {
   properties?: ReactNode; layout: DetailLayout; viewport: DetailViewportGuard; title: ReactNode; status: ReactNode; actions: ReactNode;
-  outline: ReactNode; outlineActions?: ReactNode; document(navigation:ReactNode):ReactNode; ai: ReactNode; progress: ReactNode; comments: ReactNode; revisions: ReactNode;
+  outline: ReactNode; outlineActions?: ReactNode; document(navigation:ReactNode):ReactNode; ai: ReactNode; progress: ReactNode; suggestions: ReactNode; comments: ReactNode; revisions: ReactNode;
   activity: string | null; saveStatus: ReactNode; back(): void;
   readPanel(tab: DetailTab, signal: AbortSignal): Promise<void>;
 }
-const tabs = [{value:'AI',label:'AI 对话'},{value:'PROGRESS',label:'进展'},{value:'COMMENTS',label:'评论'},{value:'REVISIONS',label:'文档记录'}] as const;
+const tabs = [{value:'AI',label:'AI 对话'},{value:'PROGRESS',label:'进展'},{value:'SUGGESTIONS',label:'修改建议'},{value:'COMMENTS',label:'评论'}] as const;
+const panelViews = [...tabs,{value:'REVISIONS',label:'文档记录'}] as const;
 
 /** Actual regions are supplied by the detail owner; no synthetic documents or
  * command permissions are created by this layout component. Hidden regions
@@ -25,7 +27,8 @@ export function DetailFrame(props: DetailFrameProps) {
   const columns = useRef<HTMLDivElement>(null), callbacks = useRef(props); callbacks.current = props;
   const motion=useLayoutMotion(),leftPresent=useMotionPresence(state.left_open,motionTiming.layout),rightPresent=useMotionPresence(state.right_open,motionTiming.layout),documentPresent=useMotionPresence(state.document_open,motionTiming.layout);
   const transition=(change:()=>void)=>motion.run([{element:columns.current,properties:['grid-template-columns']}],change,supported);
-  const rightToggle=useRef<HTMLButtonElement>(null);
+  const rightToggle=useRef<HTMLButtonElement>(null),recordsBack=useRef<HTMLButtonElement>(null),previousTab=useRef(state.right_tab);
+  useLayoutEffect(()=>{const previous=previousTab.current;previousTab.current=state.right_tab;if(!state.right_open||previous===state.right_tab)return;if(state.right_tab==='REVISIONS')recordsBack.current?.focus({preventScroll:true});else if(previous==='REVISIONS')columns.current?.querySelector<HTMLButtonElement>(`#detail-tab-${state.right_tab}`)?.focus({preventScroll:true});},[state.right_tab,state.right_open]);
   const documentView=useRef<HTMLButtonElement>(null);
   const outlineOpen=useRef<HTMLButtonElement>(null),outlineClose=useRef<HTMLButtonElement>(null),outlineFocus=useRef(false);
   const drag = useRef<{id:number;x:number;width:number}|null>(null);
@@ -56,12 +59,12 @@ export function DetailFrame(props: DetailFrameProps) {
   useEffect(() => {
     if (!supported || !state.right_open) return;
     const controller = new AbortController(); setPanelError(false);
-    void Promise.resolve().then(() => callbacks.current.readPanel(state.right_tab,controller.signal)).catch(() => { if(!controller.signal.aborted)setPanelError(true); });
+    void Promise.resolve().then(() => readVisiblePanel(()=>callbacks.current.readPanel(state.right_tab,controller.signal),controller.signal)).catch(() => { if(!controller.signal.aborted)setPanelError(true); });
     return () => controller.abort();
   },[supported,state.right_open,state.right_tab,panelRetry]);
   // Stable tracks interpolate; hidden regions no longer add/remove grid tracks.
   const sizes = `${state.left_open&&!state.left_drawer?200:0}px ${state.left_open&&!state.left_drawer?6:0}px ${Math.max(0,state.document_width)}px ${state.right_open&&state.split_view?6:0}px ${state.right_open?state.right_width:0}px`;
-  const panels: Record<DetailTab,ReactNode> = {AI:props.ai,PROGRESS:props.progress,COMMENTS:props.comments,REVISIONS:props.revisions};
+  const panels: Record<DetailTab,ReactNode> = {AI:props.ai,PROGRESS:props.progress,SUGGESTIONS:props.suggestions,COMMENTS:props.comments,REVISIONS:props.revisions};
   const navigation=<button ref={outlineOpen} className="ui-button icon-button document-navigation-toggle" disabled={!supported} type="button" aria-label={state.left_open?'收起文档导航':'展开文档导航'} title={state.left_open?'收起文档导航':'展开文档导航'} aria-expanded={state.left_open} aria-controls="detail-outline" onClick={toggleOutline}><Icon name={state.left_open?'collapseLeft':'outline'}/></button>;
   return <main className="requirement-detail-frame" data-layout={state.mode} data-viewport-phase={guard.phase}>
     <PageHeader><header className="detail-header" role="group" aria-label="需求工作栏"><div className="detail-title-row"><div className="detail-return"><button className="ui-button" type="button" aria-label="返回需求工作台" title="返回需求工作台" onClick={props.back} data-focus-fallback><Icon name="left"/>工作台</button>
@@ -101,7 +104,7 @@ export function DetailFrame(props: DetailFrameProps) {
           if(value!==null){event.preventDefault();transition(()=>props.layout.resizeRight(value));}
         }} />
       <aside className="detail-panel" hidden={!rightPresent} inert={!state.right_open} aria-hidden={!state.right_open} data-motion-open={state.right_open} aria-label="辅助面板">
-        <div className="detail-panel-heading"><button className="ui-button icon-button detail-panel-width" type="button" disabled={!supported||!state.split_view||state.right_max<380} aria-label={state.right_width<state.right_max-1?'展开辅助面板宽度':'收窄辅助面板宽度'} title={state.right_max<380?'当前窗口没有足够的调宽空间':state.right_width<state.right_max-1?'展开至当前可用最大宽度':'收窄至360px'} onClick={()=>transition(()=>props.layout.resizeRight(state.right_width<state.right_max-1?state.right_max:360))}><Icon name="panel"/></button><div className="detail-panel-tabs" role="tablist" aria-label="辅助功能">{tabs.map(item => <button className="ui-button" key={item.value} type="button" role="tab"
+        <div className="detail-panel-heading"><button className="ui-button icon-button detail-panel-width" type="button" disabled={!supported||!state.split_view||state.right_max<380} aria-label={state.right_width<state.right_max-1?'展开辅助面板宽度':'收窄辅助面板宽度'} title={state.right_max<380?'当前窗口没有足够的调宽空间':state.right_width<state.right_max-1?'展开至当前可用最大宽度':'收窄至360px'} onClick={()=>transition(()=>props.layout.resizeRight(state.right_width<state.right_max-1?state.right_max:360))}><Icon name="panel"/></button><div className="detail-panel-record-heading" hidden={state.right_tab!=='REVISIONS'}><button ref={recordsBack} className="ui-button" type="button" aria-label="返回辅助面板" onClick={()=>transition(()=>props.layout.returnFromRecords())}><Icon name="left"/>返回</button><h2 id="detail-records-heading">文档记录</h2></div><div className="detail-panel-tabs" hidden={state.right_tab==='REVISIONS'} role="tablist" aria-label="辅助功能">{tabs.map(item => <button className="ui-button" key={item.value} type="button" role="tab"
           id={`detail-tab-${item.value}`} title={item.value==='PROGRESS'?'大纲与进展':item.label} aria-controls={`detail-panel-${item.value}`} aria-selected={state.right_tab===item.value}
           tabIndex={state.right_tab===item.value?0:-1} onKeyDown={event=>{
             const index=tabs.findIndex(tab=>tab.value===item.value),next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;
@@ -110,7 +113,7 @@ export function DetailFrame(props: DetailFrameProps) {
           }}
           onClick={() => transition(()=>props.layout.openTab(item.value))}>{item.label}</button>)}</div><button className="ui-button icon-button detail-panel-close" type="button" disabled={!supported} aria-label="关闭辅助面板" title="关闭辅助面板" onClick={()=>{transition(()=>props.layout.toggleRight());rightToggle.current?.focus({preventScroll:true});}}><Icon name="close"/></button></div>
         {panelError && <div className="detail-panel-error" role="alert">读取失败，保留已确认内容。<button className="ui-button" type="button" onClick={() => setPanelRetry(value=>value+1)}>重试</button></div>}
-        {tabs.map(item => <section key={item.value} id={`detail-panel-${item.value}`} role="tabpanel" aria-labelledby={`detail-tab-${item.value}`}
+        {panelViews.map(item => <section key={item.value} id={`detail-panel-${item.value}`} role={item.value==='REVISIONS'?'region':'tabpanel'} aria-labelledby={item.value==='REVISIONS'?'detail-records-heading':`detail-tab-${item.value}`}
           className="detail-panel-content" hidden={state.right_tab!==item.value} inert={state.right_tab!==item.value}>{panels[item.value]}</section>)}
       </aside>
     </div>

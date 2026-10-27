@@ -12,7 +12,7 @@
 | 目标软件版本 | V1.5 |
 | 规格版本 | 1.0 |
 | 文档状态 | EFFECTIVE（正式设计基线） |
-| 最后更新时间 | 2026-10-26（Asia/Hong_Kong；迭代合入复核及接受回执／状态查询职责澄清） |
+| 最后更新时间 | 2026-10-26（Asia/Hong_Kong；评论材料来源解析修复，保留接受回执／状态查询职责澄清） |
 
 规格完成及实现验收分别按8.5判断。本文沿用[统一需求规格说明完整模板](../../templates/统一需求规格说明_完整模板_重构版.md)的章节职责和条目格式；0→1改为增量只影响规格类型与复用说明，不删去对象、能力、交互、入口及依赖的必要契约。
 
@@ -268,6 +268,10 @@ assessment取NOT_STARTED、DISCUSSING、SUPPORTED、REVIEW_REQUIRED。DEFERRED�
 origin取USER_STATEMENT、USER_DECISION、AI_PROPOSAL；AI抽取的assertion始终是整理文本。USER_DECISION必须关联实际用户采用／选择，不能只指向推荐。state取ACTIVE、SUPERSEDED、DISPUTED；修正保留旧条目及替代关系。AI提出冲突不自动决定哪个用户来源失效。每条另有nature=FACT／CONSTRAINT／PROPOSAL及applies_to=GLOBAL或具体topic_refs，用于确定选材；这些语义分类仍标AI整理，可由用户纠正。
 
 SourceRef为互斥联合：`{kind:"MESSAGE",message_id}`、`{kind:"CARD_ANSWER",message_id,card_key}`、`{kind:"REVISION",document_id,revision_id,block_ids}`、`{kind:"RUN_RESULT",guide_run_id}`及`{kind:"RUN_MATERIAL",guide_run_id,material_ref}`。RUN_RESULT只允许同需求已完成且含可用分析的运行，RUN_MATERIAL只允许已保存的不可变材料快照；不是读取该运行的全部私有权限。主要使用前3种，后2种承接既有复核结果及评论来源能力。同需求、真实存在、来源角色及快照范围均校验；block_ids=null表示该来源版本整体，不表示已经全量发给模型。
+
+M15-COMMENT-01：RUN_MATERIAL的原始SourceRef与本轮selected／aliases的展示ref分开核实。查找仅允许命中同一需求、同一真实run的已保存ContextBasis.selected：要么material_ref明确等于选中项ref，要么同一个RUN_MATERIAL选中项的source_refs完整包含该原始SourceRef；必须唯一，且对应alias的来源列表与选中项一致。评论材料material_ref=comment_anchor可对应r＋run_id＋:comment_anchor展示ref，不能因此误拒绝，也不能通过拆字符串／猜别名放行。遗漏材料、映射歧义、跨需求或别名来源不一致仍SOURCE_INVALID。
+
+来源核实与接受快照捕获共用该读取解析；捕获仍校验原Wire摘要及严格Schema，只取该选中项实际发送的区块／消息／文本，不读取整个私有依据来扩权，不改原始SourceRef、历史快照或用户评论。评论来源被保存到讨论依据后，后续评论、普通讨论及显式绑定可合法复用原不可变材料；新评论自身仍按C05复核锚点、目标、版本及原文，已保存旧材料可读不等于允许重试已改动或已删除的当前评论。
 
 用户纠正、确定采用、暂缓和阶段处置先保存不可变消息，再以同事务更新索引。模型给出的主题与依据增量只在该次实际材料清单内验证；拒绝无效增量不删除原始回复，不触发格式修复调用。
 
@@ -1546,6 +1550,7 @@ responses首先加载消息及purpose，验证整组答案、未回答、版本�
 | comment_id | ID | 调用参数 | 是 | 否 | 必填，不接受null |
 | expected_content_version | PositiveInt | 调用参数 | 是 | 否 | 必填，不接受null |
 | expected_discussion_version | PositiveInt | 调用参数 | 是 | 否 | 必填，不接受null |
+| scope_mode | COMMENT／BLOCK／SECTION／DOCUMENT | 调用参数，本次范围选择 | 否 | 否 | 缺省原评论范围；显式值纳入幂等身份，不接受任意scope_ref或外来目标 |
 | idempotency_key | RequestKey | 入口上下文 | 是 | 否 | 可信入口取得；SHR-IDEMPOTENCY |
 
 
@@ -1553,20 +1558,24 @@ responses首先加载消息及purpose，验证整组答案、未回答、版本�
 
 1. 读取评论真实document_id和锚点，验证未删除、可定位、可维护。
 2. 冻结评论原文／更新时间为材料；target取评论归属而非页面阅读对象。
-3. 按PROPOSE_CHANGES走接受和候选流程；后续来源固定为RUN_MATERIAL。
+3. 从同事务实际评论及CURRENT导出范围：COMMENT保留原SELECTION／BLOCK，BLOCK取评论所在区块；SECTION向前取最近标题，范围到下一个同级或更高标题前，无标题返回SCOPE_INVALID，不回退到全文；DOCUMENT取评论所属全文。按实际区块身份而非重复标题／文字匹配，评论原锚点不变。
+4. 实际target／ScopeRef冻结到原接受快照及Canonical.authorization，按原上下文选材、计数及补丁权限执行PROPOSE_CHANGES与候选流程；后续来源固定为RUN_MATERIAL。全文必要材料超限不缩回选区，不发送Chat；程序采用不再请求模型。
+5. scope_mode省略时原business_input不补字段，保留旧已发请求的幂等摘要；显式选择必须进入规范输入，同键改范围拒绝。UNKNOWN及程序重试保留原已发动作与实际范围，不能从当前页面重新授权。
 
 #### 4.4 结果与完成范围
 
 | 结果名称或编码 | 含义或公共定义引用 | 返回数据 | 调用方可确认的完成范围 |
 | --- | --- | --- | --- |
 | GUIDE_ACCEPTED | 本能力成功／接受 | RunReceipt；不直接覆盖正文 | 接受后继续执行 |
-| 声明的拒绝／失败 | INVALID_INPUT／NOT_FOUND／STATE_CONFLICT／WORK_STATE_CONFLICT／CONTENT_VERSION_CONFLICT／DISCUSSION_VERSION_CONFLICT／COMMENT_ORPHANED／IDEMPOTENCY_CONFLICT／REQUEST_IN_PROGRESS／STORAGE_UNAVAILABLE | 按SHR-APP-FAILURE；失败无成功数据 | 未执行／未提交；存在外部调用时按AI任务区分已发／未知，不保证费用回滚 |
+| 声明的拒绝／失败 | INVALID_INPUT／NOT_FOUND／STATE_CONFLICT／WORK_STATE_CONFLICT／CONTENT_VERSION_CONFLICT／DISCUSSION_VERSION_CONFLICT／COMMENT_ORPHANED／SOURCE_INVALID／SCOPE_INVALID／IDEMPOTENCY_CONFLICT／REQUEST_IN_PROGRESS／STORAGE_UNAVAILABLE | 按SHR-APP-FAILURE；失败无成功数据 | 未执行／未提交；存在外部调用时按AI任务区分已发／未知，不保证费用回滚 |
 
 #### 4.5 关键执行要求
 
 | 作用步骤或数据范围 | 必须满足的行为 | 采用机制及参数来源 | 未满足、失败或中断后的去向 |
 | --- | --- | --- | --- |
 | 本能力接受／写入步骤 | SHR-VERSION／OCCUPANCY／IDEMPOTENCY；相关记录同事务 | INF-DB事务和INF-LEASE；真实Chat在事务外 | 返回4.4声明结果；不清空输入或伪造部分成功 |
+
+评论未解决、未删除、当前可定位、归档／占用及双版本校验在所有范围保持；扩大处理范围不重新挂载孤立评论，也不扩大到其他文档。只有真实候选建批成功才可进入审阅；NOT_APPLIED不构造确认动作，不依据模型“已修改／请确认”等文字判断写入成功。
 
 #### 4.8 实现定位
 
@@ -3232,6 +3241,59 @@ backend/app/guide/{model_context,context_builder,context_projection,counted_cont
 |---|---|---|
 |backend/app/suggestions/commands.py|discard_batch|APP-BATCH-CMD-C03|
 |backend/app/suggestions/contracts.py|discard_batch_input / discard_batch_result|应用输入输出；不含HTTP或ORM对象|
+
+<a id="app-batch-cmd-c04"></a>
+
+### APP-BATCH-CMD-C04 批量接受待处理建议
+
+增量说明：新增同一批次的原子批量决定入口；复用OBJ-BATCH／原目标权限与事务，不新增实体或AI任务。
+
+#### 4.1 能力说明
+
+| 内容 | 确定定义 |
+| --- | --- |
+| 能力引用与名称 | APP-BATCH-CMD-C04 批量接受待处理建议 |
+| 处理目标 | 一次接受本轮明确确认的全部待处理项，只保存决定 |
+| 主要对象或过程 | OBJ-BATCH／SHR-PATCH／SHR-IDEMPOTENCY |
+| 完成方式 | 同步程序事务，无模型调用；之后仍由C02独立确认应用 |
+
+#### 4.2 输入与来源
+
+| 输入项 | 类型或结构引用 | 来源与用途 | 必须提供 | 可为null | 缺失、默认及校验规则 |
+| --- | --- | --- | --- | --- | --- |
+| batch_id | ID | 固定当前批次 | 是 | 否 | 真实归属／审阅占用由服务端核实 |
+| expected_content_version | PositiveInt | 用户本次确认的目标基准版本 | 是 | 否 | 与真实目标／批次基准一致 |
+| expected_pending_ids | ID[] | 确认时冻结的全部待处理项 | 是 | 否 | 1—100个唯一ID；按实际order_no／id顺序，与同事务PENDING集合完全一致 |
+| idempotency_key | RequestKey | 原入口上下文 | 是 | 否 | 规范输入含版本与完整有序集合，同键更改拒绝 |
+
+#### 4.3 处理过程
+
+1. 读取批次／需求，核实真实审阅占用及未完成未放弃；沿原_target_snapshot读取真实所属目标、归档／基准版本、原GuideRun冻结Scope与allowed_targets。
+2. 同事务核实expected_content_version、完整实际待处理有序集合；任何外来／遗漏／多余／重排或并发改动导致集合变化均拒绝，不静默接受新集合。
+3. 对全部待处理项先执行原精确补丁／原文／权限校验。任一失败不保存任何决定；组合采用约束仍由完成本批验证。
+4. 全部通过后同一事务将目标项改为ACCEPTED、清除其编辑字段并记录时间；已接受／已拒绝／已编辑项均不由本次命令修改。正文、内容版本、需求讨论及模型调用不变。
+5. 返回同事务完整真实Batch及本次accepted_suggestion_ids；成功回执持久化，原body／key恢复不重复修改。其他窗口合法修改的非目标决定，以实际返回／读取为准，不因与前端旧快照不同而永久卡住原请求恢复。
+
+#### 4.4 结果与完成范围
+
+| 结果名称或编码 | 含义或公共定义引用 | 返回数据 | 调用方可确认的完成范围 |
+| --- | --- | --- | --- |
+| SUGGESTIONS_ACCEPTED | 本次待处理集合已原子接受 | data={batch:完整Batch含suggestions/counts, accepted_suggestion_ids:本次有序ID[]} | batch仍PENDING、pending计数0；正文尚未应用，不代表C02完成 |
+| 声明的拒绝／失败 | INVALID_INPUT／NOT_FOUND／STATE_CONFLICT／WORK_STATE_CONFLICT／WORK_STATE_INCONSISTENT／CONTENT_VERSION_CONFLICT／TARGET_STALE／PATCH_INVALID／IDEMPOTENCY_CONFLICT／REQUEST_IN_PROGRESS／STORAGE_UNAVAILABLE | 按SHR-APP-FAILURE | 未接受部分集合；未知传输仍按原动作核实，不能凭GET相同状态认领成功 |
+
+#### 4.5 关键执行要求
+
+| 作用步骤或数据范围 | 必须满足的行为 | 采用机制及参数来源 | 未满足、失败或中断后的去向 |
+| --- | --- | --- | --- |
+| 全部决定与回执 | 同一事务提交或回滚；不逐条调用单项命令、不产生部分成功 | 原INF-DB／BatchRepository／原C01补丁校验与新C04幂等域 | 保留原状态／输入；未知回执不得切新key重发 |
+| 目标／版本／范围 | 不因阅读另一文档改目标，不跳过原归档／占用／原文保护 | 原固定批次与GuideRun权限 | 拒绝并要求核对；无强制覆盖 |
+
+#### 4.8 实现定位
+
+| 所属模块或关键路径 | 关键入口或资源 | 承载内容 |
+| --- | --- | --- |
+| backend/app/suggestions/commands.py | accept_pending_suggestions | 同事务批量接受 |
+| backend/app/suggestions/contracts.py | AcceptPendingInput／accept_pending_input | 参数与幂等规范输入 |
 
 <a id="app-comment-cmd-c01"></a>
 
@@ -5644,6 +5706,8 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | expected_content_version | Body／PositiveInt | 必传：是；可null：否；必填，不接受null | 同名映射APP-GUIDE-CMD-C05／4.2；未知字段拒绝 |
 | expected_discussion_version | Body／PositiveInt | 必传：是；可null：否；必填，不接受null | 同名映射APP-GUIDE-CMD-C05／4.2；未知字段拒绝 |
 
+| scope_mode | Body／COMMENT、BLOCK、SECTION、DOCUMENT | 可省略，不可null；缺省COMMENT语义 | 映射C05；省略保持原幂等输入，显式值纳入身份，实际范围由服务端同事务导出 |
+
 **响应与结果映射**
 
 | 应用结果或边界失败 | HTTP状态与外部编码 | 响应结构及字段转换 | 特有响应头或协议行为 |
@@ -5890,6 +5954,39 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 
 接口实现定位：backend/app/documents/{api,http_models}.py；客户端frontend/src/api/walle.ts。公共边界行为直接采用BND-HTTP-COMMON。
 
+<a id="bnd-batch-api-i42"></a>
+
+### BND-BATCH-API-I42 批量接受待处理建议
+
+#### 6.2 HTTP接口
+
+| 内容 | 确定定义 |
+| --- | --- |
+| 接口引用与名称 | BND-BATCH-API-I42 批量接受待处理建议 |
+| 方法与路径 | POST /api/v1/suggestion-batches/{batch_id}/accept-pending |
+| 用途与响应方式 | 一次性JSON程序决定，不发Chat、不直接应用正文 |
+| 公共契约 | BND-HTTP-COMMON，无新接口版本 |
+| 应用绑定 | APP-BATCH-CMD-C04 |
+
+**请求与输入绑定**
+
+| 参数或参数集合 | 位置及传输结构 | 必传、可空与缺失规则 | 应用输入映射及附加接入限制 |
+| --- | --- | --- | --- |
+| batch_id | Path／ID | 必传、非null | 固定当前批次 |
+| Idempotency-Key | Header／RequestKey | 必传、非null | 原动作恢复不换body／key |
+| expected_content_version | Body／PositiveInt | 必传、不可null | 同名映射C04 |
+| expected_pending_ids | Body／ID[] | 必传、不可null，1—100个唯一ID | 同名映射C04，完整有序待处理集合，未知字段拒绝 |
+
+**响应与结果映射**
+
+| 应用结果或边界失败 | HTTP状态与外部编码 | 响应结构及字段转换 | 特有响应头或协议行为 |
+| --- | --- | --- | --- |
+| SUGGESTIONS_ACCEPTED | 200 | data按C04／4.4；完整真实Batch及本次accepted_suggestion_ids | JSON一次返回，原Idempotency-Key域，不自动重试 |
+| 该APP声明失败及公共解析失败 | BND-HTTP-COMMON | error来自白名单 | 原子失败无部分接受成功数据 |
+
+接口实现定位：backend/app/suggestions/{api,http_models}.py；frontend/src/api/walle.ts。
+
+
 <a id="bnd-worker"></a>
 
 ### BND-WORKER 后台执行与恢复入口
@@ -5911,6 +6008,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | 关闭 | 停止接入与新调度，宽限10秒后退役租约 | 不能把停止等待当作供应方未执行 |
 
 不提供模型Tool或消息总线事件入口；不得为内部普通函数补建无职责入口。技术入口沿用service生命周期、GuideWorker.after_commit、监测及ExecutionLease。不新增消息总线、模型Tool或流式服务。
+
 
 
 ## 7. 数据存储与外部依赖

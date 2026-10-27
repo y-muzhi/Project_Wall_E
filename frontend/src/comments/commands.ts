@@ -9,7 +9,8 @@ import type {SelectionEvent} from '../documents/selection.ts';
 export type CommentTarget=Readonly<{document_id:number;content_version:number;block_id:number;anchor_type:'BLOCK'|'SELECTION';selection:SelectionEvent|null;quote:string}>;
 export type CommentIntent=Readonly<{kind:'CREATE';target:CommentTarget}|{kind:'EDIT'|'RESOLVE'|'REOPEN'|'DELETE'|'MODIFY';comment:CommentItem}>;
 export type CommentOutcome=Readonly<{kind:'COMMENT';comment:Comment}|{kind:'GUIDE';receipt:RunReceipt;document_id:number;comment_id:number}>;
-export type CommentCommandState=Readonly<{phase:'READY'|'SUBMITTING'|'READING'|'UNKNOWN'|'ERROR'|'CONFIRMED';content:string;error:string|null;error_code:string|null;outcome:CommentOutcome|null;observed:Readonly<{detail:DetailSnapshot;comment:Comment|null}>|null}>;
+export type CommentScopeMode='COMMENT'|'BLOCK'|'SECTION'|'DOCUMENT';
+export type CommentCommandState=Readonly<{phase:'READY'|'SUBMITTING'|'READING'|'UNKNOWN'|'ERROR'|'CONFIRMED';content:string;scope_mode:CommentScopeMode;scope_review:boolean;error:string|null;error_code:string|null;outcome:CommentOutcome|null;observed:Readonly<{detail:DetailSnapshot;comment:Comment|null}>|null}>;
 type Api=Pick<WalleApi,'prepareCreateComment'|'prepareEditComment'|'prepareResolveComment'|'prepareReopenComment'|'prepareDeleteComment'|'prepareModifyFromComment'|'getComment'>;
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 
@@ -25,7 +26,7 @@ export class CommentCommand{
     this.assertDetail(detail);this.detail=capture(detail);this.intent=capture(intent);this.api=api;this.actualComment=intent.kind==='CREATE'?null:capture(intent.comment);
     if(intent.kind==='CREATE')this.assertTarget(intent.target,detail);
     else if(intent.comment.requirement_id!==detail.requirement.id)throw TypeError('Owned comment required');
-    this.value=Object.freeze({phase:'READY',content:intent.kind==='EDIT'?intent.comment.content:'',error:null,error_code:null,outcome:null,observed:null});
+    this.value=Object.freeze({phase:'READY',content:intent.kind==='EDIT'?intent.comment.content:'',scope_mode:'COMMENT',scope_review:false,error:null,error_code:null,outcome:null,observed:null});
     if(!this.allowed)throw TypeError('Actual comment operation permissions required');
   }
   private assertDetail(detail:DetailSnapshot):asserts detail is DocumentDetailSnapshot{assertDocumentDetail(detail);positiveInteger(detail.requirement.id);if(detail.current.requirement_id!==detail.requirement.id||detail.current.document_type!=='CURRENT')throw TypeError('Actual owned CURRENT required');}
@@ -36,6 +37,17 @@ export class CommentCommand{
     else{const selection=target.selection;if(!selection||selection.document_id!==target.document_id||selection.content_version!==target.content_version||selection.block_id!==target.block_id||!Number.isSafeInteger(selection.start_offset)||selection.start_offset<0||selection.end_offset-selection.start_offset!==[...selection.selected_text].length||[...selection.selected_text].length<1||[...selection.selected_text].length>2000||[...selection.prefix_text].length>100||[...selection.suffix_text].length>100)throw TypeError('Original current selection required');}
   }
   getSnapshot=():CommentCommandState=>this.value;
+  get scopeDocument(){return this.detail.current;}
+  get sectionAvailable():boolean{
+    if(this.intent.kind!=='MODIFY')return false;
+    const comment=this.intent.comment,blocks=this.detail.current.block_state_json.blocks,index=blocks.findIndex(block=>block.block_id===comment.block_id);
+    return index>=0&&blocks.slice(0,index+1).some(block=>block.block_type==='heading');
+  }
+  changeScope(mode:CommentScopeMode):void{
+    if(this.closed||this.pending||this.intent.kind!=='MODIFY'||!['READY','ERROR'].includes(this.value.phase))return;
+    if(!['COMMENT','BLOCK','SECTION','DOCUMENT'].includes(mode)||mode==='SECTION'&&!this.sectionAvailable)throw TypeError('评论所在章节不可用');
+    this.publish({scope_mode:mode,scope_review:false,error:null,error_code:null});
+  }
   subscribe=(callback:()=>void):(()=>void)=>{this.listeners.add(callback);return()=>this.listeners.delete(callback);};
   get allowed():boolean{
     if(this.closed||!detailPermissions(this.detail,true).comment_write)return false;
@@ -47,14 +59,16 @@ export class CommentCommand{
   change(content:string):void{if(!this.closed&&!this.pending&&['CREATE','EDIT'].includes(this.intent.kind)&&['READY','ERROR'].includes(this.value.phase))this.publish({content,error:null,error_code:null});}
   rebase(actual:DetailSnapshot,comment?:CommentItem):boolean{
     if(this.closed||this.pending||!['READY','ERROR'].includes(this.value.phase))return false;this.assertDetail(actual);if(actual.requirement.id!==this.detail.requirement.id)throw TypeError('Owned actual detail required');
+    const review=this.intent.kind==='MODIFY'&&(actual.current.content_version!==this.detail.current.content_version||comment?.updated_at!==this.actualComment?.updated_at);
     if(this.intent.kind!=='CREATE'){const original=this.intent.comment;if(!comment||comment.document_id!==actual.current.id)return false;if(comment.id!==original.id||comment.requirement_id!==original.requirement_id||comment.block_id!==original.block_id||comment.anchor_type!==original.anchor_type||comment.created_at!==original.created_at||JSON.stringify(comment.anchor_ref)!==JSON.stringify(original.anchor_ref))throw TypeError('Actual same comment origin required');this.actualComment=capture(comment);}
-    this.detail=capture(actual);this.action=undefined;return true;
+    this.detail=capture(actual);this.action=undefined;if(review)this.publish({scope_review:true});return true;
   }
   private run(kind:'SEND'|'READ',work:()=>Promise<boolean>):Promise<boolean>{if(this.closed)return Promise.resolve(false);if(this.pending)return this.work===kind?this.pending:Promise.resolve(false);const pending=Promise.resolve().then(()=>this.closed?false:work()).finally(()=>{if(this.pending===pending)this.pending=undefined;});this.pending=pending;this.work=kind;return pending;}
   submit():Promise<boolean>{
     if(!['READY','ERROR'].includes(this.value.phase)&&!(this.pending&&this.work==='SEND'))return Promise.resolve(false);
     return this.run('SEND',async()=>{
       if(!this.allowed){this.publish({phase:'ERROR',error:'当前状态或正文范围已变化，请重新读取并确认操作',error_code:'STATE_CONFLICT'});return false;}
+      if(this.intent.kind==='MODIFY'&&(this.value.scope_review||this.value.scope_mode==='SECTION'&&!this.sectionAvailable)){this.publish({phase:'ERROR',error:'正文或评论已变化，请核对目标文档并重新确认处理范围',error_code:'SCOPE_INVALID'});return false;}
       try{
         const intent=this.intent,identity=intent.kind==='CREATE'?this.detail.requirement.id:intent.comment.id;
         this.normalized=['CREATE','EDIT'].includes(intent.kind)?ordinaryInput(this.value.content,'评论正文',1,2000):null;
@@ -64,7 +78,7 @@ export class CommentCommand{
           case 'RESOLVE':this.action=this.api.prepareResolveComment(identity);break;
           case 'REOPEN':this.action=this.api.prepareReopenComment(identity);break;
           case 'DELETE':this.action=this.api.prepareDeleteComment(identity);break;
-          case 'MODIFY':this.action=this.api.prepareModifyFromComment(identity,this.detail.current.content_version,this.detail.requirement.discussion_version);break;
+          case 'MODIFY':this.action=this.api.prepareModifyFromComment(identity,this.detail.current.content_version,this.detail.requirement.discussion_version,this.value.scope_mode);break;
         }
       }catch(error){this.publish({phase:'ERROR',error:error instanceof Error?error.message:'无法准备评论操作',error_code:'INVALID_INPUT'});return false;}
       return this.send();

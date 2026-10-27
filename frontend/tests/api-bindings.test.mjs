@@ -62,10 +62,11 @@ const cases = [
   ['I38','listModelCalls',[2],'GET','/guide-runs/2/model-calls',null,false],
   ['I39','getModelCall',[20],'GET','/model-calls/20',null,false],
   ['I40','prepareCreateDocument',[1,{name:'新稿',document_kind:'REQUIREMENT_BRIEF',template_ref:null}],'POST','/requirements/1/documents',{name:'新稿',document_kind:'REQUIREMENT_BRIEF',template_ref:null},true],
+  ['I42','prepareAcceptPendingBatch',[8,7,[9,10]],'POST','/suggestion-batches/8/accept-pending',{expected_content_version:7,expected_pending_ids:[9,10]},true],
   ['I41','prepareUpdateDocument',[2,{expected_metadata_version:1,change:{type:'RENAME',name:'重命名'}}],'PATCH','/documents/2',{expected_metadata_version:1,change:{type:'RENAME',name:'重命名'}},true],
 ];
 
-test('all 38 active client bindings reach exact public method/path/body/key policy; no empty-body JSON or draft/CURRENT version substitution', async () => {
+test('all active client bindings reach exact public method/path/body/key policy; no empty-body JSON or draft/CURRENT version substitution', async () => {
   for (const [name, method, args, verb, path, body, keyed] of cases) {
     let sent, keys = 0; const service = api(async (url, options) => { sent = { url, ...options }; return rejected(); }, () => { keys++; return KEY; });
     const pending = service[method](...args);
@@ -82,7 +83,7 @@ test('all 38 active client bindings reach exact public method/path/body/key poli
   }
   const serverOnly=['POST /requirements/:id/complete-initialization','POST /requirements/:id/complete','POST /requirements/:id/reactivate'];
   const bindings = cases.map(([, , , method, path]) => method + ' ' + path.replace(/\/[0-9]+(?=\/|$)/g, '/:id'));
-  assert.equal(registered.length,41);assert.equal(cases.length,38);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
+  assert.equal(registered.length,42);assert.equal(cases.length,39);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
 });
 test('one creation captures body and response expectations once; loss/replay retains key while next action gets a new key', async () => {
   const calls = []; let attempt = 0, keys = 0, getters = 0;

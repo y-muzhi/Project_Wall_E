@@ -11,7 +11,7 @@ from backend.app.documents.queries import current_document_view
 from backend.app.documents.snapshot import validate_snapshot
 from backend.app.documents.sources import DocumentSources
 from backend.app.documents.scopes import resolve_scope, ScopeInvalid
-from backend.app.requirements.source_refs import verify_source_refs
+from backend.app.requirements.source_refs import verify_source_refs, saved_run_material
 from backend.app.shared.command_execution import Rejected
 
 
@@ -64,46 +64,36 @@ def capture_source(connection, root_id, source, resources):
     run = connection.execute('SELECT * FROM guide_runs WHERE id=? AND requirement_id=?', (source['guide_run_id'], root_id)).fetchone()
     if kind == 'RUN_RESULT':
         return {'source_ref': source, 'value': {'analysis': json.loads(run['final_result_json'])['analysis']}}
-    for row in connection.execute('SELECT request_snapshot_json FROM llm_uses WHERE guide_run_id=? ORDER BY id', (run['id'],)):
-        snapshot = json.loads(row['request_snapshot_json']);basis = snapshot.get('context_basis')
-        if basis is None:
+    snapshot, basis, selected = saved_run_material(connection, root_id, source, resources)
+    from backend.app.infrastructure.collaboration_resources import sha256
+    wire_text = snapshot['request']['messages'][1]['content']
+    if sha256(wire_text) != basis['wire_sha256']:
+        raise Rejected('SOURCE_INVALID')
+    wire = resources.validate('Wire', json.loads(wire_text))
+    documents = []
+    for document in wire['documents']:
+        if document['document_id'] == selected['document_id'] and document['revision_id'] == selected['revision_id']:
+            documents.append({'document_id': document['document_id'], 'revision_id': document['revision_id'],
+                'content_version': document['content_version'], 'name': document['name'],
+                'blocks': [{key: block[key] for key in ('block_id', 'block_type', 'section_ref', 'markdown_content')}
+                    for block in document['blocks'] if block['block_id'] in selected['block_ids']]})
+    aliases = {item['ref']: item for item in basis['aliases']}
+    message_refs = {'m'+str(identity) for identity in selected['message_ids']}
+    messages = []
+    for message in [wire['current_request'], *wire['recent_history']]:
+        ref = message.get('message_ref', message.get('ref'))
+        if ref not in message_refs:
             continue
-        basis = resources.validate('ContextBasis', basis)
-        if basis['canonical']['requirement']['id'] != root_id:
-            raise Rejected('SOURCE_INVALID')
-        selected = next((item for item in basis['selected'] if item['ref'] == source['material_ref']), None)
-        if selected is None:
-            continue
-        from backend.app.infrastructure.collaboration_resources import sha256
-        wire_text = snapshot['request']['messages'][1]['content']
-        if sha256(wire_text) != basis['wire_sha256']:
-            raise Rejected('SOURCE_INVALID')
-        wire = resources.validate('Wire', json.loads(wire_text))
-        documents = []
-        for document in wire['documents']:
-            if document['document_id'] == selected['document_id'] and document['revision_id'] == selected['revision_id']:
-                documents.append({'document_id': document['document_id'], 'revision_id': document['revision_id'],
-                    'content_version': document['content_version'], 'name': document['name'],
-                    'blocks': [{key: block[key] for key in ('block_id', 'block_type', 'section_ref', 'markdown_content')}
-                        for block in document['blocks'] if block['block_id'] in selected['block_ids']]})
-        aliases = {item['ref']: item for item in basis['aliases']}
-        message_refs = {'m'+str(identity) for identity in selected['message_ids']}
-        messages = []
-        for message in [wire['current_request'], *wire['recent_history']]:
-            ref = message.get('message_ref', message.get('ref'))
-            if ref not in message_refs:
-                continue
-            answers = message['formal_answers']
-            card_keys = {item['card_key'] for item in selected['source_refs'] if item['kind'] == 'CARD_ANSWER'}
-            if answers is not None and card_keys:
-                answers = [answer for answer in answers if answer['card_key'] in card_keys]
-            messages.append({'ref': ref, 'content': message['content'], 'formal_answers': answers})
-        texts = [{key: item[key] for key in ('ref', 'origin', 'text', 'nature', 'applies_to')}
-            for item in wire['goal_and_decisions'] if item['ref'] == selected['ref'] or item['ref'] in message_refs]
-        if selected['ref'] not in aliases:
-            raise Rejected('SOURCE_INVALID')
-        return {'source_ref': source, 'value': {'material_ref': selected['ref'], 'documents': documents, 'messages': messages, 'texts': texts}}
-    raise Rejected('SOURCE_INVALID')
+        answers = message['formal_answers']
+        card_keys = {item['card_key'] for item in selected['source_refs'] if item['kind'] == 'CARD_ANSWER'}
+        if answers is not None and card_keys:
+            answers = [answer for answer in answers if answer['card_key'] in card_keys]
+        messages.append({'ref': ref, 'content': message['content'], 'formal_answers': answers})
+    texts = [{key: item[key] for key in ('ref', 'origin', 'text', 'nature', 'applies_to')}
+        for item in wire['goal_and_decisions'] if item['ref'] == selected['ref'] or item['ref'] in message_refs]
+    if selected['ref'] not in aliases:
+        raise Rejected('SOURCE_INVALID')
+    return {'source_ref': source, 'value': {'material_ref': selected['ref'], 'documents': documents, 'messages': messages, 'texts': texts}}
 
 
 def capture_inputs(connection, root, request, catalog):

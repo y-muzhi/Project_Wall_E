@@ -45,6 +45,11 @@ def main():
         target = request['target']
         if operation == 'GENERATE':
             markdown = '# 目标\n\n记录电影、评分并推荐下一部电影。\n\n# 范围\n\n先支持个人记录与评分。\n'
+            if '[bulk-review]' in (request['content'] or ''):
+                # Private browser fixture only; no product setting or provider.
+                markdown = '# 目标与背景\n\n' + '\n\n'.join(
+                    '第'+str(index)+'项：电影推荐应根据观影记录、评分偏好和当前情境提供明确建议，同时保留用户自行选择的空间。（用户陈述，m'+str(index)+'）'
+                    for index in range(1, 16)) + '\n'
             if '[layout]' in (request['content'] or ''):
                 markdown += '\n# 明细\n\n| 记录 | 说明 | 约束 |\n| --- | --- | --- |\n'
                 markdown += ''.join('| '+str(index)+' | '+'推荐规则与长说明'*12+' | 保留用户记录 |\n' for index in range(1, 41))
@@ -58,6 +63,15 @@ def main():
                 patch = {'title': '补充推荐规则', 'explanation': '根据本次指令明确推荐范围', 'impact': None, 'patch_operation': 'REPLACE_BLOCK',
                     'target_ref': {'block_id': block['block_id']}, 'selector_json': None, 'original_content': block['markdown_content'],
                     'proposed_markdown': '优先推荐尚未观看且评分偏好匹配的电影。\n', 'proposed_data_json': None}
+                if '[bulk-review]' in (request['content'] or ''):
+                    paragraphs = [item for item in document['blocks'] if item['writable'] and item['block_type'] == 'paragraph']
+                    patches = [{**patch, 'title': '统一第'+str(index)+'项推荐说明',
+                        'explanation': '去除来源标注，保留明确的产品要求与用户选择。',
+                        'impact': '仅调整此段说明，保留其他建议的独立决定。',
+                        'target_ref': {'block_id': item['block_id']}, 'original_content': item['markdown_content'],
+                        'proposed_markdown': '第'+str(index)+'项：根据观影记录、评分偏好和当前情境提供明确推荐，并保留用户自行选择的空间。\n'}
+                        for index, item in enumerate(paragraphs[:15], 1)]
+                    return output(context, response_type='CHANGE_PROPOSALS', suggestions=patches)
                 return output(context, response_type='CHANGE_PROPOSALS', suggestions=[patch])
             scope = request['scope']['scope_type'];blocks = document['blocks']
             markdown = '\n'.join(item['markdown_content'] for item in blocks if scope == 'DOCUMENT' or item['writable'])

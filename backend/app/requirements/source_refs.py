@@ -9,6 +9,40 @@ from backend.app.shared.command_execution import Rejected
 from .discussion import discussion_resources
 
 
+def saved_run_material(connection, requirement_id, source, resources):
+    """Resolve an actual saved selection, never infer aliases from text IDs.
+
+    A selection's display ref and its original SourceRef are distinct. In
+    particular a comment's material_ref stays comment_anchor while the saved
+    selected/alias ref is scoped to its run. Both identities must be proven by
+    the same immutable selected item and its alias.
+    """
+    resources.validate('SourceRef', source)
+    if source['kind'] != 'RUN_MATERIAL' or connection.execute(
+            'SELECT 1 FROM guide_runs WHERE id=? AND requirement_id=?',
+            (source['guide_run_id'], requirement_id)).fetchone() is None:
+        raise Rejected('SOURCE_INVALID')
+    for row in connection.execute('SELECT request_snapshot_json FROM llm_uses WHERE guide_run_id=? ORDER BY id', (source['guide_run_id'],)):
+        snapshot = json.loads(row['request_snapshot_json']);basis = snapshot.get('context_basis')
+        if basis is None:
+            continue
+        basis = resources.validate('ContextBasis', basis)
+        if basis['canonical']['requirement']['id'] != requirement_id:
+            raise Rejected('SOURCE_INVALID')
+        matches = [item for item in basis['selected'] if item['ref'] == source['material_ref'] or
+            item['kind'] == 'RUN_MATERIAL' and source in item['source_refs']]
+        if not matches:
+            continue
+        if len(matches) != 1:
+            raise Rejected('SOURCE_INVALID')
+        selected = matches[0]
+        aliases = [item for item in basis['aliases'] if item['ref'] == selected['ref']]
+        if len(aliases) != 1 or aliases[0]['source_refs'] != selected['source_refs']:
+            raise Rejected('SOURCE_INVALID')
+        return snapshot, basis, selected
+    raise Rejected('SOURCE_INVALID')
+
+
 def verify_source_refs(connection, requirement_id, refs, *, resources=None):
     resources = resources or discussion_resources()
     seen = set()
@@ -53,16 +87,5 @@ def verify_source_refs(connection, requirement_id, refs, *, resources=None):
                     raise Rejected('SOURCE_INVALID')
                 resources.validate('Analysis', output['analysis'])
             else:
-                found = False
-                for row in connection.execute('SELECT request_snapshot_json FROM llm_uses WHERE guide_run_id=?', (run['id'],)):
-                    snapshot = json.loads(row['request_snapshot_json'])
-                    basis = snapshot.get('context_basis')
-                    if basis is None:
-                        continue
-                    basis = resources.validate('ContextBasis', basis)
-                    matches = [item for item in basis['selected'] if item['ref'] == source['material_ref']]
-                    if len(matches) == 1:
-                        found = True
-                if not found:
-                    raise Rejected('SOURCE_INVALID')
+                saved_run_material(connection, requirement_id, source, resources)
     return refs

@@ -176,8 +176,8 @@ class ContinueGuideRunResponse(CreateGuideRunResponse):
 
 
 class ModifyFromCommentRequest(CommandRequest):
-    body_fields = ('expected_content_version', 'expected_discussion_version')
-    mandatory = body_fields
+    body_fields = ('expected_content_version', 'expected_discussion_version', 'scope_mode')
+    mandatory = ('expected_content_version', 'expected_discussion_version')
     uses_requirement_path = False
 
     @classmethod

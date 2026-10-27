@@ -8,8 +8,15 @@ from backend.app.shared.http_boundary import handle_http
 from . import commands
 from .http_models import DecideSuggestionRequest, DecideSuggestionResponse
 from .http_models import CompleteBatchRequest, CompleteBatchResponse
+from .http_models import AcceptPendingRequest, AcceptPendingResponse
 
 batch_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
+
+
+@batch_router.post('/suggestion-batches/{batch_id}/accept-pending')
+async def accept_pending_http(request: Request):
+    return await handle_http(request, AcceptPendingRequest, AcceptPendingResponse,
+        lambda runtime, parsed: commands.accept_pending_suggestions(runtime.commands(), parsed.payload, catalog=runtime.catalog))
 
 
 @batch_router.get('/suggestion-batches/{batch_id}')

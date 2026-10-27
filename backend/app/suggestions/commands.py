@@ -24,6 +24,7 @@ from backend.app.documents.patch_application import Adoption, apply_adoptions
 from backend.app.documents.patch_errors import TargetStale
 from backend.app.documents.patch_errors import PATCH_MESSAGES
 from .contracts import metadata_from_row
+from .contracts import accept_pending_input, get_batch_result
 from backend.app.documents.content import commit_content
 import json
 
@@ -103,6 +104,40 @@ def decide_suggestion(executor: Idempotency, payload: object, *, catalog=None, c
         return Success(decide_suggestion_result(updated, repository.suggestions(batch['id']), protocol=protocol), 200)
     return execute_idempotent(executor, 'APP-BATCH-CMD-C01', request, operation, target_identity=f'Suggestion:{request.suggestion_id}',
         allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'TARGET_STALE', 'PATCH_INVALID'}))
+
+
+def accept_pending_suggestions(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    try: request = accept_pending_input(payload)
+    except InvalidInput as error: return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    def operation(connection):
+        repository = BatchRepository(connection);stored = repository.get(request.batch_id)
+        if stored is None: raise Rejected('NOT_FOUND')
+        batch, root = _pending_owned_batch(connection, repository, stored)
+        resources = catalog if catalog is not None else ResourceCatalog()
+        current, _, snapshot, authority = _target_snapshot(connection, repository, stored, batch, resources)
+        if current['content_version'] != request.expected_content_version:
+            raise Rejected('CONTENT_VERSION_CONFLICT')
+        items = repository.suggestions(batch['id'])
+        counts_model(suggestion_counts(items))
+        pending = [row for row in items if row['status'] == 'PENDING']
+        if tuple(row['id'] for row in pending) != request.expected_pending_ids:
+            raise Rejected('STATE_CONFLICT')
+        # Validate every patch before any decision is written. Transaction
+        # rollback also protects against a later repository failure.
+        for row in pending:
+            item = suggestion_from_row(row, protocol=resources.collaboration)
+            try: validate_patch(snapshot, stored_patch(item), authority)
+            except (PatchInvalid, TargetStale) as error: raise Rejected(error.code) from None
+        at = operation_time(clock)
+        if at < max(batch['updated_at'], root['updated_at'], *(row['updated_at'] for row in items)):
+            raise ValueError('Decision cannot predate aggregate activity')
+        for row in pending: repository.decide(row, 'ACCEPTED', None, at)
+        actual = get_batch_result(repository.get(batch['id']), repository.suggestions(batch['id']), protocol=resources.collaboration)
+        return Success({'code': 'SUGGESTIONS_ACCEPTED', 'data': {'batch': actual,
+            'accepted_suggestion_ids': list(request.expected_pending_ids)}, 'details': None}, 200)
+    return execute_idempotent(executor, 'APP-BATCH-CMD-C04', request, operation, target_identity=f'Batch:{request.batch_id}',
+        allowed_failures=frozenset({'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT',
+            'CONTENT_VERSION_CONFLICT', 'TARGET_STALE', 'PATCH_INVALID'}))
 
 
 def discard_batch(executor: Idempotency, payload: object, *, clock=None) -> dict:

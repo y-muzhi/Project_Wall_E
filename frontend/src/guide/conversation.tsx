@@ -19,21 +19,21 @@ function BatchView({owner,documents,toasts}:Readonly<{owner:NonNullable<ReturnTy
  return <SuggestionPanel owner={owner} render={render} locate={identity=>locator.locate(identity)} notify={message=>toasts.push('success',message)}/>;
 }
 
-/** One auxiliary panel, with a bounded suggestion list and persistent message
- * owners. Local view selection never cancels a Run or replaces an intention. */
-export function GuideConversation({owner,documents,toasts}:Readonly<{owner:RequirementConversation;documents:RequirementDocumentOwner;toasts:ToastStore}>){
+/** The original batch owner stays mounted in its own top-level panel. */
+export function ConversationSuggestions({owner,documents,toasts}:Readonly<{owner:RequirementConversation;documents:RequirementDocumentOwner;toasts:ToastStore}>){
+ const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),batch=state.batch;
+ return <div className="conversation-suggestions">{batch?<BatchView key={batch.batchId} owner={batch} documents={documents} toasts={toasts}/>:<section className="suggestions-empty"><h2>暂无修改建议</h2><p>提出修改建议后，可在这里审阅并处理。</p></section>}</div>;
+}
+
+/** AI keeps its message and composer owners independently of review visibility. */
+export function GuideConversation({owner,documents}:Readonly<{owner:RequirementConversation;documents:RequirementDocumentOwner}>){
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),read=useSyncExternalStore(owner.read.subscribe,owner.read.getSnapshot),document=useSyncExternalStore(documents.subscribe,documents.getSnapshot);
- const [showMessages,setShowMessages]=useState(false),[scrollPort,setScrollPort]=useState<HTMLDivElement|null>(null),[scrollContent,setScrollContent]=useState<HTMLDivElement|null>(null),batch=state.batch;
+ const [scrollPort,setScrollPort]=useState<HTMLDivElement|null>(null),[scrollContent,setScrollContent]=useState<HTMLDivElement|null>(null);
  // Retry display when the actual editor/parser becomes available or changes.
  // This only creates DOM fragments and never adopts content as CURRENT.
  const renderMarkdown=useCallback((markdown:string)=>documents.previewMarkdown(markdown),[documents,document.navigation]);
- // A different actual batch is a new display selection; original batches and
- // their drafts/unknown requests remain retained in the owner.
- useEffect(()=>setShowMessages(false),[batch]);
  return <ModelCallsProvider cache={owner.modelCalls} api={owner.modelCallApi} requirementId={state.detail.requirement.id} active={state.visible&&state.enabled} current={read.run}><section className="guide-conversation" aria-label="需求 AI 辅助区">
-  {batch&&<div className="conversation-view-switch"><button className="ui-button" type="button" aria-pressed={!showMessages} onClick={()=>setShowMessages(false)}>修改建议</button><button className="ui-button" type="button" aria-pressed={showMessages} onClick={()=>setShowMessages(true)}>对话消息</button></div>}
-  <div className="conversation-suggestions" hidden={!batch||showMessages} inert={!batch||showMessages}>{batch&&<BatchView key={batch.batchId} owner={batch} documents={documents} toasts={toasts}/>}</div>
-  <div className="conversation-workspace" hidden={!!batch&&!showMessages} inert={!!batch&&!showMessages}>
+  <div className="conversation-workspace">
    <div className="conversation-reading-region">
    <div className="conversation-discussion" ref={setScrollPort} role="region" aria-label="对话阅读区" tabIndex={0}>
     <div className="conversation-content" ref={setScrollContent}><AiReadPanel scrollPort={scrollPort} scrollContent={scrollContent} owner={owner.read} structured={message=><CardMessage groups={owner.cards} message={message} documents={documents} busy={document.busy}/>} commands={()=><RunControls owner={owner.runs}/>} renderMarkdown={renderMarkdown}/></div>

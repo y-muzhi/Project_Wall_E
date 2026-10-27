@@ -18,10 +18,11 @@ async function fixture(){
  const actual=()=>{const value=detail(f.batch,f.version);return f.readingOther?{...value,current:{...value.current,id:3}}:value;};
  const prepare=(kind,id,body=null)=>{f.prepares.push({kind,id,body:copy(body)});let receipt;return {submit:async()=>{f.sends++;f.sequence.push('send');if(f.hold)await f.hold;if(f.rejection)throw f.rejection;if(!receipt){
   const next=copy(f.batch);if(kind==='DECIDE'){const item=next.suggestions.find(item=>item.id===id);item.status=body.decision;item.user_edited_content=body.edited_content??null;item.decided_at=at;next.counts=counts(next.suggestions);receipt={suggestion:copy(item),counts:next.counts};}
+  else if(kind==='BULK'){const ids=next.suggestions.filter(item=>item.status==='PENDING').map(item=>item.id);assert.deepEqual(body.expected_pending_ids,ids);for(const item of next.suggestions)if(ids.includes(item.id)){item.status='ACCEPTED';item.decided_at=at;}next.counts=counts(next.suggestions);receipt={batch:copy(next),accepted_suggestion_ids:ids};}
   else{next.status=kind==='COMPLETE'?'COMPLETED':'DISCARDED';next.completed_at=at;next.completion_result=kind==='COMPLETE'?(f.change?'CHANGES_APPLIED':'NO_CHANGE'):null;next.applied_content_version=f.change&&kind==='COMPLETE'?3:null;if(next.applied_content_version)f.version=3;const {suggestions,counts,...metadata}=next;receipt={batch:metadata,counts,...(kind==='COMPLETE'?{current_document:detail(f.batch,f.version).current}: {})};if(kind==='COMPLETE'){receipt.current_document={...detail(f.batch,f.version).current,content_version:f.version};receipt.document_effect={document_id:2,before_content_version:2,after_content_version:f.version,revision_id:20,result:f.change?'UPDATED':'NO_CHANGE'};receipt.applied_suggestion_ids=next.suggestions.filter(item=>item.status==='ACCEPTED'||item.status==='EDITED').map(item=>item.id);}}
   f.batch=decodeBatch(next);if(f.receiptChange)receipt=f.receiptChange(receipt);
  }if(f.drop){f.drop=false;throw new ApiUnknown(true);}return {data:copy(receipt)};}};};
- const api={getCurrentDocument:async(requirement,id)=>{assert.equal(requirement,1);assert.equal(id,2);return {data:detail(f.batch,f.version).current};},getBatch:async()=>{f.queries++;f.sequence.push('batch');return {data:f.batch};},prepareDecideSuggestion:(id,body)=>prepare('DECIDE',id,body),prepareCompleteBatch:(id,version)=>prepare('COMPLETE',id,{expected_content_version:version}),prepareDiscardBatch:id=>prepare('DISCARD',id)};
+ const api={getCurrentDocument:async(requirement,id)=>{assert.equal(requirement,1);assert.equal(id,2);return {data:detail(f.batch,f.version).current};},getBatch:async()=>{f.queries++;f.sequence.push('batch');return {data:f.batch};},prepareDecideSuggestion:(id,body)=>prepare('DECIDE',id,body),prepareAcceptPendingBatch:(id,version,ids)=>prepare('BULK',id,{expected_content_version:version,expected_pending_ids:ids}),prepareCompleteBatch:(id,version)=>prepare('COMPLETE',id,{expected_content_version:version}),prepareDiscardBatch:id=>prepare('DISCARD',id)};
  const owner=new RequirementSuggestionBatch(8,actual(),api,async()=>{f.reads++;f.sequence.push('detail');if(f.failRead)throw Error('Unavailable');return actual();},async()=>{f.adopts++;if(f.failAdopt)throw Error('Adoption unavailable');});owner.setAvailable(true);assert(await owner.refresh());return {f,owner,actual,api};
 }
 test('actual I20 full read, immutable ordering/counts, owner occupancy and hidden/terminal permissions',async()=>{
@@ -69,4 +70,32 @@ test('failed I20 refresh keeps whole original read, and retirement before dispat
 });
 test('hiding from the observation notification prevents replay and retains the original UNKNOWN action',async()=>{
  const {f,owner}=await fixture();f.drop=true;assert(!await owner.decide(10,'ACCEPTED'));const release=owner.subscribe(()=>{if(owner.getSnapshot().observed)owner.setAvailable(false);});assert(!await owner.recover());assert.equal(f.sends,1);assert.equal(owner.getSnapshot().phase,'UNKNOWN');release();owner.setAvailable(true);assert(await owner.recover());assert.equal(f.prepares.length,1);owner.dispose();
+});
+
+
+test('bulk accepts only pending in one action and one adoption, without touching rejected/edited or document',async()=>{
+ const {owner,f}=await fixture();await owner.decide(10,'REJECTED');owner.draft(12,JSON.stringify({cells:['key','用户编辑']}));await owner.decide(12,'EDITED');const old=copy(owner.getSnapshot().batch),before={sends:f.sends,reads:f.reads,prepares:f.prepares.length};
+ assert(owner.canAcceptPending);assert(await owner.acceptPending([11]));assert.equal(f.sends,before.sends+1);assert.equal(f.reads,before.reads+1);assert.equal(f.prepares.length,before.prepares+1);
+ assert.deepEqual(f.prepares.at(-1),{kind:'BULK',id:8,body:{expected_content_version:2,expected_pending_ids:[11]}});
+ assert.deepEqual(owner.getSnapshot().batch.suggestions[0],old.suggestions[0]);assert.deepEqual(owner.getSnapshot().batch.suggestions[2],old.suggestions[2]);assert.equal(owner.getSnapshot().target.content_version,2);assert(owner.canComplete);owner.dispose();
+});
+test('bulk UNKNOWN preserves exact prepared request, observation never infers success, and successful read retry never resubmits',async()=>{
+ const {owner,f}=await fixture();f.drop=true;assert(!await owner.acceptPending());assert.equal(owner.getSnapshot().phase,'UNKNOWN');assert.equal(f.batch.counts.pending,0);assert(!owner.canComplete);assert(!await owner.acceptPending());
+ assert(await owner.recover());assert.equal(f.prepares.length,1);assert.equal(f.sends,2);assert.equal(owner.getSnapshot().batch.counts.accepted,3);owner.dispose();
+ const other=await fixture();other.f.failRead=true;assert(!await other.owner.acceptPending());assert.equal(other.owner.getSnapshot().phase,'CONFIRMED');other.f.failRead=false;assert(await other.owner.finish());assert.equal(other.f.sends,1);other.owner.dispose();
+});
+test('bulk protects unsaved edits, frozen confirmation set, stale target, and in-flight commands',async()=>{
+ const {owner,f}=await fixture();owner.draft(10,'未保存的编辑');assert(!owner.canAcceptPending);assert(!await owner.acceptPending());owner.cancelDraft(10);assert(owner.canAcceptPending);
+ assert(!await owner.acceptPending([10]));assert.equal(f.sends,0);assert(owner.getSnapshot().needs_refresh);assert(await owner.refresh());
+ let release;f.hold=new Promise(resolve=>release=resolve);const pending=owner.acceptPending();assert(!owner.canComplete);assert(!await owner.decide(10,'REJECTED'));assert(!await owner.discard());release();assert(await pending);owner.dispose();
+});
+test('bulk validates fixed target and accepted IDs while concurrent non-target decisions remain actual facts',async()=>{
+ for(const mutate of [receipt=>({...receipt,accepted_suggestion_ids:[999]}),receipt=>({...receipt,batch:{...receipt.batch,target_document_id:999}})]){
+  const {owner,f}=await fixture();f.receiptChange=mutate;assert(!await owner.acceptPending());assert.equal(owner.getSnapshot().phase,'UNKNOWN');assert.equal(owner.getSnapshot().receipt,null);owner.dispose();
+ }
+ const {owner,f}=await fixture();await owner.decide(10,'REJECTED');
+ // A different reader may change a previously decided item; this command
+ // still owns only its frozen pending set, and must accept its valid receipt.
+ f.batch=decodeBatch({...f.batch,suggestions:f.batch.suggestions.map(item=>item.id===10?{...item,status:'ACCEPTED'}:item),counts:{...f.batch.counts,accepted:1,rejected:0}});
+ assert(await owner.acceptPending([11,12]));assert.equal(owner.getSnapshot().batch.counts.accepted,3);owner.dispose();
 });

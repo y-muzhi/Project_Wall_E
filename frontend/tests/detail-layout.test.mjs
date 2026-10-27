@@ -89,3 +89,25 @@ test('page restoration respects narrow width and failed read stays blocked until
   guard.resumePage();assert.equal(reads,1);assert.equal(guard.getSnapshot().phase,'RESTORE_FAILED');
   guard.retry();await settle();assert.equal(reads,2);assert.equal(saves,1);assert.equal(guard.getSnapshot().phase,'SUPPORTED');guard.dispose();
 });
+
+
+test('review selection persists without changing width and old panel preferences remain valid',()=>{
+ const storage=store(),layout=new DetailLayout('PLANNING',1600,storage);layout.resizeRight(480);layout.openTab('SUGGESTIONS');
+ const restored=new DetailLayout('PLANNING',1600,storage);assert.equal(restored.getSnapshot().right_tab,'SUGGESTIONS');assert.equal(restored.getSnapshot().preferences.right_width,480);
+ restored.viewport(1100,980);restored.openTab('SUGGESTIONS');assert(restored.getSnapshot().right_open&&!restored.getSnapshot().document_open);
+ restored.toggleRight();restored.toggleRight();assert.equal(restored.getSnapshot().right_tab,'SUGGESTIONS');
+ for(const right_tab of ['AI','PROGRESS','COMMENTS','REVISIONS'])assert.equal(decodeDetailPreferences({...restored.getSnapshot().preferences,right_tab}).right_tab,right_tab);
+});
+
+
+test('records opened from More return to prior primary panel and preserve old stored records selection',()=>{
+ const storage=store(),layout=new DetailLayout('PLANNING',1600,storage);layout.resizeRight(510);
+ for(const primary of ['AI','PROGRESS','SUGGESTIONS','COMMENTS']){
+  layout.openTab(primary);layout.openTab('REVISIONS');layout.openTab('REVISIONS');
+  layout.returnFromRecords();assert.equal(layout.getSnapshot().right_tab,primary);assert.equal(layout.getSnapshot().preferences.right_width,510);
+ }
+ layout.openTab('REVISIONS');const fresh=new DetailLayout('PLANNING',1600,storage);assert.equal(fresh.getSnapshot().right_tab,'REVISIONS');
+ fresh.returnFromRecords();assert.equal(fresh.getSnapshot().right_tab,'AI');
+ layout.viewport(1023);layout.returnFromRecords();assert.equal(layout.getSnapshot().right_tab,'REVISIONS');
+ layout.viewport(1600);layout.returnFromRecords();assert.equal(layout.getSnapshot().right_tab,'COMMENTS');
+});

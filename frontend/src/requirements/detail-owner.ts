@@ -59,7 +59,7 @@ export class RequirementDetailOwner{
    if(regions){const historical=this.documents.historical||document.mode==='HISTORY',geometry=regions.layout.getSnapshot();
     // Transient reads/adoption must not invalidate their own positive command
     // reconciliation. Visual availability follows stable view gates only.
-    regions.conversation.setView(this.supported&&geometry.right_open&&geometry.right_tab==='AI',!historical);
+    regions.conversation.setView(this.supported&&geometry.right_open&&geometry.right_tab==='AI',!historical,this.supported&&geometry.right_open&&geometry.right_tab==='SUGGESTIONS');
     regions.comments.setView(historical?'HISTORY':document.mode==='MANUAL'?'MANUAL':'CURRENT',!this.supported);
     if(this.priorHistory&&!historical&&this.supported)void regions.comments.comments.refresh(regions.comments.comments.getSnapshot().page,true);this.priorHistory=historical;
     document.navigation?.setVisible(this.supported);

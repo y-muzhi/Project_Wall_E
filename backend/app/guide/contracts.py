@@ -193,16 +193,22 @@ class ModifyFromCommentInput:
     expected_content_version: int
     expected_discussion_version: int
     idempotency_key: str
+    scope_mode: str | None = None
 
     def business_input(self):
-        return {key: getattr(self, key) for key in ('comment_id', 'expected_content_version', 'expected_discussion_version')}
+        value = {key: getattr(self, key) for key in ('comment_id', 'expected_content_version', 'expected_discussion_version')}
+        # An omitted mode must replay pre-deployment requests byte-for-byte.
+        if self.scope_mode is not None:
+            value['scope_mode'] = self.scope_mode
+        return value
 
 
 def modify_from_comment_input(payload):
     fields = ('comment_id', 'expected_content_version', 'expected_discussion_version', 'idempotency_key')
-    value = object_fields(payload, 'body', fields, fields)
+    value = object_fields(payload, 'body', (*fields, 'scope_mode'), fields)
     return ModifyFromCommentInput(strict_integer(value['comment_id'], 'comment_id'), strict_integer(value['expected_content_version'], 'expected_content_version'),
-        strict_integer(value['expected_discussion_version'], 'expected_discussion_version'), request_key(value['idempotency_key'], 'idempotency_key'))
+        strict_integer(value['expected_discussion_version'], 'expected_discussion_version'), request_key(value['idempotency_key'], 'idempotency_key'),
+        strict_enum(value['scope_mode'], 'scope_mode', ('COMMENT', 'BLOCK', 'SECTION', 'DOCUMENT')) if 'scope_mode' in value else None)
 
 
 def modify_from_comment_result(connection, run, catalog):

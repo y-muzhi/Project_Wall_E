@@ -11,25 +11,30 @@ import {locateComment} from './locate.ts';
 import type {RequirementCommentPanel,CommentSlot} from './panel-owner.ts';
 
 function Operation({panel,slot}:Readonly<{panel:RequirementCommentPanel;slot:CommentSlot}>){
-  const state=slot.flow.getSnapshot(),current=panel.getSnapshot().detail.current,intent=slot.flow.intent;
-  if(!slot.open)return <button className="ui-button" type="button" disabled={panel.blocked} onClick={()=>panel.open(slot.flow)}>继续处理未确认评论操作</button>;
+  const state=slot.flow.getSnapshot(),current=panel.getSnapshot().detail.current,intent=slot.flow.intent,id=useId(),trigger=useRef<HTMLButtonElement>(null);
+  if(!slot.open&&intent.kind!=='MODIFY')return <button className="ui-button" type="button" disabled={panel.blocked} onClick={()=>panel.open(slot.flow)}>继续处理未确认评论操作</button>;
   return <>
+    {intent.kind==='MODIFY'&&<button ref={trigger} className="ui-button comment-ai-toggle" type="button" aria-expanded={slot.open} aria-controls={id} disabled={panel.blocked} onClick={()=>slot.open?panel.collapse(slot.flow):panel.open(slot.flow)}><Icon name="settings"/>AI处理设置<Icon name={slot.open?'up':'down'}/></button>}
+    <div id={id} className="motion-disclosure" hidden={!slot.open} inert={!slot.open} aria-hidden={!slot.open} onKeyDown={event=>{if(intent.kind==='MODIFY'&&event.key==='Escape'&&!event.defaultPrevented&&!['SUBMITTING','READING'].includes(state.phase)){event.preventDefault();panel.collapse(slot.flow);trigger.current?.focus();}}}>
     {intent.kind==='CREATE'&&(intent.target.document_id!==current?.id||intent.target.content_version!==current?.content_version)&&<p role="status">正文已变化，请在当前正文重新选择评论范围；输入仍保留。</p>}
     <CommentCommandControl key={slot.key} flow={slot.flow} blocked={panel.blocked} writeReady={panel.writable(slot.flow)} readActual={panel.observe} changed={outcome=>panel.finish(slot.flow,outcome)} cancel={()=>panel.close(slot.flow)} confirmOnMount/>
     {slot.identity!==null&&['READY','ERROR'].includes(state.phase)&&!panel.comments.getSnapshot().confirmed?.items.some(row=>row.id===slot.identity)&&<button className="ui-button" type="button" disabled={panel.blocked} onClick={()=>void panel.select(slot.identity!)}>返回评论所在页</button>}
+    </div>
   </>;
 }
 function CardActions({panel,comment}:Readonly<{panel:RequirementCommentPanel;comment:CommentItem}>){
-  const [open,setOpen]=useState(false),id=useId(),trigger=useRef<HTMLButtonElement>(null),operation=useRef<HTMLDivElement>(null);
+  const [open,setOpen]=useState(false),id=useId(),trigger=useRef<HTMLButtonElement>(null),operation=useRef<HTMLDivElement>(null),hadSlot=useRef(false);
   const slot=panel.slot(comment.id);
   useLayoutEffect(()=>{
     if(slot?.open&&slot.flow.intent.kind==='EDIT')operation.current?.querySelector<HTMLTextAreaElement>('textarea:not(:disabled)')?.focus({preventScroll:true});
+    if(slot?.open&&slot.flow.intent.kind==='MODIFY')operation.current?.querySelector<HTMLButtonElement>('[role=combobox]:not(:disabled)')?.focus({preventScroll:true});
+    if(!slot&&hadSlot.current)trigger.current?.focus({preventScroll:true});hadSlot.current=slot!==null;
   },[slot?.key,slot?.open]);
   // The command/editor is outside the disclosure. Collapsing secondary actions
   // never retires a request, input, confirmation or recovery owner.
   if(slot)return <div className="comment-operation" ref={operation}><Operation panel={panel} slot={slot}/></div>;
   const allowed=panel.writeReady,orphan=comment.anchor_status==='ORPHANED'||comment.location.status==='ORPHANED';
-  const execute=(kind:'RESOLVE'|'REOPEN'|'MODIFY')=>{const flow=panel.begin(comment.id,kind);if(flow)void panel.submit(flow);};
+  const execute=(kind:'RESOLVE'|'REOPEN')=>{const flow=panel.begin(comment.id,kind);if(flow)void panel.submit(flow);};
   return <div className="comment-action-group" onKeyDown={event=>{
     if(event.key==='Escape'&&open&&!event.defaultPrevented&&!(event.target instanceof Element&&event.target.closest('dialog'))){
       event.preventDefault();event.stopPropagation();setOpen(false);trigger.current?.focus();
@@ -39,7 +44,7 @@ function CardActions({panel,comment}:Readonly<{panel:RequirementCommentPanel;com
     <button className="ui-button" type="button" ref={trigger} disabled={panel.blocked} aria-expanded={open} aria-controls={id} onClick={()=>setOpen(value=>!value)}><Icon name="more"/>更多</button>
     <div id={id} className="comment-more-actions motion-disclosure" hidden={!open} inert={!open} aria-hidden={!open}>
       {comment.status==='OPEN'&&<><button className="ui-button" type="button" disabled={!allowed} onClick={()=>panel.begin(comment.id,'EDIT')}>编辑评论</button>
-        {!orphan&&<button className="ui-button" type="button" disabled={!allowed} onClick={()=>execute('MODIFY')}>让 AI 修改</button>}</>}
+        {!orphan&&<button className="ui-button" type="button" disabled={!allowed} onClick={()=>panel.begin(comment.id,'MODIFY')}>根据评论提出修改建议</button>}</>}
       <button className="ui-button" type="button" disabled={!allowed} onClick={()=>panel.begin(comment.id,'DELETE')}>删除评论</button>
     </div>
   </div>;

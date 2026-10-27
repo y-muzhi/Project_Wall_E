@@ -194,6 +194,32 @@ def complete_batch_input(payload: object) -> CompleteBatchInput:
     return CompleteBatchInput(strict_integer(value['batch_id'], 'batch_id'), strict_integer(value['expected_content_version'], 'expected_content_version'), request_key(value['idempotency_key'], 'idempotency_key'))
 
 
+@dataclass(frozen=True)
+class AcceptPendingInput:
+    batch_id: int
+    expected_content_version: int
+    expected_pending_ids: tuple[int, ...]
+    idempotency_key: str
+
+    def business_input(self):
+        return {'batch_id': self.batch_id, 'expected_content_version': self.expected_content_version,
+            'expected_pending_ids': list(self.expected_pending_ids)}
+
+
+def accept_pending_input(payload):
+    fields = ('batch_id', 'expected_content_version', 'expected_pending_ids', 'idempotency_key')
+    value = object_fields(payload, 'body', fields, fields)
+    ids = value['expected_pending_ids']
+    if type(ids) is not list or not 1 <= len(ids) <= 100:
+        reject('expected_pending_ids', 'INVALID_FORMAT', '必须提供1至100个待处理建议ID')
+    ids = tuple(strict_integer(identity, 'expected_pending_ids') for identity in ids)
+    if len(set(ids)) != len(ids):
+        reject('expected_pending_ids', 'INVALID_FORMAT', '待处理建议ID不能重复')
+    return AcceptPendingInput(strict_integer(value['batch_id'], 'batch_id'),
+        strict_integer(value['expected_content_version'], 'expected_content_version'), ids,
+        request_key(value['idempotency_key'], 'idempotency_key'))
+
+
 def stored_patch(item: dict) -> dict:
     return {field: item[field] for field in ('title', 'explanation', 'impact', 'patch_operation', 'target_ref', 'original_content', 'proposed_markdown')} | {'selector_json': item['selector'], 'proposed_data_json': item['proposed_data']}
 

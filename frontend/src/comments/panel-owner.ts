@@ -95,6 +95,7 @@ export class RequirementCommentPanel{
     owner.release();flow.dispose();this.owners.delete(identity);this.publish({});return true;
   }
   open(flow:CommentCommand):void{const owner=[...this.owners.values()].find(owner=>owner.slot.flow===flow);if(this.blocked||!owner)return;owner.slot=Object.freeze({...owner.slot,open:true});this.publish({});}
+  collapse(flow:CommentCommand):void{const owner=[...this.owners.values()].find(owner=>owner.slot.flow===flow);if(!owner||this.blocked)return;owner.slot=Object.freeze({...owner.slot,open:false});this.publish({});}
   private enqueue(work:()=>Promise<void>):Promise<void>{
     if(this.closed)return Promise.reject(Error('Comment panel is retired'));this.jobs++;this.publish({refreshing:true});const pending=this.tail.then(async()=>{if(this.blocked)throw Error('当前评论已隐藏或暂停，请恢复后重新读取');await work();});this.tail=pending.catch(()=>undefined);
     return pending.catch(error=>{this.publish({error:error instanceof Error?error.message:'评论与详情暂时无法重新读取'});throw error;}).finally(()=>{this.jobs--;if(!this.jobs)this.publish({refreshing:false});});

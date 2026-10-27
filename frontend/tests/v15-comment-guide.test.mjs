@@ -12,7 +12,7 @@ test('comment proposal keeps the actual document/discussion versions and origina
  const owner=new CommentCommand(detail(),{kind:'MODIFY',comment},api);
  assert.equal(await owner.submit(),false);assert.equal(owner.getSnapshot().phase,'UNKNOWN');
  assert.equal(await owner.retryUnknown(async()=>detail(3,99)),true);assert.equal(owner.getSnapshot().phase,'CONFIRMED');
- assert.deepEqual(prepared,[[1,7,4]]);assert.equal(sends,2);assert.equal(owner.getSnapshot().outcome.document_id,2);assert.deepEqual(owner.getSnapshot().outcome.receipt,receipt);owner.dispose();
+ assert.deepEqual(prepared,[[1,7,4,'COMMENT']]);assert.equal(sends,2);assert.equal(owner.getSnapshot().outcome.document_id,2);assert.deepEqual(owner.getSnapshot().outcome.receipt,receipt);owner.dispose();
 });
 test('a comment cannot use another reading document as its owner or silently rebase onto it',()=>{
  const api={};assert.throws(()=>new CommentCommand(detail(3),{kind:'MODIFY',comment},api));
@@ -23,4 +23,25 @@ test('the comment API transports two versions and a MODEL receipt rather than ma
  const api=new WalleApi(new ApiClient(async(path,init)=>{requests.push({path,init});return new Response(JSON.stringify({success:true,data:receipt,error:null,meta:{request_id:key}}),{status:202,headers:{'Content-Type':'application/json'}});},()=>key),null);
  assert.deepEqual((await api.prepareModifyFromComment(1,7,4).submit()).data,receipt);
  assert.equal(requests[0].path,'/api/v1/comments/1/guide-runs');assert.deepEqual(JSON.parse(requests[0].init.body),{expected_content_version:7,expected_discussion_version:4});
+});
+
+
+test('scope draft is local and sends only explicit submission; UNKNOWN freezes scope and exact body/key',async()=>{
+ const requests=[],key='00000000-0000-4000-8000-000000000002';let sends=0;
+ const api=new WalleApi(new ApiClient(async(path,init)=>{requests.push({path,body:init.body,key:new Headers(init.headers).get('Idempotency-Key')});if(++sends===1)throw Error('lost receipt');return new Response(JSON.stringify({success:true,data:receipt,error:null,meta:{request_id:key}}),{status:202,headers:{'Content-Type':'application/json'}});},()=>key),null);
+ api.getComment=async()=>({data:comment});
+ const actual={...detail(),current:{...detail().current,block_state_json:{blocks:[{block_id:9,block_type:'heading'},{block_id:1,block_type:'paragraph'}]}}};
+ const flow=new CommentCommand(actual,{kind:'MODIFY',comment},api),other=new CommentCommand(actual,{kind:'MODIFY',comment:{...comment,id:2}},api);
+ assert(flow.sectionAvailable);flow.changeScope('SECTION');flow.changeScope('DOCUMENT');assert.equal(requests.length,0);assert.equal(other.getSnapshot().scope_mode,'COMMENT');
+ assert(!await flow.submit());assert.equal(flow.getSnapshot().phase,'UNKNOWN');flow.changeScope('COMMENT');assert.equal(flow.getSnapshot().scope_mode,'DOCUMENT');
+ assert(await flow.retryUnknown(async()=>detail(3,999)));assert.equal(requests.length,2);assert.deepEqual(requests[0],requests[1]);
+ assert.equal(JSON.parse(requests[0].body).scope_mode,'DOCUMENT');assert.equal(JSON.parse(requests[0].body).expected_content_version,7);
+ flow.dispose();other.dispose();
+});
+
+test('no heading never grants SECTION, and refreshed content/comment requires explicit scope review',async()=>{
+ let prepares=0;const api={prepareModifyFromComment(){prepares++;return {async submit(){return {data:receipt};}};}};
+ const flow=new CommentCommand(detail(),{kind:'MODIFY',comment},api);assert(!flow.sectionAvailable);assert.throws(()=>flow.changeScope('SECTION'));
+ flow.changeScope('DOCUMENT');assert(flow.rebase(detail(2,8),comment));assert(flow.getSnapshot().scope_review);assert(!await flow.submit());assert.equal(prepares,0);
+ flow.changeScope('DOCUMENT');assert(!flow.getSnapshot().scope_review);assert(await flow.submit());assert.equal(prepares,1);flow.dispose();
 });

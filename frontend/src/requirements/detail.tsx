@@ -8,7 +8,7 @@ import {OwnedDocumentControls} from './document-controls.tsx';
 import {DocumentCreationProvider,DocumentDirectory,DocumentMetadataBar,NewDocumentButton} from './document-directory-view.tsx';
 import {CommentPanel,CommentDocumentTools} from '../comments/panel.tsx';
 import {RevisionList,RevisionSaveControl} from '../revisions/components.tsx';
-import {GuideConversation} from '../guide/conversation.tsx';
+import {GuideConversation,ConversationSuggestions} from '../guide/conversation.tsx';
 import {Confirmation} from '../shared/confirmation.tsx';
 import {ToastViewport} from '../shared/toast.tsx';
 import {localTime} from '../shared/time.ts';
@@ -41,11 +41,12 @@ function LoadedDetail({owner,host,back}:Readonly<{owner:RequirementDetailOwner;h
  return <DocumentCreationProvider owner={owner}><div className="detail-product" ref={product} data-requirement-id={actual.requirement.id}>
   <DetailFrame layout={regions.layout} viewport={regions.viewport} title={actual.requirement.title} status={<div className="requirement-metadata"><span>{actual.requirement.requirement_no}</span><span>{actual.requirement.requirement_type==='NEW'?'需求新增':'需求改造'}</span><span className="requirement-state-badge" data-state={actual.requirement.status}>{REQUIREMENT_STATUS_LABELS[actual.requirement.status]}</span></div>}
    actions={null} properties={<RequirementHeader documentActions={<div className="requirement-document-actions" ref={setDocumentActionHost}/>} commands={regions.header} ready={state.ready} blocked={blocked||document.busy} history={historical} refresh={owner.refresh} refreshRevisions={async()=>{if(!await owner.documents.revisions.refresh())throw Error('实际版本列表暂时无法读取');}} notifyConfirmed={owner.notifyConfirmed}
-    tools={<><button className="ui-button" type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button></>}/>}
+    tools={<><button className="ui-button" type="button" disabled={blocked||document.busy||state.loading} onClick={()=>regions.layout.openTab('REVISIONS')}>文档记录</button><button className="ui-button" type="button" disabled={blocked||document.busy||state.loading} onClick={()=>void owner.refresh().catch(()=>undefined)}>重新读取详情</button></>}/>}
    outline={<DocumentDirectory owner={owner}/>} outlineActions={<NewDocumentButton owner={owner} iconOnly/>}
    document={navigation=><><DocumentMetadataBar owner={owner} navigation={actual.current?navigation:null}/><OwnedDocumentControls actionHost={documentActionHost} showSaveStatus={false} owner={owner.documents} blocked={blocked} auxiliary={document.mode!=='CURRENT'||!owner.documents.currentBinding} notifyConfirmed={owner.notifyConfirmed}/><CommentDocumentTools panel={regions.comments} documents={owner.documents} openPanel={owner.openComments}/>
     {state.error&&<p className="inline-error" role="alert">{state.error}</p>}{document.mode==='EMPTY'&&<section className="document-empty-workspace"><h2>{actual.documents.length?'选择一份文档开始阅读':'先梳理需求，再形成文档'}</h2><p>{actual.documents.length?'从文档导航选择已有文档，也可以新建空白或框架文档。':'初始想法已保存在对话中。可以先讨论目标与范围，也可以直接手动创建文档。'}</p><div className="document-empty-actions">{!actual.current&&navigation}{!actual.documents.length&&<button className="ui-button primary" type="button" disabled={blocked} onClick={discuss}>前往讨论</button>}<NewDocumentButton owner={owner} label="手动新建文档"/></div></section>}<DocumentMount host={host}/></>}
-   ai={<GuideConversation owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
+   ai={<GuideConversation owner={regions.conversation} documents={owner.documents}/>}
+   suggestions={<ConversationSuggestions owner={regions.conversation} documents={owner.documents} toasts={owner.toasts}/>}
    progress={<DiscussionProgress owner={owner} active={supported&&geometry.right_open&&geometry.right_tab==='PROGRESS'} blocked={blocked||document.busy||historical} discuss={discuss}/>}
    comments={<CommentPanel panel={regions.comments} documents={owner.documents}/>}
    revisions={<DocumentRecords cache={regions.conversation.modelCalls} modelCallApi={regions.conversation.modelCallApi} requirementId={actual.requirement.id} active={supported&&geometry.right_open&&geometry.right_tab==='REVISIONS'} blocked={blocked||document.busy} revisions={owner.documents.revisions} history={regions.conversation.read.history} readRun={owner.readRunRecord}

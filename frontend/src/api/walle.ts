@@ -209,8 +209,10 @@ export class WalleApi {
     return checked(identified(models.guideAccepted,identity),actual=>require(actual.status==='CANCELLED'&&actual.current_step==='FINISHED'))(row);
   });}
   prepareRetryGuide(identity:number){return this.action('POST',target('guide-runs',identity,'/retry'),null,()=>checked(models.runReceipt,value=>require(value.guide_run_id!==identity)),202);}
-  prepareModifyFromComment(identity:number,version:number,discussionVersion:number){return this.action('POST',target('comments',identity,'/guide-runs'),
-    {expected_content_version:id(version),expected_discussion_version:id(discussionVersion)},()=>models.runReceipt,202);}
+  prepareModifyFromComment(identity:number,version:number,discussionVersion:number,scopeMode?:'COMMENT'|'BLOCK'|'SECTION'|'DOCUMENT'){
+    if(scopeMode!==undefined&&!['COMMENT','BLOCK','SECTION','DOCUMENT'].includes(scopeMode))throw TypeError('Invalid comment scope mode');
+    return this.action('POST',target('comments',identity,'/guide-runs'),
+    {expected_content_version:id(version),expected_discussion_version:id(discussionVersion),...(scopeMode===undefined?{}:{scope_mode:scopeMode})},()=>models.runReceipt,202);}
 
   prepareCardResponses(identity:number,body:models.Responses,discussionVersion:number){
     const action=this.action('POST',target('conversation-messages',identity,'/responses'),{...body,expected_discussion_version:id(discussionVersion)},original=>{
@@ -230,6 +232,16 @@ export class WalleApi {
       require(original!.decision==='EDITED'?typeof original!.edited_content==='string':!('edited_content' in original!));
       return checked(shape({ suggestion: identified(models.suggestion, identity), counts: models.counts }), value => {
         require(value.suggestion.status === original!.decision && value.counts[value.suggestion.status.toLowerCase() as 'accepted' | 'rejected' | 'edited'] > 0);
+      });
+    });
+  }
+  prepareAcceptPendingBatch(identity:number,version:number,pendingIds:readonly number[]){
+    return this.action('POST',target('suggestion-batches',identity,'/accept-pending'),{expected_content_version:id(version),expected_pending_ids:[...pendingIds]},original=>{
+      bodyFields(original!,['expected_content_version','expected_pending_ids']);
+      const ids=array(id,100,1)(original!.expected_pending_ids);require(new Set(ids).size===ids.length);
+      return checked(shape({batch:identified(models.batch,identity),accepted_suggestion_ids:array(id,100,1)}),value=>{
+        require(value.batch.status==='PENDING'&&value.batch.base_content_version===original!.expected_content_version&&value.batch.counts.pending===0);
+        require(JSON.stringify(value.accepted_suggestion_ids)===JSON.stringify(ids)&&ids.every(identity=>value.batch.suggestions.some(item=>item.id===identity&&item.status==='ACCEPTED')));
       });
     });
   }
