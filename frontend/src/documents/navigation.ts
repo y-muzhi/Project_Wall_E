@@ -40,17 +40,19 @@ export class DocumentNavigation{
   private readonly root:HTMLElement;private readonly port:NavigationPort;private readonly scrollport:HTMLElement|null;
   private readonly listeners=new Set<()=>void>();private readonly removers:(()=>void)[]=[];private observer:MutationObserver;private resize:ResizeObserver;
   private frame:number|null=null;private needsRead=false;private closed=false;private visible=true;private interacting=false;
+  private hovered:HTMLElement|null=null;private leaveTimer:ReturnType<typeof setTimeout>|undefined;
   private highlighted:HTMLElement|null=null;private highlightTimer:ReturnType<typeof setTimeout>|undefined;
   private value:NavigationState=Object.freeze({content:null,active_heading:null,selected_block:null,source_block:null,toolbar:null,error:null});
   private constructor(root:HTMLElement,port:NavigationPort,scrollport:HTMLElement|null){
     this.root=root;this.port=port;this.scrollport=scrollport;
     const listen=(target:EventTarget,name:string,callback:EventListener,capture=false)=>{target.addEventListener(name,callback,capture);this.removers.push(()=>target.removeEventListener(name,callback,capture));};
     listen(window,'scroll',()=>this.schedule(false),true);listen(window,'resize',()=>this.schedule(false));
-    listen(root,'pointerover',event=>this.selectTarget(event.target));listen(root,'focusin',event=>this.selectTarget(event.target));
-    const inAuxiliary=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.block-auxiliary,.block-source-popover');
-    listen(root,'pointerleave',event=>{if(inAuxiliary((event as PointerEvent).relatedTarget)||root.contains(document.activeElement))return;this.interacting=false;this.measure();});
-    listen(root,'focusout',event=>{if(root.contains((event as FocusEvent).relatedTarget as Node|null)||inAuxiliary((event as FocusEvent).relatedTarget))return;this.interacting=false;this.measure();});
-    listen(document,'pointerover',event=>{if(root.contains(event.target as Node|null)||inAuxiliary(event.target)||root.contains(document.activeElement)||inAuxiliary(document.activeElement)||!this.interacting)return;this.interacting=false;this.measure();});
+    listen(root,'pointerover',event=>{this.cancelLeave();this.selectTarget(event.target);});listen(root,'focusin',event=>this.selectTarget(event.target));
+    const inAuxiliary=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.block-operation-trigger,.block-auxiliary,.block-source-popover,.block-selection-comment');
+    const leave=()=>{this.cancelLeave();this.leaveTimer=setTimeout(()=>{this.leaveTimer=undefined;if(root.contains(document.activeElement)||inAuxiliary(document.activeElement))return;this.interacting=false;this.measure();},180);};
+    listen(root,'pointerleave',event=>{if(inAuxiliary((event as PointerEvent).relatedTarget))return;leave();});
+    listen(root,'focusout',event=>{if(root.contains((event as FocusEvent).relatedTarget as Node|null)||inAuxiliary((event as FocusEvent).relatedTarget))return;leave();});
+    listen(document,'pointerover',event=>{if(root.contains(event.target as Node|null)||inAuxiliary(event.target)){this.cancelLeave();return;}if(this.interacting&&this.leaveTimer===undefined)leave();});
     listen(root,'compositionstart',()=>this.schedule(true));listen(root,'compositionend',()=>this.schedule(true));
     listen(root,'keyup',()=>{const selection=window.getSelection();if(selection?.anchorNode)this.selectTarget(selection.anchorNode);});
     this.observer=new MutationObserver(()=>this.schedule(true));this.observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['data-block-id']});
@@ -74,7 +76,7 @@ export class DocumentNavigation{
     if(this.closed)return;this.clearHighlight();try{const content=this.port.read(),ids=new Set(content.blocks.map(block=>block.block_id));
       this.publish({content,error:null,selected_block:this.value.selected_block!==null&&ids.has(this.value.selected_block)?this.value.selected_block:null,
         source_block:this.value.source_block!==null&&ids.has(this.value.source_block)?this.value.source_block:null});this.measure();
-    }catch{this.publish({error:'当前输入尚未形成完整文档，大纲和区块来源暂不可操作。',toolbar:null,source_block:null});}
+    }catch{this.hover(null);this.publish({error:'当前输入尚未形成完整文档，大纲和区块来源暂不可操作。',toolbar:null,source_block:null});}
   }
   private bounds():{left:number;right:number;top:number;bottom:number}{const box=this.scrollport?.getBoundingClientRect();return {left:Math.max(0,box?.left??0),right:Math.min(window.innerWidth,box?.right??window.innerWidth),top:Math.max(0,box?.top??0),bottom:Math.min(window.innerHeight,box?.bottom??window.innerHeight)};}
   private measure():void{
@@ -83,14 +85,19 @@ export class DocumentNavigation{
     if(this.root.getClientRects().length){for(const entry of this.value.content.outline){const element=this.port.element(entry.block_id);if(!element?.getClientRects().length)continue;const top=element.getBoundingClientRect().top;first??=entry.block_id;if(top<=(atEnd?bounds.bottom-1:bounds.top+24))heading=entry.block_id;else break;}}
     heading??=first;const element=this.value.selected_block===null?null:this.port.element(this.value.selected_block),box=element?.getBoundingClientRect();
     const visible=(this.interacting||this.value.source_block!==null)&&element?.getClientRects().length&&box&&box.bottom>bounds.top&&box.top<bounds.bottom;
-    // CSS aligns the toolbar's right edge with this anchor, within the actual
-    // document viewport instead of placing it over the left outline/panel.
-    this.publish({active_heading:heading,toolbar:visible?Object.freeze({left:Math.max(bounds.left+8,Math.min(bounds.right-8,box.right)),top:Math.max(bounds.top+4,Math.min(bounds.bottom-40,box.top))}):null});
+    this.hover(visible?element:null);
+    // The document reserves a left gutter. Controls stay outside its text and
+    // inside the visible document viewport, even for a partly scrolled block.
+    this.publish({active_heading:heading,toolbar:visible?Object.freeze({left:Math.max(bounds.left+4,Math.min(bounds.right-36,box.left-36)),top:Math.max(bounds.top+4,Math.min(bounds.bottom-36,box.top))}):null});
   }
   private selectTarget(target:EventTarget|null):void{
     if(!this.visible||this.value.error||!this.value.content||!(target instanceof Node))return;
+    if(this.value.source_block!==null)return;
     for(const block of this.value.content.blocks){const element=this.port.element(block.block_id);if(element&&(element===target||element.contains(target))){this.interacting=true;this.publish({selected_block:block.block_id});this.measure();return;}}
   }
+  private cancelLeave():void{if(this.leaveTimer!==undefined)clearTimeout(this.leaveTimer);this.leaveTimer=undefined;}
+  private hover(element:HTMLElement|null):void{if(this.hovered===element)return;this.hovered?.classList.remove('block-hover-highlight');this.hovered=element;this.hovered?.classList.add('block-hover-highlight');}
+  dismissAuxiliary():void{if(this.closed)return;this.cancelLeave();this.interacting=false;this.hover(null);this.publish({toolbar:null,source_block:null});}
   private clearHighlight():void{if(this.highlightTimer!==undefined)clearTimeout(this.highlightTimer);this.highlightTimer=undefined;this.highlighted?.classList.remove('comment-target-highlight');this.highlighted=null;}
   locate(blockId:number,highlight=false):boolean{
     if(this.closed||!this.visible||this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId))return false;
@@ -99,6 +106,6 @@ export class DocumentNavigation{
     else element.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'});this.interacting=true;this.publish({selected_block:blockId});this.measure();if(highlight){this.clearHighlight();this.highlighted=element;element.classList.add('comment-target-highlight');this.highlightTimer=setTimeout(()=>this.clearHighlight(),2000);}return true;
   }
   source(blockId:number|null):void{if(this.closed)return;if(blockId!==null&&(!this.visible||this.value.error||!this.value.content?.blocks.some(block=>block.block_id===blockId)))return;this.publish({source_block:blockId});this.measure();}
-  setVisible(visible:boolean):void{if(this.closed||this.visible===visible)return;this.visible=visible;if(visible)this.refresh();else{this.clearHighlight();this.publish({toolbar:null,source_block:null,active_heading:null});}}
-  dispose():void{if(this.closed)return;this.closed=true;this.clearHighlight();for(const remove of this.removers)remove();this.observer.disconnect();this.resize.disconnect();if(this.frame!==null)cancelAnimationFrame(this.frame);this.listeners.clear();}
+  setVisible(visible:boolean):void{if(this.closed||this.visible===visible)return;this.visible=visible;if(visible)this.refresh();else{this.cancelLeave();this.hover(null);this.clearHighlight();this.publish({toolbar:null,source_block:null,active_heading:null});}}
+  dispose():void{if(this.closed)return;this.closed=true;this.cancelLeave();this.hover(null);this.clearHighlight();for(const remove of this.removers)remove();this.observer.disconnect();this.resize.disconnect();if(this.frame!==null)cancelAnimationFrame(this.frame);this.listeners.clear();}
 }

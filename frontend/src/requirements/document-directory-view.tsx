@@ -64,7 +64,9 @@ export function DocumentDirectory({owner}:{owner:RequirementDetailOwner}){
 
 export function NewDocumentButton({owner,label='新建文档',iconOnly=false}:{owner:RequirementDetailOwner;label?:string;iconOnly?:boolean}){
  const flow=owner.regions!.directory;useSyncExternalStore(flow.subscribe,flow.getSnapshot);
+ const editing=useSyncExternalStore(owner.documents.subscribe,owner.documents.getSnapshot).mode==='MANUAL';
  const create=useContext(DocumentCreationContext);
+ if(editing)return null;
  return <button className={'ui-button'+(iconOnly?' icon-button document-create-trigger':'')} type="button" aria-label={label} title={iconOnly?label:undefined} disabled={!flow.allowed||create===null} onClick={()=>create?.()}>{iconOnly?<Icon name="plus"/>:label}</button>;
 }
 

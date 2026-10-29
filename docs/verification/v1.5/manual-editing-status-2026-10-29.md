@@ -20,3 +20,13 @@ M15-MANUAL-ACTIONS-01。DocumentMetadataBar新增真实文档mode订阅，MANUAL
 - 初步尝试静态服务端渲染检查，因组件原useSyncExternalStore没有SSR getServerSnapshot而无法运行，未修改生产组件以适配该临时检查；改为实际浏览器挂载验证并通过。
 
 检查页面仅使用内存owner，没有业务请求或用户数据写入。临时Vite／浏览器／缓存／脚本已清理；未执行生产构建或完整业务保存链，本轮未提交推送。
+
+## 同日补充：人工编辑页面隐藏新建文档入口
+
+M15-MANUAL-CREATE-01，仅改NewDocumentButton的视图订阅与条件渲染。
+
+- `npm run typecheck`退出0；`node --test tests/v15-directory.test.mjs tests/v15-reading.test.mjs`：2文件通过、0失败，453.954268ms。
+- Chromium154隔离加载真实NewDocumentButton／DocumentCreationProvider：MANUAL→CURRENT→EMPTY→MANUAL→CURRENT，两种入口DOM计数依次0／2／2／0／2；恢复后的加号实际点击打开新建文档弹窗，空表关闭正常。页面脚本错误0，未提交创建或请求业务后端。
+- 临时Vite／浏览器由finally关闭，缓存／检查脚本已清理，未留测试截图、JSON、录像或原始日志；`git diff --check`通过。未重复全量验收或生产构建。
+
+本轮继续在work修改，尚未提交推送；上轮两项已集中提交为b954017，不能用此前“尚未提交”的历史描述判断当前Git状态。

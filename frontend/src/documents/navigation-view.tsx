@@ -27,11 +27,12 @@ export function DocumentOutline({navigation,close,heading=true}:{navigation:Docu
 /** Source IDs remain internal; labels state the type and actor, never invent an
  * object title or dereference a deleted editing session as a live draft. */
 export function BlockAuxiliary({navigation,extra}:{navigation:DocumentNavigation;extra?:ReactNode}){
-  const state=useSyncExternalStore(navigation.subscribe,navigation.getSnapshot),trigger=useRef<HTMLButtonElement>(null),popover=useRef<HTMLDivElement>(null);
+  const state=useSyncExternalStore(navigation.subscribe,navigation.getSnapshot),trigger=useRef<HTMLButtonElement>(null),popover=useRef<HTMLDivElement>(null),handle=useRef<HTMLButtonElement>(null),menu=useRef<HTMLDivElement>(null),menuId=useId();
+  const [menuBlock,setMenuBlock]=useState<number|null>(null),open=state.toolbar!==null&&state.selected_block!==null&&menuBlock===state.selected_block&&!state.error;
   const block=state.content?.blocks.find(item=>item.block_id===state.source_block);
   const present=useMotionPresence(block!==undefined),lastBlock=useRef(block);if(block)lastBlock.current=block;const shown=block??lastBlock.current;
   useEffect(()=>{if(!block)return;const previous=document.activeElement,element=popover.current;let restoreFocus=true;element?.focus();
-    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!activeModal()){event.preventDefault();navigation.source(null);}};
+    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!event.defaultPrevented&&!activeModal()){event.preventDefault();event.stopPropagation();navigation.source(null);}};
     const outside=(event:PointerEvent)=>{if(!element?.contains(event.target as Node)&&!trigger.current?.contains(event.target as Node)){restoreFocus=false;navigation.source(null);}};
     document.addEventListener('keydown',escape);document.addEventListener('pointerdown',outside);
     return()=>{document.removeEventListener('keydown',escape);document.removeEventListener('pointerdown',outside);
@@ -40,10 +41,23 @@ export function BlockAuxiliary({navigation,extra}:{navigation:DocumentNavigation
       // move focus behind a confirmation dialog that has just opened.
       if(restoreFocus&&!activeModal()&&(focused===document.body||focused===null||element?.contains(focused))&&previous instanceof HTMLElement&&previous.isConnected&&!previous.closest('[inert],[hidden]')&&!previous.matches(':disabled'))previous.focus({preventScroll:true});};
   },[navigation,block?.block_id]);
+  useEffect(()=>{if(state.toolbar===null)setMenuBlock(null);},[state.toolbar]);
+  useEffect(()=>{if(!open)return;
+    const outside=(event:PointerEvent)=>{if(menu.current?.contains(event.target as Node)||handle.current?.contains(event.target as Node)||popover.current?.contains(event.target as Node))return;setMenuBlock(null);if(!block)navigation.dismissAuxiliary();};
+    const escape=(event:KeyboardEvent)=>{if(event.key!=='Escape'||event.defaultPrevented||block||activeModal())return;event.preventDefault();event.stopPropagation();setMenuBlock(null);handle.current?.focus({preventScroll:true});};
+    document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);
+    return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape);};
+  },[navigation,open,block]);
+  const anchor=state.toolbar,menuWidth=160,menuHeight=84;
+  const menuPosition=anchor?{left:Math.max(8,Math.min(window.innerWidth-menuWidth-8,anchor.left>=menuWidth+16?anchor.left-menuWidth-8:anchor.left)),top:Math.max(8,Math.min(window.innerHeight-menuHeight-8,anchor.top+(anchor.left>=menuWidth+16?0:36)))}:undefined;
   return createPortal(<>
-    {state.toolbar&&state.selected_block!==null&&!state.error&&<div className="block-auxiliary" aria-label="区块辅助栏" style={state.toolbar}>
-      <button className="ui-button" type="button" ref={trigger} aria-expanded={block!==undefined} onClick={()=>navigation.source(block?null:state.selected_block)}><Icon name="info"/>来源</button>
-      {extra}
+    {anchor&&state.selected_block!==null&&!state.error&&<button ref={handle} type="button" className="ui-button icon-button block-operation-trigger" style={anchor} aria-label="区块操作" title="区块操作" aria-haspopup="menu" aria-expanded={open} aria-controls={open?menuId:undefined}
+      onMouseDown={event=>event.preventDefault()} onPointerEnter={()=>setMenuBlock(state.selected_block)} onClick={()=>setMenuBlock(state.selected_block)} onKeyDown={event=>{if(event.key==='ArrowDown'){event.preventDefault();setMenuBlock(state.selected_block);requestAnimationFrame(()=>menu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus());}}}><Icon name="more"/></button>}
+    {open&&<div ref={menu} id={menuId} className="block-auxiliary" role="menu" aria-label="区块操作栏" style={menuPosition} onKeyDown={event=>{
+      if(event.key!=='ArrowDown'&&event.key!=='ArrowUp'&&event.key!=='Home'&&event.key!=='End')return;event.preventDefault();const buttons=Array.from(menu.current!.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')),index=buttons.indexOf(document.activeElement as HTMLButtonElement),next=event.key==='Home'?0:event.key==='End'?buttons.length-1:event.key==='ArrowDown'?(index+1)%buttons.length:(index-1+buttons.length)%buttons.length;buttons[next]?.focus();
+    }}>
+      <button className="ui-button" role="menuitem" type="button" ref={trigger} aria-expanded={block!==undefined} onMouseDown={event=>event.preventDefault()} onClick={()=>navigation.source(block?null:state.selected_block)}><Icon name="info"/>来源</button>
+      {extra??<button className="ui-button" role="menuitem" type="button" disabled title={state.content?.kind==='REVISION'?'历史版本不可新增评论。':'请在正式正文阅读页面评论区块。'}><Icon name="comment"/>评论区块</button>}
     </div>}
     {present&&shown&&<div ref={popover} className="block-source-popover" inert={!block} aria-hidden={!block} data-motion-open={block!==undefined} role="dialog" aria-label="区块来源" tabIndex={-1} style={{left:Math.max(8,Math.min(window.innerWidth-336,(state.toolbar?.left??336)-320)),top:Math.max(8,Math.min(window.innerHeight-300,(state.toolbar?.top??16)+40))}}>
       <header><strong>区块来源</strong><button className="ui-button" type="button" aria-label="关闭来源" onClick={()=>navigation.source(null)}><Icon name="close"/></button></header>

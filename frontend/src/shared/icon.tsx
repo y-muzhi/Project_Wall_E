@@ -19,6 +19,7 @@ const shapes = {
   success: <><circle cx="8" cy="8" r="6"/><path d="m5 8 2 2 4-4"/></>,
   error: <><circle cx="8" cy="8" r="6"/><path d="m6 6 4 4m0-4-4 4"/></>,
   info: <><circle cx="8" cy="8" r="6"/><path d="M8 7v4m0-7v.5"/></>,
+  comment: <path d="M3 2.5h10v8H7l-4 3v-11Z"/>,
   warning: <><path d="m8 2 6.5 12h-13L8 2Z"/><path d="M8 6v3m0 2v.5"/></>,
   more: <>{[3, 8, 13].map(cx=><circle key={cx} cx={cx} cy="8" r="1" fill="currentColor" stroke="none"/>)}</>,
   settings: <><path d="M2 4h3m4 0h5M2 8h7m4 0h1M2 12h1m4 0h7"/><circle cx="7" cy="4" r="2"/><circle cx="11" cy="8" r="2"/><circle cx="5" cy="12" r="2"/></>,

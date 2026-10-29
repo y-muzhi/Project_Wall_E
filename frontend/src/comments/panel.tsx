@@ -8,6 +8,7 @@ import {CommentList,CommentMarkerLayer} from './components.tsx';
 import {CommentCommandControl} from './command-control.tsx';
 import {commentTarget} from './target.ts';
 import {locateComment} from './locate.ts';
+import {selectionToolbarPosition} from '../documents/selection-toolbar-position.ts';
 import type {RequirementCommentPanel,CommentSlot} from './panel-owner.ts';
 
 function Operation({panel,slot}:Readonly<{panel:RequirementCommentPanel;slot:CommentSlot}>){
@@ -74,13 +75,21 @@ export function CommentPanel({panel,documents}:Readonly<{panel:RequirementCommen
 
 function CreationEntries({panel,documents,binding,openPanel}:Readonly<{panel:RequirementCommentPanel;documents:RequirementDocumentOwner;binding:CurrentDocumentBinding;openPanel?:()=>void}>){
   const navigation=useSyncExternalStore(binding.navigation.subscribe,binding.navigation.getSnapshot),documentState=useSyncExternalStore(documents.subscribe,documents.getSnapshot),selection=documentState.selection,id=useId();
+  const [selectionPosition,setSelectionPosition]=useState<{left:number;top:number}|null>(null),[dismissedSelection,setDismissedSelection]=useState<typeof selection>(null);
+  useLayoutEffect(()=>{
+    const position=()=>{const actual=window.getSelection();if(!selection||selection===dismissedSelection||!actual?.rangeCount||actual.isCollapsed||!binding.root.contains(actual.getRangeAt(0).commonAncestorContainer)){setSelectionPosition(null);return;}
+      const range=actual.getRangeAt(0).getBoundingClientRect(),port=binding.root.getBoundingClientRect();setSelectionPosition(selectionToolbarPosition(range,{left:Math.max(8,port.left),right:Math.min(window.innerWidth-8,port.right),top:Math.max(8,port.top),bottom:Math.min(window.innerHeight-8,port.bottom)},116,40));};
+    position();window.addEventListener('scroll',position,true);window.addEventListener('resize',position);return()=>{window.removeEventListener('scroll',position,true);window.removeEventListener('resize',position);};
+  },[binding,selection,dismissedSelection]);
   const reason=panel.writeUnavailableReason,blockReason=reason??(navigation.selected_block===null?'请先选择正文区块。':null),selectionReason=reason??(selection===null?'请先选中同一正文区块内的文字，再评论选区。':null);
   const create=(range:boolean)=>{try{const block=range?selection?.block_id:navigation.selected_block;if(block!==null&&block!==undefined){if(panel.create(commentTarget(binding.editor,block,range?selection:null)))openPanel?.();}else panel.rejectTarget();}catch{panel.rejectTarget();}};
-  return <BlockAuxiliary navigation={binding.navigation} extra={<>
-    <span title={blockReason??'评论当前区块'}><button className="ui-button" type="button" title={blockReason??undefined} aria-describedby={reason?id:undefined} disabled={blockReason!==null} onMouseDown={event=>event.preventDefault()} onClick={()=>create(false)}>评论区块</button></span>
-    <span title={selectionReason??'评论当前选中文字'}><button className="ui-button" type="button" title={selectionReason??undefined} aria-describedby={selectionReason?id:undefined} disabled={selectionReason!==null} onMouseDown={event=>event.preventDefault()} onClick={()=>create(true)}>评论选区</button></span>
-    {(reason||selectionReason)&&<span id={id} className="block-comment-help">{reason??selectionReason}</span>}
-  </>}/>;
+  return <><BlockAuxiliary navigation={binding.navigation} extra={<>
+    <span title={blockReason??'评论当前区块'}><button className="ui-button" role="menuitem" type="button" title={blockReason??undefined} aria-describedby={blockReason?id+'-block':undefined} disabled={blockReason!==null} onMouseDown={event=>event.preventDefault()} onClick={()=>create(false)}><Icon name="comment"/>评论区块</button></span>
+    {blockReason&&<span id={id+'-block'} className="block-comment-help">{blockReason}</span>}
+  </>}/>{selectionPosition&&createPortal(<div className="block-selection-comment" role="group" aria-label="选区评论" style={selectionPosition} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setDismissedSelection(selection);}}}>
+    <button className="ui-button" type="button" title={selectionReason??undefined} aria-describedby={selectionReason?id+'-selection':undefined} disabled={selectionReason!==null} onMouseDown={event=>event.preventDefault()} onClick={()=>create(true)}><Icon name="comment"/>评论选区</button>
+    {selectionReason&&<span id={id+'-selection'} className="block-comment-help">{selectionReason}</span>}
+  </div>,document.body)}</>;
 }
 export function CommentDocumentTools({panel,documents,openPanel}:Readonly<{panel:RequirementCommentPanel;documents:RequirementDocumentOwner;openPanel?:()=>void}>){
   const state=useSyncExternalStore(panel.subscribe,panel.getSnapshot);useSyncExternalStore(documents.subscribe,documents.getSnapshot);
