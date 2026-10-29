@@ -2,8 +2,22 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DetailReadScope} from '../src/api/detail-read-scope.ts';
 import {WalleApi} from '../src/api/walle.ts';
+import {ApiClient,ApiUnknown,API_REQUEST_TIMEOUT_MS} from '../src/api/client.ts';
 const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('H04 overlapping timed-out writes release scoped reads only after both settle',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const sent=[];
+ const client=new ApiClient(async(_url,options)=>{sent.push(options);if(options.method==='GET')throw Error('isolated read ended');return new Promise(()=>{});},()=> '00000000-0000-4000-8000-00000000000a');
+ const api=new WalleApi(client,{}).forDetailReads();
+ try{
+  const first=assert.rejects(api.prepareCancelGuide(8).submit(),ApiUnknown);await flush();t.mock.timers.tick(10_000);
+  const second=assert.rejects(api.prepareCancelGuide(9).submit(),ApiUnknown);let released=false;const gate=api.waitForDetailWrites().then(()=>{released=true;});
+  const reading=assert.rejects(api.getGuideRun(8),ApiUnknown);await flush();assert.deepEqual(sent.map(x=>x.method),['POST','POST']);
+  t.mock.timers.tick(API_REQUEST_TIMEOUT_MS-10_000);await first;await flush();assert(!released);assert.equal(sent.length,2);
+  t.mock.timers.tick(10_000);await second;await gate;await reading;assert(released);assert.deepEqual(sent.map(x=>x.method),['POST','POST','GET']);
+ }finally{api.disposeDetailReads();}
+});
 
 test('ten consumers share one in-flight fact, then a later observation reads again',async()=>{
  const scope=new DetailReadScope(),held=deferred();let reads=0;

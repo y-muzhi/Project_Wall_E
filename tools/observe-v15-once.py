@@ -50,7 +50,7 @@ def preview(catalog):
                 'system_sha256': sha256(context.system), 'user_sha256': sha256(context.input_json),
                 'system_characters': len(context.system), 'user_characters': len(context.input_json),
                 'count_batches_sent': 0, 'chat_calls_sent': 0,
-                'input_limit': 131072, 'output_limit': 8192, 'total_limit': 139264, 'framing_reserve': 1024}
+                **{key: catalog.collaboration.counting[key] for key in ('input_limit', 'output_limit', 'total_limit', 'framing_reserve')}}
 
 
 def observe_once(directory, *, profile, catalog, count_batches, chat_calls, total_tokens, gateway=None, counter=None):
@@ -61,7 +61,7 @@ def observe_once(directory, *, profile, catalog, count_batches, chat_calls, tota
     from backend.app.infrastructure.process_lock import ProcessLock
     from backend.app.infrastructure.resources import ConfigInvalid
     from backend.app.shared.command_execution import operation_time
-    if type(count_batches) is not int or not 1 <= count_batches <= 3 or type(chat_calls) is not int or chat_calls != 1 or type(total_tokens) is not int or total_tokens != 139264:
+    if type(count_batches) is not int or not 1 <= count_batches <= 3 or type(chat_calls) is not int or chat_calls != 1 or type(total_tokens) is not int or total_tokens != catalog.collaboration.counting['total_limit']:
         raise ConfigInvalid('Explicit count/Chat allowances and complete token budget are required')
     if _profile_digest(profile.snapshot) != catalog.collaboration.release['model_profile_sha256']:
         raise ConfigInvalid('Observation profile must match the frozen release')
@@ -92,14 +92,15 @@ def observe_once(directory, *, profile, catalog, count_batches, chat_calls, tota
 
 
 def main(argv=None):
-    from backend.app.infrastructure.model_profile import ModelProfile
+    from backend.app.infrastructure.model_profile import ModelProfile, DEFAULT_PROFILE, PROFILES
     from backend.app.infrastructure.resources import ResourceCatalog
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--output-dir', type=Path)
     parser.add_argument('--allow-count-batches', type=int, choices=(1, 2, 3))
     parser.add_argument('--allow-chat-calls', type=int, choices=(1,))
-    parser.add_argument('--max-total-tokens', type=int, choices=(139264,))
+    parser.add_argument('--max-total-tokens', type=int, choices=(139264,163840))
+    parser.add_argument('--profile', choices=list(PROFILES), default=DEFAULT_PROFILE)
     parser.add_argument('--credential-file', type=Path, help='Explicit local credential import for execution only; never evaluated as code')
     args = parser.parse_args(argv)
     supplied = (args.output_dir, args.allow_count_batches, args.allow_chat_calls, args.max_total_tokens)
@@ -107,16 +108,17 @@ def main(argv=None):
         parser.error('--execute requires an explicit new output directory and every allowance')
     if not args.execute and (any(value is not None for value in supplied) or args.credential_file is not None):
         parser.error('Execution allowances require --execute; default mode is an offline preview')
-    catalog = ResourceCatalog()
+    catalog = ResourceCatalog().for_collaboration_profile(args.profile)
     if args.execute:
         try:
-            environment = None
+            import os
+            environment = {**os.environ, 'WALLE_MODEL_PROFILE': args.profile, 'WALLE_MODEL_ID': PROFILES[args.profile][0], 'WALLE_MODEL_VERSION': PROFILES[args.profile][1]}
             if args.credential_file is not None:
                 import os
                 from backend.app.infrastructure.local_credentials import read_local_credential
                 if not args.credential_file.is_absolute():
                     raise ValueError('Credential file must be an explicit absolute path')
-                environment = {**os.environ, 'WALLE_MODEL_API_KEY': read_local_credential(args.credential_file)}
+                environment = {**environment, 'WALLE_MODEL_API_KEY': read_local_credential(args.credential_file)}
             result = observe_once(args.output_dir, profile=ModelProfile.from_environment(environment), catalog=catalog,
                 count_batches=args.allow_count_batches, chat_calls=args.allow_chat_calls, total_tokens=args.max_total_tokens)
         except Exception as error:

@@ -39,7 +39,7 @@ export function RunRecordSummary({run}:Readonly<{run:GuideRun}>){
   {run.application_result==='NO_CHANGE'&&<p>未产生正文变化。</p>}{run.application_result==='NOT_APPLIED'&&<p className="inline-error">{run.operation==='PROPOSE_CHANGES'?'修改建议未生成，本轮正文未变。':'本轮未写入文档。'}</p>}
   {run.progress_result==='APPLIED'&&<p>讨论进度已更新。</p>}{run.progress_result==='REJECTED'&&<p role="alert" className="inline-error">{run.progress_error}</p>}
   {run.final_result?.analysis&&<details className="run-result"><summary>查看分析结果</summary><AnalysisResult value={run.final_result.analysis}/></details>}
-  {run.final_result&&<details className="run-result"><summary>查看运行结果摘要</summary><p className="run-summary">{run.final_result.summary}</p></details>}</>;
+  {run.final_result&&<details className="run-result" open={run.application_result==='NOT_APPLIED'}><summary>查看运行结果摘要</summary><p className="run-summary">{run.final_result.summary}</p></details>}</>;
 }
 export function ReturnedResponses({run}:Readonly<{run:GuideRun}>){
  return <>{run.returned_responses.map(response=><section key={response.llm_use_id} className="returned-model-response" aria-label={`模型返回 ${response.call_no}.${response.attempt_no}`}>

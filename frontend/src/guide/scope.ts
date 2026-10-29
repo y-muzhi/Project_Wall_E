@@ -7,6 +7,22 @@ import {utf16RangeForSelection,utf16ToCodepoint} from '../documents/selection.ts
 import type {SelectionEvent} from '../documents/selection.ts';
 export type GuideScope=ReturnType<typeof decodeScope>;
 export type GuideTarget=Readonly<{document_id:number;content_version:number;scope:GuideScope;label:string;selection:SelectionEvent|null}>;
+export type ChapterTarget=Readonly<{block_id:number;level:number;title:string;target:GuideTarget}>;
+/** Current headings only. No guessed completion state or automatic dispatch. */
+export function chapterTargets(editor:RequirementEditor):readonly ChapterTarget[]{
+ const current=editor.loadedDocument;if(!editor.valid||current.document_type!=='CURRENT')throw TypeError('Valid current document required');
+ return editor.action(ctx=>{
+  const {source,state}=validateBlockState(ctx,current.markdown_content,current.block_state_json);
+  return source.blocks.flatMap((block,index)=>block.block_type==='heading'?[{block_id:state.blocks[index]!.block_id,level:block.heading_level!,title:block.plain_text,
+   target:capture({document_id:current.id,content_version:current.content_version,scope:{scope_type:'SECTION' as const,scope_ref:{block_id:state.blocks[index]!.block_id}},label:'章节：'+block.plain_text,selection:null})}]:[]);
+ });
+}
+export function nextChapter(chapters:readonly ChapterTarget[],blockId:number):ChapterTarget|null{
+ const index=chapters.findIndex(chapter=>chapter.block_id===blockId);if(index<0)return null;
+ // Skip this chapter's children; stop at a parent boundary rather than revising it again.
+ for(let at=index+1;at<chapters.length;at++){const chapter=chapters[at]!;if(chapter.level<chapters[index]!.level)return null;if(chapter.level===chapters[index]!.level)return chapter;}
+ return null;
+}
 const capture=<T>(value:T):T=>snapshotObject(value) as unknown as T;
 export function documentTarget(current:DocumentReadModel):GuideTarget{
  if(current.document_type!=='CURRENT')throw TypeError('Actual CURRENT required');return capture({document_id:current.id,content_version:current.content_version,scope:{scope_type:'DOCUMENT',scope_ref:null},label:'整篇文档',selection:null});

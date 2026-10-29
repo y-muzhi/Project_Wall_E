@@ -7,6 +7,8 @@ export type ApiMeta = { request_id: string; pagination?: PagePagination | Cursor
 export type ApiSuccess<T> = { data: T; meta: ApiMeta; status: number };
 type Decoder<T> = (value: unknown) => T;
 type CommandMethod = 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+/** Per HTTP exchange, including the response body; not an AI execution limit. */
+export const API_REQUEST_TIMEOUT_MS = 30_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ERROR_STATUS: Readonly<Record<string, number>> = {
   VALIDATION_FAILED: 422, NOT_FOUND: 404, MANUAL_DRAFT_NOT_FOUND: 404,
@@ -184,16 +186,39 @@ export class ApiClient {
   private async request<T>(target: string, method: string, body: string | null, key: string | null, successStatus: readonly number[],
                            decode: Decoder<T>, signal?: AbortSignal): Promise<ApiSuccess<T>> {
     const mutation = method !== 'GET';
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stop: (() => void) | undefined;
     try {
+      if (signal?.aborted) throw new ApiUnknown(mutation);
       const headers: Record<string, string> = { Accept: 'application/json' };
       if (body !== null) headers['Content-Type'] = 'application/json';
       if (key !== null) headers['Idempotency-Key'] = key;
       const options: RequestInit = { method, headers, credentials: 'same-origin', redirect: 'error', cache: 'no-store' };
       if (body !== null) options.body = body;
-      if (signal !== undefined) options.signal = signal;
-      const response = await this.send(target, options);
-      if (response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') throw new TypeError('Expected API JSON');
-      const parsed: unknown = JSON.parse(await response.text()); jsonValue(parsed);
+      options.signal = controller.signal;
+      // Race explicitly as well as aborting fetch: a stalled/custom transport
+      // must not retain the caller's write barrier after its deadline.
+      const cancelled = new Promise<never>((_resolve, reject) => {
+        stop = () => { reject(new ApiUnknown(mutation)); controller.abort(); };
+      });
+      signal?.addEventListener('abort', stop!, { once: true });
+      timer = setTimeout(stop!, API_REQUEST_TIMEOUT_MS);
+      const exchange = (async () => {
+        const response = await this.send(target, options);
+        if (controller.signal.aborted) {
+          // Never decode a late receipt or leave its unread stream open.
+          void response.body?.cancel().catch(() => undefined);
+          throw new ApiUnknown(mutation);
+        }
+        if (response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') throw new TypeError('Expected API JSON');
+        const text = await response.text();
+        if (controller.signal.aborted) throw new ApiUnknown(mutation);
+        return { response, text };
+      })();
+      const { response, text } = await Promise.race([exchange, cancelled]);
+      if (controller.signal.aborted) throw new ApiUnknown(mutation);
+      const parsed: unknown = JSON.parse(text); jsonValue(parsed);
       const envelope = exact(parsed, ['success', 'data', 'error', 'meta']), context = meta(envelope.meta);
       if (envelope.success === true && envelope.error === null && successStatus.includes(response.status)) {
         return { data: decode(envelope.data), meta: context, status: response.status };
@@ -210,6 +235,9 @@ export class ApiClient {
       // Includes transport, abort, response/body parse and success projection:
       // none prove that a previously submitted command failed to commit.
       throw new ApiUnknown(mutation);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      if (stop) signal?.removeEventListener('abort', stop);
     }
   }
 }

@@ -1,9 +1,22 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ApiUnknown,ApiRejected} from '../src/api/client.ts';
+import {ApiClient,ApiUnknown,ApiRejected,API_REQUEST_TIMEOUT_MS} from '../src/api/client.ts';
 import {RequirementGuideComposer} from '../src/guide/composer.ts';
 import {documentTarget,reviewTarget,uniqueSelectionRange} from '../src/guide/scope.ts';
 const at='2026-10-06T08:00:00.000Z';
+
+test('H04 timed-out send becomes recoverable UNKNOWN and reuses the original action',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const rig=fixture(),sent=[];let late;
+ const settle=async()=>{for(let i=0;i<60;i++)await Promise.resolve();};
+ const client=new ApiClient(async(_url,options)=>{sent.push(options);if(sent.length===1)return new Promise(resolve=>{late=resolve;});return new Response(JSON.stringify({success:true,data:{processing:'MODEL',guide_run_id:7,user_message_id:9},error:null,meta:{request_id:'00000000-0000-4000-8000-00000000000b'}}),{status:202,headers:{'Content-Type':'application/json'}});},()=> '00000000-0000-4000-8000-00000000000a');
+ rig.api.prepareCreateGuide=(_id,body)=>{rig.f.body=body;const action=client.prepare('POST','/api/v1/requirements/1/guide-runs',body,{idempotent:true,success_status:202});return {submit:()=>client.commit(action,x=>x)};};
+ try{
+  rig.owner.change('原始输入');const pending=rig.owner.submit();await settle();assert.equal(rig.owner.getSnapshot().phase,'SUBMITTING');
+  t.mock.timers.tick(API_REQUEST_TIMEOUT_MS);assert.equal(await pending,false);assert.equal(rig.owner.getSnapshot().phase,'UNKNOWN');assert.equal(rig.owner.getSnapshot().instruction,'原始输入');assert.equal(sent.length,1);
+  assert(await rig.owner.recover());assert.equal(sent.length,2);assert.equal(sent[0].headers['Idempotency-Key'],sent[1].headers['Idempotency-Key']);assert.equal(sent[0].body,sent[1].body);assert.equal(rig.owner.getSnapshot().phase,'READY');
+  late(new Response('{}'));await settle();assert.equal(rig.owner.getSnapshot().phase,'READY');assert.equal(rig.f.receives,1);
+ }finally{rig.owner.dispose();}
+});
 const run=(id=6,status='COMPLETED',action_type='ASK')=>({id,requirement_id:1,status,current_step:status==='RUNNING'?'PREPARING':'FINISHED',action_type,created_at:at,final_result:status==='COMPLETED'?{summary:'真实端口检查'}:null,scope:{scope_type:'DOCUMENT',scope_ref:null}});
 const detail=(status='PLANNING',waiting=null,version=3)=>({requirement:{id:1,status,discussion_version:5,document_work_state:waiting?'GUIDE_ACTIVE':'IDLE',active_operation_type:waiting?'GUIDE_RUN':null,active_operation_id:waiting?.id??null},current:{id:2,requirement_id:1,document_type:'CURRENT',archived_at:null,name:'当前稿',content_version:version,block_state_json:{blocks:[{block_id:10,block_type:'heading'},{block_id:11,block_type:'paragraph'}]}},documents:[{id:2,name:'当前稿',content_version:version,current_revision_id:7,archived_at:null}],activity:waiting?{kind:'GUIDE',run:waiting}:{kind:'IDLE'}});
 function fixture(initial=detail()){

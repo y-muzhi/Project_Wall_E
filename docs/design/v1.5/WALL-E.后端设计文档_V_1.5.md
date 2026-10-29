@@ -1972,7 +1972,7 @@ AI-BUDGET为预算选择规则；输入与预留、输出、总量、软目标�
 
 实际usage按LLMUse原返回记录input、output、total、cache_hit；cache_hit属于input，不能再加进total。缺失用量保持null。total与分项不一致时记录观测异常，不伪造修正数字；原始响应可读，能否自动写入仍由冻结用量策略和业务校验决定。
 
-新布局保留两消息网关形式和8192输出限制，但并不因此天然继承旧计数资源的经验framing证明。新资源必须明确text计数、framing预留、实际usage校验及适用profile；不允许改input布局后只换版本字符串假装已准入。
+新布局保留两消息网关形式；旧profile保持8192，M15-LONG-01新增显式选择的32768输出配置，但并不因此天然继承旧计数资源的经验framing证明。新资源必须明确text计数、framing预留、实际usage校验及适用profile；不允许改input布局后只换版本字符串假装已准入。
 
 **技术实现补充：请求详情投影**
 
@@ -2047,17 +2047,20 @@ LLMUse保存同一ContextBasis及精确system／Wire。通用审计清理仍剔�
 
 **上下文与执行预算：AI-BUDGET**
 
-沿用现有可信Tokenization、计数证据及模型调用机制；新上下文布局必须发布与之匹配的计数资源和准入记录，不能直接复用旧资源哈希冒称已验证。默认选用现有完整预算作为安全上限：输入131072、输出8192、总量139264 token，framing预留1024；这些是项目现有配置依据，不是对供应方当前容量的新证明。
+沿用现有可信Tokenization、计数证据及模型调用机制；新上下文布局必须发布与之匹配的计数资源和准入记录，不能直接复用旧资源哈希冒称已验证。默认deepseek-v2沿用输入131072、输出8192、总量139264；M15-LONG-01新增deepseek-long-v3，输入131072、输出32768、总量163840，framing均预留1024。新配置由WALLE_MODEL_PROFILE显式选择并绑定resources/v16独立发布与准入，未获当前真实证据前不启用Chat。既有v15和历史profile／审计按原字节、原预算恢复，不能用新预算放宽历史校验。供应方文档允许较大输出不代表本项目真实验证通过。
 
 新布局以完整输入／输出／总量为硬Token约束；各上下文子集计数仅作观测，不隐式继承旧完整模板场景的prompt／source／history分项上限。具体文本码点／字节容量仍按第2章。若资源发布采用额外硬限制，必须明确回写本规格并在预检展示，不得在实现中隐式缩小。
 
-发送前预计输入=最终system计数＋最终user数据计数＋framing预留；须同时满足输入和总预算。输出请求上限8192。分区计数为诊断子集，包含于完整输入，不能重复相加。保留软目标49152，仅作观察，超过它不单独阻断。
+发送前预计输入=最终system计数＋最终user数据计数＋framing预留；须同时满足输入和总预算。输出请求上限由冻结profile／release一致确定：旧配置8192，新长输出配置32768。分区计数为诊断子集，包含于完整输入，不能重复相加。保留软目标49152，仅作观察，超过它不单独阻断。
 
 装配在计数前完成身份去重和按任务选材。若预计超硬预算，按顺序移除可选近期历史的最早整条、明确标成可选的邻近背景，并重新计数；最多3个计数批次。所有候选、移除ID及原因留私有证据；每批只统计真实候选，不为查看详情重计数。
 
 原始目标、本轮用户明确指令、有效硬约束、当前主题必需依据、目标待改原文不可静默删除。仍超预算或计数次数用尽时不调用Chat，结果为CONTEXT_LIMIT_EXCEEDED并列出必要材料及缩小范围／显式分批入口。无确定计数资源则CONFIG_INVALID，不以字符估算偷偷放行。
 
 GENERATE结果超过输出上限、finish_reason表明截断时，保留实际返回并标“输出不完整，未写入”；不提交半份文档、不自动续写。用户可缩小成果范围或明确分批发起新任务；不增加隐形第二次Chat。
+
+M15-LONG-01分章出稿：复用手动创建固定框架及REVISE／SECTION；用户选择真实当前文档中的章节（可选子章节），每次明确发送只授权该章。正常完整返回经范围与版本校验后原子保存，范围外正文与已完成章节不变；下一章由用户选择并再次发送，不自动串行调用。截断保留返回原文及原文档，生成失败提示创建固定框架分章，修订失败提示缩小章节范围；不拼接残缺JSON、不将运行结束当作文档已保存、不用章节选择推断完成进度。
+
 
 <a id="ai-output"></a>
 
@@ -2942,7 +2945,7 @@ Root仅用于资源自检；消息持久化额外选择MessageStructures中的St
     "Canonical": {"type":"object","properties":{"schema_version":{"const":1,"type":"integer"},"layout_version":{"const":"collaboration_context_v1","type":"string"},"requirement":{"type":"object","properties":{"id":{"$ref":"#/$defs/ID"},"title":{"type":"string","minLength":1,"maxLength":20},"requirement_type":{"type":"string","enum":["NEW","CHANGE"]},"status":{"type":"string","enum":["PLANNING","READY","IMPLEMENTING","COMPLETED","CLOSED"]},"metadata_version":{"$ref":"#/$defs/ID"},"discussion_version":{"$ref":"#/$defs/ID"},"initial_message_id":{"$ref":"#/$defs/ID"}},"required":["id","title","requirement_type","status","metadata_version","discussion_version","initial_message_id"],"additionalProperties":false},"discussion":{"$ref":"#/$defs/Discussion"},"operation":{"$ref":"#/$defs/Operation"},"target":{"anyOf":[{"$ref":"#/$defs/Target"},{"type":"null"}]},"scope":{"anyOf":[{"$ref":"#/$defs/legacy_scope"},{"type":"null"}]},"source_refs":{"type":"array","items":{"$ref":"#/$defs/SourceRef"},"minItems":0},"current_message":{"$ref":"#/$defs/RawMessage"},"messages":{"type":"array","items":{"$ref":"#/$defs/RawMessage"},"minItems":0},"documents":{"type":"array","items":{"$ref":"#/$defs/DocumentSnapshot"},"minItems":0},"run_materials":{"type":"array","items":{"type":"object","properties":{"source_ref":{"$ref":"#/$defs/SourceRef"},"content":{"type":"string","minLength":0,"maxLength":1000000}},"required":["source_ref","content"],"additionalProperties":false},"minItems":0},"resources":{"type":"array","items":{"$ref":"#/$defs/ResourceContent"},"minItems":0},"authorization":{"$ref":"#/$defs/Authorization"},"selected":{"type":"array","items":{"$ref":"#/$defs/ManifestItem"},"minItems":0},"omitted":{"type":"array","items":{"$ref":"#/$defs/Omitted"},"minItems":0}},"required":["schema_version","layout_version","requirement","discussion","operation","target","scope","source_refs","current_message","messages","documents","run_materials","resources","authorization","selected","omitted"],"additionalProperties":false},
     "Alias": {"type":"object","properties":{"ref":{"$ref":"#/$defs/Ref"},"source_refs":{"type":"array","items":{"$ref":"#/$defs/SourceRef"},"minItems":0},"evidence_ref":{"anyOf":[{"$ref":"#/$defs/Ref"},{"type":"null"}]}},"required":["ref","source_refs","evidence_ref"],"additionalProperties":false},
     "ContextBasis": {"type":"object","properties":{"schema_version":{"const":1,"type":"integer"},"canonical":{"$ref":"#/$defs/Canonical"},"aliases":{"type":"array","items":{"$ref":"#/$defs/Alias"},"minItems":0},"canonical_sha256":{"$ref":"#/$defs/Digest"},"wire_sha256":{"$ref":"#/$defs/Digest"},"system_sha256":{"$ref":"#/$defs/Digest"},"output_schema_sha256":{"$ref":"#/$defs/Digest"},"selected":{"type":"array","items":{"$ref":"#/$defs/ManifestItem"},"minItems":0},"omitted":{"type":"array","items":{"$ref":"#/$defs/Omitted"},"minItems":0}},"required":["schema_version","canonical","aliases","canonical_sha256","wire_sha256","system_sha256","output_schema_sha256","selected","omitted"],"additionalProperties":false},
-    "CountingDefinition": {"type":"object","properties":{"schema_version":{"const":1,"type":"integer"},"layout":{"const":"collaboration_context_v1","type":"string"},"model":{"const":"deepseek-v4-1-flash-260910","type":"string"},"model_version":{"const":"260910","type":"string"},"roles":{"const":["system","user"],"type":"array"},"stream":{"const":false,"type":"boolean"},"tool_calling":{"const":false,"type":"boolean"},"serialization":{"const":"json_utf8_compact_declared_field_order_v1","type":"string"},"input_limit":{"const":131072,"type":"integer"},"output_limit":{"const":8192,"type":"integer"},"total_limit":{"const":139264,"type":"integer"},"framing_reserve":{"const":1024,"type":"integer"},"soft_input_target":{"const":49152,"type":"integer"},"max_batches":{"const":3,"type":"integer"},"max_chat_calls":{"const":1,"type":"integer"},"transport_retries":{"const":0,"type":"integer"},"trim_order":{"const":["oldest_optional_history_whole_message","optional_neighbor_whole_block"],"type":"array"},"admission_mode":{"const":"exact_text_empirical_framing_v1","type":"string"}},"required":["schema_version","layout","model","model_version","roles","stream","tool_calling","serialization","input_limit","output_limit","total_limit","framing_reserve","soft_input_target","max_batches","max_chat_calls","transport_retries","trim_order","admission_mode"],"additionalProperties":false},
+    "CountingDefinition": {"type":"object","properties":{"schema_version":{"const":1,"type":"integer"},"layout":{"const":"collaboration_context_v1","type":"string"},"model":{"const":"deepseek-v4-1-flash-260910","type":"string"},"model_version":{"const":"260910","type":"string"},"roles":{"const":["system","user"],"type":"array"},"stream":{"const":false,"type":"boolean"},"tool_calling":{"const":false,"type":"boolean"},"serialization":{"const":"json_utf8_compact_declared_field_order_v1","type":"string"},"input_limit":{"const":131072,"type":"integer"},"output_limit":{"const":32768,"type":"integer"},"total_limit":{"const":163840,"type":"integer"},"framing_reserve":{"const":1024,"type":"integer"},"soft_input_target":{"const":49152,"type":"integer"},"max_batches":{"const":3,"type":"integer"},"max_chat_calls":{"const":1,"type":"integer"},"transport_retries":{"const":0,"type":"integer"},"trim_order":{"const":["oldest_optional_history_whole_message","optional_neighbor_whole_block"],"type":"array"},"admission_mode":{"const":"exact_text_empirical_framing_v1","type":"string"}},"required":["schema_version","layout","model","model_version","roles","stream","tool_calling","serialization","input_limit","output_limit","total_limit","framing_reserve","soft_input_target","max_batches","max_chat_calls","transport_retries","trim_order","admission_mode"],"additionalProperties":false},
     "Admission": {"type":"object","properties":{"state":{"type":"string","enum":["OFFLINE_READY","LIVE_VERIFIED","SUSPENDED"]},"profile_sha256":{"$ref":"#/$defs/Digest"},"release_sha256":{"$ref":"#/$defs/Digest"},"evidence_ref":{"anyOf":[{"$ref":"#/$defs/Ref"},{"type":"null"}]},"count_request_sha256":{"anyOf":[{"$ref":"#/$defs/Digest"},{"type":"null"}]},"chat_request_sha256":{"anyOf":[{"$ref":"#/$defs/Digest"},{"type":"null"}]},"actual_input_tokens":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"counted_system_tokens":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"counted_user_tokens":{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"null"}]},"framing_gap":{"anyOf":[{"type":"integer"},{"type":"null"}]},"reserve":{"const":1024,"type":"integer"}},"required":["state","profile_sha256","release_sha256","evidence_ref","count_request_sha256","chat_request_sha256","actual_input_tokens","counted_system_tokens","counted_user_tokens","framing_gap","reserve"],"additionalProperties":false},
     "Release": {"type":"object","properties":{"schema_version":{"const":1,"type":"integer"},"key":{"const":"collaboration_v1","type":"string"},"version":{"$ref":"#/$defs/Ref"},"canonical_schema":{"$ref":"#/$defs/ResourceRef"},"wire_schema":{"$ref":"#/$defs/ResourceRef"},"output_schemas":{"type":"array","items":{"type":"object","properties":{"operation":{"$ref":"#/$defs/Operation"},"schema_ref":{"$ref":"#/$defs/ResourceRef"}},"required":["operation","schema_ref"],"additionalProperties":false},"minItems":6,"maxItems":6},"guides":{"type":"array","items":{"type":"object","properties":{"phase_kind":{"$ref":"#/$defs/PhaseKind"},"resource_ref":{"$ref":"#/$defs/ResourceRef"}},"required":["phase_kind","resource_ref"],"additionalProperties":false},"minItems":4,"maxItems":4},"structure_profiles":{"type":"array","items":{"$ref":"#/$defs/ResourceRef"},"minItems":3,"maxItems":3},"prompt":{"$ref":"#/$defs/ResourceRef"},"counting":{"$ref":"#/$defs/ResourceRef"},"model_profile_sha256":{"$ref":"#/$defs/Digest"},"compiler_version":{"const":"collaboration_compiler_v1","type":"string"},"admission":{"$ref":"#/$defs/Admission"},"message_schema":{"$ref":"#/$defs/ResourceRef"}},"required":["schema_version","key","version","canonical_schema","wire_schema","output_schemas","guides","structure_profiles","prompt","counting","model_profile_sha256","compiler_version","admission","message_schema"],"additionalProperties":false},
     "OutputDiscussion": {"type":"object","properties":{"schema_version":{"const":1,"type":"integer"},"response_type":{"const":"DISCUSSION","type":"string"},"message":{"type":"string","minLength":1,"maxLength":100000},"basis_ref":{"$ref":"#/$defs/BasisRef"},"progress_delta":{"anyOf":[{"$ref":"#/$defs/Progress"},{"type":"null"}]},"cards":{"anyOf":[{"$ref":"#/$defs/ModelCardGroup"},{"type":"null"}]},"document_result":{"type":"null"},"suggestions":{"type":"null"},"analysis":{"type":"null"}},"required":["schema_version","response_type","message","basis_ref","progress_delta","cards","document_result","suggestions","analysis"],"additionalProperties":false},
@@ -2979,7 +2982,7 @@ Root仅用于资源自检；消息持久化额外选择MessageStructures中的St
 7. Wire根字段固定依Schema中声明顺序：schema_version、structure、goal_and_decisions、project_position、current_topic、documents、recent_history、current_request。每个具名类型内部亦按properties声明顺序；继承Scope／Patch按其显式分支顺序。空值保留，JSON采用ensure_ascii=false、separators=(',',':')、allow_nan=false及UTF-8，无BOM、无末尾换行；不随机排序、插入时间或随机ID。
 8. system精确编译为：common_prompt＋'\n\n阶段指引 '+guide.key+'@'+guide.version+'\n'＋compact(guide_projection)＋'\n\n任务输出协议 '+operation+'\n'＋compact(output_schema)。common_prompt取五段共同指令，去掉Markdown引用前缀，每段内部行以LF连接、段间两个LF；不包含章节标题或阶段简表。阶段投影只含goal、mainlines、outcome_requirements、design_methods、questioning_policy、convergence_policy、redirection_policy。guide_key／version为稳定资源头；动态phase_ref、discussion_version、目标及用户输入在user.current_request.basis_ref／任务字段，不能写入稳定头。
 9. 输出Schema编译从指定Output*根求本地$ref可达闭包，仅输出该根与必要$defs。闭包名字按字典序，其他对象字段保持声明顺序；$schema固定2020-12。类型分支和约束不得省略；不将整个Canonical／Wire Schema或四阶段资源嵌入system。共同Prompt后的旧阶段简表用于阅读索引，不再额外拼接一次。
-10. 保存system精确字符串与wire精确字符串、两者SHA-256、canonical_sha256、output_schema_sha256、资源引用、selected／omitted及aliases。诊断分区由这两条实际字符串及Wire的确定路径投影；不从当前业务对象反推历史。Chat仍用ModelProfile.request的两消息形式及现有temperature=0、stream=false、thinking disabled、max_tokens=8192、transport_retries=0，不新增response_format参数或供应方工具能力。
+10. 保存system精确字符串与wire精确字符串、两者SHA-256、canonical_sha256、output_schema_sha256、资源引用、selected／omitted及aliases。诊断分区由这两条实际字符串及Wire的确定路径投影；不从当前业务对象反推历史。Chat仍用ModelProfile.request的两消息形式及现有temperature=0、stream=false、thinking disabled、max_tokens按冻结profile为8192或32768、transport_retries=0，不新增response_format参数或供应方工具能力。
 11. projected SourceRef只使用本轮aliases；source_refs在模型输出为别名列表，程序持久化时解析成真实SHR-SOURCE-REF。模型不能返回RUN_RESULT／RUN_MATERIAL结构指令读取其他运行。Output中的target只作建议目标，当前实际GENERATE／REVISE结果没有自主目标字段，真正保存位置始终来自冻结授权。
 12. Canonical、ContextBasis与实际request分别沿既有快照、LLMUse及正常运行审计机制保存。原审计单项4MiB及HTTP 8MiB限制保持；装配超容量时CONFIG_INVALID或既有容量错误，调用前停止，不静默截断，也不新建临时持久化服务。日志不得写认证、私有权限全文或隐藏推理。
 
@@ -3009,7 +3012,7 @@ Root仅用于资源自检；消息持久化额外选择MessageStructures中的St
 
 **7. 计数、裁剪与准入的精确定义**
 
-CountingDefinition为下列固定值资源：
+M15-LONG-01新增CountingDefinition v2为下列固定值资源；历史v1保留8192／139264原字节：
 
 ```json
 {
@@ -3025,8 +3028,8 @@ CountingDefinition为下列固定值资源：
   "tool_calling": false,
   "serialization": "json_utf8_compact_declared_field_order_v1",
   "input_limit": 131072,
-  "output_limit": 8192,
-  "total_limit": 139264,
+  "output_limit": 32768,
+  "total_limit": 163840,
   "framing_reserve": 1024,
   "soft_input_target": 49152,
   "max_batches": 3,
@@ -3042,7 +3045,7 @@ CountingDefinition为下列固定值资源：
 
 每次候选最多一次Tokenization批请求，文本向量顺序固定为system、完整user、current_request诊断、structure诊断、documents诊断、recent_history诊断、goal_and_decisions诊断、project_position＋current_topic诊断。非空诊断用对应规范JSON；空可选分区发送空字符串，保留供应方对此文本返回的实际非负计数，可能包含边界标记，不能强制为0或改写收据。空分区展示“未携带”描述实际选材，不代表供应方对空文本的Tokenization结果或Chat usage为0。诊断向量第3—8项具体为compact(current_request)、structure为null时空字符串否则compact(structure)、documents为空时空字符串否则compact(documents)、recent_history为空时空字符串否则compact(recent_history)、goal_and_decisions为空时空字符串否则compact(goal_and_decisions)、compact({project_position,current_topic})。字段顺序按Wire定义。所有诊断都已包含在完整输入，不与完整user重复相加。计数响应沿TokenCounts复核模型、请求摘要、文本摘要、index、恰好8项返回和非负整数；日志／详情读取不再计数。
 
-记S、U为完整system与user的可信文本计数，R=1024，O=8192。预计输入P=S+U+R；要求P≤131072且P+O≤139264。软目标49152只作观察；旧prompt／source／history／template分项上限不隐式继承。首次候选合格直接发送，不为省几百token额外计数。
+记S、U为完整system与user的可信文本计数，R=1024，O为冻结输出上限（旧8192，新32768）。预计输入P=S+U+R；要求P≤131072且P+O≤冻结总预算（旧139264，新163840）。软目标49152只作观察；旧prompt／source／history／template分项上限不隐式继承。首次候选合格直接发送，不为省几百token额外计数。
 
 初次超硬预算时第二候选一次移除所有可选近期历史；仍超限时第三候选一次移除所有显式可选邻近背景块，保留必要祖先标题导航。移除顺序分别按历史最早、背景原区块顺序记录；可选集合为空时跳过该候选、不消耗空批。最多3个有不同候选摘要的计数批次。原始目标、当前输入、GLOBAL及相关硬约束、pending原话、当前必要成果和目标原文不可裁剪。三次后仍超限，返回CONTEXT_LIMIT_EXCEEDED，展示可缩小的目标或来源，不自动分成多次Chat。
 
@@ -3058,13 +3061,13 @@ Release中admission仅记录摘要、状态、计数及观测引用；完整实�
 
 准入持久化复用正常LLMUse及CountingJournal审计目录，不改变冻结Release文件的OFFLINE_READY字节或新增业务根。程序配置仅保存schema_version、source_database、llm_use_id、approved_at与Admission；读取时重新核实原调用、profile／release、精确请求／计数及usage，来源丢失或损坏拒绝普通调度。普通执行在装配、每个计数候选、实际计数／Chat IO及准备审计时复核，同一有效Admission保存在程序私有请求快照，不进入Wire。后续异常从原LLMUse持久推导SUSPENDED；同release不能用新成功样本或修改配置抹去异常，须修订资源并重新授权观测。
 
-隔离观测复用同一接受、编译、计数、网关及审计链路。专用CLI默认使用退出即清理的新临时库离线预览，不读取环境密钥或执行provider IO；真实执行须明确新绝对目录、1—3计数批、1次Chat及139264总量，保持8192输出、1024预留、零传输重试。以原子mkdir占用不可重用槽，失败／取消／未知结果均保留正常数据库与计数审计，不自动再发送；每次IO前消耗额度，异常不返还。内部能力绑定实际主库连接、唯一DISCUSS运行、零文档、profile与release，并在准备审计的同一事务复核；普通HTTP输入和Worker选项不能安装该能力。快照保存初始OFFLINE_READY及私有observation预算，合格实际返回才为隔离库记录准入，导入其他库是独立明确操作；技术准入不代替语义效果EV，也不授予额外真实调用许可。
+隔离观测复用同一接受、编译、计数、网关及审计链路。专用CLI默认使用退出即清理的新临时库离线预览，不读取环境密钥或执行provider IO；真实执行须明确新绝对目录、1—3计数批、1次Chat及所选冻结profile的完整总量（旧139264／新163840），保持匹配的8192／32768输出、1024预留、零传输重试。以原子mkdir占用不可重用槽，失败／取消／未知结果均保留正常数据库与计数审计，不自动再发送；每次IO前消耗额度，异常不返还。内部能力绑定实际主库连接、唯一DISCUSS运行、零文档、profile与release，并在准备审计的同一事务复核；普通HTTP输入和Worker选项不能安装该能力。快照保存初始OFFLINE_READY及私有observation预算，合格实际返回才为隔离库记录准入，导入其他库是独立明确操作；技术准入不代替语义效果EV，也不授予额外真实调用许可。
 
 本地启动助手默认仅检查V1.5资源及固定模型预算，不读取密钥、不打开业务库、不启动服务或调用供应方。显式--start必须先核对绝对已存在schema150数据库和同release正常准入证据，再安全读取明确凭证来源，仅配置该启动进程环境并走原单worker服务入口；不初始化／迁移库、不自动导入技术证据，不沿用旧context_projection准入说明。
 
 1.5路径复用practical_usage的安全核查职责，必须登记新release并按最终8项计数收据适配；原函数对非旧PRACTICAL_RELEASES的提前return不能作为新版放行条件。新版入口遇未知release直接CONFIG_INVALID，不继承旧六项计数的索引假设。
 
-实际返回usage保持独立：input/output/total/cache_hit缺失为null；缓存属于input；不据字符数分摊各区实际token。实际用量必须满足供应方model／envelope匹配、input／output／total均为非负安全整数、total=input+output、input≤131072、output≤8192、total≤139264及0≤input−(S+U)≤1024。任一缺失、矛盾、超硬限或framing偏差均记录异常，将该release置SUSPENDED；本次可读返回保留、正文与进度均NOT_APPLIED，不自动重试或扩大预算。只超过49152软目标不触发该处置。input+output与total不一致保留供应方原值及异常标记，不伪造修正。
+实际返回usage保持独立：input/output/total/cache_hit缺失为null；缓存属于input；不据字符数分摊各区实际token。实际用量必须满足供应方model／envelope匹配、input／output／total均为非负安全整数、total=input+output、input≤131072、output≤所选release.output_limit、total≤所选release.total_limit及0≤input−(S+U)≤1024。任一缺失、矛盾、超硬限或framing偏差均记录异常，将该release置SUSPENDED；本次可读返回保留、正文与进度均NOT_APPLIED，不自动重试或扩大预算。只超过49152软目标不触发该处置。input+output与total不一致保留供应方原值及异常标记，不伪造修正。
 
 **8. 观测字段与实施验收**
 
@@ -6109,7 +6112,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 
 | 使用的外部能力 | 内部输入及外部请求映射 | 内部输出及外部响应映射 | 技术失败与完成范围 |
 | --- | --- | --- | --- |
-| Chat | 冻结system和user精确字符串→messages；max_tokens=8192及ModelProfile实际参数 | 原content／finish_reason／usage／request_id→LLMUse，再交应用解析 | 未发送／已发失败／结果未知分别记录；不把无效响应变为空成功 |
+| Chat | 冻结system和user精确字符串→messages；max_tokens为冻结profile的8192或32768及ModelProfile实际参数 | 原content／finish_reason／usage／request_id→LLMUse，再交应用解析 | 未发送／已发失败／结果未知分别记录；不把无效响应变为空成功 |
 | Tokenization | 最终实际候选的system／user及需要的诊断分区→原计数API | 可信计数收据、批次和预留证据 | 无可信计数不Chat；次数最多3，诊断子集不重加总 |
 
 | 调用事项 | 确定定义 |
@@ -6126,7 +6129,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 
 | 内容 | 确定定义 |
 | --- | --- |
-| 配置名称 | 现有默认deepseek-v2；历史profile代码保留但不自动切换 |
+| 配置名称 | 默认deepseek-v2；显式WALLE_MODEL_PROFILE=deepseek-long-v3选择32768／v16，独立准入；历史profile不改 |
 | 模型标识与版本 | 当前代码deepseek-v4-1-flash-260910／260910；以实际ModelProfile冻结快照定位 |
 | 所需调用能力 | 当前非流式结构化内容及实际usage；不要求或展示隐藏思维链 |
 | 正式配置来源 | backend/app/infrastructure/model_profile.py，预算在本文AI-BUDGET；新计数布局AI-RESOURCE |
@@ -6134,7 +6137,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | 参数 | 类型与允许范围 | 默认值或唯一来源 | 是否允许任务级覆盖及规则 |
 | --- | --- | --- | --- |
 | temperature | 固定number 0 | 现有ModelProfile.snapshot | 不允许任务／模型返回覆盖 |
-| max_tokens | 固定正整数8192 | 本文AI-BUDGET／ModelProfile | 不自动提高；新预算需正式变更 |
+| max_tokens | deepseek-v2为8192；deepseek-long-v3为32768 | 本文AI-BUDGET／ModelProfile／M15-LONG-01 | 显式选择、匹配资源与独立准入，不自动重试扩大 |
 | stream | 固定false | 现有非流式适配 | 不允许当前任务启用流式 |
 | thinking | {type:disabled} | 现有ModelProfile | 不启用隐藏推理展示 |
 | transport_retries | 固定0 | 现有网关配置 | 不追加SDK自动重试 |

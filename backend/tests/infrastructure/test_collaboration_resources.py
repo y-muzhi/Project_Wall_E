@@ -11,7 +11,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from backend.app.infrastructure.collaboration_resources import CollaborationResources, ROOT, OUTPUTS, GUIDE_FIELDS
-from backend.app.infrastructure.model_profile import ModelProfile, DEFAULT_PROFILE
+from backend.app.infrastructure.model_profile import ModelProfile, DEFAULT_PROFILE, LONG_OUTPUT_PROFILE
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.infrastructure.schema_transport import compact, declared_json, named_schema
 from backend.app.shared.validation import strict_json_object, InvalidInput
@@ -23,6 +23,10 @@ def resources():
 
 
 def test_resources_match_the_complete_design_source(resources):
+    # Current design publishes the opt-in long-output batch. The default v15
+    # stays frozen until a separate live admission and service switch.
+    historical = resources
+    resources = ResourceCatalog().for_collaboration_profile(LONG_OUTPUT_PROFILE).collaboration
     design = Path('docs/design/v1.5/WALL-E.后端设计文档_V_1.5.md').read_text(encoding='utf-8')
     blocks = [json.loads(text) for text in re.findall(r'```json\s*\n(.*?)\n```', design, re.S)]
     assert resources.bundle == next(value for value in blocks if isinstance(value, dict) and value.get('$id') == 'urn:walle:collaboration-contract:v1')
@@ -37,6 +41,11 @@ def test_resources_match_the_complete_design_source(resources):
     assert len(paragraphs) == 5
     assert resources.prompt == '\n\n'.join(paragraphs)
     assert len(resources.bundle['$defs']) == 89
+    restored = deepcopy(resources.bundle)
+    restored['$defs']['CountingDefinition']['properties']['output_limit']['const'] = 8192
+    restored['$defs']['CountingDefinition']['properties']['total_limit']['const'] = 139264
+    assert restored == historical.bundle
+    assert resources.prompt == historical.prompt
 
 
 def test_all_named_schema_closures_are_local_complete_and_minimal(resources):

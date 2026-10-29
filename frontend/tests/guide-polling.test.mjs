@@ -2,8 +2,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GuideRunPolling } from '../src/guide/polling.ts';
 import { guideRun } from '../src/api/models.ts';
+import {ApiClient,API_REQUEST_TIMEOUT_MS} from '../src/api/client.ts';
 
 const at = '2026-10-05T10:00:00.000Z';
+
+test('H04 hanging status request times out, preserves confirmed state and uses normal error backoff',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});let calls=0;const clock=timing(),initial=run();
+ const client=new ApiClient(async()=>{calls++;if(calls===2)return new Promise(()=>{});return new Response(JSON.stringify({success:true,data:calls===1?initial:run('COMPLETED'),error:null,meta:{request_id:'00000000-0000-4000-8000-00000000000b'}}),{headers:{'Content-Type':'application/json'}});});
+ const poll=new GuideRunPolling(2,async(_id,signal)=>(await client.read('/api/v1/guide-runs/2',guideRun,[],signal)).data,clock);
+ const settle=async()=>{for(let i=0;i<80;i++)await Promise.resolve();};
+ try{
+  poll.setVisible(true);await settle();assert.equal(poll.state.confirmed.status,'RUNNING');clock.next();await settle();assert.equal(calls,2);
+  t.mock.timers.tick(API_REQUEST_TIMEOUT_MS);await settle();assert.equal(poll.state.querying,false);assert.equal(poll.state.connection_error,true);assert.equal(poll.state.confirmed.status,'RUNNING');assert.equal(clock.delays.at(-1),2000);
+  clock.next();await settle();assert.equal(calls,3);assert.equal(poll.state.confirmed.status,'COMPLETED');assert.equal(poll.state.connection_error,false);assert.equal(poll.state.polling,false);
+ }finally{poll.dispose();}
+});
 function run(status = 'RUNNING', changes = {}) {
   return guideRun({ id: 2, requirement_id: 1, action_type: 'ASK', function_type:'collaboration_v1', source_type: 'USER_INSTRUCTION', source_id: null,
     scope: { scope_type: 'DOCUMENT', scope_ref: null }, status, current_step: status === 'RUNNING' ? 'PREPARING' : 'FINISHED',

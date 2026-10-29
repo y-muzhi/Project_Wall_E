@@ -45,6 +45,7 @@ def _persist_in_transaction(connection, identity, *, profile, catalog, at, recov
     if latest is None or latest['id'] != identity:
         raise Rejected('STATE_CONFLICT')
     snapshot = json.loads(row['request_snapshot_json'])
+    catalog = catalog.for_collaboration_release(snapshot['protocol']['release'])
     context = restore_counted(snapshot, catalog, profile)
     frozen = read_canonical(connection, run['id'], catalog, require_current=False)
     verify_counted(context, catalog, profile, expected_canonical=frozen)
@@ -91,6 +92,9 @@ def _persist_in_transaction(connection, identity, *, profile, catalog, at, recov
                 application = 'NO_CHANGE' if run['operation'] in ('REVISE', 'PROPOSE_CHANGES') else application
     except (ValueError, KeyError, TypeError, ConfigInvalid, ProtocolInvalid):
         primary = None;validation_error = '返回未通过本轮结构、依据或实际用量校验，未应用业务变更。'
+        if row['finish_reason'] == 'length':
+            validation_error = ('输出不完整，未写入。请新建固定框架文档，选择章节分次生成。' if run['operation'] == 'GENERATE'
+                else '输出不完整，未写入。原文档及已保存章节保持不变，请选择更小的章节范围后重新发送。')
     assistant_id = entity_id(connection, EntityKind.MESSAGE)
     if header_valid and progress is not None:
         try:
@@ -142,7 +146,7 @@ def _persist_in_transaction(connection, identity, *, profile, catalog, at, recov
         document_ids=() if context.canonical['authorization']['target_document_id'] is None else (context.canonical['authorization']['target_document_id'],))
     # Preserve the actual return separately whenever a component was
     # rejected; the readable message must not masquerade as an applied one.
-    summary = primary['message'][:10000] if primary is not None else '模型返回已保存；业务变更未应用。'
+    summary = primary['message'][:10000] if primary is not None else validation_error if row['finish_reason'] == 'length' else '模型返回已保存；业务变更未应用。'
     effects = {'summary': summary, 'assistant_message_id': assistant_id, 'application_result': application,
         'progress_result': progress_result, 'progress_error': progress_error, 'document_effect': effect,
         'suggestion_batch_id': batch_id, 'analysis': analysis, 'validation_error': validation_error}

@@ -214,8 +214,35 @@ class ResourceCatalog:
         """V1.5 uses this same catalog; loading does not grant Chat admission."""
         from .collaboration_resources import CollaborationResources
         if not hasattr(self, '_collaboration_resources'):
-            self._collaboration_resources = CollaborationResources.load()
+            from .model_profile import ModelProfile, LONG_OUTPUT_PROFILE
+            from .collaboration_resources import ROOT
+            selected = getattr(self, '_collaboration_profile', None) or ModelProfile.selected_profile()
+            self._collaboration_resources = CollaborationResources.load(ROOT.parent / 'v16' if selected == LONG_OUTPUT_PROFILE else ROOT)
         return self._collaboration_resources
+
+    def for_collaboration_release(self, reference):
+        """Select exact installed historical bytes without changing this catalog."""
+        if self.collaboration.reference('collaboration.release') == reference:
+            return self
+        from copy import copy
+        from .collaboration_resources import CollaborationResources, ROOT
+        for batch in ('v15', 'v16'):
+            resources = CollaborationResources.load(ROOT.parent / batch)
+            if resources.reference('collaboration.release') == reference:
+                selected = copy(self)
+                selected._collaboration_resources = resources
+                return selected
+        raise ConfigInvalid('Unknown frozen collaboration release')
+
+    def for_collaboration_profile(self, profile_id):
+        from copy import copy
+        from .model_profile import PROFILES
+        if profile_id not in PROFILES:
+            raise ConfigInvalid('Unknown model profile')
+        selected = copy(self)
+        selected._collaboration_profile = profile_id
+        selected.__dict__.pop('_collaboration_resources', None)
+        return selected
 
     def __init__(self, root: Path | str | None = None, *, versioned_root: Path | str | None = None, extended_root: Path | str | None = None, layout_root: Path | str | None = None, progression_root: Path | str | None = None, heading_root: Path | str | None = None, promoted_heading_root: Path | str | None = None, projection_root: Path | str | None = None):
         # Explicit v1 roots are useful for immutable historical deployments and
