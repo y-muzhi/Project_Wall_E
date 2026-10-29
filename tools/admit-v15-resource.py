@@ -31,7 +31,7 @@ def main():
         parser.error('Explicit approval requires both --source-database and --llm-use-id')
     if not args.approve_saved_call and (args.source_database is not None or args.llm_use_id is not None):
         parser.error('Evidence arguments require --approve-saved-call')
-    database = Database(args.database);catalog = ResourceCatalog()
+    database = Database(args.database);catalog = ResourceCatalog().for_collaboration_profile(args.profile)
     # A metadata-only dummy key; no environment credential read and no IO client.
     profile = ModelProfile('private-admission-metadata-validation', args.profile)
     lock = ProcessLock.for_database(database.path)

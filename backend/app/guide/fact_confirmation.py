@@ -79,6 +79,7 @@ def apply_confirmed_action(connection, root, original, response, cards, catalog,
     if row is None or row['raw_response_json'] is None:
         raise CardsInvalid('Fact action has no actual frozen request')
     saved = json.loads(row['request_snapshot_json']);profile = ModelProfile.from_snapshot(saved['profile'])
+    catalog = catalog.for_collaboration_release(saved['protocol']['release'])
     context = restore_counted(saved, catalog, profile)
     verify_counted(context, catalog, profile, expected_canonical=read_canonical(connection, run['id'], catalog, require_current=False))
     validate_fact_action(connection, root, run, context, cards['action_payload'], catalog)

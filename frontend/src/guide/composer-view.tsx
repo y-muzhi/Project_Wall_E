@@ -3,10 +3,11 @@ import type {GuideRun} from '../api/models.ts';
 import {operations} from '../api/models.ts';
 import type {RequirementDocumentOwner} from '../requirements/document-owner.ts';
 import type {RequirementGuideComposer} from './composer.ts';
-import {guideTarget,reviewTarget} from './scope.ts';
+import {guideTarget,reviewTarget,chapterTargets,nextChapter} from './scope.ts';
+import {useDocumentCreation} from '../requirements/document-directory-view.tsx';
 import {instructionFeedback} from './input-feedback.ts';
 import {composerFeedback} from './composer-feedback.ts';
-import {isSendShortcut} from './send-shortcut.ts';
+import {composerShortcut} from './send-shortcut.ts';
 import {SingleSelect} from '../shared/single-select.tsx';
 import {Icon} from '../shared/icon.tsx';
 const names={DISCUSS:'讨论',GENERATE:'生成新文档',REVISE:'修订并保存',PROPOSE_CHANGES:'提出修改建议',COMPARE:'对照分析',REVIEW:'检查'};
@@ -15,6 +16,7 @@ const kinds={brief:'需求说明',design:'设计文档',specification:'规格说
 const quietSubscribe=()=>()=>{},empty=()=>null;
 export function GuideComposer({owner,documents,review=null,viewingHistory=null}:{owner:RequirementGuideComposer;documents:RequirementDocumentOwner;review?:GuideRun|null;viewingHistory?:number|null}){
  const state=useSyncExternalStore(owner.subscribe,owner.getSnapshot),document=useSyncExternalStore(documents.subscribe,documents.getSnapshot);
+ const createDocument=useDocumentCreation();
  const nav=useSyncExternalStore(document.navigation?.subscribe??quietSubscribe,document.navigation?.getSnapshot??empty),binding=documents.currentBinding;
  const [composing,setComposing]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),settings=useRef<HTMLDetailsElement>(null),help=useId(),target=state.target;
  const targetName=target===null?null:state.detail.documents.find(item=>item.id===target.document_id)?.name??target.label;
@@ -27,6 +29,12 @@ export function GuideComposer({owner,documents,review=null,viewingHistory=null}:
   return {kind,target:guideTarget(binding.editor,kind,nav?.selected_block??nav?.active_heading??null,document.selection)};
  }catch{return {kind,target:null};}}),[binding,nav?.selected_block,nav?.active_heading,nav?.error,document.selection,target?.document_id]);
  const selectedSources=state.source_refs.filter(ref=>ref.kind==='REVISION').map(ref=>Number(ref.document_id));
+ const chapters=useMemo(()=>{try{return binding&&document.mode==='CURRENT'&&!nav?.error?chapterTargets(binding.editor):[];}catch{return [];}},[binding,document.mode,document.detail?.current?.content_version,nav?.error]);
+ const chapterId=target?.scope.scope_type==='SECTION'?target.scope.scope_ref.block_id:null;
+ const sameDocument=target?.document_id===binding?.editor.loadedDocument.id;
+ const chapter= sameDocument?chapters.find(item=>item.block_id===chapterId):undefined;
+ const following=chapter?nextChapter(chapters,chapter.block_id):null;
+ const chooseChapter=(id:number)=>{const selected=chapters.find(item=>item.block_id===id);if(selected)owner.selectChapter(selected.target);else owner.rejectScope();};
  const send=()=>{if(canSend){owner.endSettings();if(settings.current)settings.current.open=false;void owner.submit();}};
  return <section aria-label="AI 消息输入" className="guide-composer" aria-busy={state.refreshing||state.phase==='SUBMITTING'||state.phase==='READING'}>
   <div className="guide-composer-body">
@@ -40,6 +48,8 @@ export function GuideComposer({owner,documents,review=null,viewingHistory=null}:
      <label>文档类型<SingleSelect label="生成文档类型" value={state.new_target.document_kind} disabled={disabled} options={Object.entries(kinds).map(([value,label])=>({value,label}))} change={value=>owner.configureNew(state.new_target.name,value as typeof state.new_target.document_kind,state.new_target.template_ref!==null)}/></label>
      <label className="guide-structure-choice"><input type="checkbox" disabled={disabled} checked={state.new_target.template_ref!==null} onChange={event=>owner.configureNew(state.new_target.name,state.new_target.document_kind,event.currentTarget.checked)}/>绑定固定结构</label>
      <p className="field-help">成功后直接保存为未确认稿。</p>
+     <button className="ui-button" type="button" disabled={disabled||!createDocument} onClick={()=>{closeSettings();createDocument?.({name:state.new_target.name,kind:({brief:'REQUIREMENT_BRIEF',design:'DESIGN',specification:'SPECIFICATION'} as const)[state.new_target.document_kind],framework:true});}}>创建框架，分章撰写</button>
+     <p className="field-help">长文档可先创建章节框架，再选择“分章节撰写”，逐章保存。</p>
     </>:<>
      <label>工作目标<SingleSelect label="AI 工作目标" disabled={disabled||state.parent!==null} value={target===null?'NONE':String(target.document_id)} options={[{value:'NONE',label:'不指定文档'},...state.detail.documents.map(item=>({value:String(item.id),label:item.name+(item.archived_at===null?'':'（已归档）')}))]} change={value=>owner.selectDocument(value==='NONE'?null:Number(value))}/></label>
      {document.detail?.current&&<button type="button" className="ui-button" disabled={disabled||state.parent!==null} onClick={()=>owner.selectDocument(document.detail!.current!.id)}>采用当前阅读文档作为目标</button>}
@@ -52,9 +62,18 @@ export function GuideComposer({owner,documents,review=null,viewingHistory=null}:
     {review?.action_type==='REVIEW'&&review.status==='COMPLETED'&&review.scope!==null&&<button className="ui-button" type="button" disabled={disabled||!binding} onClick={()=>{try{owner.useReview(review,reviewTarget(binding!.editor,review.scope!));}catch{owner.rejectScope();}}}>根据这次检查修订</button>}
     <div className="guide-settings-actions"><button className="ui-button" type="button" disabled={disabled} onClick={()=>closeSettings(true)}>取消调整</button><button className="ui-button primary" type="button" disabled={disabled} onClick={()=>closeSettings()}>完成设置</button></div>
    </details>
+   {state.parent===null&&chapters.length>0&&<div className="guide-chapter-controls">
+    {state.action==='REVISE'&&target?.scope.scope_type==='SECTION'&&sameDocument?<>
+     <label>撰写章节<SingleSelect label="撰写章节" value={chapter?String(chapter.block_id):'NONE'} disabled={disabled} options={[{value:'NONE',label:'请选择章节',disabled:true},...chapters.map(item=>({value:String(item.block_id),label:`${'　'.repeat(item.level-1)}${item.title}`}))]} change={value=>chooseChapter(Number(value))}/></label>
+     <p className="field-help">{chapter?chapter.title:'原章节已失效，请重新选择'} · 每次仅保存所选章节；填写要求后发送。</p>
+     {chapter&&target.content_version!==chapter.target.content_version&&<button className="ui-button" type="button" disabled={disabled} onClick={()=>chooseChapter(chapter.block_id)}>使用最新版本继续本章</button>}
+     <button className="ui-button" type="button" disabled={disabled||!following} onClick={()=>{if(following)chooseChapter(following.block_id);}}>选择下一章</button>
+     {!following&&chapter&&<span className="field-help">当前层级没有下一章，可从列表选择其他章节。</span>}
+    </>:<button className="ui-button" type="button" disabled={disabled} onClick={()=>{owner.endSettings();chooseChapter(chapters[0]!.block_id);}}>分章节撰写当前文档</button>}
+   </div>}
    <p className="guide-action-effect">{guidance.effect}</p>
    {target&&state.action!=='GENERATE'&&document.detail?.current&&document.detail.current.id!==target.document_id&&<p className="guide-target-notice">当前阅读与工作目标不同；本次操作仍以“{targetName}”为准。</p>}
-   <label className="guide-message-field"><span className="sr-only">给 AI 的消息</span><textarea className="ui-input" aria-label="给 AI 的消息" value={state.instruction} disabled={disabled} placeholder="说明本次希望讨论或完成的工作…" rows={3} aria-invalid={!composing&&state.instruction.length>0&&!feedback.valid} aria-describedby={help} onChange={event=>owner.change(event.currentTarget.value)} onKeyDown={event=>{if(isSendShortcut(event.nativeEvent,canSend)){event.preventDefault();send();}}} onCompositionStart={()=>setComposing(true)} onCompositionEnd={event=>{setComposing(false);owner.change(event.currentTarget.value);}}/></label>
+   <label className="guide-message-field"><span className="sr-only">给 AI 的消息</span><textarea className="ui-input" aria-label="给 AI 的消息" value={state.instruction} disabled={disabled} placeholder="说明本次希望讨论或完成的工作…" rows={3} aria-invalid={!composing&&state.instruction.length>0&&!feedback.valid} aria-describedby={help} onChange={event=>owner.change(event.currentTarget.value)} onKeyDown={event=>{if(composing)return;const action=composerShortcut(event.nativeEvent);if(action===null)return;event.preventDefault();if(action==='SEND')send();else if(action==='NEWLINE'&&!disabled){const field=event.currentTarget;field.setRangeText('\n',field.selectionStart,field.selectionEnd,'end');owner.change(field.value);}}} onCompositionStart={()=>setComposing(true)} onCompositionEnd={event=>{setComposing(false);owner.change(event.currentTarget.value);}}/></label>
    <p id={help} className={!composing&&state.instruction.length>0&&!feedback.valid?'field-help inline-error':'field-help guide-character-count'}>{composing?'正在输入…':`${feedback.length} / 10000 字符${state.instruction.length>0&&feedback.error?' · '+feedback.error:''}`}</p>
    {guidance.blocked&&<div id={guidanceId} className="guide-send-guidance"><p>{guidance.blocked}</p>{guidance.configure&&!disabled&&<button type="button" className="ui-button" onClick={openSettings}>完善操作设置</button>}</div>}
    {state.phase==='SUBMITTING'&&<p role="status">正在提交本次操作…</p>}{state.phase==='READING'&&<p role="status">正在核实实际状态…</p>}
@@ -64,6 +83,6 @@ export function GuideComposer({owner,documents,review=null,viewingHistory=null}:
    {state.phase==='CONFIRMED'&&<button className="ui-button" type="button" disabled={!state.available||state.refreshing} onClick={()=>void owner.finish()}>读取已接受结果</button>}
    {state.phase==='ERROR'&&<button className="ui-button" type="button" disabled={disabled} onClick={()=>void owner.refresh()}>重新读取状态</button>}
   </div>
-  <footer className="guide-composer-footer"><span className="guide-send-hint">Ctrl / ⌘ + Enter 发送</span><button className="ui-button primary" type="button" disabled={!canSend} aria-describedby={guidance.blocked?guidanceId:help} onClick={send}><Icon name="send"/>{state.parent?'继续讨论':names[state.action]}</button></footer>
+  <footer className="guide-composer-footer"><span className="guide-send-hint">Enter 发送 · Ctrl / ⌘ + Enter 换行</span><button className="ui-button primary" type="button" disabled={!canSend} aria-describedby={guidance.blocked?guidanceId:help} onClick={send}><Icon name="send"/>{state.parent?'继续讨论':names[state.action]}</button></footer>
  </section>;
 }

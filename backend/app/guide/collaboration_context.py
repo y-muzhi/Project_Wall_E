@@ -61,6 +61,7 @@ def read_canonical(connection, identity, catalog, *, require_current=True):
         if root['discussion_version'] != run['discussion_version_snapshot']:
             raise Rejected('DISCUSSION_VERSION_CONFLICT')
     accepted = json.loads(run['execution_basis_json'])
+    catalog = catalog.for_collaboration_release(accepted['resources']['release'])
     resources = catalog.collaboration
     discussion = validate_discussion(accepted['discussion'], resources)
     if accepted['discussion_version'] != run['discussion_version_snapshot'] or accepted['requirement']['id'] != root['id']:

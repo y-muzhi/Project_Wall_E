@@ -1,11 +1,46 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ManualDraftAutosave } from '../src/documents/autosave.ts';
-import { ApiUnknown, ApiRejected } from '../src/api/client.ts';
+import { ApiClient, ApiUnknown, ApiRejected, API_REQUEST_TIMEOUT_MS } from '../src/api/client.ts';
+import { ManualDraftEnd } from '../src/documents/manual-end.ts';
 
 // Controller-only diagnostic ports. Real Milkdown/SQLite receipt adoption is
 // covered independently in the browser; these do not model provenance.
 const at = '2026-10-05T10:40:00.000Z';
+
+// Preserve the production port's ticket -> immutable action binding, while
+// keeping document decoding/storage isolated from Milkdown and user data.
+function timeoutPort(transport) {
+ const actions=new WeakMap();let keys=0;
+ const client=new ApiClient(transport,()=>`00000000-0000-4000-8000-${String(++keys).padStart(12,'0')}`);
+ return {async save(ticket){let action=actions.get(ticket);if(!action){action=client.prepare('PUT','/api/v1/manual-drafts/2',ticket,{idempotent:true,success_status:200});actions.set(ticket,action);}return (await client.commit(action,x=>x)).data;},async read(){return (await client.read('/api/v1/manual-drafts/2',x=>x)).data;}};
+}
+const receiptH04=data=>new Response(JSON.stringify({success:true,data,error:null,meta:{request_id:'00000000-0000-4000-8000-00000000000b'}}),{headers:{'Content-Type':'application/json'}});
+
+test('H04 save timeout reconciles original key before saving newer locally retained edits',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const sent=[],held=deferred();
+ const rig=setup(timeoutPort(async(_url,options)=>{if(options.method==='GET')return receiptH04(draft());sent.push(options);if(sent.length===1)return held.promise;const ticket=JSON.parse(options.body);return receiptH04(draft(ticket.markdown_content,ticket.expected_version+1));}));
+ try{
+  rig.edit('first');const pending=rig.controller.flush();await settle();rig.edit('newest');await settle();assert.equal(rig.writes.at(-1)[2].markdown_content,'newest');
+  t.mock.timers.tick(API_REQUEST_TIMEOUT_MS);await pending;assert.equal(sent.length,3);assert.equal(sent[0].headers['Idempotency-Key'],sent[1].headers['Idempotency-Key']);assert.equal(sent[0].body,sent[1].body);
+  assert.notEqual(sent[1].headers['Idempotency-Key'],sent[2].headers['Idempotency-Key']);assert.equal(JSON.parse(sent[2].body).expected_version,2);assert.equal(rig.controller.state.status,'SAVED');assert.equal(rig.controller.state.confirmed_version,3);assert.equal(rig.controller.localSnapshot.markdown_content,'newest');
+  held.resolve(receiptH04(draft('first',2)));await settle();assert.equal(rig.controller.state.confirmed_version,3);
+ }finally{rig.controller.dispose();}
+});
+
+test('H04 finish editing exits waiting after save and recovery-read timeouts, without completing or clearing the draft',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const methods=[];
+ const rig=setup(timeoutPort(async(_url,options)=>{methods.push(options.method);return new Promise(()=>{});}));
+ let locked=false,completes=0,clears=0;
+ const end=new ManualDraftEnd({...draft(),id:1,document_type:'CURRENT'},draft(),{prepareCompleteManualDraft(){completes++;throw Error('must not complete');}},
+  {flushLocal:()=>true,setReadonly:value=>{locked=value;}},rig.controller,{async clearClosedDraft(){clears++;}});
+ try{
+  rig.edit('retained');const ending=end.complete();await settle();assert(locked);
+  t.mock.timers.tick(API_REQUEST_TIMEOUT_MS);await settle();assert.equal(rig.controller.state.status,'UNKNOWN');assert.deepEqual(methods,['PUT','GET']);
+  t.mock.timers.tick(API_REQUEST_TIMEOUT_MS);assert.equal(await ending,false);assert.equal(end.getSnapshot().phase,'ERROR');assert.equal(completes,0);assert.equal(clears,0);assert.equal(rig.controller.state.confirmed_version,1);assert.equal(rig.controller.localSnapshot.markdown_content,'retained');
+  assert(end.continueEditing());assert(!locked);rig.edit('can continue');assert.equal(rig.controller.localSnapshot.markdown_content,'can continue');assert.deepEqual(rig.timing.live(),[2000]);
+ }finally{end.dispose();rig.controller.dispose();}
+});
 const pair = text => ({ markdown_content: text, block_state_json: { schema_version: 1, next_block_id: 1, blocks: [] } });
 const draft = (text = 'initial', version = 1) => ({ id: 2, requirement_id: 1, document_type: 'MANUAL_DRAFT', content_version: version, created_at: at, updated_at: at, ...pair(text) });
 function ledger(document) {

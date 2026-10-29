@@ -17,6 +17,7 @@ from backend.app.shared.validation import strict_json_object
 
 ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v15'
 MANIFEST_SHA256 = 'a8c5087236d8e4b4b40d62a92643832fe37cc2b5e426725f1ddde7d5670abc40'
+LONG_MANIFEST_SHA256 = '8a4a16de358eb66a6d057ffba4e54fd3b2e696d4673754cfe1435b0bb79ebc5e'
 OUTPUTS = MappingProxyType({'DISCUSS': 'OutputDiscuss', 'GENERATE': 'OutputGenerate',
     'REVISE': 'OutputRevise', 'PROPOSE_CHANGES': 'OutputPropose',
     'COMPARE': 'OutputCompare', 'REVIEW': 'OutputReview'})
@@ -40,7 +41,8 @@ class CollaborationResources:
         try:
             root = root.resolve(strict=True)
             manifest_bytes = (root / 'manifest.json').read_bytes()
-            if hashlib.sha256(manifest_bytes).hexdigest() != MANIFEST_SHA256:
+            digest = hashlib.sha256(manifest_bytes).hexdigest()
+            if digest not in (MANIFEST_SHA256, LONG_MANIFEST_SHA256):
                 raise ValueError('Collaboration manifest identity changed')
             manifest = strict_json_object(manifest_bytes)
             texts, references = {}, {}
@@ -57,7 +59,7 @@ class CollaborationResources:
                     raise ValueError('Duplicate resource identity')
                 texts[file['path']] = content.decode('utf-8', errors='strict')
                 references[key] = (file['path'], compact(file['resource_ref']))
-            value = cls(MANIFEST_SHA256, MappingProxyType(texts), MappingProxyType(references))
+            value = cls(digest, MappingProxyType(texts), MappingProxyType(references))
             value._check(manifest)
             return value
         except ConfigInvalid:

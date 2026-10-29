@@ -19,6 +19,7 @@ class CollaborationObservation:
         self.database = database;self.identity = identity;self.path = Path(database.path).resolve()
         self.manifest = catalog.collaboration.manifest_sha256;self.release = catalog.collaboration.release_sha256
         self.profile = profile.snapshot;self.count_limit = count_batches;self.chat_limit = chat_calls
+        self.limits = catalog.collaboration.counting
         self.count_calls = self.chat_calls = 0
 
     def check(self, database, identity, catalog, profile):
@@ -44,8 +45,8 @@ class CollaborationObservation:
     @property
     def budget(self):
         return {'count_batches': self.count_limit, 'chat_calls': self.chat_limit,
-            'input_tokens': 131072, 'output_tokens': 8192, 'total_tokens': 139264,
-            'framing_reserve': 1024, 'transport_retries': 0}
+            'input_tokens': self.limits['input_limit'], 'output_tokens': self.limits['output_limit'], 'total_tokens': self.limits['total_limit'],
+            'framing_reserve': self.limits['framing_reserve'], 'transport_retries': 0}
 
     def counter(self, delegate):
         permit = self

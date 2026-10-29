@@ -98,7 +98,7 @@ def _collaboration_detail(row, snapshot, *, catalog=None):
     if catalog is None:
         from backend.app.infrastructure.resources import ResourceCatalog
         catalog = ResourceCatalog()
-    resources = catalog.collaboration
+    resources = catalog.for_collaboration_release(snapshot['protocol']['release']).collaboration
     request = snapshot.get('request');protocol = snapshot.get('protocol') or {}
     counting = snapshot.get('counting') or {};basis = snapshot.get('context_basis') or {}
     sections = [];wire = None

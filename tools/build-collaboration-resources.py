@@ -20,7 +20,7 @@ def compact(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
 
 
-def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', release_version='v1', contract_version='v1', output_version='v1'):
+def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', release_version='v1', contract_version='v1', output_version='v1', counting_version='v1', profile_id=None):
     from backend.app.infrastructure.model_profile import ModelProfile, DEFAULT_PROFILE
     from backend.app.infrastructure.schema_transport import named_schema
     from backend.app.infrastructure.resources import _validate
@@ -51,9 +51,9 @@ def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', relea
         refs[path] = reference
         return reference
 
-    def add_json(path, value, key, entry):
+    def add_json(path, value, key, entry, version='v1'):
         _validate(named_schema(schema, entry).schema_json, value)
-        return add(path, compact(value), key)
+        return add(path, compact(value), key, version)
 
     add('schemas/collaboration-contract.'+contract_version+'.json', compact(schema), 'collaboration.contract', contract_version)
     canonical = add('schemas/collaboration-canonical.v1.json', named_schema(schema, 'Canonical').schema_json, 'collaboration.canonical')
@@ -67,10 +67,12 @@ def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', relea
     guide_refs = [{'phase_kind': value['phase_kind'], 'resource_ref': add_json('guides/' + value['key'] + '.v1.json', value, value['key'], 'GuideDefinition')} for value in guides]
     structure_refs = [add_json('structures/' + value['key'] + '.v1.json', value, value['key'], 'StructureProfile') for value in structures]
     prompt = add('prompts/collaboration-common.'+prompt_version+'.md', '\n\n'.join(paragraphs), 'collaboration.common', prompt_version)
-    count_ref = add_json('counting/collaboration-counting.v1.json', counting, 'collaboration.counting', 'CountingDefinition')
+    count_ref = add_json('counting/collaboration-counting.'+counting_version+'.json', counting, 'collaboration.counting', 'CountingDefinition', counting_version)
     # A non-secret placeholder is used only to obtain the existing public
     # immutable profile snapshot. No environment configuration is loaded.
-    profile = ModelProfile('offline-resource-build', DEFAULT_PROFILE).snapshot
+    profile = ModelProfile('offline-resource-build', profile_id or DEFAULT_PROFILE).snapshot
+    if profile['max_tokens'] != counting['output_limit'] or counting['input_limit'] + counting['output_limit'] != counting['total_limit']:
+        raise ValueError('Frozen profile and resource budget must agree')
     profile_sha = hashlib.sha256(compact(profile).encode('utf-8')).hexdigest()
     release = {'schema_version': 1, 'key': 'collaboration_v1', 'version': release_version,
         'canonical_schema': canonical, 'wire_schema': wire, 'output_schemas': outputs,
@@ -104,7 +106,9 @@ def build(*, batch='v9', design_sha256=DESIGN_SHA256, prompt_version='v1', relea
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] == ['--v15']:
+    if sys.argv[1:] == ['--v16']:
+        build(batch='v16', design_sha256='93272acfc058115ca0516e75af0abafa525d52479080ae1afb2042b0bbf04cee', prompt_version='v6', release_version='v8', contract_version='v4', output_version='v3', counting_version='v2', profile_id='deepseek-long-v3')
+    elif sys.argv[1:] == ['--v15']:
         build(batch='v15', design_sha256='9f7e6476861e8d954fc6be675973c6e829988b2c582a107367b3d764fb90bcdd', prompt_version='v6', release_version='v7', contract_version='v3', output_version='v3')
     elif sys.argv[1:] == ['--v14']:
         build(batch='v14', design_sha256='8c818b009879ce902b9ef2e2692028013437cc47a801d32b5ac7e484c38e80f0', prompt_version='v5', release_version='v6', contract_version='v3', output_version='v3')
@@ -119,4 +123,4 @@ if __name__ == '__main__':
     elif not sys.argv[1:]:
         build()
     else:
-        raise SystemExit('Usage: build-collaboration-resources.py [--v10|--v11|--v12|--v13|--v14|--v15]')
+        raise SystemExit('Usage: build-collaboration-resources.py [--v10|--v11|--v12|--v13|--v14|--v15|--v16]')

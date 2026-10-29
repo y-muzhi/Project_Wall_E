@@ -58,7 +58,17 @@ def main():
                 'markdown_content': markdown, 'change_summary': '离线浏览器明确生成'})
         if operation in ('REVISE', 'PROPOSE_CHANGES'):
             document = next(item for item in context.input['documents'] if 'TARGET' in item['roles'])
-            block = next(item for item in document['blocks'] if item['writable'] and item['block_type'] == 'paragraph')
+            block = next((item for item in document['blocks'] if item['writable'] and item['block_type'] == 'paragraph'), None)
+            if operation == 'REVISE' and block is None:
+                # A newly created fixed framework contains headings only.
+                # Return the selected local structure plus actual body text.
+                scope = request['scope']['scope_type']
+                markdown = '\n\n'.join(item['markdown_content'].rstrip('\n') for item in document['blocks'] if scope == 'DOCUMENT' or item['writable'])
+                markdown += '\n\n用户明确修订后的电影推荐规则。\n'
+                return output(context, response_type='DOCUMENT_RESULT', document_result={'name': document['name'], 'document_kind': document['document_kind'],
+                    'markdown_content': markdown, 'change_summary': '离线浏览器章节填写'})
+            if block is None:
+                return output(context, response_type='ANALYSIS', analysis={'conclusion':'NO_CHANGE','summary':'没有可替换的段落','findings':[], 'covered_refs':[], 'unresolved':[]})
             if operation == 'PROPOSE_CHANGES':
                 patch = {'title': '补充推荐规则', 'explanation': '根据本次指令明确推荐范围', 'impact': None, 'patch_operation': 'REPLACE_BLOCK',
                     'target_ref': {'block_id': block['block_id']}, 'selector_json': None, 'original_content': block['markdown_content'],

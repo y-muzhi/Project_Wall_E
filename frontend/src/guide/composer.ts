@@ -69,6 +69,10 @@ export class RequirementGuideComposer{
    this.configured=true;this.publish({target:capture(target),error:null,error_code:null});return true;
   }catch{this.rejectScope();return false;}}
  rejectScope():void{if(this.editable)this.publish({error:'范围无法定位，请重新选择；原输入仍保留。',error_code:'SCOPE_INVALID'});}
+ selectChapter(target:GuideTarget):boolean{
+  if(target.scope.scope_type!=='SECTION'||!this.select(target))return false;
+  this.publish({action:'REVISE',parent:null,review:null});return true;
+ }
  useReview(run:GuideRun,target:GuideTarget):boolean{if(!this.editable||run.requirement_id!==this.value.detail.requirement.id||run.action_type!=='REVIEW'||run.status!=='COMPLETED'||!this.select(target))return false;
   this.publish({action:'REVISE',parent:null,review:capture(run),source_refs:[...this.value.source_refs.filter(ref=>ref.kind!=='RUN_RESULT'),sourceRef({kind:'RUN_RESULT',guide_run_id:run.id})]});return true;}
  continueFrom(run:GuideRun|null):void{if(!this.editable)return;if(run&&(run.requirement_id!==this.value.detail.requirement.id||run.status==='RUNNING'))throw TypeError('Owned ended parent required');this.configured=true;this.publish({parent:run?capture(run):null,action:'DISCUSS'});}

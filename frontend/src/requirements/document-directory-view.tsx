@@ -12,14 +12,16 @@ import {Icon} from '../shared/icon.tsx';
 import {ordinaryInput} from '../shared/text.ts';
 import {useMotionPresence} from '../shared/motion-react.ts';
 
-const DocumentCreationContext=createContext<(()=>void)|null>(null);
+type CreationDefaults=Readonly<{name?:string;kind?:typeof documentKinds[number];framework?:boolean}>;
+const DocumentCreationContext=createContext<((defaults?:CreationDefaults)=>void)|null>(null);
+export function useDocumentCreation(){return useContext(DocumentCreationContext);}
 export function DocumentCreationProvider({owner,children}:{owner:RequirementDetailOwner;children:import('react').ReactNode}){
- const [state,setState]=useState({open:false,identity:0}),present=useMotionPresence(state.open);
- return <DocumentCreationContext.Provider value={()=>setState(previous=>previous.open?previous:{open:true,identity:previous.identity+1})}>{children}{present&&<CreateDocumentDialog key={state.identity} owner={owner} open={state.open} close={()=>setState(previous=>({...previous,open:false}))}/>}</DocumentCreationContext.Provider>;
+ const [state,setState]=useState({open:false,identity:0,defaults:{} as CreationDefaults}),present=useMotionPresence(state.open);
+ return <DocumentCreationContext.Provider value={(defaults={})=>setState(previous=>previous.open?previous:{open:true,identity:previous.identity+1,defaults})}>{children}{present&&<CreateDocumentDialog key={state.identity} owner={owner} open={state.open} defaults={state.defaults} close={()=>setState(previous=>({...previous,open:false}))}/>}</DocumentCreationContext.Provider>;
 }
-function CreateDocumentDialog({owner,open,close}:{owner:RequirementDetailOwner;open:boolean;close():void}){
+function CreateDocumentDialog({owner,open,close,defaults}:{owner:RequirementDetailOwner;open:boolean;close():void;defaults:CreationDefaults}){
  const flow=owner.regions!.directory,state=useSyncExternalStore(flow.subscribe,flow.getSnapshot);
- const [name,setName]=useState(''),[kind,setKind]=useState<typeof documentKinds[number]>('REQUIREMENT_BRIEF'),[framework,setFramework]=useState(false),[error,setError]=useState<string|null>(null);
+ const [name,setName]=useState(defaults.name??''),[kind,setKind]=useState<typeof documentKinds[number]>(defaults.kind??'REQUIREMENT_BRIEF'),[framework,setFramework]=useState(defaults.framework??false),[error,setError]=useState<string|null>(null);
  const [invalidName,setInvalidName]=useState(false);
  const [discard,setDiscard]=useState(false);
  const dialog=useRef<HTMLDialogElement>(null),composing=useRef(false),pending=useRef(false);
