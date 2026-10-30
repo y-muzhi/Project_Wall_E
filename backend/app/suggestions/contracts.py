@@ -1,15 +1,62 @@
 """Exact I20 batch/suggestion projections, without fresh-target mutation."""
+
 from functools import lru_cache
 import json
 from backend.app.documents.snapshot import _time
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.resources import ResourceCatalog
-from backend.app.shared.validation import MISSING, object_fields, strict_integer, strict_enum, strict_json_object, raw_text, reject
+from backend.app.shared.validation import (
+    MISSING,
+    object_fields,
+    strict_integer,
+    strict_enum,
+    strict_json_object,
+    raw_text,
+    reject,
+)
 from dataclasses import dataclass
 from backend.app.infrastructure.idempotency import request_key
 
-METADATA_FIELDS = ('id', 'requirement_id', 'guide_run_id', 'source_type', 'source_id', 'title', 'summary', 'status', 'completion_result', 'error_message', 'base_content_version', 'applied_content_version', 'created_at', 'completed_at', 'updated_at', 'target_document_id', 'source_refs')
-SUGGESTION_FIELDS = ('id', 'batch_id', 'order_no', 'title', 'explanation', 'impact', 'patch_operation', 'target_ref', 'selector', 'original_content', 'proposed_markdown', 'proposed_data', 'user_edited_content', 'status', 'validation_status', 'validation_error', 'created_at', 'decided_at', 'updated_at')
+METADATA_FIELDS = (
+    'id',
+    'requirement_id',
+    'guide_run_id',
+    'source_type',
+    'source_id',
+    'title',
+    'summary',
+    'status',
+    'completion_result',
+    'error_message',
+    'base_content_version',
+    'applied_content_version',
+    'created_at',
+    'completed_at',
+    'updated_at',
+    'target_document_id',
+    'source_refs',
+)
+SUGGESTION_FIELDS = (
+    'id',
+    'batch_id',
+    'order_no',
+    'title',
+    'explanation',
+    'impact',
+    'patch_operation',
+    'target_ref',
+    'selector',
+    'original_content',
+    'proposed_markdown',
+    'proposed_data',
+    'user_edited_content',
+    'status',
+    'validation_status',
+    'validation_error',
+    'created_at',
+    'decided_at',
+    'updated_at',
+)
 DECISIONS = ('PENDING', 'ACCEPTED', 'REJECTED', 'EDITED')
 
 
@@ -28,51 +75,97 @@ def _protocol():
 
 
 def metadata_from_row(row):
-    return batch_metadata({field: row[field] for field in METADATA_FIELDS if field != 'source_refs'} |
-        {'source_refs': json.loads(row['source_refs_json'])})
+    return batch_metadata(
+        {field: row[field] for field in METADATA_FIELDS if field != 'source_refs'}
+        | {'source_refs': json.loads(row['source_refs_json'])}
+    )
 
 
 def batch_metadata(data: object) -> dict:
     value = object_fields(data, 'batch', METADATA_FIELDS, METADATA_FIELDS)
-    for field in ('id', 'requirement_id', 'guide_run_id', 'base_content_version', 'target_document_id'): strict_integer(value[field], field)
-    if type(value['source_refs']) is not list: raise ValueError('Source references must be a list')
-    for source in value['source_refs']: _protocol().validate('SourceRef', source)
-    if len({canonical_input(source) for source in value['source_refs']}) != len(value['source_refs']):
+    for field in (
+        'id',
+        'requirement_id',
+        'guide_run_id',
+        'base_content_version',
+        'target_document_id',
+    ):
+        strict_integer(value[field], field)
+    if type(value['source_refs']) is not list:
+        raise ValueError('Source references must be a list')
+    for source in value['source_refs']:
+        _protocol().validate('SourceRef', source)
+    if len({canonical_input(source) for source in value['source_refs']}) != len(
+        value['source_refs']
+    ):
         raise ValueError('Source references must be distinct')
-    strict_enum(value['source_type'], 'source_type', ('USER_INSTRUCTION', 'REVIEW_RESULT', 'COMMENT'))
+    strict_enum(
+        value['source_type'], 'source_type', ('USER_INSTRUCTION', 'REVIEW_RESULT', 'COMMENT')
+    )
     if value['source_type'] == 'USER_INSTRUCTION':
-        if value['source_id'] is not None: raise ValueError('USER_INSTRUCTION has no source identity')
-    else: strict_integer(value['source_id'], 'source_id')
-    raw_text(value['title'], 'title', 1); raw_text(value['summary'], 'summary', 1)
+        if value['source_id'] is not None:
+            raise ValueError('USER_INSTRUCTION has no source identity')
+    else:
+        strict_integer(value['source_id'], 'source_id')
+    raw_text(value['title'], 'title', 1)
+    raw_text(value['summary'], 'summary', 1)
     strict_enum(value['status'], 'status', ('PENDING', 'COMPLETED', 'DISCARDED'))
     created, updated = _time(value['created_at']), _time(value['updated_at'])
     if created > updated or (value['status'] != 'PENDING') != (value['completed_at'] is not None):
         raise ValueError('Batch event chronology is inconsistent')
     if value['completed_at'] is not None and not created <= _time(value['completed_at']) <= updated:
         raise ValueError('Batch completion time is outside its lifetime')
-    if value['status'] == 'COMPLETED': strict_enum(value['completion_result'], 'completion_result', ('CHANGES_APPLIED', 'NO_CHANGE'))
-    elif value['completion_result'] is not None: raise ValueError('Only completed batches have a completion result')
+    if value['status'] == 'COMPLETED':
+        strict_enum(
+            value['completion_result'], 'completion_result', ('CHANGES_APPLIED', 'NO_CHANGE')
+        )
+    elif value['completion_result'] is not None:
+        raise ValueError('Only completed batches have a completion result')
     if value['completion_result'] == 'CHANGES_APPLIED':
-        if strict_integer(value['applied_content_version'], 'applied_content_version') != value['base_content_version']+1:
+        if (
+            strict_integer(value['applied_content_version'], 'applied_content_version')
+            != value['base_content_version'] + 1
+        ):
             raise ValueError('One batch application increments its baseline version once')
-    elif value['applied_content_version'] is not None: raise ValueError('Unchanged/unapplied batches have no adopted version')
-    if value['error_message'] is not None: raw_text(value['error_message'], 'error_message', 1)
+    elif value['applied_content_version'] is not None:
+        raise ValueError('Unchanged/unapplied batches have no adopted version')
+    if value['error_message'] is not None:
+        raw_text(value['error_message'], 'error_message', 1)
     return _detached(value)
 
 
 def suggestion_read_model(data: object, *, protocol=None) -> dict:
     value = object_fields(data, 'suggestion', SUGGESTION_FIELDS, SUGGESTION_FIELDS)
-    for field in ('id', 'batch_id', 'order_no'): strict_integer(value[field], field)
+    for field in ('id', 'batch_id', 'order_no'):
+        strict_integer(value[field], field)
     resource = _protocol() if protocol is None else protocol
-    resource.validate_patch({field: value[field] for field in ('title', 'explanation', 'impact', 'patch_operation', 'target_ref', 'original_content', 'proposed_markdown')} |
-        {'selector_json': value['selector'], 'proposed_data_json': value['proposed_data']})
-    strict_enum(value['status'], 'status', DECISIONS); strict_enum(value['validation_status'], 'validation_status', ('VALID', 'INVALID'))
-    if value['validation_status'] == 'INVALID': raw_text(value['validation_error'], 'validation_error', 1)
-    elif value['validation_error'] is not None: raise ValueError('Valid suggestions have no validation error')
+    resource.validate_patch(
+        {
+            field: value[field]
+            for field in (
+                'title',
+                'explanation',
+                'impact',
+                'patch_operation',
+                'target_ref',
+                'original_content',
+                'proposed_markdown',
+            )
+        }
+        | {'selector_json': value['selector'], 'proposed_data_json': value['proposed_data']}
+    )
+    strict_enum(value['status'], 'status', DECISIONS)
+    strict_enum(value['validation_status'], 'validation_status', ('VALID', 'INVALID'))
+    if value['validation_status'] == 'INVALID':
+        raw_text(value['validation_error'], 'validation_error', 1)
+    elif value['validation_error'] is not None:
+        raise ValueError('Valid suggestions have no validation error')
     if value['status'] == 'EDITED':
         raw_text(value['user_edited_content'], 'user_edited_content', 1, 100000)
-        if value['patch_operation'] == 'DELETE_BLOCK': raise ValueError('Delete suggestions cannot be edited')
-    elif value['user_edited_content'] is not None: raise ValueError('Other decisions clear edited content')
+        if value['patch_operation'] == 'DELETE_BLOCK':
+            raise ValueError('Delete suggestions cannot be edited')
+    elif value['user_edited_content'] is not None:
+        raise ValueError('Other decisions clear edited content')
     created, updated = _time(value['created_at']), _time(value['updated_at'])
     if created > updated or (value['status'] != 'PENDING') != (value['decided_at'] is not None):
         raise ValueError('Suggestion decision chronology is inconsistent')
@@ -82,22 +175,35 @@ def suggestion_read_model(data: object, *, protocol=None) -> dict:
 
 
 def suggestion_from_row(row, *, protocol=None) -> dict:
-    value = {field: row[field] for field in SUGGESTION_FIELDS if field not in ('target_ref', 'selector', 'proposed_data')}
-    for public, stored in (('target_ref', 'target_ref_json'), ('selector', 'selector_json'), ('proposed_data', 'proposed_data_json')):
+    value = {
+        field: row[field]
+        for field in SUGGESTION_FIELDS
+        if field not in ('target_ref', 'selector', 'proposed_data')
+    }
+    for public, stored in (
+        ('target_ref', 'target_ref_json'),
+        ('selector', 'selector_json'),
+        ('proposed_data', 'proposed_data_json'),
+    ):
         value[public] = None if row[stored] is None else strict_json_object(row[stored], stored)
     return suggestion_read_model(value, protocol=protocol)
 
 
 def suggestion_counts(items: list[dict]) -> dict:
-    result = {status.lower(): sum(item['status'] == status for item in items) for status in DECISIONS}
+    result = {
+        status.lower(): sum(item['status'] == status for item in items) for status in DECISIONS
+    }
     return {'total': len(items), **result}
 
 
 def counts_model(data: object) -> dict:
     fields = ('total', 'pending', 'accepted', 'rejected', 'edited')
     value = object_fields(data, 'counts', fields, fields)
-    for field in fields: strict_integer(value[field], field, minimum=0)
-    if not 1 <= value['total'] <= 100 or value['total'] != sum(value[field] for field in fields[1:]):
+    for field in fields:
+        strict_integer(value[field], field, minimum=0)
+    if not 1 <= value['total'] <= 100 or value['total'] != sum(
+        value[field] for field in fields[1:]
+    ):
         raise ValueError('Aggregate counts must include every suggestion exactly once')
     return dict(value)
 
@@ -109,20 +215,32 @@ def batch_read_model(data: object, *, protocol=None) -> dict:
     if type(value['suggestions']) is not list or not 1 <= len(value['suggestions']) <= 100:
         raise ValueError('A stored batch must contain all 1..100 suggestions')
     items = [suggestion_read_model(item, protocol=protocol) for item in value['suggestions']]
-    if any(item['batch_id'] != value['id'] or item['created_at'] < value['created_at'] or item['updated_at'] > value['updated_at'] for item in items):
+    if any(
+        item['batch_id'] != value['id']
+        or item['created_at'] < value['created_at']
+        or item['updated_at'] > value['updated_at']
+        for item in items
+    ):
         raise ValueError('Suggestion ownership or aggregate activity time is inconsistent')
     order = [(item['order_no'], item['id']) for item in items]
-    if order != sorted(order) or len({item['id'] for item in items}) != len(items) or len({item['order_no'] for item in items}) != len(items):
+    if (
+        order != sorted(order)
+        or len({item['id'] for item in items}) != len(items)
+        or len({item['order_no'] for item in items}) != len(items)
+    ):
         raise ValueError('Suggestions must be distinct in stable order')
     counts = counts_model(value['counts'])
-    if counts != suggestion_counts(items): raise ValueError('Batch counts must reflect its complete same-snapshot suggestions')
+    if counts != suggestion_counts(items):
+        raise ValueError('Batch counts must reflect its complete same-snapshot suggestions')
     return {**metadata, 'suggestions': items, 'counts': dict(counts)}
 
 
 def get_batch_result(row, suggestions, *, protocol) -> dict:
     metadata = metadata_from_row(row)
     items = [suggestion_from_row(item, protocol=protocol) for item in suggestions]
-    return batch_read_model({**metadata, 'suggestions': items, 'counts': suggestion_counts(items)}, protocol=protocol)
+    return batch_read_model(
+        {**metadata, 'suggestions': items, 'counts': suggestion_counts(items)}, protocol=protocol
+    )
 
 
 @dataclass(frozen=True)
@@ -137,14 +255,23 @@ class BatchActionInput:
 def discard_batch_input(payload: object) -> BatchActionInput:
     fields = ('batch_id', 'idempotency_key')
     value = object_fields(payload, 'body', fields, fields)
-    return BatchActionInput(strict_integer(value['batch_id'], 'batch_id'), request_key(value['idempotency_key'], 'idempotency_key'))
+    return BatchActionInput(
+        strict_integer(value['batch_id'], 'batch_id'),
+        request_key(value['idempotency_key'], 'idempotency_key'),
+    )
 
 
 def discard_batch_result(row, items) -> dict:
     metadata = metadata_from_row(row)
-    if metadata['status'] != 'DISCARDED': raise ValueError('Discard result must reflect the actual batch transition')
-    for item in items: strict_enum(item['status'], 'status', DECISIONS)
-    return {'code': 'BATCH_DISCARDED', 'data': {'batch': metadata, 'counts': counts_model(suggestion_counts(items))}, 'details': None}
+    if metadata['status'] != 'DISCARDED':
+        raise ValueError('Discard result must reflect the actual batch transition')
+    for item in items:
+        strict_enum(item['status'], 'status', DECISIONS)
+    return {
+        'code': 'BATCH_DISCARDED',
+        'data': {'batch': metadata, 'counts': counts_model(suggestion_counts(items))},
+        'details': None,
+    }
 
 
 @dataclass(frozen=True)
@@ -155,7 +282,9 @@ class DecideSuggestionInput:
     idempotency_key: str
 
     def business_input(self) -> dict:
-        return {'suggestion_id': self.suggestion_id, 'decision': self.decision} | ({'edited_content': self.edited_content} if self.decision == 'EDITED' else {})
+        return {'suggestion_id': self.suggestion_id, 'decision': self.decision} | (
+            {'edited_content': self.edited_content} if self.decision == 'EDITED' else {}
+        )
 
 
 def decide_suggestion_input(payload: object) -> DecideSuggestionInput:
@@ -165,17 +294,29 @@ def decide_suggestion_input(payload: object) -> DecideSuggestionInput:
     content = value.get('edited_content')
     if decision == 'EDITED':
         content = raw_text(value.get('edited_content', MISSING), 'edited_content', 1, 100000)
-        try: content.encode('utf-8', errors='strict')
-        except UnicodeError: reject('edited_content', 'INVALID_FORMAT', '必须使用有效Unicode文本')
+        try:
+            content.encode('utf-8', errors='strict')
+        except UnicodeError:
+            reject('edited_content', 'INVALID_FORMAT', '必须使用有效Unicode文本')
     elif 'edited_content' in value:
         reject('edited_content', 'INVALID_FORMAT', '只有EDITED决定可携带编辑内容')
-    return DecideSuggestionInput(strict_integer(value['suggestion_id'], 'suggestion_id'), decision, content, request_key(value['idempotency_key'], 'idempotency_key'))
+    return DecideSuggestionInput(
+        strict_integer(value['suggestion_id'], 'suggestion_id'),
+        decision,
+        content,
+        request_key(value['idempotency_key'], 'idempotency_key'),
+    )
 
 
 def decide_suggestion_result(row, items, *, protocol) -> dict:
     suggestion = suggestion_from_row(row, protocol=protocol)
-    if suggestion['status'] == 'PENDING': raise ValueError('Decision response requires a persisted decision')
-    return {'code': 'SUGGESTION_DECIDED', 'data': {'suggestion': suggestion, 'counts': counts_model(suggestion_counts(items))}, 'details': None}
+    if suggestion['status'] == 'PENDING':
+        raise ValueError('Decision response requires a persisted decision')
+    return {
+        'code': 'SUGGESTION_DECIDED',
+        'data': {'suggestion': suggestion, 'counts': counts_model(suggestion_counts(items))},
+        'details': None,
+    }
 
 
 @dataclass(frozen=True)
@@ -185,13 +326,20 @@ class CompleteBatchInput:
     idempotency_key: str
 
     def business_input(self) -> dict:
-        return {'batch_id': self.batch_id, 'expected_content_version': self.expected_content_version}
+        return {
+            'batch_id': self.batch_id,
+            'expected_content_version': self.expected_content_version,
+        }
 
 
 def complete_batch_input(payload: object) -> CompleteBatchInput:
     fields = ('batch_id', 'expected_content_version', 'idempotency_key')
     value = object_fields(payload, 'body', fields, fields)
-    return CompleteBatchInput(strict_integer(value['batch_id'], 'batch_id'), strict_integer(value['expected_content_version'], 'expected_content_version'), request_key(value['idempotency_key'], 'idempotency_key'))
+    return CompleteBatchInput(
+        strict_integer(value['batch_id'], 'batch_id'),
+        strict_integer(value['expected_content_version'], 'expected_content_version'),
+        request_key(value['idempotency_key'], 'idempotency_key'),
+    )
 
 
 @dataclass(frozen=True)
@@ -202,8 +350,11 @@ class AcceptPendingInput:
     idempotency_key: str
 
     def business_input(self):
-        return {'batch_id': self.batch_id, 'expected_content_version': self.expected_content_version,
-            'expected_pending_ids': list(self.expected_pending_ids)}
+        return {
+            'batch_id': self.batch_id,
+            'expected_content_version': self.expected_content_version,
+            'expected_pending_ids': list(self.expected_pending_ids),
+        }
 
 
 def accept_pending_input(payload):
@@ -215,26 +366,65 @@ def accept_pending_input(payload):
     ids = tuple(strict_integer(identity, 'expected_pending_ids') for identity in ids)
     if len(set(ids)) != len(ids):
         reject('expected_pending_ids', 'INVALID_FORMAT', '待处理建议ID不能重复')
-    return AcceptPendingInput(strict_integer(value['batch_id'], 'batch_id'),
-        strict_integer(value['expected_content_version'], 'expected_content_version'), ids,
-        request_key(value['idempotency_key'], 'idempotency_key'))
+    return AcceptPendingInput(
+        strict_integer(value['batch_id'], 'batch_id'),
+        strict_integer(value['expected_content_version'], 'expected_content_version'),
+        ids,
+        request_key(value['idempotency_key'], 'idempotency_key'),
+    )
 
 
 def stored_patch(item: dict) -> dict:
-    return {field: item[field] for field in ('title', 'explanation', 'impact', 'patch_operation', 'target_ref', 'original_content', 'proposed_markdown')} | {'selector_json': item['selector'], 'proposed_data_json': item['proposed_data']}
+    return {
+        field: item[field]
+        for field in (
+            'title',
+            'explanation',
+            'impact',
+            'patch_operation',
+            'target_ref',
+            'original_content',
+            'proposed_markdown',
+        )
+    } | {'selector_json': item['selector'], 'proposed_data_json': item['proposed_data']}
 
 
 def complete_batch_result(batch, items, current, sources, effect) -> dict:
     from backend.app.documents.contracts import get_current_document_result
+
     metadata = metadata_from_row(batch)
     counts = counts_model(suggestion_counts(items))
     document = get_current_document_result(current, sources)
-    if metadata['status'] != 'COMPLETED' or counts['pending'] or document['requirement_id'] != metadata['requirement_id'] or document['content_version'] != (metadata['applied_content_version'] or metadata['base_content_version']):
+    if (
+        metadata['status'] != 'COMPLETED'
+        or counts['pending']
+        or document['requirement_id'] != metadata['requirement_id']
+        or document['content_version']
+        != (metadata['applied_content_version'] or metadata['base_content_version'])
+    ):
         raise ValueError('Completion response requires consistent committed effects')
-    code = 'BATCH_APPLIED' if metadata['completion_result'] == 'CHANGES_APPLIED' else 'BATCH_NO_CHANGE'
+    code = (
+        'BATCH_APPLIED' if metadata['completion_result'] == 'CHANGES_APPLIED' else 'BATCH_NO_CHANGE'
+    )
     from backend.app.documents.contracts import document_effect
+
     effect = document_effect(effect)
-    if effect['document_id'] != metadata['target_document_id'] or document['id'] != effect['document_id'] or effect['after_content_version'] != document['content_version']:
+    if (
+        effect['document_id'] != metadata['target_document_id']
+        or document['id'] != effect['document_id']
+        or effect['after_content_version'] != document['content_version']
+    ):
         raise ValueError('Batch effects must address the actual committed target')
-    return {'code': code, 'data': {'batch': metadata, 'counts': counts, 'current_document': document, 'document_effect': effect,
-        'applied_suggestion_ids': [item['id'] for item in items if item['status'] in ('ACCEPTED', 'EDITED')]}, 'details': None}
+    return {
+        'code': code,
+        'data': {
+            'batch': metadata,
+            'counts': counts,
+            'current_document': document,
+            'document_effect': effect,
+            'applied_suggestion_ids': [
+                item['id'] for item in items if item['status'] in ('ACCEPTED', 'EDITED')
+            ],
+        },
+        'details': None,
+    }

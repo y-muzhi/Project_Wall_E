@@ -2,7 +2,11 @@ import type { Crepe } from '@milkdown/crepe';
 import type { MarkdownNode } from '@milkdown/kit/transformer';
 import { $node, $remark } from '@milkdown/kit/utils';
 import {
-  remarkHtmlTransformer, remarkInlineLinkPlugin, remarkPreserveEmptyLinePlugin, syncHeadingIdPlugin, codeBlockSchema,
+  remarkHtmlTransformer,
+  remarkInlineLinkPlugin,
+  remarkPreserveEmptyLinePlugin,
+  syncHeadingIdPlugin,
+  codeBlockSchema,
 } from '@milkdown/kit/preset/commonmark';
 import { uploadPlugin } from '@milkdown/kit/plugin/upload';
 import { trailing } from '@milkdown/kit/plugin/trailing';
@@ -15,41 +19,58 @@ import { remarkRawSource } from './raw-source-remark.ts';
 // A text node, never innerHTML: authored HTML and definitions stay visible,
 // including duplicates that remark-inline-links would otherwise discard.
 const rawSourceNode = $node('walle_raw_source', () => ({
-  group: 'block', content: 'text*', marks: '', code: true, defining: true,
+  group: 'block',
+  content: 'text*',
+  marks: '',
+  code: true,
+  defining: true,
   attrs: { kind: { default: 'html_block' } },
-  parseDOM: [{ tag: 'pre[data-walle-raw]', preserveWhitespace: 'full',
-    getAttrs: dom => ({kind: dom.getAttribute('data-walle-raw')}) }],
-  toDOM: node => ['pre', {'data-walle-raw': node.attrs.kind}, ['code', 0]],
+  parseDOM: [
+    {
+      tag: 'pre[data-walle-raw]',
+      preserveWhitespace: 'full',
+      getAttrs: (dom) => ({ kind: dom.getAttribute('data-walle-raw') }),
+    },
+  ],
+  toDOM: (node) => ['pre', { 'data-walle-raw': node.attrs.kind }, ['code', 0]],
   parseMarkdown: {
-    match: node => node.type === 'walleRawSource',
+    match: (node) => node.type === 'walleRawSource',
     runner: (state, node, type) => {
-      state.openNode(type, {kind: node.kind});
+      state.openNode(type, { kind: node.kind });
       if (node.value) state.addText(String(node.value));
       state.closeNode();
     },
   },
   toMarkdown: {
-    match: node => node.type.name === 'walle_raw_source',
-    runner: (state, node) => { state.addNode('html', undefined, node.textContent); },
+    match: (node) => node.type.name === 'walle_raw_source',
+    runner: (state, node) => {
+      state.addNode('html', undefined, node.textContent);
+    },
   },
 }));
 
-const sourceCodeNode = codeBlockSchema.extendSchema(previous => ctx => {
+const sourceCodeNode = codeBlockSchema.extendSchema((previous) => (ctx) => {
   const original = previous(ctx);
-  return {...original, attrs: {...original.attrs, walle_code_tail: {default: '\n', validate: 'string'}},
-    parseMarkdown: {...original.parseMarkdown, runner: (state, node, type) => {
-      state.openNode(type, {language: node.lang ?? '', walle_code_tail: node.walleCodeTail});
-      if (node.value) state.addText(String(node.value));
-      state.closeNode();
-    }},
+  return {
+    ...original,
+    attrs: { ...original.attrs, walle_code_tail: { default: '\n', validate: 'string' } },
+    parseMarkdown: {
+      ...original.parseMarkdown,
+      runner: (state, node, type) => {
+        state.openNode(type, { language: node.lang ?? '', walle_code_tail: node.walleCodeTail });
+        if (node.value) state.addText(String(node.value));
+        state.closeNode();
+      },
+    },
   };
 });
 
-const sourceListItem = extendListItemSchemaForTask.extendSchema(previous => ctx => ({
+const sourceListItem = extendListItemSchemaForTask.extendSchema((previous) => (ctx) => ({
   // CommonMark permits a quote/code/raw block as the first list child. Keep
   // paragraph first for generated empty items, but never inject a phantom
   // paragraph when a parsed item's actual first child is another block.
-  ...previous(ctx), content: '(paragraph | block) block*',
+  ...previous(ctx),
+  content: '(paragraph | block) block*',
 }));
 
 function sourceValue(node: MarkdownNode, source: string, wholeLine = false): string {
@@ -106,14 +127,16 @@ const sourceRemark = $remark('walle-source-nodes', () => () => (root, file) => {
         const last = lines.at(-1) ?? '';
         const marker = opening[2]!;
         const container = depth === 1 ? '^ {0,3}' : '^(?:[ \\t]*>[ \\t]*)*[ \\t]*';
-        const closing = new RegExp(container + marker[0] + '{' + marker.length + ',}[ \\t]*(?:\\r\\n|\\r|\\n)?$');
+        const closing = new RegExp(
+          container + marker[0] + '{' + marker.length + ',}[ \\t]*(?:\\r\\n|\\r|\\n)?$',
+        );
         if (lines.length > 1 && closing.test(last)) body = lines.slice(1, -1).join('');
       }
       node.walleCodeTail = /(?:\r\n|\r|\n)$/.test(body) ? '\n' : '';
       node.value = String(node.value ?? '').replace(/\r\n|\r/g, '\n');
     }
     const childrenAreFlow = ['root', 'blockquote', 'listItem'].includes(originalType);
-    node.children?.forEach(child => transform(child, childrenAreFlow, depth + 1));
+    node.children?.forEach((child) => transform(child, childrenAreFlow, depth + 1));
   };
   transform(root as MarkdownNode, true, 0);
 });
@@ -123,11 +146,20 @@ export async function installSourceNodes(crepe: Crepe): Promise<void> {
   // dropping files must never insert a temporary blob URL into saved Markdown.
   await crepe.editor.remove([
     ...remarkGFMPlugin,
-    ...remarkInlineLinkPlugin, ...remarkHtmlTransformer,
-    ...remarkPreserveEmptyLinePlugin, syncHeadingIdPlugin, uploadPlugin, ...trailing, codeBlockSchema.node,
+    ...remarkInlineLinkPlugin,
+    ...remarkHtmlTransformer,
+    ...remarkPreserveEmptyLinePlugin,
+    syncHeadingIdPlugin,
+    uploadPlugin,
+    ...trailing,
+    codeBlockSchema.node,
     extendListItemSchemaForTask.node,
   ]);
-  crepe.editor.use($remark('walle-gfm', () => remarkWallEGfm))
+  crepe.editor
+    .use($remark('walle-gfm', () => remarkWallEGfm))
     .use($remark('walle-raw-flow', () => remarkRawSource))
-    .use(sourceCodeNode).use(sourceListItem).use(rawSourceNode).use(sourceRemark);
+    .use(sourceCodeNode)
+    .use(sourceListItem)
+    .use(rawSourceNode)
+    .use(sourceRemark);
 }

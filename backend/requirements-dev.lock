@@ -1,0 +1,2 @@
+# Development tools; production dependencies remain in requirements.lock.
+ruff==0.17.3

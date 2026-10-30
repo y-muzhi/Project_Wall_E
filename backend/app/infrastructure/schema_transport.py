@@ -5,6 +5,7 @@ one root base URI, direct local definition references, and no recursion or
 dynamic resolution. Unknown resolution mechanisms fail closed. Production
 Builder/Audit still require the independently verified counting release.
 """
+
 from dataclasses import dataclass
 import hashlib
 import json
@@ -36,10 +37,13 @@ class TransportSchema:
 
     @property
     def evidence(self):
-        return {'strategy': STRATEGY, 'original_schema_sha256': self.original_sha256,
-                'derived_schema_sha256': self.derived_sha256,
-                'retained_definitions': list(self.retained_definitions),
-                'removed_definitions': list(self.removed_definitions)}
+        return {
+            'strategy': STRATEGY,
+            'original_schema_sha256': self.original_sha256,
+            'derived_schema_sha256': self.derived_sha256,
+            'retained_definitions': list(self.retained_definitions),
+            'removed_definitions': list(self.removed_definitions),
+        }
 
 
 def derive_schema(original_json: str) -> TransportSchema:
@@ -55,7 +59,9 @@ def derive_schema(original_json: str) -> TransportSchema:
         if root.get('$schema') != DIALECT or type(root.get('$defs')) is not dict:
             raise ValueError('Unsupported schema dialect/definitions')
         base = root.get('$id')
-        if base is not None and (type(base) is not str or not urlsplit(base).scheme or urlsplit(base).fragment):
+        if base is not None and (
+            type(base) is not str or not urlsplit(base).scheme or urlsplit(base).fragment
+        ):
             raise ValueError('Unsupported root base URI')
         definitions = root['$defs']
 
@@ -65,69 +71,102 @@ def derive_schema(original_json: str) -> TransportSchema:
                 if mapping:
                     # Property names (including "id", "$id" or "$ref") are
                     # instance keys, never schema resolution keywords.
-                    for child in node.values(): found.update(references(child))
+                    for child in node.values():
+                        found.update(references(child))
                     return found
                 for key, value in node.items():
-                    if key in ('$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor', '$anchor', '$vocabulary', 'id'):
+                    if key in (
+                        '$dynamicRef',
+                        '$dynamicAnchor',
+                        '$recursiveRef',
+                        '$recursiveAnchor',
+                        '$anchor',
+                        '$vocabulary',
+                        'id',
+                    ):
                         raise ValueError('Unsupported schema resolution')
                     if key == '$id' and not top:
                         raise ValueError('Embedded base URI is unsupported')
                     if key == '$schema' and not top:
                         raise ValueError('Embedded dialect is unsupported')
                     if key == '$defs':
-                        if not top: raise ValueError('Nested definitions are unsupported')
+                        if not top:
+                            raise ValueError('Nested definitions are unsupported')
                         continue
                     if key in ('properties', 'patternProperties', 'dependentSchemas'):
-                        if type(value) is not dict: raise ValueError('Schema mapping required')
+                        if type(value) is not dict:
+                            raise ValueError('Schema mapping required')
                         found.update(references(value, mapping=True))
                     elif key == '$ref':
-                        if type(value) is not str or not re.fullmatch(r'#\/\$defs\/[A-Za-z_][A-Za-z_0-9]*', value):
+                        if type(value) is not str or not re.fullmatch(
+                            r'#\/\$defs\/[A-Za-z_][A-Za-z_0-9]*', value
+                        ):
                             raise ValueError('Only direct local named definitions are supported')
                         name = value[8:]
-                        if name not in definitions: raise ValueError('Missing local definition')
+                        if name not in definitions:
+                            raise ValueError('Missing local definition')
                         found.add(name)
                     else:
                         found.update(references(value))
             elif type(node) is list:
-                for value in node: found.update(references(value))
+                for value in node:
+                    found.update(references(value))
             return found
 
         start = references(root, top=True)
         graph = {}
         for name, definition in definitions.items():
-            if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', name) or type(definition) not in (dict, bool):
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', name) or type(definition) not in (
+                dict,
+                bool,
+            ):
                 raise ValueError('Unsupported local definition')
             graph[name] = references(definition)
         visited, active = set(), set()
 
         def visit(name):
-            if name in active: raise ValueError('Recursive references are unsupported')
-            if name in visited: return
+            if name in active:
+                raise ValueError('Recursive references are unsupported')
+            if name in visited:
+                return
             active.add(name)
-            for child in graph[name]: visit(child)
-            active.remove(name); visited.add(name)
+            for child in graph[name]:
+                visit(child)
+            active.remove(name)
+            visited.add(name)
 
         # Even unused recursive/identifier mechanisms are refused, not quietly
         # deleted and interpreted under a weaker resolution contract.
-        for name in graph: visit(name)
+        for name in graph:
+            visit(name)
         reachable, pending = set(), list(start)
         while pending:
             name = pending.pop()
-            if name in reachable: continue
-            reachable.add(name); pending.extend(graph[name])
+            if name in reachable:
+                continue
+            reachable.add(name)
+            pending.extend(graph[name])
         retained = tuple(name for name in definitions if name in reachable)
         removed = tuple(name for name in definitions if name not in reachable)
-        derived = {key: ({name: definitions[name] for name in retained} if key == '$defs' else value)
-                   for key, value in root.items()}
+        derived = {
+            key: ({name: definitions[name] for name in retained} if key == '$defs' else value)
+            for key, value in root.items()
+        }
         encoded = compact(derived)
-        return TransportSchema(encoded, hashlib.sha256(original_json.encode('utf-8')).hexdigest(),
-                               hashlib.sha256(encoded.encode('utf-8')).hexdigest(), retained, removed)
+        return TransportSchema(
+            encoded,
+            hashlib.sha256(original_json.encode('utf-8')).hexdigest(),
+            hashlib.sha256(encoded.encode('utf-8')).hexdigest(),
+            retained,
+            removed,
+        )
     except (ValueError, TypeError, UnicodeError, RecursionError) as error:
         raise ConfigInvalid('Output schema transport resolution is unsupported') from error
 
 
 def function_schema(function: FrozenFunction) -> TransportSchema:
-    if type(function) is not FrozenFunction: raise ConfigInvalid('Frozen Function required')
+    if type(function) is not FrozenFunction:
+        raise ConfigInvalid('Frozen Function required')
     return derive_schema(function.output_schema_json)
 
 
@@ -145,8 +184,13 @@ def named_schema(bundle: dict, entry: str) -> TransportSchema:
     retained = tuple(sorted(derived.retained_definitions))
     schema['$defs'] = {key: schema['$defs'][key] for key in retained}
     encoded = compact(schema)
-    return TransportSchema(encoded, derived.original_sha256,
-        hashlib.sha256(encoded.encode('utf-8')).hexdigest(), retained, derived.removed_definitions)
+    return TransportSchema(
+        encoded,
+        derived.original_sha256,
+        hashlib.sha256(encoded.encode('utf-8')).hexdigest(),
+        retained,
+        derived.removed_definitions,
+    )
 
 
 def declared_json(schema: dict, value) -> str:
@@ -156,6 +200,7 @@ def declared_json(schema: dict, value) -> str:
     data. Schema objects themselves keep their original keyword order.
     """
     from .resources import _validate, STRICT_VALIDATOR
+
     _validate(compact(schema), value)
     definitions = schema.get('$defs', {})
 
@@ -182,13 +227,17 @@ def declared_json(schema: dict, value) -> str:
             for candidate in rules:
                 for key, child in candidate.get('properties', {}).items():
                     properties.setdefault(key, child)
-            output = {key: order(child, item[key]) for key, child in properties.items() if key in item}
+            output = {
+                key: order(child, item[key]) for key, child in properties.items() if key in item
+            }
             for key in item:
                 if key not in output:
                     output[key] = item[key]
             return output
         if type(item) is list:
-            items_rule = next((candidate['items'] for candidate in rules if 'items' in candidate), {})
+            items_rule = next(
+                (candidate['items'] for candidate in rules if 'items' in candidate), {}
+            )
             return [order(items_rule, child) for child in item]
         return item
 

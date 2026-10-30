@@ -2,7 +2,14 @@ import type { Crepe } from '@milkdown/crepe';
 import { createTimer, type MilkdownPlugin } from '@milkdown/kit/ctx';
 import { InitReady, nodesCtx, schemaTimerCtx, editorStateOptionsCtx } from '@milkdown/kit/core';
 import { Fragment, type Node } from '@milkdown/kit/prose/model';
-import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type Transaction } from '@milkdown/kit/prose/state';
+import {
+  Plugin,
+  PluginKey,
+  TextSelection,
+  type Command,
+  type EditorState,
+  type Transaction,
+} from '@milkdown/kit/prose/state';
 import { Mapping, canJoin } from '@milkdown/kit/prose/transform';
 import { keymap } from '@milkdown/kit/prose/keymap';
 import { isHistoryTransaction } from '@milkdown/kit/prose/history';
@@ -29,17 +36,28 @@ export interface IdentityState {
 }
 
 function integer(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= MAX_SAFE;
+  return (
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= MAX_SAFE
+  );
 }
 
 function validateInitial(ids: readonly number[], next: number): void {
-  if (ids.length > 10_000 || !integer(next) || ids.some(id => !integer(id) || id >= next) || new Set(ids).size !== ids.length) {
+  if (
+    ids.length > 10_000 ||
+    !integer(next) ||
+    ids.some((id) => !integer(id) || id >= next) ||
+    new Set(ids).size !== ids.length
+  ) {
     throw new IdentityInvalid('初始区块身份或高水位不合法');
   }
 }
 
 function emptyCaret(doc: Node): boolean {
-  return doc.childCount === 1 && doc.firstChild?.type.name === 'paragraph' && doc.firstChild.content.size === 0;
+  return (
+    doc.childCount === 1 &&
+    doc.firstChild?.type.name === 'paragraph' &&
+    doc.firstChild.content.size === 0
+  );
 }
 
 function emptyParagraph(node: Node): boolean {
@@ -49,11 +67,16 @@ function emptyParagraph(node: Node): boolean {
 function rewrite(node: Node, id: number | null): Node {
   if (node.isText) return node;
   const children: Node[] = [];
-  node.forEach(child => children.push(rewrite(child, null)));
-  const attrs = ATTRIBUTE in node.attrs && node.attrs[ATTRIBUTE] !== id ? {...node.attrs, [ATTRIBUTE]: id} : node.attrs;
+  node.forEach((child) => children.push(rewrite(child, null)));
+  const attrs =
+    ATTRIBUTE in node.attrs && node.attrs[ATTRIBUTE] !== id
+      ? { ...node.attrs, [ATTRIBUTE]: id }
+      : node.attrs;
   if (id !== null && !(ATTRIBUTE in node.attrs)) throw new IdentityInvalid('编辑器未安装身份属性');
   const content = Fragment.fromArray(children);
-  return attrs === node.attrs && content.eq(node.content) ? node : node.type.create(attrs, content, node.marks);
+  return attrs === node.attrs && content.eq(node.content)
+    ? node
+    : node.type.create(attrs, content, node.marks);
 }
 
 export function bindIdentityDocument(doc: Node, ids: readonly number[], next: number): Node {
@@ -69,18 +92,24 @@ export function identityState(state: EditorState): IdentityState {
   const identity = key.getState(state);
   if (!identity) throw new IdentityInvalid('编辑器身份状态未安装');
   // Do not expose the live mutable Set to callers.
-  return Object.freeze({next_block_id: identity.next_block_id, known_ids: new Set(identity.known_ids)});
+  return Object.freeze({
+    next_block_id: identity.next_block_id,
+    known_ids: new Set(identity.known_ids),
+  });
 }
 
 export function topBlockIds(doc: Node): readonly (number | null)[] {
   const result: (number | null)[] = [];
-  doc.forEach(node => result.push(integer(node.attrs[ATTRIBUTE]) ? node.attrs[ATTRIBUTE] as number : null));
+  doc.forEach((node) =>
+    result.push(integer(node.attrs[ATTRIBUTE]) ? (node.attrs[ATTRIBUTE] as number) : null),
+  );
   return Object.freeze(result);
 }
 
 export function sourceRevision(doc: Node): number {
   const revision: unknown = doc.attrs[SOURCE_REVISION] ?? 0;
-  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) throw new IdentityInvalid('源码历史修订不合法');
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0)
+    throw new IdentityInvalid('源码历史修订不合法');
   return revision;
 }
 
@@ -92,36 +121,50 @@ export function createIdentityPlugin(ids: readonly number[], next: number): Plug
     state: {
       init: (_config, state) => {
         const actual = emptyCaret(state.doc) && initial.length === 0 ? [] : topBlockIds(state.doc);
-        if (JSON.stringify(actual) !== JSON.stringify(initial)) throw new IdentityInvalid('初始节点身份未绑定');
-        return Object.freeze({next_block_id: next, known_ids: new Set(initial)});
+        if (JSON.stringify(actual) !== JSON.stringify(initial))
+          throw new IdentityInvalid('初始节点身份未绑定');
+        return Object.freeze({ next_block_id: next, known_ids: new Set(initial) });
       },
-      apply: (tr, prior) => tr.getMeta(key) as IdentityState | undefined ?? prior,
+      apply: (tr, prior) => (tr.getMeta(key) as IdentityState | undefined) ?? prior,
     },
     props: {
-      decorations: state => {
+      decorations: (state) => {
         const decorations: Decoration[] = [];
         state.doc.forEach((node, pos) => {
           const id = node.attrs[ATTRIBUTE];
-          if (integer(id)) decorations.push(Decoration.node(pos, pos + node.nodeSize, {'data-block-id': String(id)}));
+          if (integer(id))
+            decorations.push(
+              Decoration.node(pos, pos + node.nodeSize, { 'data-block-id': String(id) }),
+            );
         });
         return DecorationSet.create(state.doc, decorations);
       },
     },
     appendTransaction: (transactions, oldState, newState) => {
-      if (!transactions.some(tr => tr.docChanged && !tr.getMeta(key))) return;
+      if (!transactions.some((tr) => tr.docChanged && !tr.getMeta(key))) return;
       const current = identityState(newState);
       const mapping = new Mapping();
-      transactions.forEach(tr => mapping.appendMapping(tr.mapping));
-      const targets: {node: Node; pos: number}[] = [];
-      newState.doc.forEach((node, pos) => targets.push({node, pos}));
-      if (targets.filter(target => !emptyParagraph(target.node)).length > 10_000) throw new IdentityInvalid('顶层区块超过容量');
+      transactions.forEach((tr) => mapping.appendMapping(tr.mapping));
+      const targets: { node: Node; pos: number }[] = [];
+      newState.doc.forEach((node, pos) => targets.push({ node, pos }));
+      if (targets.filter((target) => !emptyParagraph(target.node)).length > 10_000)
+        throw new IdentityInvalid('顶层区块超过容量');
       const assigned = new Map<number, number>();
       const used = new Set<number>();
-      const moves = transactions.flatMap(tr => (tr.getMeta(moveKey) ?? []) as {old_index: number; new_index: number}[]);
+      const moves = transactions.flatMap(
+        (tr) => (tr.getMeta(moveKey) ?? []) as { old_index: number; new_index: number }[],
+      );
       for (const move of moves) {
         const old = oldState.doc.maybeChild(move.old_index);
         const target = targets[move.new_index];
-        if (!old || !target || !old.eq(target.node) || !integer(old.attrs[ATTRIBUTE]) || used.has(old.attrs[ATTRIBUTE]) || assigned.has(move.new_index)) {
+        if (
+          !old ||
+          !target ||
+          !old.eq(target.node) ||
+          !integer(old.attrs[ATTRIBUTE]) ||
+          used.has(old.attrs[ATTRIBUTE]) ||
+          assigned.has(move.new_index)
+        ) {
           throw new IdentityInvalid('移动没有明确原节点映射');
         }
         assigned.set(move.new_index, old.attrs[ATTRIBUTE] as number);
@@ -137,14 +180,16 @@ export function createIdentityPlugin(ids: readonly number[], next: number): Plug
         for (const anchor of anchors) {
           const mapped = mapping.mapResult(anchor, 1);
           if (mapped.deleted) continue;
-          let low = 0, high = targets.length;
+          let low = 0,
+            high = targets.length;
           while (low < high) {
             const middle = Math.floor((low + high) / 2);
             if (targets[middle]!.pos <= mapped.pos) low = middle + 1;
             else high = middle;
           }
           const index = low - 1;
-          if (index < 0 || mapped.pos > targets[index]!.pos + targets[index]!.node.nodeSize - 1) continue;
+          if (index < 0 || mapped.pos > targets[index]!.pos + targets[index]!.node.nodeSize - 1)
+            continue;
           if (!assigned.has(index)) {
             assigned.set(index, id);
             used.add(id);
@@ -154,18 +199,20 @@ export function createIdentityPlugin(ids: readonly number[], next: number): Plug
       });
       // Only the same editor's actual history transactions may restore a
       // removed allocated identity. Pasted attributes never grant ownership.
-      if (transactions.some(isHistoryTransaction)) targets.forEach(({node}, index) => {
-        const id = node.attrs[ATTRIBUTE];
-        if (!assigned.has(index) && integer(id) && current.known_ids.has(id) && !used.has(id)) {
-          assigned.set(index, id);
-          used.add(id);
-        }
-      });
+      if (transactions.some(isHistoryTransaction))
+        targets.forEach(({ node }, index) => {
+          const id = node.attrs[ATTRIBUTE];
+          if (!assigned.has(index) && integer(id) && current.known_ids.has(id) && !used.has(id)) {
+            assigned.set(index, id);
+            used.add(id);
+          }
+        });
       const known = new Set(current.known_ids);
       let highWater = current.next_block_id;
-      const children = targets.map(({node}, index) => {
+      const children = targets.map(({ node }, index) => {
         let id = assigned.get(index);
-        if (emptyCaret(newState.doc) || (id === undefined && emptyParagraph(node))) return rewrite(node, null);
+        if (emptyCaret(newState.doc) || (id === undefined && emptyParagraph(node)))
+          return rewrite(node, null);
         if (id === undefined) {
           if (highWater >= MAX_SAFE) throw new IdentityInvalid('区块ID容量耗尽', true);
           id = highWater++;
@@ -176,29 +223,45 @@ export function createIdentityPlugin(ids: readonly number[], next: number): Plug
       const doc = newState.doc.copy(Fragment.fromArray(children));
       if (doc.eq(newState.doc) && highWater === current.next_block_id) return;
       const normalized = newState.tr;
-      const topPositions = new Map(targets.map((target, index) => [target.pos, children[index]!.attrs[ATTRIBUTE] as number | null]));
+      const topPositions = new Map(
+        targets.map((target, index) => [
+          target.pos,
+          children[index]!.attrs[ATTRIBUTE] as number | null,
+        ]),
+      );
       newState.doc.descendants((node, pos) => {
         if (!(ATTRIBUTE in node.attrs)) return;
         const id = topPositions.get(pos) ?? null;
-        if (node.attrs[ATTRIBUTE] !== id) normalized.setNodeMarkup(pos, undefined, {...node.attrs, [ATTRIBUTE]: id});
+        if (node.attrs[ATTRIBUTE] !== id)
+          normalized.setNodeMarkup(pos, undefined, { ...node.attrs, [ATTRIBUTE]: id });
       });
-      return normalized.setMeta(key, Object.freeze({next_block_id: highWater, known_ids: known}));
+      return normalized.setMeta(key, Object.freeze({ next_block_id: highWater, known_ids: known }));
     },
   });
 }
 
 export function moveTopBlock(state: EditorState, from: number, to: number): Transaction {
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= state.doc.childCount || to >= state.doc.childCount) {
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to < 0 ||
+    from >= state.doc.childCount ||
+    to >= state.doc.childCount
+  ) {
     throw new IdentityInvalid('移动区块位置不合法');
   }
   if (from === to) return state.tr;
-  const order = Array.from({length: state.doc.childCount}, (_, index) => index);
+  const order = Array.from({ length: state.doc.childCount }, (_, index) => index);
   const [oldIndex] = order.splice(from, 1);
   order.splice(to, 0, oldIndex!);
-  const nodes = order.map(index => state.doc.child(index));
-  return state.tr.replaceWith(0, state.doc.content.size, Fragment.fromArray(nodes)).setMeta(moveKey,
-    order.map((index, newIndex) => ({old_index: index, new_index: newIndex}))
-      .filter(move => integer(state.doc.child(move.old_index).attrs[ATTRIBUTE])));
+  const nodes = order.map((index) => state.doc.child(index));
+  return state.tr.replaceWith(0, state.doc.content.size, Fragment.fromArray(nodes)).setMeta(
+    moveKey,
+    order
+      .map((index, newIndex) => ({ old_index: index, new_index: newIndex }))
+      .filter((move) => integer(state.doc.child(move.old_index).attrs[ATTRIBUTE])),
+  );
 }
 
 // An explicit source-editor operation, not an inference from pasted attrs or
@@ -207,7 +270,7 @@ export function moveTopBlock(state: EditorState, from: number, to: number): Tran
 export function hasRawSource(node: Node): boolean {
   if (node.type.name === 'walle_raw_source') return true;
   let found = false;
-  node.descendants(child => {
+  node.descendants((child) => {
     if (child.type.name === 'walle_raw_source') found = true;
     return !found;
   });
@@ -219,89 +282,162 @@ export function hasRawSource(node: Node): boolean {
 // changes join the originating user edit in history, even across blocks.
 export function rebindSourceContext(state: EditorState, document: Node): EditorState {
   const current = identityState(state);
-  if (document.type.schema !== state.schema || !document.sameMarkup(state.doc) ||
-      JSON.stringify(topBlockIds(document)) !== JSON.stringify(topBlockIds(state.doc))) {
+  if (
+    document.type.schema !== state.schema ||
+    !document.sameMarkup(state.doc) ||
+    JSON.stringify(topBlockIds(document)) !== JSON.stringify(topBlockIds(state.doc))
+  ) {
     throw new IdentityInvalid('完整源码重绑定缺少同快照身份映射');
   }
   if (document.eq(state.doc)) return state;
-  const adapter = new Plugin({appendTransaction: (_transactions, _before, after) => {
-    if (after.doc.eq(document)) return;
-    if (after.doc.childCount !== document.childCount) throw new IdentityInvalid('上下文重绑定改变区块边界');
-    const positions: number[] = [];
-    after.doc.forEach((_node, position) => positions.push(position));
-    const transaction = after.tr;
-    for (let index = after.doc.childCount - 1; index >= 0; index--) {
-      const node = after.doc.child(index), parsed = document.child(index);
-      if (!node.eq(parsed)) transaction.replaceWith(positions[index]!, positions[index]! + node.nodeSize, parsed);
-    }
-    return transaction.setMeta(key, Object.freeze({next_block_id: current.next_block_id, known_ids: new Set(current.known_ids)}));
-  }});
-  const staged = state.reconfigure({plugins: [...state.plugins, adapter]});
+  const adapter = new Plugin({
+    appendTransaction: (_transactions, _before, after) => {
+      if (after.doc.eq(document)) return;
+      if (after.doc.childCount !== document.childCount)
+        throw new IdentityInvalid('上下文重绑定改变区块边界');
+      const positions: number[] = [];
+      after.doc.forEach((_node, position) => positions.push(position));
+      const transaction = after.tr;
+      for (let index = after.doc.childCount - 1; index >= 0; index--) {
+        const node = after.doc.child(index),
+          parsed = document.child(index);
+        if (!node.eq(parsed))
+          transaction.replaceWith(positions[index]!, positions[index]! + node.nodeSize, parsed);
+      }
+      return transaction.setMeta(
+        key,
+        Object.freeze({
+          next_block_id: current.next_block_id,
+          known_ids: new Set(current.known_ids),
+        }),
+      );
+    },
+  });
+  const staged = state.reconfigure({ plugins: [...state.plugins, adapter] });
   const rebound = staged.applyTransaction(staged.tr).state;
   if (!rebound.doc.eq(document) || identityState(rebound).next_block_id !== current.next_block_id) {
     throw new IdentityInvalid('上下文重绑定未保持完整实际状态');
   }
-  return rebound.reconfigure({plugins: state.plugins});
+  return rebound.reconfigure({ plugins: state.plugins });
 }
 
 // IDs are supplied by explicit source-span ownership, never text matching.
 // The complete parser may merge/split blocks across the edited raw boundary.
-export function replaceParsedSourceDocument(state: EditorState, parsed: Node, ids: readonly number[], next: number): EditorState {
+export function replaceParsedSourceDocument(
+  state: EditorState,
+  parsed: Node,
+  ids: readonly number[],
+  next: number,
+): EditorState {
   const current = identityState(state);
   validateInitial(ids, next);
-  const allocated = ids.filter(id => !current.known_ids.has(id));
-  if (parsed.type.schema !== state.schema || next < current.next_block_id || next - current.next_block_id !== allocated.length ||
-      allocated.some((id, index) => id !== current.next_block_id + index)) throw new IdentityInvalid('完整源身份分配缺少连续高水位证明');
+  const allocated = ids.filter((id) => !current.known_ids.has(id));
+  if (
+    parsed.type.schema !== state.schema ||
+    next < current.next_block_id ||
+    next - current.next_block_id !== allocated.length ||
+    allocated.some((id, index) => id !== current.next_block_id + index)
+  )
+    throw new IdentityInvalid('完整源身份分配缺少连续高水位证明');
   const bound = bindIdentityDocument(parsed, ids, next);
   if (!(SOURCE_REVISION in state.doc.attrs)) throw new IdentityInvalid('源码历史属性未安装');
   const revision = Math.max(sourceCounters.get(state.schema) ?? 1, sourceRevision(state.doc) + 1);
   if (revision > MAX_SAFE) throw new IdentityInvalid('源码历史容量耗尽', true);
-  const document = state.doc.type.create({...state.doc.attrs, [SOURCE_REVISION]: revision}, bound.content, state.doc.marks);
+  const document = state.doc.type.create(
+    { ...state.doc.attrs, [SOURCE_REVISION]: revision },
+    bound.content,
+    state.doc.marks,
+  );
   const known = new Set([...current.known_ids, ...allocated]);
   let applied = false;
-  const adapter = new Plugin({appendTransaction: (_transactions, _before, after) => {
-    if (after.doc.eq(document)) return;
-    if (applied) throw new IdentityInvalid('完整源解析与编辑器插件解释不一致');
-    applied = true;
-    return after.tr.replaceWith(0, after.doc.content.size, document.content).setDocAttribute(SOURCE_REVISION, revision)
-      .setMeta(key, Object.freeze({next_block_id: next, known_ids: known}));
-  }});
-  const staged = state.reconfigure({plugins: [...state.plugins, adapter]});
+  const adapter = new Plugin({
+    appendTransaction: (_transactions, _before, after) => {
+      if (after.doc.eq(document)) return;
+      if (applied) throw new IdentityInvalid('完整源解析与编辑器插件解释不一致');
+      applied = true;
+      return after.tr
+        .replaceWith(0, after.doc.content.size, document.content)
+        .setDocAttribute(SOURCE_REVISION, revision)
+        .setMeta(key, Object.freeze({ next_block_id: next, known_ids: known }));
+    },
+  });
+  const staged = state.reconfigure({ plugins: [...state.plugins, adapter] });
   const after = staged.applyTransaction(staged.tr).state;
-  if (!after.doc.eq(document) || identityState(after).next_block_id !== next) throw new IdentityInvalid('完整源解析状态不一致');
+  if (!after.doc.eq(document) || identityState(after).next_block_id !== next)
+    throw new IdentityInvalid('完整源解析状态不一致');
   sourceCounters.set(state.schema, revision + 1);
-  return after.reconfigure({plugins: state.plugins});
+  return after.reconfigure({ plugins: state.plugins });
 }
 
 /** Explicit same-base local snapshot restoration. The ledger validates the
  * complete cache pair before this call; paste/history never use this path.
  * Sparse IDs/high water are the persisted local mapping, never text guesses.
  * Native save still validates persisted session/allocation/birth ownership. */
-export function replaceLocalRecoveryDocument(state:EditorState,parsed:Node,ids:readonly number[],next:number):EditorState {
-  const current=identityState(state);validateInitial(ids,next);
-  if(parsed.type.schema!==state.schema||next<current.next_block_id||!(SOURCE_REVISION in state.doc.attrs))throw new IdentityInvalid('恢复身份不属于完整同基线快照');
-  const bound=bindIdentityDocument(parsed,ids,next),revision=Math.max(sourceCounters.get(state.schema)??1,sourceRevision(state.doc)+1);
-  if(revision>MAX_SAFE)throw new IdentityInvalid('源码历史容量耗尽',true);
-  const document=state.doc.type.create({...state.doc.attrs,[SOURCE_REVISION]:revision},bound.content,state.doc.marks);
-  const known=new Set([...current.known_ids,...ids]);let applied=false;
-  const adapter=new Plugin({appendTransaction:(_transactions,_before,after)=>{
-    if(after.doc.eq(document))return;if(applied)throw new IdentityInvalid('恢复源码与编辑插件解释不一致');applied=true;
-    return after.tr.replaceWith(0,after.doc.content.size,document.content).setDocAttribute(SOURCE_REVISION,revision)
-      .setMeta(key,Object.freeze({next_block_id:next,known_ids:known})).setMeta('addToHistory',false);
-  }});
-  const staged=state.reconfigure({plugins:[...state.plugins,adapter]}),after=staged.applyTransaction(staged.tr).state;
-  if(!after.doc.eq(document)||identityState(after).next_block_id!==next)throw new IdentityInvalid('恢复解析未保持完整实际状态');
-  sourceCounters.set(state.schema,revision+1);return after.reconfigure({plugins:state.plugins});
+export function replaceLocalRecoveryDocument(
+  state: EditorState,
+  parsed: Node,
+  ids: readonly number[],
+  next: number,
+): EditorState {
+  const current = identityState(state);
+  validateInitial(ids, next);
+  if (
+    parsed.type.schema !== state.schema ||
+    next < current.next_block_id ||
+    !(SOURCE_REVISION in state.doc.attrs)
+  )
+    throw new IdentityInvalid('恢复身份不属于完整同基线快照');
+  const bound = bindIdentityDocument(parsed, ids, next),
+    revision = Math.max(sourceCounters.get(state.schema) ?? 1, sourceRevision(state.doc) + 1);
+  if (revision > MAX_SAFE) throw new IdentityInvalid('源码历史容量耗尽', true);
+  const document = state.doc.type.create(
+    { ...state.doc.attrs, [SOURCE_REVISION]: revision },
+    bound.content,
+    state.doc.marks,
+  );
+  const known = new Set([...current.known_ids, ...ids]);
+  let applied = false;
+  const adapter = new Plugin({
+    appendTransaction: (_transactions, _before, after) => {
+      if (after.doc.eq(document)) return;
+      if (applied) throw new IdentityInvalid('恢复源码与编辑插件解释不一致');
+      applied = true;
+      return after.tr
+        .replaceWith(0, after.doc.content.size, document.content)
+        .setDocAttribute(SOURCE_REVISION, revision)
+        .setMeta(key, Object.freeze({ next_block_id: next, known_ids: known }))
+        .setMeta('addToHistory', false);
+    },
+  });
+  const staged = state.reconfigure({ plugins: [...state.plugins, adapter] }),
+    after = staged.applyTransaction(staged.tr).state;
+  if (!after.doc.eq(document) || identityState(after).next_block_id !== next)
+    throw new IdentityInvalid('恢复解析未保持完整实际状态');
+  sourceCounters.set(state.schema, revision + 1);
+  return after.reconfigure({ plugins: state.plugins });
 }
 
-export function replaceParsedRawBlock(state: EditorState, index: number, nodes: readonly Node[]): Transaction {
-  if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount) throw new IdentityInvalid('原始节点位置不合法');
-  const original = state.doc.child(index), current = identityState(state);
+export function replaceParsedRawBlock(
+  state: EditorState,
+  index: number,
+  nodes: readonly Node[],
+): Transaction {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= state.doc.childCount)
+    throw new IdentityInvalid('原始节点位置不合法');
+  const original = state.doc.child(index),
+    current = identityState(state);
   const id: unknown = original.attrs[ATTRIBUTE];
-  if (!hasRawSource(original) || !integer(id) || !current.known_ids.has(id) ||
-      nodes.some(node => node.type.schema !== state.schema || emptyParagraph(node))) throw new IdentityInvalid('重新解析没有实际原始节点/同schema区块证明');
+  if (
+    !hasRawSource(original) ||
+    !integer(id) ||
+    !current.known_ids.has(id) ||
+    nodes.some((node) => node.type.schema !== state.schema || emptyParagraph(node))
+  )
+    throw new IdentityInvalid('重新解析没有实际原始节点/同schema区块证明');
   let logicalCount = nodes.length;
-  state.doc.forEach((node, _pos, childIndex) => { if (childIndex !== index && !emptyParagraph(node)) logicalCount++; });
+  state.doc.forEach((node, _pos, childIndex) => {
+    if (childIndex !== index && !emptyParagraph(node)) logicalCount++;
+  });
   if (logicalCount > 10_000) throw new IdentityInvalid('顶层区块超过容量');
   let next = current.next_block_id;
   const known = new Set(current.known_ids);
@@ -320,13 +456,15 @@ export function replaceParsedRawBlock(state: EditorState, index: number, nodes: 
     replacements.push(rewrite(caret, null));
   }
   let position = 0;
-  for (let childIndex = 0; childIndex < index; childIndex++) position += state.doc.child(childIndex).nodeSize;
+  for (let childIndex = 0; childIndex < index; childIndex++)
+    position += state.doc.child(childIndex).nodeSize;
   if (!(SOURCE_REVISION in state.doc.attrs)) throw new IdentityInvalid('源码历史属性未安装');
   const revision = Math.max(sourceCounters.get(state.schema) ?? 1, sourceRevision(state.doc) + 1);
   if (revision > MAX_SAFE) throw new IdentityInvalid('源码历史容量耗尽', true);
-  const transaction = state.tr.replaceWith(position, position + original.nodeSize, Fragment.fromArray(replacements))
+  const transaction = state.tr
+    .replaceWith(position, position + original.nodeSize, Fragment.fromArray(replacements))
     .setDocAttribute(SOURCE_REVISION, revision)
-    .setMeta(key, Object.freeze({next_block_id: next, known_ids: known}));
+    .setMeta(key, Object.freeze({ next_block_id: next, known_ids: known }));
   sourceCounters.set(state.schema, revision + 1);
   return transaction;
 }
@@ -337,14 +475,25 @@ export function replaceParsedRawBlock(state: EditorState, index: number, nodes: 
 function joinEmptyParagraph(direction: -1 | 1): Command {
   return (state, dispatch) => {
     const selection = state.selection;
-    if (!(selection instanceof TextSelection) || !selection.empty || selection.$from.depth !== 1) return false;
+    if (!(selection instanceof TextSelection) || !selection.empty || selection.$from.depth !== 1)
+      return false;
     const current = selection.$from.parent;
     const offset = selection.$from.parentOffset;
-    if (current.type.name !== 'paragraph' || (direction < 0 ? offset !== 0 : offset !== current.content.size)) return false;
+    if (
+      current.type.name !== 'paragraph' ||
+      (direction < 0 ? offset !== 0 : offset !== current.content.size)
+    )
+      return false;
     const boundary = direction < 0 ? selection.$from.before(1) : selection.$from.after(1);
     const resolved = state.doc.resolve(boundary);
     const neighbor = direction < 0 ? resolved.nodeBefore : resolved.nodeAfter;
-    if (!neighbor || neighbor.type.name !== 'paragraph' || (neighbor.content.size && current.content.size) || !canJoin(state.doc, boundary)) return false;
+    if (
+      !neighbor ||
+      neighbor.type.name !== 'paragraph' ||
+      (neighbor.content.size && current.content.size) ||
+      !canJoin(state.doc, boundary)
+    )
+      return false;
     dispatch?.(state.tr.join(boundary).scrollIntoView());
     return true;
   };
@@ -355,19 +504,48 @@ export const joinEmptyParagraphForward = joinEmptyParagraph(1);
 
 export function installIdentityAttributes(crepe: Crepe): void {
   const ready = createTimer('WalleIdentityAttributes');
-  const plugin: MilkdownPlugin = ctx => {
-    ctx.record(ready).update(schemaTimerCtx, timers => [...timers, ready]);
+  const plugin: MilkdownPlugin = (ctx) => {
+    ctx.record(ready).update(schemaTimerCtx, (timers) => [...timers, ready]);
     return async () => {
       await ctx.wait(InitReady);
-      ctx.update(nodesCtx, nodes => nodes.map(([name, schema]) => [name, name === 'doc'
-        ? {...schema, attrs: {...schema.attrs, [SOURCE_REVISION]: {default: 0, validate: (value: unknown) => {
-          if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new IdentityInvalid('源码历史属性不合法');
-        }}}} : schema.group?.split(' ').includes('block')
-        ? {...schema, attrs: {...schema.attrs, [ATTRIBUTE]: {default: null, validate: (value: unknown) => {
-          if (value !== null && !integer(value)) throw new IdentityInvalid('节点身份属性不合法');
-        }}}} : schema]));
+      ctx.update(nodesCtx, (nodes) =>
+        nodes.map(([name, schema]) => [
+          name,
+          name === 'doc'
+            ? {
+                ...schema,
+                attrs: {
+                  ...schema.attrs,
+                  [SOURCE_REVISION]: {
+                    default: 0,
+                    validate: (value: unknown) => {
+                      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+                        throw new IdentityInvalid('源码历史属性不合法');
+                    },
+                  },
+                },
+              }
+            : schema.group?.split(' ').includes('block')
+              ? {
+                  ...schema,
+                  attrs: {
+                    ...schema.attrs,
+                    [ATTRIBUTE]: {
+                      default: null,
+                      validate: (value: unknown) => {
+                        if (value !== null && !integer(value))
+                          throw new IdentityInvalid('节点身份属性不合法');
+                      },
+                    },
+                  },
+                }
+              : schema,
+        ]),
+      );
       ctx.done(ready);
-      return () => { ctx.clearTimer(ready); };
+      return () => {
+        ctx.clearTimer(ready);
+      };
     };
   };
   crepe.editor.use(plugin);
@@ -376,11 +554,19 @@ export function installIdentityAttributes(crepe: Crepe): void {
 export function installIdentityState(crepe: Crepe, ids: readonly number[], next: number): void {
   const initial = Object.freeze([...ids]);
   validateInitial(initial, next);
-  crepe.editor.config(ctx => ctx.update(editorStateOptionsCtx, previous => options => {
-    const configured = previous(options);
-    if (!configured.doc) throw new IdentityInvalid('初始文档缺失');
-    return {...configured, doc: bindIdentityDocument(configured.doc, initial, next),
-      plugins: [keymap({Backspace: joinEmptyParagraphBackward, Delete: joinEmptyParagraphForward}),
-        ...configured.plugins ?? [], createIdentityPlugin(initial, next)]};
-  }));
+  crepe.editor.config((ctx) =>
+    ctx.update(editorStateOptionsCtx, (previous) => (options) => {
+      const configured = previous(options);
+      if (!configured.doc) throw new IdentityInvalid('初始文档缺失');
+      return {
+        ...configured,
+        doc: bindIdentityDocument(configured.doc, initial, next),
+        plugins: [
+          keymap({ Backspace: joinEmptyParagraphBackward, Delete: joinEmptyParagraphForward }),
+          ...(configured.plugins ?? []),
+          createIdentityPlugin(initial, next),
+        ],
+      };
+    }),
+  );
 }

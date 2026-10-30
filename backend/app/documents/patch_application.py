@@ -5,6 +5,7 @@ are explicit; a final reparse proves that composition has not merged, swallowed
 or reinterpreted a neighboring block. The application owns the transaction and
 must bind source verification to that transaction's actual related objects.
 """
+
 from dataclasses import dataclass, replace
 import re
 
@@ -29,6 +30,7 @@ class Adoption:
 @dataclass(frozen=True)
 class PatchPreview:
     """Structural composition only; no manufactured author/source metadata."""
+
     markdown: str
     block_ids: tuple[int, ...]
     next_block_id: int
@@ -36,7 +38,10 @@ class PatchPreview:
     @property
     def by_id(self):
         """Structural lookup only; no fabricated author/source metadata."""
-        return {identity: (block, None) for identity, block in zip(self.block_ids, parse_markdown(self.markdown).blocks)}
+        return {
+            identity: (block, None)
+            for identity, block in zip(self.block_ids, parse_markdown(self.markdown).blocks)
+        }
 
 
 @dataclass
@@ -82,16 +87,23 @@ def _compose(units: list[_Unit], trailer: str, prior: Snapshot) -> tuple[str, tu
         gap = unit.gap
         local = unit.parsed
         previous = units[index - 1] if index else None
-        unchanged_boundary = previous is not None and (previous.identity, unit.identity) in adjacent and previous.markdown == original[previous.identity][0].markdown and unit.markdown == original[unit.identity][0].markdown
+        unchanged_boundary = (
+            previous is not None
+            and (previous.identity, unit.identity) in adjacent
+            and previous.markdown == original[previous.identity][0].markdown
+            and unit.markdown == original[unit.identity][0].markdown
+        )
         if expected and not unchanged_boundary:
             # Retain every authored byte. Only add a boundary separator where
             # necessary; the reparse below rejects syntax that still merges.
             boundary_start = len(result)
             while boundary_start and result[boundary_start - 1] in ' \t\r\n':
                 boundary_start -= 1
-            boundary = result[boundary_start:] + gap + unit.markdown[:local.start_offset]
+            boundary = result[boundary_start:] + gap + unit.markdown[: local.start_offset]
             if len(re.findall(r'\r\n|\r|\n', boundary)) < 2:
-                ending = '\r\n' if result.endswith('\r\n') else '\r' if result.endswith('\r') else '\n'
+                ending = (
+                    '\r\n' if result.endswith('\r\n') else '\r' if result.endswith('\r') else '\n'
+                )
                 gap = ending * (2 - len(re.findall(r'\r\n|\r|\n', boundary))) + gap
         result += gap
         expected.append((len(result) + local.start_offset, local, unit.identity))
@@ -103,11 +115,27 @@ def _compose(units: list[_Unit], trailer: str, prior: Snapshot) -> tuple[str, tu
     for actual, (start, local, _) in zip(parsed.blocks, expected):
         # A previously unterminated last line acquires one line ending when a
         # new block follows. All its existing bytes remain exact.
-        suffix = actual.markdown[len(local.markdown):] if actual.markdown.startswith(local.markdown) else None
-        appended_ending = not local.markdown.endswith(('\r', '\n')) and suffix in ('\r\n', '\r', '\n')
-        if actual.start_offset != start or actual.block_type != local.block_type or not (suffix == '' or appended_ending):
+        suffix = (
+            actual.markdown[len(local.markdown) :]
+            if actual.markdown.startswith(local.markdown)
+            else None
+        )
+        appended_ending = not local.markdown.endswith(('\r', '\n')) and suffix in (
+            '\r\n',
+            '\r',
+            '\n',
+        )
+        if (
+            actual.start_offset != start
+            or actual.block_type != local.block_type
+            or not (suffix == '' or appended_ending)
+        ):
             raise PatchInvalid('补丁组合改变了区块边界或未授权源码')
-        if actual.plain_text != local.plain_text and not (appended_ending and local.block_type in ('html_block', 'link_definition') and actual.plain_text == local.plain_text + suffix):
+        if actual.plain_text != local.plain_text and not (
+            appended_ending
+            and local.block_type in ('html_block', 'link_definition')
+            and actual.plain_text == local.plain_text + suffix
+        ):
             raise PatchInvalid('补丁组合改变了区块解释')
     return result, tuple(identity for _, _, identity in expected)
 
@@ -118,7 +146,16 @@ def _apply_checked_units(snapshot: Snapshot, checked):
     offset = 0
     for identity, (block, _) in snapshot.by_id.items():
         local = replace(block, start_offset=0, end_offset=len(block.markdown))
-        units.append(_Unit(identity, block.markdown, snapshot.parsed.markdown[offset:block.start_offset], None, path=block.section_path, parsed=local))
+        units.append(
+            _Unit(
+                identity,
+                block.markdown,
+                snapshot.parsed.markdown[offset : block.start_offset],
+                None,
+                path=block.section_path,
+                parsed=local,
+            )
+        )
         offset = block.end_offset
     trailer = snapshot.parsed.markdown[offset:]
     next_id = snapshot.next_block_id
@@ -147,8 +184,16 @@ def _apply_checked_units(snapshot: Snapshot, checked):
         else:
             if patch.operation == 'REPLACE_TABLE_ROW':
                 edits = row_edits.setdefault(target.identity, [])
-                edits.append(RowReplacement(patch.patch['selector_json'], patch.patch['original_content'], patch.row_cells))
-                proposed = replace_rows(table_model(snapshot.by_id[target.identity][0]), tuple(edits))
+                edits.append(
+                    RowReplacement(
+                        patch.patch['selector_json'],
+                        patch.patch['original_content'],
+                        patch.row_cells,
+                    )
+                )
+                proposed = replace_rows(
+                    table_model(snapshot.by_id[target.identity][0]), tuple(edits)
+                )
             else:
                 proposed = patch.proposed_markdown
             if target.markdown != proposed:
@@ -157,7 +202,9 @@ def _apply_checked_units(snapshot: Snapshot, checked):
     return units, trailer, next_id
 
 
-def preview_patches(snapshot: Snapshot, patches: list[dict], authority: WriteAuthority) -> PatchPreview:
+def preview_patches(
+    snapshot: Snapshot, patches: list[dict], authority: WriteAuthority
+) -> PatchPreview:
     """Prove an entire candidate bundle composes, without DB/SourceVerifier.
 
     Only a program-validated original Snapshot is accepted upstream. This
@@ -170,26 +217,52 @@ def preview_patches(snapshot: Snapshot, patches: list[dict], authority: WriteAut
     return PatchPreview(markdown, identities, next_id)
 
 
-def apply_adoptions(snapshot: Snapshot, adoptions: list[Adoption], authority: WriteAuthority, batch_id: int, operation_time: str, source_verifier: SourceVerifier) -> Snapshot:
+def apply_adoptions(
+    snapshot: Snapshot,
+    adoptions: list[Adoption],
+    authority: WriteAuthority,
+    batch_id: int,
+    operation_time: str,
+    source_verifier: SourceVerifier,
+) -> Snapshot:
     """Apply accepted/edited decisions in order_no order, or return original.
 
     REJECTED decisions are supplied by the application as no effective patches;
     PENDING/batch status/version checks belong to that application's transaction.
     """
-    if type(adoptions) is not list or len(adoptions) > 100 or any(type(item) is not Adoption for item in adoptions):
+    if (
+        type(adoptions) is not list
+        or len(adoptions) > 100
+        or any(type(item) is not Adoption for item in adoptions)
+    ):
         raise PatchInvalid('采用列表结构或容量不合法')
     orders = [item.order_no for item in adoptions]
-    if any(type(order) is not int or not 1 <= order <= MAX_SAFE_INTEGER for order in orders) or len(set(orders)) != len(orders):
+    if any(type(order) is not int or not 1 <= order <= MAX_SAFE_INTEGER for order in orders) or len(
+        set(orders)
+    ) != len(orders):
         raise PatchInvalid('建议顺序必须为唯一正整数')
     time = _time(operation_time)
     checked = []
     for item in sorted(adoptions, key=lambda entry: entry.order_no):
-        if item.decision not in ('ACCEPTED', 'EDITED') or item.decision == 'ACCEPTED' and item.edited_content is not None or item.decision == 'EDITED' and item.edited_content is None:
+        if (
+            item.decision not in ('ACCEPTED', 'EDITED')
+            or item.decision == 'ACCEPTED'
+            and item.edited_content is not None
+            or item.decision == 'EDITED'
+            and item.edited_content is None
+        ):
             raise PatchInvalid('采用决定或编辑内容不匹配')
-        origin = Provenance('AI' if item.decision == 'ACCEPTED' else 'USER', 'SUGGESTION_BATCH', batch_id)
+        origin = Provenance(
+            'AI' if item.decision == 'ACCEPTED' else 'USER', 'SUGGESTION_BATCH', batch_id
+        )
         if source_verifier(origin) is not True:
             raise DocumentInvalid('采用来源不属于当前文档')
-        checked.append((validate_patch(snapshot, item.patch, authority, edited_content=item.edited_content), origin))
+        checked.append(
+            (
+                validate_patch(snapshot, item.patch, authority, edited_content=item.edited_content),
+                origin,
+            )
+        )
     validate_combination(tuple(patch for patch, _ in checked))
     if not checked:
         return snapshot
@@ -197,7 +270,9 @@ def apply_adoptions(snapshot: Snapshot, adoptions: list[Adoption], authority: Wr
     return _adopt_composition(snapshot, units, trailer, next_id, checked, time, source_verifier)
 
 
-def apply_confirmed_facts(snapshot, patches, authority, guide_run_id, operation_time, source_verifier, *, provenance=None):
+def apply_confirmed_facts(
+    snapshot, patches, authority, guide_run_id, operation_time, source_verifier, *, provenance=None
+):
     """Caller proves the actual confirmation and real durable source relation.
 
     V1.5 C06 uses its real in-transaction edit session; no new model run or
@@ -205,7 +280,8 @@ def apply_confirmed_facts(snapshot, patches, authority, guide_run_id, operation_
     """
     if type(patches) is not list or len(patches) > 100:
         raise PatchInvalid('事实采用列表结构或容量不合法')
-    if not patches:return snapshot
+    if not patches:
+        return snapshot
     time = _time(operation_time)
     origin = Provenance('AI', 'GUIDE_RUN', guide_run_id) if provenance is None else provenance
     if type(origin) is not Provenance:
@@ -220,7 +296,11 @@ def apply_confirmed_facts(snapshot, patches, authority, guide_run_id, operation_
 def _adopt_composition(snapshot, units, trailer, next_id, checked, time, source_verifier):
     """Common metadata rules, exact bytes, identity and actual source proof."""
     markdown, identities = _compose(units, trailer, snapshot)
-    if markdown == snapshot.parsed.markdown and identities == tuple(snapshot.by_id) and next_id == snapshot.next_block_id:
+    if (
+        markdown == snapshot.parsed.markdown
+        and identities == tuple(snapshot.by_id)
+        and next_id == snapshot.next_block_id
+    ):
         return snapshot
     parsed = parse_markdown(markdown)
     metadata = []
@@ -235,14 +315,32 @@ def _adopt_composition(snapshot, units, trailer, next_id, checked, time, source_
                 if origin is None:
                     # The separator may add a terminator to an insertion anchor
                     # at EOF. Attribute that boundary to its insertion operation.
-                    origin = next((cause for patch, cause in reversed(checked) if patch.target_id == unit.identity and patch.operation in ('INSERT_AFTER', 'INSERT_BEFORE')), None)
+                    origin = next(
+                        (
+                            cause
+                            for patch, cause in reversed(checked)
+                            if patch.target_id == unit.identity
+                            and patch.operation in ('INSERT_AFTER', 'INSERT_BEFORE')
+                        ),
+                        None,
+                    )
                 if origin is None:
                     raise PatchInvalid('未修改目标的源码或章节发生变化')
                 if time < previous['last_modified_at']:
                     raise DocumentInvalid('采用事件时间不能倒退')
                 value.update(origin.fields('last_modified'), last_modified_at=time)
         else:
-            value = {'block_id': unit.identity, **unit.created.fields('created'), 'created_at': time, **(unit.cause or unit.created).fields('last_modified'), 'last_modified_at': time}
+            value = {
+                'block_id': unit.identity,
+                **unit.created.fields('created'),
+                'created_at': time,
+                **(unit.cause or unit.created).fields('last_modified'),
+                'last_modified_at': time,
+            }
         value.update(block_type=block.block_type, section_path=list(block.section_path))
         metadata.append(value)
-    return validate_snapshot(markdown, {'schema_version': 1, 'next_block_id': next_id, 'blocks': metadata}, source_verifier)
+    return validate_snapshot(
+        markdown,
+        {'schema_version': 1, 'next_block_id': next_id, 'blocks': metadata},
+        source_verifier,
+    )

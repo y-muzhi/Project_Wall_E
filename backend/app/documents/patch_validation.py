@@ -3,6 +3,7 @@
 Application/bundle application is a separate unit. Passing this module alone
 does not authorize C07 adoption or mark a suggestion batch completed.
 """
+
 from dataclasses import dataclass
 from functools import lru_cache
 import json
@@ -52,46 +53,69 @@ def prove_selection(old: ParsedBlock, proposed: str, selection: tuple[int, int])
     if proposed == old.markdown:
         return
     prefix_length = 0
-    while prefix_length < min(len(old.markdown), len(proposed)) and old.markdown[prefix_length] == proposed[prefix_length]:
+    while (
+        prefix_length < min(len(old.markdown), len(proposed))
+        and old.markdown[prefix_length] == proposed[prefix_length]
+    ):
         prefix_length += 1
     suffix_length = 0
-    while suffix_length < min(len(old.markdown) - prefix_length, len(proposed) - prefix_length) and old.markdown[-suffix_length - 1] == proposed[-suffix_length - 1]:
+    while (
+        suffix_length < min(len(old.markdown) - prefix_length, len(proposed) - prefix_length)
+        and old.markdown[-suffix_length - 1] == proposed[-suffix_length - 1]
+    ):
         suffix_length += 1
     marker = 'WALLESELECTIONBOUNDARYCHECK'
     while marker in old.markdown or marker in proposed or marker in old.plain_text:
         marker += 'Z'
-    tail = old.markdown[len(old.markdown) - suffix_length:] if suffix_length else ''
+    tail = old.markdown[len(old.markdown) - suffix_length :] if suffix_length else ''
     probe = parse_markdown(old.markdown[:prefix_length] + marker + tail)
     if len(probe.blocks) != 1 or probe.blocks[0].plain_text.count(marker) != 1:
         raise PatchInvalid('不能证明选区外标记保持不变')
     before, _, after_text = probe.blocks[0].plain_text.partition(marker)
     removed_start, removed_end = len(before), len(old.plain_text) - len(after_text)
-    if old.plain_text[:removed_start] != before or old.plain_text[removed_end:] != after_text or not start <= removed_start <= removed_end <= end:
+    if (
+        old.plain_text[:removed_start] != before
+        or old.plain_text[removed_end:] != after_text
+        or not start <= removed_start <= removed_end <= end
+    ):
         raise PatchInvalid('补丁修改了选区外内容或标记')
     new_text = after.blocks[0].plain_text
-    if not new_text.startswith(old.plain_text[:start]) or not new_text.endswith(old.plain_text[end:]):
+    if not new_text.startswith(old.plain_text[:start]) or not new_text.endswith(
+        old.plain_text[end:]
+    ):
         raise PatchInvalid('补丁修改了选区外文本')
 
 
-def validate_patch(snapshot: Snapshot, patch: dict, authority: WriteAuthority, *, edited_content: str | None = None) -> CheckedPatch:
+def validate_patch(
+    snapshot: Snapshot, patch: dict, authority: WriteAuthority, *, edited_content: str | None = None
+) -> CheckedPatch:
     try:
         value = _protocol().validate_patch(patch)
     except ProtocolInvalid:
         raise PatchInvalid('补丁未满足冻结结构') from None
     identity = value['target_ref']['block_id']
     target = snapshot.by_id.get(identity)
-    allowed = next((entry for entry in authority.allowed_targets if entry.block_id == identity), None)
+    allowed = next(
+        (entry for entry in authority.allowed_targets if entry.block_id == identity), None
+    )
     operation = value['patch_operation']
     if target is None or allowed is None or operation not in allowed.operations:
         raise TargetStale('目标或冻结权限未匹配')
-    if edited_content is not None and (type(edited_content) is not str or not 1 <= len(edited_content) <= 100_000 or operation == 'DELETE_BLOCK'):
+    if edited_content is not None and (
+        type(edited_content) is not str
+        or not 1 <= len(edited_content) <= 100_000
+        or operation == 'DELETE_BLOCK'
+    ):
         raise PatchInvalid('编辑内容不符合操作类型或容量')
     block = target[0]
     row_index, row_cells = None, None
     proposed = value['proposed_markdown']
     if operation == 'REPLACE_TABLE_ROW':
         selector = value['selector_json']
-        if allowed.row_selectors is not None and (selector['key_column_index'], selector['key_value']) not in allowed.row_selectors:
+        if (
+            allowed.row_selectors is not None
+            and (selector['key_column_index'], selector['key_value']) not in allowed.row_selectors
+        ):
             raise TargetStale('表格行不在冻结授权集合')
         table = table_model(block)
         row_index = select_row(table, value['selector_json'])
@@ -117,7 +141,14 @@ def validate_patch(snapshot: Snapshot, patch: dict, authority: WriteAuthority, *
                 raise PatchInvalid('建议必须为恰好一个顶层区块')
             if allowed.selection_range is not None:
                 prove_selection(block, proposed, allowed.selection_range)
-    return CheckedPatch(json.dumps(value, ensure_ascii=False, sort_keys=True), identity, operation, proposed, row_cells, row_index)
+    return CheckedPatch(
+        json.dumps(value, ensure_ascii=False, sort_keys=True),
+        identity,
+        operation,
+        proposed,
+        row_cells,
+        row_index,
+    )
 
 
 def validate_combination(patches: tuple[CheckedPatch, ...]) -> None:
@@ -125,14 +156,27 @@ def validate_combination(patches: tuple[CheckedPatch, ...]) -> None:
     for patch in patches:
         by_target.setdefault(patch.target_id, []).append(patch)
     for entries in by_target.values():
-        mutations = [entry for entry in entries if entry.operation in ('REPLACE_BLOCK', 'DELETE_BLOCK')]
+        mutations = [
+            entry for entry in entries if entry.operation in ('REPLACE_BLOCK', 'DELETE_BLOCK')
+        ]
         rows = [entry for entry in entries if entry.operation == 'REPLACE_TABLE_ROW']
-        inserts = [entry for entry in entries if entry.operation in ('INSERT_BEFORE', 'INSERT_AFTER')]
-        if len(mutations) > 1 or mutations and rows or len({entry.row_index for entry in rows}) != len(rows) or any(entry.operation == 'DELETE_BLOCK' for entry in mutations) and inserts:
+        inserts = [
+            entry for entry in entries if entry.operation in ('INSERT_BEFORE', 'INSERT_AFTER')
+        ]
+        if (
+            len(mutations) > 1
+            or mutations
+            and rows
+            or len({entry.row_index for entry in rows}) != len(rows)
+            or any(entry.operation == 'DELETE_BLOCK' for entry in mutations)
+            and inserts
+        ):
             raise PatchInvalid('补丁目标或操作组合冲突')
 
 
-def validate_bundle(snapshot: Snapshot, patches: list[dict], authority: WriteAuthority) -> tuple[CheckedPatch, ...]:
+def validate_bundle(
+    snapshot: Snapshot, patches: list[dict], authority: WriteAuthority
+) -> tuple[CheckedPatch, ...]:
     if type(patches) is not list or not 1 <= len(patches) <= 100:
         raise PatchInvalid('模型建议必须为非空且不超过100项')
     checked = tuple(validate_patch(snapshot, patch, authority) for patch in patches)

@@ -1,4 +1,5 @@
 """SHR-DISCUSSION value validation; no new aggregate or autonomous work queue."""
+
 from functools import lru_cache
 import re
 
@@ -12,14 +13,28 @@ def discussion_resources():
 
 def empty_discussion(resources=None):
     resources = resources if resources is not None else discussion_resources()
-    return {'schema_version': 1,
-        'phase': {'phase_ref': 'p1', 'kind': 'DISCOVERY',
-            'guide_ref': resources.reference('collaboration.discovery'), 'closure': None},
-        'focus_topic_ref': None, 'topics': [], 'evidence': [],
+    return {
+        'schema_version': 1,
+        'phase': {
+            'phase_ref': 'p1',
+            'kind': 'DISCOVERY',
+            'guide_ref': resources.reference('collaboration.discovery'),
+            'closure': None,
+        },
+        'focus_topic_ref': None,
+        'topics': [],
+        'evidence': [],
         'pending_user_message_ids': [],
-        'binding': {'target_document_id': None, 'source_refs': [], 'scope': None, 'document_kind': None},
-        'dispositions': [], 'last_step': None,
-        'counters': {'phase': 2, 'topic': 1, 'evidence': 1}}
+        'binding': {
+            'target_document_id': None,
+            'source_refs': [],
+            'scope': None,
+            'document_kind': None,
+        },
+        'dispositions': [],
+        'last_step': None,
+        'counters': {'phase': 2, 'topic': 1, 'evidence': 1},
+    }
 
 
 def validate_discussion(value, resources=None):
@@ -35,12 +50,14 @@ def validate_discussion(value, resources=None):
         raise ValueError('Discussion references must be unique')
     if len(set(state['pending_user_message_ids'])) != len(state['pending_user_message_ids']):
         raise ValueError('Pending inputs must be unique')
+
     def local(ref, prefix):
         if re.fullmatch(prefix + r'[1-9][0-9]*', ref) is None:
             raise ValueError('Invalid local discussion identity')
         value = int(ref[1:])
         if value >= state['counters'][{'p': 'phase', 't': 'topic', 'e': 'evidence'}[prefix]]:
             raise ValueError('Discussion counter must exceed all allocated references')
+
     local(phase['phase_ref'], 'p')
     for topic in state['topics']:
         local(topic['topic_ref'], 't')
@@ -48,7 +65,9 @@ def validate_discussion(value, resources=None):
     for item in state['evidence']:
         local(item['evidence_ref'], 'e')
     focus = state['focus_topic_ref']
-    if focus is not None and (focus not in topics or topics[focus]['phase_ref'] != phase['phase_ref']):
+    if focus is not None and (
+        focus not in topics or topics[focus]['phase_ref'] != phase['phase_ref']
+    ):
         raise ValueError('Focus must belong to the current phase')
     visited, active = set(), set()
 
@@ -85,10 +104,21 @@ def validate_discussion(value, resources=None):
 def discussion_references(connection, requirement_id, state):
     """Stable references established by state or real user phase events."""
     import json
-    known = {state['phase']['phase_ref'], *(topic['topic_ref'] for topic in state['topics']),
+
+    known = {
+        state['phase']['phase_ref'],
+        *(topic['topic_ref'] for topic in state['topics']),
         *(item['evidence_ref'] for item in state['evidence']),
-        *(outcome['outcome_ref'] for topic in state['topics'] for outcome in topic['expected_outcomes'])}
-    for row in connection.execute("SELECT payload_json FROM document_change_audits WHERE requirement_id=? AND event_type='PHASE_CHANGED'", (requirement_id,)):
+        *(
+            outcome['outcome_ref']
+            for topic in state['topics']
+            for outcome in topic['expected_outcomes']
+        ),
+    }
+    for row in connection.execute(
+        "SELECT payload_json FROM document_change_audits WHERE requirement_id=? AND event_type='PHASE_CHANGED'",
+        (requirement_id,),
+    ):
         event = json.loads(row['payload_json'])
         for field in ('phase_before', 'phase_after'):
             phase = event.get(field)
@@ -108,6 +138,7 @@ def apply_user_command(connection, root, command, message_id, catalog):
     from backend.app.shared.command_execution import Rejected
     from backend.app.shared.validation import strict_json_object
     from .source_refs import verify_source_refs
+
     resources = catalog.collaboration
     state = deepcopy(root['discussion_state_json'])
     kind = command['type']
@@ -126,7 +157,11 @@ def apply_user_command(connection, root, command, message_id, catalog):
                 raise Rejected('SOURCE_INVALID')
             if current['archived_at'] is not None:
                 raise Rejected('STATE_CONFLICT')
-            document_kind = {'REQUIREMENT_BRIEF': 'brief', 'DESIGN': 'design', 'SPECIFICATION': 'specification'}[current['document_kind']]
+            document_kind = {
+                'REQUIREMENT_BRIEF': 'brief',
+                'DESIGN': 'design',
+                'SPECIFICATION': 'specification',
+            }[current['document_kind']]
             if command['scope'] is not None:
                 scope = command['scope']
                 ref = scope['scope_ref']
@@ -134,19 +169,38 @@ def apply_user_command(connection, root, command, message_id, catalog):
                 # input uses block_id and emits the same canonical scope.
                 if scope['scope_type'] == 'SECTION':
                     ref = {'block_id': ref['heading_block_id']}
-                snapshot = validate_snapshot(current['markdown_content'], strict_json_object(current['block_state_json']),
-                    DocumentSources(connection, root['id'], catalog, document_id=target))
+                snapshot = validate_snapshot(
+                    current['markdown_content'],
+                    strict_json_object(current['block_state_json']),
+                    DocumentSources(connection, root['id'], catalog, document_id=target),
+                )
                 try:
                     resolve_scope(snapshot, 'ASK', scope['scope_type'], ref)
                 except ScopeInvalid:
                     raise Rejected('SCOPE_INVALID') from None
-        binding = {'target_document_id': target, 'source_refs': command['source_refs'], 'scope': command['scope'], 'document_kind': document_kind}
+        binding = {
+            'target_document_id': target,
+            'source_refs': command['source_refs'],
+            'scope': command['scope'],
+            'document_kind': document_kind,
+        }
         if state['binding'] == binding:
             return state, None
         state['binding'] = binding
-        state['dispositions'].append({'kind': 'REDIRECT', 'scope_refs': [state['phase']['phase_ref']], 'message_id': message_id, 'summary': '用户调整讨论目标与参考来源'})
+        state['dispositions'].append(
+            {
+                'kind': 'REDIRECT',
+                'scope_refs': [state['phase']['phase_ref']],
+                'message_id': message_id,
+                'summary': '用户调整讨论目标与参考来源',
+            }
+        )
     elif kind == 'SET_FOCUS':
-        if not any(topic['topic_ref'] == command['topic_ref'] and topic['phase_ref'] == state['phase']['phase_ref'] for topic in state['topics']):
+        if not any(
+            topic['topic_ref'] == command['topic_ref']
+            and topic['phase_ref'] == state['phase']['phase_ref']
+            for topic in state['topics']
+        ):
             raise Rejected('SOURCE_INVALID')
         if state['focus_topic_ref'] == command['topic_ref']:
             return state, None
@@ -157,18 +211,37 @@ def apply_user_command(connection, root, command, message_id, catalog):
         if state['phase']['kind'] == command['phase_kind']:
             return state, None
         closed_phase = deepcopy(state['phase'])
-        closed_phase['closure'] = {'message_id': message_id, 'summary': command['closure_message'] or '用户确认阶段收束', 'unresolved_refs': command['unresolved_refs']}
+        closed_phase['closure'] = {
+            'message_id': message_id,
+            'summary': command['closure_message'] or '用户确认阶段收束',
+            'unresolved_refs': command['unresolved_refs'],
+        }
         guide = resources.guide(command['phase_kind'])
-        state['phase'] = {'phase_ref': 'p' + str(state['counters']['phase']), 'kind': command['phase_kind'],
-            'guide_ref': resources.reference(guide['key'], guide['version']), 'closure': None}
+        state['phase'] = {
+            'phase_ref': 'p' + str(state['counters']['phase']),
+            'kind': command['phase_kind'],
+            'guide_ref': resources.reference(guide['key'], guide['version']),
+            'closure': None,
+        }
         state['counters']['phase'] = increment(state['counters']['phase'])
         state['focus_topic_ref'] = None
     else:
         if command['subject_ref'] not in known:
             raise Rejected('SOURCE_INVALID')
-        decision = {'kind': {'DEFER': 'DEFER', 'NOT_APPLICABLE': 'NOT_APPLICABLE', 'DECLINE_DRAFT': 'REJECT_DRAFT'}[command['decision']],
-            'scope_refs': [command['subject_ref']], 'message_id': message_id, 'summary': command['description']}
-        if any(all(item[key] == decision[key] for key in ('kind', 'scope_refs', 'summary')) for item in state['dispositions']):
+        decision = {
+            'kind': {
+                'DEFER': 'DEFER',
+                'NOT_APPLICABLE': 'NOT_APPLICABLE',
+                'DECLINE_DRAFT': 'REJECT_DRAFT',
+            }[command['decision']],
+            'scope_refs': [command['subject_ref']],
+            'message_id': message_id,
+            'summary': command['description'],
+        }
+        if any(
+            all(item[key] == decision[key] for key in ('kind', 'scope_refs', 'summary'))
+            for item in state['dispositions']
+        ):
             return state, None
         state['dispositions'].append(decision)
     state['last_step'] = None

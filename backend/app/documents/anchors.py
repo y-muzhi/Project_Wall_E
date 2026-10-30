@@ -1,7 +1,14 @@
 """SHR-ANCHOR/D-004 pure reads. Never changes a persisted comment's status."""
+
 from dataclasses import dataclass
 
-from backend.app.shared.validation import InvalidInput, MAX_SAFE_INTEGER, prefix_text, selected_text, suffix_text
+from backend.app.shared.validation import (
+    InvalidInput,
+    MAX_SAFE_INTEGER,
+    prefix_text,
+    selected_text,
+    suffix_text,
+)
 from .snapshot import Snapshot
 
 
@@ -20,17 +27,28 @@ class Location:
         return self.block_id is not None
 
     def as_dict(self) -> dict:
-        return {'block_id': self.block_id, 'start_offset': self.start_offset, 'end_offset': self.end_offset}
+        return {
+            'block_id': self.block_id,
+            'start_offset': self.start_offset,
+            'end_offset': self.end_offset,
+        }
 
 
 ORPHANED = Location(None, None, None)
 
 
 def validate_anchor(anchor_type: str, block_id: int, anchor_ref: dict) -> None:
-    if type(block_id) is not int or not 1 <= block_id <= MAX_SAFE_INTEGER or type(anchor_ref) is not dict:
+    if (
+        type(block_id) is not int
+        or not 1 <= block_id <= MAX_SAFE_INTEGER
+        or type(anchor_ref) is not dict
+    ):
         raise AnchorInvalid('锚点结构不合法')
     if anchor_type == 'BLOCK':
-        if set(anchor_ref) != {'block_markdown_snapshot'} or type(anchor_ref['block_markdown_snapshot']) is not str:
+        if (
+            set(anchor_ref) != {'block_markdown_snapshot'}
+            or type(anchor_ref['block_markdown_snapshot']) is not str
+        ):
             raise AnchorInvalid('完整区块锚点必须保留创建原文')
     elif anchor_type == 'SELECTION':
         if set(anchor_ref) != {'selected_text', 'prefix_text', 'suffix_text'}:
@@ -53,7 +71,9 @@ def locate(snapshot: Snapshot, anchor_type: str, block_id: int, anchor_ref: dict
     if anchor_type == 'BLOCK':
         return Location(block_id, None, None)
     text = current[0].plain_text
-    selection, prefix, suffix = (anchor_ref[key] for key in ('selected_text', 'prefix_text', 'suffix_text'))
+    selection, prefix, suffix = (
+        anchor_ref[key] for key in ('selected_text', 'prefix_text', 'suffix_text')
+    )
     candidates = []
     position = 0
     while True:
@@ -61,7 +81,11 @@ def locate(snapshot: Snapshot, anchor_type: str, block_id: int, anchor_ref: dict
         if start == -1:
             break
         end = start + len(selection)
-        if start >= len(prefix) and text[start - len(prefix):start] == prefix and text[end:end + len(suffix)] == suffix:
+        if (
+            start >= len(prefix)
+            and text[start - len(prefix) : start] == prefix
+            and text[end : end + len(suffix)] == suffix
+        ):
             candidates.append((start, end))
             if len(candidates) > 1:
                 return ORPHANED

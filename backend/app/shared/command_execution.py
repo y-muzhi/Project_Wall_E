@@ -1,11 +1,19 @@
 """Application rejection and persistent command execution, no HTTP delivery."""
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import sqlite3
 from typing import Callable, Protocol
 
 from backend.app.infrastructure.database import StorageUnavailable
-from backend.app.infrastructure.idempotency import Idempotency, IdempotencyConflict, RequestInProgress, Scope, Success, request_key
+from backend.app.infrastructure.idempotency import (
+    Idempotency,
+    IdempotencyConflict,
+    RequestInProgress,
+    Scope,
+    Success,
+    request_key,
+)
 from backend.app.infrastructure.idempotency import CommentAnchorRejected
 from backend.app.infrastructure.identifiers import CapacityExhausted
 from .time import utc_milliseconds
@@ -27,12 +35,17 @@ class ExpectedCurrentInput:
 
     @classmethod
     def from_fields(cls, data: dict) -> 'ExpectedCurrentInput':
-        return cls(strict_integer(data['requirement_id'], 'requirement_id'),
-                   strict_integer(data['expected_content_version'], 'expected_content_version'),
-                   request_key(data['idempotency_key'], 'idempotency_key'))
+        return cls(
+            strict_integer(data['requirement_id'], 'requirement_id'),
+            strict_integer(data['expected_content_version'], 'expected_content_version'),
+            request_key(data['idempotency_key'], 'idempotency_key'),
+        )
 
     def business_input(self) -> dict:
-        return {'requirement_id': self.requirement_id, 'expected_content_version': self.expected_content_version}
+        return {
+            'requirement_id': self.requirement_id,
+            'expected_content_version': self.expected_content_version,
+        }
 
 
 @dataclass(frozen=True)
@@ -42,7 +55,10 @@ class RequirementActionInput:
 
     @classmethod
     def from_fields(cls, data: dict) -> 'RequirementActionInput':
-        return cls(strict_integer(data['requirement_id'], 'requirement_id'), request_key(data['idempotency_key'], 'idempotency_key'))
+        return cls(
+            strict_integer(data['requirement_id'], 'requirement_id'),
+            request_key(data['idempotency_key'], 'idempotency_key'),
+        )
 
     def business_input(self) -> dict:
         return {'requirement_id': self.requirement_id}
@@ -56,9 +72,11 @@ class ExpectedDraftInput:
 
     @classmethod
     def from_fields(cls, data: dict) -> 'ExpectedDraftInput':
-        return cls(strict_integer(data['requirement_id'], 'requirement_id'),
-                   strict_integer(data['expected_version'], 'expected_version'),
-                   request_key(data['idempotency_key'], 'idempotency_key'))
+        return cls(
+            strict_integer(data['requirement_id'], 'requirement_id'),
+            strict_integer(data['expected_version'], 'expected_version'),
+            request_key(data['idempotency_key'], 'idempotency_key'),
+        )
 
     def business_input(self) -> dict:
         return {'requirement_id': self.requirement_id, 'expected_version': self.expected_version}
@@ -77,15 +95,32 @@ class IdempotentInput(Protocol):
     def business_input(self) -> dict: ...
 
 
-def execute_idempotent(executor: Idempotency, capability: str, request: IdempotentInput,
-                       operation: Callable[[sqlite3.Connection], Success | CommentAnchorRejected], *, allowed_failures: frozenset[str],
-                       business_input: dict | None = None, target_identity: str | None = None) -> dict:
+def execute_idempotent(
+    executor: Idempotency,
+    capability: str,
+    request: IdempotentInput,
+    operation: Callable[[sqlite3.Connection], Success | CommentAnchorRejected],
+    *,
+    allowed_failures: frozenset[str],
+    business_input: dict | None = None,
+    target_identity: str | None = None,
+) -> dict:
     try:
-        scope = Scope(capability, f'Requirement:{request.requirement_id}' if target_identity is None else target_identity, request.idempotency_key)
-        return executor.execute(scope, request.business_input() if business_input is None else business_input, operation).result
+        scope = Scope(
+            capability,
+            f'Requirement:{request.requirement_id}' if target_identity is None else target_identity,
+            request.idempotency_key,
+        )
+        return executor.execute(
+            scope, request.business_input() if business_input is None else business_input, operation
+        ).result
     except Rejected as error:
         code = error.code if error.code in allowed_failures else 'INTERNAL_ERROR'
-        return {'code': code, 'data': None, 'details': error.details if code != 'INTERNAL_ERROR' else None}
+        return {
+            'code': code,
+            'data': None,
+            'details': error.details if code != 'INTERNAL_ERROR' else None,
+        }
     except (IdempotencyConflict, RequestInProgress, CapacityExhausted) as error:
         code = error.code
     except (StorageUnavailable, sqlite3.Error):

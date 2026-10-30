@@ -3,6 +3,7 @@
 Never accepts a provider exception or an arbitrary root error message. This is
 not an HTTP server or a substitute for the 36 endpoint adapters.
 """
+
 from dataclasses import dataclass
 from typing import Any, Collection
 from uuid import UUID, uuid4
@@ -63,21 +64,51 @@ def _request_id(value: str) -> str:
 
 
 def _details(code: str, value: object) -> dict[str, Any] | None:
-    if code in ('METADATA_VERSION_CONFLICT', 'DISCUSSION_VERSION_CONFLICT', 'SOURCE_VERSION_CONFLICT') and value is not None:
-        if type(value) is not dict or set(value) != {'expected_version', 'actual_version', 'resource_kind', 'resource_id'}:
+    if (
+        code
+        in ('METADATA_VERSION_CONFLICT', 'DISCUSSION_VERSION_CONFLICT', 'SOURCE_VERSION_CONFLICT')
+        and value is not None
+    ):
+        if type(value) is not dict or set(value) != {
+            'expected_version',
+            'actual_version',
+            'resource_kind',
+            'resource_id',
+        }:
             raise ValueError('Invalid safe version conflict details')
-        if any(type(value[key]) is not int or not 1 <= value[key] <= MAX_SAFE_INTEGER for key in ('expected_version', 'actual_version', 'resource_id')) or value['resource_kind'] not in ('Requirement', 'RequirementDocument', 'Discussion', 'Revision'):
+        if any(
+            type(value[key]) is not int or not 1 <= value[key] <= MAX_SAFE_INTEGER
+            for key in ('expected_version', 'actual_version', 'resource_id')
+        ) or value['resource_kind'] not in (
+            'Requirement',
+            'RequirementDocument',
+            'Discussion',
+            'Revision',
+        ):
             raise ValueError('Invalid safe version conflict identity')
         return dict(value)
     if code in ('PATCH_INVALID', 'TARGET_STALE') and value is not None:
-        if type(value) is not dict or set(value) != {'suggestion_errors'} or type(value['suggestion_errors']) is not list or not 1 <= len(value['suggestion_errors']) <= 100:
+        if (
+            type(value) is not dict
+            or set(value) != {'suggestion_errors'}
+            or type(value['suggestion_errors']) is not list
+            or not 1 <= len(value['suggestion_errors']) <= 100
+        ):
             raise ValueError('Invalid approved suggestion errors')
         projected = []
         for item in value['suggestion_errors']:
-            if type(item) is not dict or set(item) != {'suggestion_id', 'code', 'message'} or type(item['suggestion_id']) is not int or not 1 <= item['suggestion_id'] <= MAX_SAFE_INTEGER or item['code'] not in ('PATCH_INVALID', 'TARGET_STALE') or item['message'] != ERRORS[item['code']][2]:
+            if (
+                type(item) is not dict
+                or set(item) != {'suggestion_id', 'code', 'message'}
+                or type(item['suggestion_id']) is not int
+                or not 1 <= item['suggestion_id'] <= MAX_SAFE_INTEGER
+                or item['code'] not in ('PATCH_INVALID', 'TARGET_STALE')
+                or item['message'] != ERRORS[item['code']][2]
+            ):
                 raise ValueError('Suggestion errors require program-owned codes and safe messages')
             projected.append(dict(item))
-        if len({item['suggestion_id'] for item in projected}) != len(projected): raise ValueError('Suggestion errors must have distinct identities')
+        if len({item['suggestion_id'] for item in projected}) != len(projected):
+            raise ValueError('Suggestion errors must have distinct identities')
         return {'suggestion_errors': projected}
     if code == 'INVALID_INPUT':
         if type(value) is not dict or set(value) != {'field_errors'}:
@@ -93,7 +124,9 @@ def _details(code: str, value: object) -> dict[str, Any] | None:
                 raise ValueError('Nonempty strings required')
             if error['reason'] not in REASONS:
                 raise ValueError('Unregistered validation reason')
-            projected.append({'field': error['field'], 'reason': error['reason'], 'message': error['message']})
+            projected.append(
+                {'field': error['field'], 'reason': error['reason'], 'message': error['message']}
+            )
         return {'field_errors': projected}
     if code == 'CARD_ALREADY_ANSWERED':
         if type(value) is not dict or set(value) != {'response_message_id'}:
@@ -107,7 +140,9 @@ def _details(code: str, value: object) -> dict[str, Any] | None:
     return None
 
 
-def error_response(code: str, details: object, *, allowed_errors: Collection[str], request_id: str) -> HttpError:
+def error_response(
+    code: str, details: object, *, allowed_errors: Collection[str], request_id: str
+) -> HttpError:
     """Project only registered and reachable errors; malformed results become 500.
 
     request_id is owned by the request context, so logging and the envelope use
@@ -121,4 +156,12 @@ def error_response(code: str, details: object, *, allowed_errors: Collection[str
     except ValueError:
         code, projected = 'INTERNAL_ERROR', None
     status, error_code, message = ERRORS[code]
-    return HttpError(status, {'success': False, 'data': None, 'error': {'code': error_code, 'message': message, 'details': projected}, 'meta': {'request_id': request_id}})
+    return HttpError(
+        status,
+        {
+            'success': False,
+            'data': None,
+            'error': {'code': error_code, 'message': message, 'details': projected},
+            'meta': {'request_id': request_id},
+        },
+    )

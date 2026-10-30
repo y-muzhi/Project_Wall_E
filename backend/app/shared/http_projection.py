@@ -4,12 +4,19 @@ The application already validates actual sources in its read transaction. This
 layer checks the projected structure and pair; it never supplies a fake source
 verifier or opens a second database snapshot during response conversion.
 """
+
 import re
 
 from backend.app.documents.markdown import parse_markdown
 from backend.app.documents.snapshot import FIELDS, Provenance, _time
 from backend.app.infrastructure.idempotency import canonical_input
-from backend.app.requirements.contracts import READ_FIELDS, LIST_FIELDS, STATUSES, REQUIREMENT_TYPES, requirement_read_model
+from backend.app.requirements.contracts import (
+    READ_FIELDS,
+    LIST_FIELDS,
+    STATUSES,
+    REQUIREMENT_TYPES,
+    requirement_read_model,
+)
 from backend.app.revisions.contracts import SUMMARY_FIELDS, revision_summary
 from .validation import strict_integer, strict_enum, title
 
@@ -27,7 +34,10 @@ def requirement(value: object) -> dict:
 def requirement_summary(value: object) -> dict:
     data = exact(value, LIST_FIELDS)
     strict_integer(data['id'], 'id')
-    if type(data['requirement_no']) is not str or re.fullmatch(r'REQ[0-9]{6}', data['requirement_no']) is None:
+    if (
+        type(data['requirement_no']) is not str
+        or re.fullmatch(r'REQ[0-9]{6}', data['requirement_no']) is None
+    ):
         raise ValueError('Invalid requirement number')
     if title(data['title']) != data['title']:
         raise ValueError('Invalid title')
@@ -45,7 +55,7 @@ def snapshot_pair(markdown: object, value: object) -> dict:
     parsed = parse_markdown(markdown)
     if type(state['blocks']) is not list or len(state['blocks']) != len(parsed.blocks):
         raise ValueError('Invalid paired block count')
-    if len(canonical_input(state).encode('utf-8')) > 4*1024*1024:
+    if len(canonical_input(state).encode('utf-8')) > 4 * 1024 * 1024:
         raise ValueError('Block state exceeds capacity')
     identities = set()
     blocks = []
@@ -55,11 +65,24 @@ def snapshot_pair(markdown: object, value: object) -> dict:
         if identity >= next_id or identity in identities:
             raise ValueError('Invalid block identity')
         identities.add(identity)
-        if metadata['block_type'] != block.block_type or type(metadata['section_path']) is not list or metadata['section_path'] != list(block.section_path):
+        if (
+            metadata['block_type'] != block.block_type
+            or type(metadata['section_path']) is not list
+            or metadata['section_path'] != list(block.section_path)
+        ):
             raise ValueError('Block derivatives differ from actual Markdown')
         for prefix in ('created', 'last_modified'):
-            origin = Provenance(metadata[prefix+'_by_type'], metadata[prefix+'_source_type'], metadata[prefix+'_source_id'])
-            actors = {'TEMPLATE': {'SYSTEM'}, 'GUIDE_RUN': {'AI'}, 'SUGGESTION_BATCH': {'AI', 'USER'}, 'MANUAL_EDIT': {'USER'}}
+            origin = Provenance(
+                metadata[prefix + '_by_type'],
+                metadata[prefix + '_source_type'],
+                metadata[prefix + '_source_id'],
+            )
+            actors = {
+                'TEMPLATE': {'SYSTEM'},
+                'GUIDE_RUN': {'AI'},
+                'SUGGESTION_BATCH': {'AI', 'USER'},
+                'MANUAL_EDIT': {'USER'},
+            }
             if origin.actor not in actors[origin.source_type]:
                 raise ValueError('Invalid provenance combination')
         if _time(metadata['created_at']) > _time(metadata['last_modified_at']):
@@ -70,6 +93,7 @@ def snapshot_pair(markdown: object, value: object) -> dict:
 
 def document(value: object, kind: str) -> dict:
     from backend.app.documents.contracts import DOCUMENT_FIELDS
+
     data = exact(value, DOCUMENT_FIELDS)
     for field in ('id', 'requirement_id', 'content_version'):
         strict_integer(data[field], field)
@@ -87,7 +111,11 @@ def revision(value: object, *, full: bool = False) -> dict:
     summary = revision_summary({field: data[field] for field in SUMMARY_FIELDS})
     if not full:
         return summary
-    return {**summary, 'markdown_content': data['markdown_content'], 'block_state_json': snapshot_pair(data['markdown_content'], data['block_state_json'])}
+    return {
+        **summary,
+        'markdown_content': data['markdown_content'],
+        'block_state_json': snapshot_pair(data['markdown_content'], data['block_state_json']),
+    }
 
 
 def page(value: object, item_projection, requested_page: int) -> tuple[dict, dict]:
@@ -96,6 +124,14 @@ def page(value: object, item_projection, requested_page: int) -> tuple[dict, dic
     strict_integer(data['page_size'], 'page_size')
     strict_integer(data['total'], 'total', minimum=0)
     strict_integer(data['total_pages'], 'total_pages', minimum=0)
-    if data['page'] != requested_page or data['page_size'] != 20 or data['total_pages'] != (data['total']+19)//20 or type(data['items']) is not list or len(data['items']) != min(20, max(0, data['total']-(data['page']-1)*20)):
+    if (
+        data['page'] != requested_page
+        or data['page_size'] != 20
+        or data['total_pages'] != (data['total'] + 19) // 20
+        or type(data['items']) is not list
+        or len(data['items']) != min(20, max(0, data['total'] - (data['page'] - 1) * 20))
+    ):
         raise ValueError('Pagination contradicts the actual read result')
-    return {'items': [item_projection(item) for item in data['items']]}, {field: data[field] for field in ('page', 'page_size', 'total', 'total_pages')}
+    return {'items': [item_projection(item) for item in data['items']]}, {
+        field: data[field] for field in ('page', 'page_size', 'total', 'total_pages')
+    }

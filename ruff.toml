@@ -1,0 +1,7 @@
+target-version = "py313"
+line-length = 100
+extend-exclude = ["docs", "backend/resources", "data"]
+
+[format]
+quote-style = "single"
+line-ending = "lf"

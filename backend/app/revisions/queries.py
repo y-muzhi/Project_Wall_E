@@ -1,4 +1,5 @@
 """Historical reads; never substitute current body, comments or source versions."""
+
 from backend.app.documents.sources import DocumentSources
 from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.resources import ResourceCatalog
@@ -26,7 +27,9 @@ def list_revisions(database: Database, payload: object = MISSING) -> dict:
         return {'code': 'INTERNAL_ERROR', 'data': None, 'details': None}
 
 
-def get_revision(database: Database, revision_id: object = MISSING, *, catalog: ResourceCatalog | None = None) -> dict:
+def get_revision(
+    database: Database, revision_id: object = MISSING, *, catalog: ResourceCatalog | None = None
+) -> dict:
     try:
         identity = get_revision_input(revision_id)
     except InvalidInput as error:
@@ -37,8 +40,17 @@ def get_revision(database: Database, revision_id: object = MISSING, *, catalog: 
             if row is None:
                 result = {'code': 'NOT_FOUND', 'data': None, 'details': None}
             else:
-                sources = DocumentSources(connection, row['requirement_id'], catalog if catalog is not None else ResourceCatalog(), document_id=row['document_id'])
-                result = {'code': 'READ_OK', 'data': get_revision_result(row, sources), 'details': None}
+                sources = DocumentSources(
+                    connection,
+                    row['requirement_id'],
+                    catalog if catalog is not None else ResourceCatalog(),
+                    document_id=row['document_id'],
+                )
+                result = {
+                    'code': 'READ_OK',
+                    'data': get_revision_result(row, sources),
+                    'details': None,
+                }
         return result
     except StorageUnavailable:
         return {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None}

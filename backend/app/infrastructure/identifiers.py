@@ -1,4 +1,5 @@
 """D-003 allocations inside the caller's shared SQLite write transaction."""
+
 from enum import StrEnum
 import sqlite3
 
@@ -40,7 +41,9 @@ def increment(value: int, *, maximum: int = MAX_SAFE_INTEGER) -> int:
 
 def _allocate(connection: sqlite3.Connection, kind: str, maximum: int) -> int:
     require_write_transaction(connection)
-    row = connection.execute('SELECT last_value FROM sequences WHERE entity_kind=?', (kind,)).fetchone()
+    row = connection.execute(
+        'SELECT last_value FROM sequences WHERE entity_kind=?', (kind,)
+    ).fetchone()
     previous = row[0] if row else 0
     if type(previous) is not int or not 0 <= previous <= maximum:
         raise ValueError('Stored sequence is invalid')
@@ -48,7 +51,9 @@ def _allocate(connection: sqlite3.Connection, kind: str, maximum: int) -> int:
         raise CapacityExhausted()
     value = previous + 1
     if row is None:
-        connection.execute('INSERT INTO sequences(entity_kind,last_value) VALUES (?,?)', (kind, value))
+        connection.execute(
+            'INSERT INTO sequences(entity_kind,last_value) VALUES (?,?)', (kind, value)
+        )
     else:
         connection.execute('UPDATE sequences SET last_value=? WHERE entity_kind=?', (value, kind))
     return value
@@ -64,12 +69,16 @@ def requirement_number(connection: sqlite3.Connection) -> str:
     return f'REQ{_allocate(connection, "RequirementNumber", 999_999):06d}'
 
 
-def _next_for_requirement(connection: sqlite3.Connection, table: str, column: str, requirement_id: int) -> int:
+def _next_for_requirement(
+    connection: sqlite3.Connection, table: str, column: str, requirement_id: int
+) -> int:
     require_write_transaction(connection)
     if type(requirement_id) is not int or not 1 <= requirement_id <= MAX_SAFE_INTEGER:
         raise ValueError('Positive requirement identity required')
     # Both identifiers come only from the two functions below, never user input.
-    maximum = connection.execute(f'SELECT MAX({column}) FROM {table} WHERE requirement_id=?', (requirement_id,)).fetchone()[0]
+    maximum = connection.execute(
+        f'SELECT MAX({column}) FROM {table} WHERE requirement_id=?', (requirement_id,)
+    ).fetchone()[0]
     return 1 if maximum is None else increment(maximum)
 
 

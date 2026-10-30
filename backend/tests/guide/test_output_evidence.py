@@ -215,9 +215,7 @@ class OutputEvidenceTests(unittest.TestCase):
         answers=[{**answer,'card_key':item['card_key']} for item in original_cards]
         # Historical C07 evidence fixtures deliberately model the pre-FLOW-004
         # accepted continuation. Current C06 direct adoption has its own tests.
-        from unittest.mock import patch as mock_patch
-        with mock_patch('backend.app.guide.confirmed_response.complete_confirmed_response', return_value=None):
-            result=fixture.submit(responses=answers)
+        result=fixture.submit(responses=answers)
         self.assertEqual(result['code'],'CARDS_ACCEPTED',result)
         user=result['data']['response_message'];new=result['data']['guide_run']['id']
         chunks=[user['content'][index:index+10000] for index in range(0,len(user['content']),10000)]

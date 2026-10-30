@@ -1,57 +1,237 @@
 /* M15-MOTION-01: one vocabulary for layout, disclosures and overlays. */
-:root { --motion-layout:220ms;--motion-disclosure:180ms;--motion-overlay:160ms;--motion-ease:cubic-bezier(.2,.8,.2,1); }
-.application-navigation-toggle-wrap { margin-left:auto; }
-.application-brand-zone.is-collapsed { padding:8px 12px;justify-content:flex-start; }
-.application-navigation.is-collapsed .application-navigation-item { justify-content:flex-start;padding-inline:12px; }
-.detail-columns > .detail-outline { grid-column:1;grid-row:1; }
-.detail-columns > .detail-left-divider { grid-column:2;grid-row:1; }
-.detail-columns > .detail-document-region { grid-column:3;grid-row:1; }
-.detail-columns > .detail-resizer { grid-column:4;grid-row:1; }
-.detail-columns > .detail-panel { grid-column:5;grid-row:1; }
-.detail-columns { overflow:clip; }
-.detail-columns > [data-motion-open] { transition:opacity var(--motion-layout) var(--motion-ease),translate var(--motion-layout) var(--motion-ease); }
-.detail-columns > [data-motion-open=false] { opacity:0;pointer-events:none; }
-.detail-outline[data-motion-open=false] { translate:-8px 0; }
-.detail-panel[data-motion-open=false] { translate:8px 0; }
+:root {
+  --motion-layout: 220ms;
+  --motion-disclosure: 180ms;
+  --motion-overlay: 160ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.application-navigation-toggle-wrap {
+  margin-left: auto;
+}
+.application-brand-zone.is-collapsed {
+  padding: 8px 12px;
+  justify-content: flex-start;
+}
+.application-navigation.is-collapsed .application-navigation-item {
+  justify-content: flex-start;
+  padding-inline: 12px;
+}
+.detail-columns > .detail-outline {
+  grid-column: 1;
+  grid-row: 1;
+}
+.detail-columns > .detail-left-divider {
+  grid-column: 2;
+  grid-row: 1;
+}
+.detail-columns > .detail-document-region {
+  grid-column: 3;
+  grid-row: 1;
+}
+.detail-columns > .detail-resizer {
+  grid-column: 4;
+  grid-row: 1;
+}
+.detail-columns > .detail-panel {
+  grid-column: 5;
+  grid-row: 1;
+}
+.detail-columns {
+  overflow: clip;
+}
+.detail-columns > [data-motion-open] {
+  transition:
+    opacity var(--motion-layout) var(--motion-ease),
+    translate var(--motion-layout) var(--motion-ease);
+}
+.detail-columns > [data-motion-open='false'] {
+  opacity: 0;
+  pointer-events: none;
+}
+.detail-outline[data-motion-open='false'] {
+  translate: -8px 0;
+}
+.detail-panel[data-motion-open='false'] {
+  translate: 8px 0;
+}
 @starting-style {
- .detail-columns > [data-motion-open=true] { opacity:0; }
- .detail-outline[data-motion-open=true] { translate:-8px 0; }
- .detail-panel[data-motion-open=true] { translate:8px 0; }
+  .detail-columns > [data-motion-open='true'] {
+    opacity: 0;
+  }
+  .detail-outline[data-motion-open='true'] {
+    translate: -8px 0;
+  }
+  .detail-panel[data-motion-open='true'] {
+    translate: 8px 0;
+  }
 }
 /* Native semantics and existing onToggle/lazy-read owners remain unchanged. */
-@supports (interpolate-size:allow-keywords) {
- details { interpolate-size:allow-keywords; }
- details::details-content { block-size:0;opacity:0;overflow:clip;transition:block-size var(--motion-disclosure) var(--motion-ease),opacity var(--motion-disclosure) var(--motion-ease),content-visibility var(--motion-disclosure) allow-discrete; }
- details[open]::details-content { block-size:auto;opacity:1; }
+@supports (interpolate-size: allow-keywords) {
+  details {
+    interpolate-size: allow-keywords;
+  }
+  details::details-content {
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      block-size var(--motion-disclosure) var(--motion-ease),
+      opacity var(--motion-disclosure) var(--motion-ease),
+      content-visibility var(--motion-disclosure) allow-discrete;
+  }
+  details[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
 }
-.outline-entry { block-size:auto;interpolate-size:allow-keywords;overflow:clip;transition:block-size var(--motion-disclosure) var(--motion-ease),opacity var(--motion-disclosure) var(--motion-ease),display var(--motion-disclosure) allow-discrete; }
-.outline-entry[hidden] { block-size:0;opacity:0;pointer-events:none; }
-.filter-menu,.single-select-panel,.requirement-tools-popover,.block-source-popover,.model-call-drawer,.editor-slash-menu,.editor-selection-toolbar,.editor-context-link {
- transition:opacity var(--motion-overlay) var(--motion-ease),translate var(--motion-overlay) var(--motion-ease),display var(--motion-overlay) allow-discrete,overlay var(--motion-overlay) allow-discrete;
+.outline-entry {
+  block-size: auto;
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  transition:
+    block-size var(--motion-disclosure) var(--motion-ease),
+    opacity var(--motion-disclosure) var(--motion-ease),
+    display var(--motion-disclosure) allow-discrete;
 }
-.filter-menu[data-motion-open=false],.single-select-panel[hidden],.requirement-tools-popover[hidden],.model-call-drawer[data-motion-open=false],.block-source-popover[data-motion-open=false],.editor-slash-menu[hidden],.editor-selection-toolbar[hidden],.editor-context-link[hidden] { opacity:0;translate:0 -4px;pointer-events:none; }
+.outline-entry[hidden] {
+  block-size: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.filter-menu,
+.single-select-panel,
+.requirement-tools-popover,
+.block-source-popover,
+.model-call-drawer,
+.editor-slash-menu,
+.editor-selection-toolbar,
+.editor-context-link {
+  transition:
+    opacity var(--motion-overlay) var(--motion-ease),
+    translate var(--motion-overlay) var(--motion-ease),
+    display var(--motion-overlay) allow-discrete,
+    overlay var(--motion-overlay) allow-discrete;
+}
+.filter-menu[data-motion-open='false'],
+.single-select-panel[hidden],
+.requirement-tools-popover[hidden],
+.model-call-drawer[data-motion-open='false'],
+.block-source-popover[data-motion-open='false'],
+.editor-slash-menu[hidden],
+.editor-selection-toolbar[hidden],
+.editor-context-link[hidden] {
+  opacity: 0;
+  translate: 0 -4px;
+  pointer-events: none;
+}
 @starting-style {
- .filter-menu,.single-select-panel:popover-open,.requirement-tools-popover:not([hidden]),.block-source-popover,.model-call-drawer,.editor-slash-menu:not([hidden]),.editor-selection-toolbar:not([hidden]),.editor-context-link:not([hidden]) { opacity:0;translate:0 -4px; }
+  .filter-menu,
+  .single-select-panel:popover-open,
+  .requirement-tools-popover:not([hidden]),
+  .block-source-popover,
+  .model-call-drawer,
+  .editor-slash-menu:not([hidden]),
+  .editor-selection-toolbar:not([hidden]),
+  .editor-context-link:not([hidden]) {
+    opacity: 0;
+    translate: 0 -4px;
+  }
 }
-.motion-disclosure,.editor-format-more,.editor-link-form,.editor-format-group[aria-label="表格操作"] { block-size:auto;interpolate-size:allow-keywords;overflow:clip;transition:block-size var(--motion-disclosure) var(--motion-ease),padding var(--motion-disclosure) var(--motion-ease),opacity var(--motion-disclosure) var(--motion-ease),display var(--motion-disclosure) allow-discrete; }
-.motion-disclosure[hidden],.editor-format-more[hidden],.editor-link-form[hidden],.editor-format-group[aria-label="表格操作"][hidden] { block-size:0;padding-block:0;opacity:0;pointer-events:none; }
-@starting-style { .motion-disclosure,.editor-format-more,.editor-link-form,.editor-format-group[aria-label="表格操作"] { block-size:0;padding-block:0;opacity:0; } }
-dialog.create-drawer,dialog.application-navigation-drawer,dialog.confirmation {
- transition:opacity var(--motion-overlay) var(--motion-ease),translate var(--motion-overlay) var(--motion-ease),scale var(--motion-overlay) var(--motion-ease),display var(--motion-overlay) allow-discrete,overlay var(--motion-overlay) allow-discrete;
+.motion-disclosure,
+.editor-format-more,
+.editor-link-form,
+.editor-format-group[aria-label='表格操作'] {
+  block-size: auto;
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  transition:
+    block-size var(--motion-disclosure) var(--motion-ease),
+    padding var(--motion-disclosure) var(--motion-ease),
+    opacity var(--motion-disclosure) var(--motion-ease),
+    display var(--motion-disclosure) allow-discrete;
 }
-dialog:not([open]).create-drawer,dialog:not([open]).application-navigation-drawer,dialog:not([open]).confirmation { opacity:0;pointer-events:none; }
-dialog:not([open]).create-drawer { translate:16px 0; }
-dialog:not([open]).application-navigation-drawer { translate:-16px 0; }
-dialog:not([open]).confirmation { scale:.98; }
-dialog::backdrop { transition:opacity var(--motion-overlay) var(--motion-ease),display var(--motion-overlay) allow-discrete,overlay var(--motion-overlay) allow-discrete; }
-dialog:not([open])::backdrop { opacity:0;pointer-events:none; }
+.motion-disclosure[hidden],
+.editor-format-more[hidden],
+.editor-link-form[hidden],
+.editor-format-group[aria-label='表格操作'][hidden] {
+  block-size: 0;
+  padding-block: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 @starting-style {
- dialog[open].create-drawer { opacity:0;translate:16px 0; }
- dialog[open].application-navigation-drawer { opacity:0;translate:-16px 0; }
- dialog[open].confirmation { opacity:0;scale:.98; }
- dialog[open]::backdrop { opacity:0; }
+  .motion-disclosure,
+  .editor-format-more,
+  .editor-link-form,
+  .editor-format-group[aria-label='表格操作'] {
+    block-size: 0;
+    padding-block: 0;
+    opacity: 0;
+  }
 }
-@media(prefers-reduced-motion:reduce) {
- :root { --motion-layout:0ms;--motion-disclosure:0ms;--motion-overlay:0ms; }
- *,*::before,*::after,*::details-content { transition:none!important;animation:none!important; }
+dialog.create-drawer,
+dialog.application-navigation-drawer,
+dialog.confirmation {
+  transition:
+    opacity var(--motion-overlay) var(--motion-ease),
+    translate var(--motion-overlay) var(--motion-ease),
+    scale var(--motion-overlay) var(--motion-ease),
+    display var(--motion-overlay) allow-discrete,
+    overlay var(--motion-overlay) allow-discrete;
+}
+dialog:not([open]).create-drawer,
+dialog:not([open]).application-navigation-drawer,
+dialog:not([open]).confirmation {
+  opacity: 0;
+  pointer-events: none;
+}
+dialog:not([open]).create-drawer {
+  translate: 16px 0;
+}
+dialog:not([open]).application-navigation-drawer {
+  translate: -16px 0;
+}
+dialog:not([open]).confirmation {
+  scale: 0.98;
+}
+dialog::backdrop {
+  transition:
+    opacity var(--motion-overlay) var(--motion-ease),
+    display var(--motion-overlay) allow-discrete,
+    overlay var(--motion-overlay) allow-discrete;
+}
+dialog:not([open])::backdrop {
+  opacity: 0;
+  pointer-events: none;
+}
+@starting-style {
+  dialog[open].create-drawer {
+    opacity: 0;
+    translate: 16px 0;
+  }
+  dialog[open].application-navigation-drawer {
+    opacity: 0;
+    translate: -16px 0;
+  }
+  dialog[open].confirmation {
+    opacity: 0;
+    scale: 0.98;
+  }
+  dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-layout: 0ms;
+    --motion-disclosure: 0ms;
+    --motion-overlay: 0ms;
+  }
+  *,
+  *::before,
+  *::after,
+  *::details-content {
+    transition: none !important;
+    animation: none !important;
+  }
 }

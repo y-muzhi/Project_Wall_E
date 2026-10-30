@@ -4,6 +4,7 @@ Candidates are collected in a linear source scan and sorted for lookup. Paths ar
 matched lazily at actual parser positions, so nested-looking URLs in a long
 path are not repeatedly scanned. No fuzzy bare-domain recognition occurs.
 """
+
 from bisect import bisect_right
 from dataclasses import dataclass
 import re
@@ -36,7 +37,9 @@ def _email_end(source: str, at: int) -> int | None:
         if char in DOMAIN and char != '.':
             segment = True
             end += 1
-        elif char == '.' and segment and end + 1 < len(source) and source[end + 1] in DOMAIN - {'.'}:
+        elif (
+            char == '.' and segment and end + 1 < len(source) and source[end + 1] in DOMAIN - {'.'}
+        ):
             dot = True
             segment = False
             end += 1
@@ -74,11 +77,17 @@ class AutolinkIndex:
                     return None
                 domain_start = start if protocol == 'www.' else prefix.end()
                 domain_end = domain_start
-                while domain_end < maximum and (source[domain_end] in DOMAIN or source[domain_end].isalnum()):
+                while domain_end < maximum and (
+                    source[domain_end] in DOMAIN or source[domain_end].isalnum()
+                ):
                     domain_end += 1
                 domain = source[domain_start:domain_end].rstrip('.')
                 labels = domain.split('.')
-                if len(labels) < 2 or any(not label for label in labels) or any('_' in label for label in labels[-2:]):
+                if (
+                    len(labels) < 2
+                    or any(not label for label in labels)
+                    or any('_' in label for label in labels[-2:])
+                ):
                     return None
                 end = domain_end
                 while end < maximum and source[end] not in SPACE and source[end] != '<':
@@ -103,7 +112,9 @@ class AutolinkIndex:
                 text = source[start:end].replace('\0', '\ufffd')
                 if end < domain_start + len(domain):
                     return None
-                return LiteralLink(start, end, text, ('http://' if protocol == 'www.' else '') + text)
+                return LiteralLink(
+                    start, end, text, ('http://' if protocol == 'www.' else '') + text
+                )
             if previous is not None and (previous in ATEXT or previous == '/'):
                 return None
             email_start = prefix.end()
@@ -119,7 +130,12 @@ class AutolinkIndex:
             text = source[start:end]
             return LiteralLink(start, end, text, text)
         end = self.emails.get(start)
-        if end is None or end > maximum or previous is not None and (previous in ATEXT or previous == '/'):
+        if (
+            end is None
+            or end > maximum
+            or previous is not None
+            and (previous in ATEXT or previous == '/')
+        ):
             return None
         text = source[start:end]
         return LiteralLink(start, end, text, 'mailto:' + text)
@@ -136,7 +152,9 @@ def _index(state) -> AutolinkIndex:
 def _literal(state, silent: bool) -> bool:
     if state.linkLevel or state.env.get('_walle_image_label', 0):
         return False
-    link = _index(state).match(state.pos, state.posMax, state.src[state.pos - 1] if state.pos else None)
+    link = _index(state).match(
+        state.pos, state.posMax, state.src[state.pos - 1] if state.pos else None
+    )
     if link is None or not state.md.validateLink(link.href):
         return False
     if not silent:
@@ -156,12 +174,14 @@ def _text(state, silent: bool) -> bool:
     index = _index(state)
     next_index = bisect_right(index.starts, state.pos)
     candidate = index.starts[next_index] if next_index < len(index.starts) else state.posMax
-    terminator = state.md.inline.terminator_re.search(state.src, state.pos, min(candidate, state.posMax))
+    terminator = state.md.inline.terminator_re.search(
+        state.src, state.pos, min(candidate, state.posMax)
+    )
     end = min(candidate, terminator.start() if terminator else state.posMax, state.posMax)
     if end == state.pos:
         return False
     if not silent:
-        state.pending += state.src[state.pos:end]
+        state.pending += state.src[state.pos : end]
     state.pos = end
     return True
 

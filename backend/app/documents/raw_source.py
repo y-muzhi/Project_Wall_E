@@ -1,4 +1,5 @@
 """Capture inert flow source while the actual container offsets are active."""
+
 import re
 
 from markdown_it import MarkdownIt
@@ -10,7 +11,12 @@ def install_raw_source(parser: MarkdownIt) -> None:
         # Before normalize changes CRLF/CR and NULL. Line-local character
         # offsets remain compatible with the block parser's normalized source.
         state.env['_walle_original_lines'] = re.findall(r'[^\r\n]*(?:\r\n|\r|\n|$)', state.src)
-        state.env['_walle_normalized_starts'] = [0] + [match.end() for match in re.finditer(r'\r\n|\r|\n', state.src.replace('\r\n', '\n').replace('\r', '\n'))]
+        state.env['_walle_normalized_starts'] = [0] + [
+            match.end()
+            for match in re.finditer(
+                r'\r\n|\r|\n', state.src.replace('\r\n', '\n').replace('\r', '\n')
+            )
+        ]
 
     parser.core.ruler.before('normalize', 'walle-original-flow-source', remember)
 
@@ -47,6 +53,7 @@ def install_raw_source(parser: MarkdownIt) -> None:
                     lines.append(prefix + original[offset:])
                 token.meta['walle_raw_source'] = ''.join(lines)
             return accepted
+
         return wrapped
 
     parser.block.ruler.at('html_block', capture(html_block))

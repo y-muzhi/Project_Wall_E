@@ -3,6 +3,7 @@
 Stored values are checked, never normalized or repaired by a read. These checks
 cover Requirement's own fields, not the cross-aggregate lifecycle guard.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 import re
@@ -11,16 +12,34 @@ from typing import Mapping, Any
 from backend.app.shared.pagination import page_number, page_metadata
 from backend.app.shared.time import utc_milliseconds
 from backend.app.shared.validation import (
-    MISSING, keyword, object_fields, reject, strict_enum, strict_integer, title,
+    MISSING,
+    keyword,
+    object_fields,
+    reject,
+    strict_enum,
+    strict_integer,
+    title,
 )
 
 STATUSES = ('PLANNING', 'READY', 'IMPLEMENTING', 'COMPLETED', 'CLOSED')
 REQUIREMENT_TYPES = ('NEW', 'CHANGE')
 READ_FIELDS = (
-    'id', 'requirement_no', 'requirement_type', 'title', 'status',
-    'metadata_version', 'initial_message_id', 'discussion_version',
-    'document_work_state', 'active_operation_type', 'active_operation_id',
-    'created_at', 'updated_at', 'completed_at', 'closed_at', 'state_started_at',
+    'id',
+    'requirement_no',
+    'requirement_type',
+    'title',
+    'status',
+    'metadata_version',
+    'initial_message_id',
+    'discussion_version',
+    'document_work_state',
+    'active_operation_type',
+    'active_operation_id',
+    'created_at',
+    'updated_at',
+    'completed_at',
+    'closed_at',
+    'state_started_at',
 )
 STORED_FIELDS = (*READ_FIELDS, 'discussion_state_json')
 LIST_FIELDS = ('id', 'requirement_no', 'title', 'requirement_type', 'status', 'updated_at')
@@ -34,16 +53,23 @@ class CreateRequirementInput:
     idempotency_key: str
 
     def business_input(self) -> dict:
-        return {field: getattr(self, field) for field in ('title', 'requirement_type', 'initial_idea')}
+        return {
+            field: getattr(self, field) for field in ('title', 'requirement_type', 'initial_idea')
+        }
 
 
 def create_requirement_input(payload: object) -> CreateRequirementInput:
     from backend.app.shared.validation import initial_idea
     from backend.app.infrastructure.idempotency import canonical_input, request_key
+
     fields = ('title', 'requirement_type', 'initial_idea', 'idempotency_key')
     data = object_fields(payload, 'body', fields, fields)
-    request = CreateRequirementInput(title(data['title']), strict_enum(data['requirement_type'], 'requirement_type', REQUIREMENT_TYPES),
-        initial_idea(data['initial_idea']), request_key(data['idempotency_key'], 'idempotency_key'))
+    request = CreateRequirementInput(
+        title(data['title']),
+        strict_enum(data['requirement_type'], 'requirement_type', REQUIREMENT_TYPES),
+        initial_idea(data['initial_idea']),
+        request_key(data['idempotency_key'], 'idempotency_key'),
+    )
     for field, value in request.business_input().items():
         try:
             value.encode('utf-8')
@@ -56,7 +82,11 @@ def create_requirement_input(payload: object) -> CreateRequirementInput:
 def create_requirement_result(root: Mapping[str, Any], initial_message_id: int) -> dict:
     value = requirement_read_model(root)
     strict_integer(initial_message_id, 'initial_message_id')
-    if value['status'] != 'PLANNING' or value['document_work_state'] != 'IDLE' or value['initial_message_id'] != initial_message_id:
+    if (
+        value['status'] != 'PLANNING'
+        or value['document_work_state'] != 'IDLE'
+        or value['initial_message_id'] != initial_message_id
+    ):
         raise ValueError('Created requirement must be idle with its actual initial input')
     return {'requirement': value, 'initial_message_id': initial_message_id, 'documents': []}
 
@@ -72,8 +102,11 @@ class ListRequirementsInput:
 def _enum_array(value: object, field: str, choices: tuple[str, ...]) -> tuple[str, ...]:
     if type(value) is not list:
         reject(field, 'INVALID_TYPE', '必须是枚举数组且不能为null')
-    result = tuple(dict.fromkeys(strict_enum(item, f'{field}[{index}]', choices)
-                                 for index, item in enumerate(value)))
+    result = tuple(
+        dict.fromkeys(
+            strict_enum(item, f'{field}[{index}]', choices) for index, item in enumerate(value)
+        )
+    )
     return () if set(result) == set(choices) else result
 
 
@@ -88,7 +121,8 @@ def list_requirements_input(payload: object) -> ListRequirementsInput:
             except UnicodeEncodeError:
                 reject('keyword', 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
     return ListRequirementsInput(
-        term, _enum_array(data.get('status', []), 'status', STATUSES),
+        term,
+        _enum_array(data.get('status', []), 'status', STATUSES),
         _enum_array(data.get('requirement_type', []), 'requirement_type', REQUIREMENT_TYPES),
         page_number(data.get('page', 1)),
     )
@@ -114,11 +148,16 @@ class UpdateRequirementInput:
     idempotency_key: str
 
     def business_input(self) -> dict:
-        return {'requirement_id': self.requirement_id, 'expected_metadata_version': self.expected_metadata_version, 'changes': self.changes}
+        return {
+            'requirement_id': self.requirement_id,
+            'expected_metadata_version': self.expected_metadata_version,
+            'changes': self.changes,
+        }
 
 
 def update_requirement_input(payload: object) -> UpdateRequirementInput:
     from backend.app.infrastructure.idempotency import canonical_input, request_key
+
     fields = ('requirement_id', 'expected_metadata_version', 'changes', 'idempotency_key')
     data = object_fields(payload, 'body', fields, fields)
     submitted = object_fields(data['changes'], 'changes', ('title', 'status'))
@@ -133,9 +172,12 @@ def update_requirement_input(payload: object) -> UpdateRequirementInput:
             reject('changes.title', 'INVALID_FORMAT', '文本必须由有效Unicode码点组成')
     if 'status' in submitted:
         changes['status'] = strict_enum(submitted['status'], 'changes.status', STATUSES)
-    request = UpdateRequirementInput(requirement_id_input(data['requirement_id']),
-        strict_integer(data['expected_metadata_version'], 'expected_metadata_version'), changes,
-        request_key(data['idempotency_key'], 'idempotency_key'))
+    request = UpdateRequirementInput(
+        requirement_id_input(data['requirement_id']),
+        strict_integer(data['expected_metadata_version'], 'expected_metadata_version'),
+        changes,
+        request_key(data['idempotency_key'], 'idempotency_key'),
+    )
     canonical_input(request.business_input())
     return request
 
@@ -152,32 +194,70 @@ class DiscussionCommandInput:
     idempotency_key: str
 
     def business_input(self):
-        return {key: getattr(self, key) for key in ('requirement_id', 'expected_discussion_version', 'discussion_command')}
+        return {
+            key: getattr(self, key)
+            for key in ('requirement_id', 'expected_discussion_version', 'discussion_command')
+        }
 
 
 def discussion_command_input(payload):
     from backend.app.infrastructure.idempotency import request_key, canonical_input
     from backend.app.shared.validation import ordinary_text
     from .discussion import discussion_resources
-    fields = ('requirement_id', 'expected_discussion_version', 'discussion_command', 'idempotency_key')
+
+    fields = (
+        'requirement_id',
+        'expected_discussion_version',
+        'discussion_command',
+        'idempotency_key',
+    )
     data = object_fields(payload, 'body', fields, fields)
-    command = object_fields(data['discussion_command'], 'discussion_command',
-        ('type', 'target_document_id', 'source_refs', 'scope', 'topic_ref', 'phase_kind', 'closure_message', 'unresolved_refs', 'subject_ref', 'decision', 'description'), ('type',))
-    kind = strict_enum(command['type'], 'discussion_command.type', ('SET_BINDING', 'SET_FOCUS', 'CHANGE_PHASE', 'SET_DISPOSITION'))
-    fields = {'SET_BINDING': ('target_document_id', 'source_refs', 'scope'), 'SET_FOCUS': ('topic_ref',),
-        'CHANGE_PHASE': ('phase_kind', 'closure_message', 'unresolved_refs'), 'SET_DISPOSITION': ('subject_ref', 'decision', 'description')}[kind]
+    command = object_fields(
+        data['discussion_command'],
+        'discussion_command',
+        (
+            'type',
+            'target_document_id',
+            'source_refs',
+            'scope',
+            'topic_ref',
+            'phase_kind',
+            'closure_message',
+            'unresolved_refs',
+            'subject_ref',
+            'decision',
+            'description',
+        ),
+        ('type',),
+    )
+    kind = strict_enum(
+        command['type'],
+        'discussion_command.type',
+        ('SET_BINDING', 'SET_FOCUS', 'CHANGE_PHASE', 'SET_DISPOSITION'),
+    )
+    fields = {
+        'SET_BINDING': ('target_document_id', 'source_refs', 'scope'),
+        'SET_FOCUS': ('topic_ref',),
+        'CHANGE_PHASE': ('phase_kind', 'closure_message', 'unresolved_refs'),
+        'SET_DISPOSITION': ('subject_ref', 'decision', 'description'),
+    }[kind]
     command = object_fields(command, 'discussion_command', ('type', *fields), ('type', *fields))
     resources = discussion_resources()
+
     def named(name, value):
         if name == 'PhaseKind':
-            return strict_enum(value, 'phase_kind', ('DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW'))
+            return strict_enum(
+                value, 'phase_kind', ('DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW')
+            )
         if name == 'Ref':
             from backend.app.shared.validation import raw_text
+
             return raw_text(value, 'discussion_command', 1, 100)
         try:
             return resources.validate(name, value)
         except ValueError:
             reject('discussion_command', 'INVALID_FORMAT', '讨论命令的字段结构不合法')
+
     if kind == 'SET_BINDING':
         if command['target_document_id'] is not None:
             strict_integer(command['target_document_id'], 'target_document_id')
@@ -192,7 +272,9 @@ def discussion_command_input(payload):
     elif kind == 'CHANGE_PHASE':
         named('PhaseKind', command['phase_kind'])
         if command['closure_message'] is not None:
-            command['closure_message'] = ordinary_text(command['closure_message'], 'closure_message', 1, 1000)
+            command['closure_message'] = ordinary_text(
+                command['closure_message'], 'closure_message', 1, 1000
+            )
         if type(command['unresolved_refs']) is not list or len(command['unresolved_refs']) > 1000:
             reject('unresolved_refs', 'INVALID_FORMAT', '未决引用必须是有界数组')
         for ref in command['unresolved_refs']:
@@ -203,9 +285,12 @@ def discussion_command_input(payload):
         named('Ref', command['subject_ref'])
         strict_enum(command['decision'], 'decision', ('DEFER', 'NOT_APPLICABLE', 'DECLINE_DRAFT'))
         command['description'] = ordinary_text(command['description'], 'description', 1, 1000)
-    request = DiscussionCommandInput(requirement_id_input(data['requirement_id']),
-        strict_integer(data['expected_discussion_version'], 'expected_discussion_version'), command,
-        request_key(data['idempotency_key'], 'idempotency_key'))
+    request = DiscussionCommandInput(
+        requirement_id_input(data['requirement_id']),
+        strict_integer(data['expected_discussion_version'], 'expected_discussion_version'),
+        command,
+        request_key(data['idempotency_key'], 'idempotency_key'),
+    )
     try:
         canonical_input(request.business_input()).encode('utf-8')
     except UnicodeEncodeError:
@@ -215,12 +300,20 @@ def discussion_command_input(payload):
 
 def discussion_command_result(root):
     from .discussion import validate_discussion
-    return {'requirement_id': root['id'], 'discussion_version': root['discussion_version'],
-        'discussion': validate_discussion(root['discussion_state_json'])}
+
+    return {
+        'requirement_id': root['id'],
+        'discussion_version': root['discussion_version'],
+        'discussion': validate_discussion(root['discussion_state_json']),
+    }
 
 
 def _stored_time(value: object) -> None:
-    if type(value) is not str or re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z', value) is None:
+    if (
+        type(value) is not str
+        or re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z', value)
+        is None
+    ):
         raise ValueError('Invalid persisted UTC time')
     if utc_milliseconds(datetime.fromisoformat(value[:-1] + '+00:00')) != value:
         raise ValueError('Invalid persisted UTC time')
@@ -229,7 +322,10 @@ def _stored_time(value: object) -> None:
 def requirement_read_model(row: Mapping[str, Any]) -> dict[str, Any]:
     data = {field: row[field] for field in READ_FIELDS}
     strict_integer(data['id'], 'id')
-    if type(data['requirement_no']) is not str or re.fullmatch(r'REQ[0-9]{6}', data['requirement_no']) is None:
+    if (
+        type(data['requirement_no']) is not str
+        or re.fullmatch(r'REQ[0-9]{6}', data['requirement_no']) is None
+    ):
         raise ValueError('Invalid persisted requirement number')
     strict_enum(data['requirement_type'], 'requirement_type', REQUIREMENT_TYPES)
     strict_enum(data['status'], 'status', STATUSES)
@@ -249,8 +345,12 @@ def requirement_read_model(row: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError('Invalid closed state')
     if data['updated_at'] < data['created_at']:
         raise ValueError('Invalid requirement chronology')
-    occupancy = {'IDLE': None, 'MANUAL_EDITING': 'MANUAL_DRAFT',
-                 'GUIDE_ACTIVE': 'GUIDE_RUN', 'SUGGESTION_REVIEWING': 'SUGGESTION_BATCH'}
+    occupancy = {
+        'IDLE': None,
+        'MANUAL_EDITING': 'MANUAL_DRAFT',
+        'GUIDE_ACTIVE': 'GUIDE_RUN',
+        'SUGGESTION_REVIEWING': 'SUGGESTION_BATCH',
+    }
     strict_enum(data['document_work_state'], 'document_work_state', occupancy)
     expected = occupancy[data['document_work_state']]
     if data['active_operation_type'] != expected:
@@ -265,7 +365,9 @@ def requirement_read_model(row: Mapping[str, Any]) -> dict[str, Any]:
     return data
 
 
-def list_requirements_result(rows: list[Mapping[str, Any]], page: int, total: int) -> dict[str, Any]:
+def list_requirements_result(
+    rows: list[Mapping[str, Any]], page: int, total: int
+) -> dict[str, Any]:
     items = []
     for row in rows:
         model = requirement_read_model(row)

@@ -1,4 +1,5 @@
 """GFM row selection and plain-cell replacement; never replaces a whole table."""
+
 from dataclasses import dataclass
 import html
 import re
@@ -61,20 +62,36 @@ def table_model(block: ParsedBlock) -> Table:
 
 
 def select_row(table: Table, selector: dict) -> int:
-    if type(selector) is not dict or set(selector) != {'key_column_index', 'key_value'} or type(selector['key_column_index']) is not int or not 0 <= selector['key_column_index'] < len(table.headers) or type(selector['key_value']) is not str:
+    if (
+        type(selector) is not dict
+        or set(selector) != {'key_column_index', 'key_value'}
+        or type(selector['key_column_index']) is not int
+        or not 0 <= selector['key_column_index'] < len(table.headers)
+        or type(selector['key_value']) is not str
+    ):
         raise PatchInvalid('行选择条件必须使用有效列索引和精确文本键')
     column = selector['key_column_index']
-    matches = [index for index, row in enumerate(table.rows) if row.cells[column] == selector['key_value']]
+    matches = [
+        index for index, row in enumerate(table.rows) if row.cells[column] == selector['key_value']
+    ]
     if len(matches) != 1:
         raise TargetStale('表格键不能唯一定位原行')
     return matches[0]
 
 
 def validate_cells(value: dict, columns: int) -> tuple[str, ...]:
-    if type(value) is not dict or set(value) != {'cells'} or type(value['cells']) is not list or len(value['cells']) != columns or any(type(cell) is not str for cell in value['cells']):
+    if (
+        type(value) is not dict
+        or set(value) != {'cells'}
+        or type(value['cells']) is not list
+        or len(value['cells']) != columns
+        or any(type(cell) is not str for cell in value['cells'])
+    ):
         raise PatchInvalid('行内容必须只含与表头等长的文本cells数组')
     cells = tuple(value['cells'])
-    if sum(len(cell) for cell in cells) > 100_000 or any('\r' in cell or '\n' in cell for cell in cells):
+    if sum(len(cell) for cell in cells) > 100_000 or any(
+        '\r' in cell or '\n' in cell for cell in cells
+    ):
         raise PatchInvalid('GFM纯文本单元格不能含换行或超过容量')
     try:
         for cell in cells:
@@ -99,15 +116,26 @@ def replace_rows(table: Table, replacements: tuple[RowReplacement, ...]) -> str:
         if index in by_index:
             raise PatchInvalid('同一基线行不能重复修改')
         row = table.rows[index]
-        if type(replacement.original_content) is not str or replacement.original_content != row.markdown:
+        if (
+            type(replacement.original_content) is not str
+            or replacement.original_content != row.markdown
+        ):
             raise TargetStale('表格行原文已变化')
         cells = validate_cells({'cells': list(replacement.cells)}, len(table.headers))
-        ending = '\r\n' if row.markdown.endswith('\r\n') else '\n' if row.markdown.endswith('\n') else '\r' if row.markdown.endswith('\r') else ''
+        ending = (
+            '\r\n'
+            if row.markdown.endswith('\r\n')
+            else '\n'
+            if row.markdown.endswith('\n')
+            else '\r'
+            if row.markdown.endswith('\r')
+            else ''
+        )
         by_index[index] = '| ' + ' | '.join(_escape_cell(cell) for cell in cells) + ' |' + ending
     result = table.markdown
     for index in sorted(by_index, reverse=True):
         row = table.rows[index]
-        result = result[:row.start_offset] + by_index[index] + result[row.end_offset:]
+        result = result[: row.start_offset] + by_index[index] + result[row.end_offset :]
     # Independently reparse: exact requested plain cells must survive escaping,
     # and the table must not split or gain/drop rows. No silent data correction.
     parsed = parse_markdown(result)

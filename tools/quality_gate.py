@@ -13,8 +13,8 @@ from tempfile import TemporaryDirectory
 from time import monotonic
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGES = ('runner', 'frontend', 'typecheck', 'build', 'backend')
-LABELS = dict(zip(STAGES,('检查程序自检','前端测试','前端类型','临时生产构建','V1.5后端测试')))
+STAGES = ('runner', 'format', 'python-format', 'frontend', 'typecheck', 'build', 'backend')
+LABELS = dict(zip(STAGES,('检查程序自检','前端格式','后端格式','前端测试','前端类型','临时生产构建','V1.5后端测试')))
 
 
 def backend_files(root=ROOT):
@@ -37,7 +37,9 @@ def environment(temporary, source=None):
 
 def fingerprint(root=ROOT):
     digest=hashlib.sha256()
-    files={root/'frontend/package.json',root/'frontend/package-lock.json',root/'backend/requirements.lock'}
+    files={root/'frontend/package.json',root/'frontend/package-lock.json',root/'backend/requirements.lock',root/'backend/requirements-dev.lock',root/'ruff.toml',root/'frontend/.prettierrc.json'}
+    files.update((root/'frontend').glob('*config*'))
+    files.update((root/'.github/workflows').glob('*.yml'))
     for area in ('backend/app','backend/tests','backend/resources','frontend/src','frontend/tests','tools'):
         files.update(p for p in (root/area).rglob('*') if p.is_file() and not any(part in ('__pycache__','node_modules','.pytest_cache') for part in p.parts))
     for path in sorted(files):
@@ -48,10 +50,12 @@ def fingerprint(root=ROOT):
 def commands(temporary):
     preload=[shutil.which('node') or 'node','--require',str(ROOT/'tools/quality_node.cjs')]
     tests=sorted((ROOT/'frontend/tests').glob('*.test.mjs'));backend=backend_files()
-    if not tests or not backend or any(not p.is_file() for p in backend):
+    if not (ROOT/'tools/tests/test_quality_gate.py').is_file() or not tests or not backend or any(not p.is_file() for p in backend):
         raise RuntimeError('Test inventory is empty or incomplete')
     return {
         'runner':([sys.executable,'-B','-m','unittest','discover','-s','tools/tests','-p','test_quality_gate.py','-q'],ROOT),
+        'python-format':([sys.executable,'-m','ruff','format','--no-cache','--check','backend/app'],ROOT),
+        'format':([*preload,'node_modules/prettier/bin/prettier.cjs','--check','src/**/*.{ts,tsx,css}'],ROOT/'frontend'),
         'frontend':([*preload,'--test','--test-isolation=none','--test-reporter=tap',*[str(p) for p in tests]],ROOT/'frontend'),
         'typecheck':([*preload,'node_modules/typescript/bin/tsc','--noEmit'],ROOT/'frontend'),
         'build':([*preload,'node_modules/vite/bin/vite.js','build','--outDir',str(temporary/'frontend-build')],ROOT/'frontend'),
@@ -93,6 +97,8 @@ def run_stage(name, command, cwd, env, timeout):
                 result['code']=process.returncode
                 result['status']='PASSED' if process.returncode==0 else 'FAILED'
                 result['summary'],result['failures']=summarize(output,process.returncode)
+                if name in ('runner','frontend') and re.search(r'(?:Ran 0 tests|^# tests 0$)',output,re.M):
+                    result.update(status='FAILED',summary='没有实际执行测试')
                 break
             except subprocess.TimeoutExpired:
                 elapsed=monotonic()-started
@@ -157,7 +163,8 @@ def main(argv=None):
     except (OSError,subprocess.SubprocessError):head='unavailable'
     temporary=None;cleanup=False
     try:
-        with TemporaryDirectory(prefix='walle-quality-') as directory:
+        # EV fixtures contain deep audit paths; reserve Windows MAX_PATH space.
+        with TemporaryDirectory(prefix='wq-') as directory:
             temporary=Path(directory);command_map=commands(temporary);env=environment(temporary)
             for index,name in enumerate(selected,1):
                 print(f'[{index}/{len(selected)}] {name}',flush=True)
@@ -168,4 +175,7 @@ def main(argv=None):
     except (OSError,RuntimeError) as error:print('Preparation/cleanup failed: '+type(error).__name__,flush=True)
     path,code=write_report(results,selected,before,fingerprint(),temporary,cleanup,started,head)
     print('Report: '+str(path.relative_to(ROOT)),flush=True)
+    if os.environ.get('GITHUB_STEP_SUMMARY'):
+        with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as handle:
+            handle.write(path.read_text(encoding='utf-8'))
     return code

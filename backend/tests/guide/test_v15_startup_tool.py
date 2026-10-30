@@ -64,8 +64,9 @@ def test_explicit_start_uses_same_release_admission_and_private_environment_only
         store=CollaborationAdmission(workspace[0],workspace[1].process_lock,workspace[2])
         assert store.approve_saved_call(workspace[0].path,1,operation_time(None))['state']=='LIVE_VERIFIED'
     monkeypatch.setenv('WALLE_DATABASE_PATH',str(workspace[0].path))
-    for key in ('WALLE_MODEL_API_KEY','WALLE_MODEL_ID','WALLE_MODEL_VERSION'):
-        monkeypatch.setenv(key,'old-environment-value')
+    monkeypatch.setenv('WALLE_MODEL_API_KEY','old-environment-value')
+    monkeypatch.setenv('WALLE_MODEL_ID',PROFILE.model_name)
+    monkeypatch.setenv('WALLE_MODEL_VERSION',PROFILE.model_version)
     secret='startup-private-fixture-key-only';seen=[]
     monkeypatch.setattr(value,'read_local_credential',lambda path:secret)
     monkeypatch.setattr('backend.app.__main__.main',lambda:seen.append({key:os.environ[key]
@@ -73,3 +74,13 @@ def test_explicit_start_uses_same_release_admission_and_private_environment_only
     assert value.main(['--start','--credential-file',str(workspace[0].path.with_name('explicit.env'))])==0
     assert seen==[{'WALLE_MODEL_API_KEY':secret,'WALLE_MODEL_ID':PROFILE.model_name,'WALLE_MODEL_VERSION':PROFILE.model_version}]
     assert secret not in capsys.readouterr().out
+
+
+def test_invalid_model_environment_is_rejected_before_credentials_or_start(monkeypatch):
+    value=tool()
+    def forbidden(*args,**kwargs):raise AssertionError('Invalid profile must not read credentials or start')
+    monkeypatch.setattr(value,'read_local_credential',forbidden)
+    monkeypatch.setattr('backend.app.__main__.main',forbidden)
+    monkeypatch.setenv('WALLE_MODEL_ID','unapproved-model')
+    with pytest.raises(ConfigInvalid,match='approved exact model/version'):
+        value.main(['--start'])

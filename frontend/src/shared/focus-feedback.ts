@@ -6,13 +6,32 @@ export function installFocusFeedback(document: Document): () => void {
   const previous = root.getAttribute('data-focus-input');
   root.setAttribute('data-focus-input', 'keyboard');
   const pointer = () => root.setAttribute('data-focus-input', 'pointer');
-  const navigationKeys = new Set(['Tab', 'Enter', ' ', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
+  const navigationKeys = new Set([
+    'Tab',
+    'Enter',
+    ' ',
+    'Escape',
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'Home',
+    'End',
+    'PageUp',
+    'PageDown',
+  ]);
   const keyboard = (event: KeyboardEvent) => {
-    if (!event.isComposing && !event.altKey && !event.ctrlKey && !event.metaKey && navigationKeys.has(event.key)) {
+    if (
+      !event.isComposing &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      navigationKeys.has(event.key)
+    ) {
       root.setAttribute('data-focus-input', 'keyboard');
     }
   };
-  const capture = {capture: true};
+  const capture = { capture: true };
   document.addEventListener('pointerdown', pointer, capture);
   document.addEventListener('keydown', keyboard, capture);
   return () => {

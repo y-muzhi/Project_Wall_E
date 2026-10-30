@@ -1,10 +1,22 @@
 """I27/I28/I37 exact read transport and safe public projections."""
+
 from dataclasses import dataclass
 from backend.app.shared.http_boundary import request_query
 from backend.app.shared.http_projection import page
 from backend.app.shared.validation import decimal_integer
-from .contracts import list_comments_input, comment_list_item, comment_read_model, comment_index_model
-from .contracts import create_comment_input, edit_comment_input, resolve_comment_input, reopen_comment_input, delete_comment_input
+from .contracts import (
+    list_comments_input,
+    comment_list_item,
+    comment_read_model,
+    comment_index_model,
+)
+from .contracts import (
+    create_comment_input,
+    edit_comment_input,
+    resolve_comment_input,
+    reopen_comment_input,
+    delete_comment_input,
+)
 from backend.app.shared.http_commands import CommandRequest
 from backend.app.shared.http_boundary import idempotency_header
 from backend.app.shared.validation import object_fields
@@ -18,11 +30,19 @@ class ListCommentsRequest:
     def parse(cls, request):
         payload = request_query(request, singles=('document_id', 'page'))
         payload['document_id'] = decimal_integer(payload.get('document_id'), 'document_id')
-        payload['requirement_id'] = decimal_integer(request.path_params['requirement_id'], 'requirement_id')
+        payload['requirement_id'] = decimal_integer(
+            request.path_params['requirement_id'], 'requirement_id'
+        )
         if 'page' in payload:
             payload['page'] = decimal_integer(payload['page'], 'page', maximum=100000)
         validated = list_comments_input(payload)
-        return cls({'requirement_id': validated.requirement_id, 'document_id': validated.document_id, 'page': validated.page})
+        return cls(
+            {
+                'requirement_id': validated.requirement_id,
+                'document_id': validated.document_id,
+                'page': validated.page,
+            }
+        )
 
 
 class ListCommentsResponse:
@@ -32,9 +52,13 @@ class ListCommentsResponse:
     def project(data, request):
         def item(value):
             projected = comment_list_item(value)
-            if projected['requirement_id'] != request.payload['requirement_id'] or projected['document_id'] != request.payload['document_id']:
+            if (
+                projected['requirement_id'] != request.payload['requirement_id']
+                or projected['document_id'] != request.payload['document_id']
+            ):
                 raise ValueError('Comments must belong to the requested requirement')
             return projected
+
         return page(data, item, request.payload['page'])
 
 
@@ -67,7 +91,10 @@ class GetCommentIndexRequest:
     @classmethod
     def parse(cls, request):
         query = request_query(request, singles=('document_id',))
-        return cls(decimal_integer(request.path_params['requirement_id'], 'requirement_id'), decimal_integer(query.get('document_id'), 'document_id'))
+        return cls(
+            decimal_integer(request.path_params['requirement_id'], 'requirement_id'),
+            decimal_integer(query.get('document_id'), 'document_id'),
+        )
 
 
 class GetCommentIndexResponse:
@@ -76,27 +103,57 @@ class GetCommentIndexResponse:
     @staticmethod
     def project(data, request):
         value = comment_index_model(data)
-        if value['requirement_id'] != request.requirement_id or value['document_id'] != request.document_id:
+        if (
+            value['requirement_id'] != request.requirement_id
+            or value['document_id'] != request.document_id
+        ):
             raise ValueError('Index response belongs to another requirement')
         return value, None
 
 
 class CreateCommentRequest(CommandRequest):
-    body_fields = ('document_id', 'expected_content_version', 'content', 'anchor_type', 'block_id', 'selection')
+    body_fields = (
+        'document_id',
+        'expected_content_version',
+        'content',
+        'anchor_type',
+        'block_id',
+        'selection',
+    )
     mandatory = ('document_id', 'expected_content_version', 'content', 'anchor_type', 'block_id')
     validate = staticmethod(create_comment_input)
-    normalize = staticmethod(lambda payload, validated: {**validated.business_input(), 'idempotency_key': validated.idempotency_key})
+    normalize = staticmethod(
+        lambda payload, validated: {
+            **validated.business_input(),
+            'idempotency_key': validated.idempotency_key,
+        }
+    )
 
 
 class CreateCommentResponse:
     status = 201
     success_code = 'COMMENT_CREATED'
-    errors = ListCommentsResponse.errors | {'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'CONTENT_VERSION_CONFLICT', 'ANCHOR_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED'}
+    errors = ListCommentsResponse.errors | {
+        'STATE_CONFLICT',
+        'WORK_STATE_CONFLICT',
+        'WORK_STATE_INCONSISTENT',
+        'CONTENT_VERSION_CONFLICT',
+        'ANCHOR_INVALID',
+        'IDEMPOTENCY_CONFLICT',
+        'REQUEST_IN_PROGRESS',
+        'CAPACITY_EXHAUSTED',
+    }
 
     @staticmethod
     def project(data, request):
         value = comment_read_model(data)
-        if value['requirement_id'] != request.payload['requirement_id'] or value['document_id'] != request.payload['document_id'] or value['status'] != 'OPEN' or value['anchor_status'] != 'ATTACHED' or value['deleted_at'] is not None:
+        if (
+            value['requirement_id'] != request.payload['requirement_id']
+            or value['document_id'] != request.payload['document_id']
+            or value['status'] != 'OPEN'
+            or value['anchor_status'] != 'ATTACHED'
+            or value['deleted_at'] is not None
+        ):
             raise ValueError('Creation response must reflect the accepted new comment')
         return value, None
 
@@ -110,8 +167,15 @@ class CommentActionRequest:
     @classmethod
     def parse(cls, request, body=None):
         request_query(request)
-        payload = {} if cls.body_fields is None else dict(object_fields(body, 'body', cls.body_fields, cls.body_fields))
-        payload.update(comment_id=decimal_integer(request.path_params['comment_id'], 'comment_id'), idempotency_key=idempotency_header(request))
+        payload = (
+            {}
+            if cls.body_fields is None
+            else dict(object_fields(body, 'body', cls.body_fields, cls.body_fields))
+        )
+        payload.update(
+            comment_id=decimal_integer(request.path_params['comment_id'], 'comment_id'),
+            idempotency_key=idempotency_header(request),
+        )
         validated = cls.validate(payload)
         return cls({**validated.business_input(), 'idempotency_key': validated.idempotency_key})
 
@@ -135,7 +199,12 @@ class DeleteCommentRequest(CommentActionRequest):
 
 class EditCommentResponse:
     success_code = 'COMMENT_UPDATED'
-    errors = ListCommentsResponse.errors | {'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS'}
+    errors = ListCommentsResponse.errors | {
+        'STATE_CONFLICT',
+        'WORK_STATE_CONFLICT',
+        'IDEMPOTENCY_CONFLICT',
+        'REQUEST_IN_PROGRESS',
+    }
 
     @staticmethod
     def project(data, request):

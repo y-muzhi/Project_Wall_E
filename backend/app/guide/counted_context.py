@@ -5,6 +5,7 @@ again as its actual serialized text. Private ORCH/audit integration is wired;
 Legacy candidates retain their pending-proof identity. DeepSeek v3 uses the
 separately approved empirical reserve, never a universal compatibility proof.
 """
+
 from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
@@ -13,7 +14,12 @@ from backend.app.infrastructure.audit_data import audit_json
 from backend.app.infrastructure.model_profile import ModelProfile, MODEL_ID, DEFAULT_PROFILE
 from backend.app.infrastructure.resources import ConfigInvalid, FrozenFunction
 from backend.app.infrastructure.schema_transport import compact, function_schema
-from backend.app.infrastructure.tokenization import TokenCounts, integer, restore_measurement, measurement_summary
+from backend.app.infrastructure.tokenization import (
+    TokenCounts,
+    integer,
+    restore_measurement,
+    measurement_summary,
+)
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.shared.validation import strict_json_object
 from .context_builder import BuiltContext, ContextLimitExceeded, assemble_input, serialize_input
@@ -39,10 +45,18 @@ PROJECTION_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v9/strategy.json'
 PROJECTION_RELEASE_SHA256 = '64057f4547543a8726351e30f02256984ca30d98a013b57c49f1090fe21236d1'
 FULL_PROJECTION_RELEASE_PATH = RELEASE_PATH.parents[1] / 'v10/strategy.json'
 FULL_PROJECTION_RELEASE_SHA256 = 'acccd8979c83e486896ed49883da36bc88d93eb27f614c9421d6e1eae86fd2a1'
-PRACTICAL_RELEASES = frozenset({PRACTICAL_RELEASE_SHA256, EXPANDED_RELEASE_SHA256,
-    LAYOUT_RELEASE_SHA256, FULL_LAYOUT_RELEASE_SHA256,
-    PROGRESSION_RELEASE_SHA256, FULL_PROGRESSION_RELEASE_SHA256,
-    PROJECTION_RELEASE_SHA256, FULL_PROJECTION_RELEASE_SHA256})
+PRACTICAL_RELEASES = frozenset(
+    {
+        PRACTICAL_RELEASE_SHA256,
+        EXPANDED_RELEASE_SHA256,
+        LAYOUT_RELEASE_SHA256,
+        FULL_LAYOUT_RELEASE_SHA256,
+        PROGRESSION_RELEASE_SHA256,
+        FULL_PROGRESSION_RELEASE_SHA256,
+        PROJECTION_RELEASE_SHA256,
+        FULL_PROJECTION_RELEASE_SHA256,
+    }
+)
 
 
 def release_identity(profile=None, *, release_sha256=None):
@@ -98,9 +112,15 @@ class CountedContext(BuiltContext):
 
 
 def counting_digest_for_function(profile, function):
-    selected = {'v3': EXPANDED_RELEASE_SHA256, 'v4': LAYOUT_RELEASE_SHA256, 'v5': FULL_LAYOUT_RELEASE_SHA256,
-        'v6': PROGRESSION_RELEASE_SHA256, 'v7': FULL_PROGRESSION_RELEASE_SHA256,
-        'v8': PROJECTION_RELEASE_SHA256, 'v9': FULL_PROJECTION_RELEASE_SHA256}
+    selected = {
+        'v3': EXPANDED_RELEASE_SHA256,
+        'v4': LAYOUT_RELEASE_SHA256,
+        'v5': FULL_LAYOUT_RELEASE_SHA256,
+        'v6': PROGRESSION_RELEASE_SHA256,
+        'v7': FULL_PROGRESSION_RELEASE_SHA256,
+        'v8': PROJECTION_RELEASE_SHA256,
+        'v9': FULL_PROJECTION_RELEASE_SHA256,
+    }
     return release_identity(profile, release_sha256=selected.get(function.version))[1]
 
 
@@ -112,11 +132,18 @@ def counting_release_for_function(profile, function):
 
 def candidate_texts(value, function, system):
     from .context_projection import projected, counting_parts
-    parts = counting_parts(value, function) if projected(function) else tuple(compact(value[key]) for key in ('user_input', 'source', 'template', 'history'))
+
+    parts = (
+        counting_parts(value, function)
+        if projected(function)
+        else tuple(compact(value[key]) for key in ('user_input', 'source', 'template', 'history'))
+    )
     return (system, serialize_input(value, function), *parts)
 
 
-async def compile_counted_candidate(context, function: FrozenFunction, profile: ModelProfile, *, counter):
+async def compile_counted_candidate(
+    context, function: FrozenFunction, profile: ModelProfile, *, counter
+):
     """Private candidate boundary: injected counter never grants Chat permission.
 
     Successful compilation proves only the configured budget calculation
@@ -137,19 +164,36 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
     value = assemble_input(context, function)
     transport = function_schema(function)
     system = function.prompt + '\n' + transport.schema_json
-    required = set(context['scope']['required_read_block_ids']) | {item['block_id'] for item in value['allowed_targets']}
+    required = set(context['scope']['required_read_block_ids']) | {
+        item['block_id'] for item in value['allowed_targets']
+    }
     required.update(value['template']['locked_heading_block_ids'])
-    optional = [item['metadata']['block_id'] for item in value['current_document']['read_blocks'] if item['metadata']['block_id'] not in required]
+    optional = [
+        item['metadata']['block_id']
+        for item in value['current_document']['read_blocks']
+        if item['metadata']['block_id'] not in required
+    ]
     history_by_id = {item['id']: item for item in context['history']}
     removed_history, removed_neighbors, attempts = [], [], []
     budget = release['budget']
 
     def update_manifest():
-        originals = [context['user_input'], *(history_by_id[item['id']] for item in value['history'])]
+        originals = [
+            context['user_input'],
+            *(history_by_id[item['id']] for item in value['history']),
+        ]
         ids = {item['id'] for item in originals}
-        ids.update(item['reply_to_message_id'] for item in originals if item['message_type'] == 'CARD_RESPONSE')
-        value['read_manifest']['message_ids'] = [identity for identity in context['read_manifest']['message_ids'] if identity in ids]
-        value['read_manifest']['block_ids'] = [item['metadata']['block_id'] for item in value['current_document']['read_blocks']]
+        ids.update(
+            item['reply_to_message_id']
+            for item in originals
+            if item['message_type'] == 'CARD_RESPONSE'
+        )
+        value['read_manifest']['message_ids'] = [
+            identity for identity in context['read_manifest']['message_ids'] if identity in ids
+        ]
+        value['read_manifest']['block_ids'] = [
+            item['metadata']['block_id'] for item in value['current_document']['read_blocks']
+        ]
 
     while True:
         # Validation and exact ordering are repeated after every whole-item cut.
@@ -158,110 +202,268 @@ async def compile_counted_candidate(context, function: FrozenFunction, profile: 
         texts = candidate_texts(value, function, system)
         result = await counter.count(profile, texts)
         hashes = tuple(hashlib.sha256(text.encode('utf-8')).hexdigest() for text in texts)
-        if type(result) is not TokenCounts or result.model != model or result.text_sha256 != hashes or len(result.counts) != len(texts):
+        if (
+            type(result) is not TokenCounts
+            or result.model != model
+            or result.text_sha256 != hashes
+            or len(result.counts) != len(texts)
+        ):
             raise ConfigInvalid('Text counts do not belong to this exact candidate')
         try:
             counts = tuple(integer(count) for count in result.counts)
             # The request hash must bind the complete exact model/text batch.
-            expected_request = hashlib.sha256(compact({'model': model, 'text': list(texts)}).encode('utf-8')).hexdigest()
-            if result.request_sha256 != expected_request: raise ValueError('Count request mismatch')
+            expected_request = hashlib.sha256(
+                compact({'model': model, 'text': list(texts)}).encode('utf-8')
+            ).hexdigest()
+            if result.request_sha256 != expected_request:
+                raise ValueError('Count request mismatch')
         except (ValueError, TypeError) as error:
             raise ConfigInvalid('Text counts are invalid') from error
-        attempts.append({'attempt_no': len(attempts)+1, 'removed_history_ids': list(removed_history),
-                         'removed_neighbor_ids': list(removed_neighbors), 'measurement': result.evidence})
+        attempts.append(
+            {
+                'attempt_no': len(attempts) + 1,
+                'removed_history_ids': list(removed_history),
+                'removed_neighbor_ids': list(removed_neighbors),
+                'measurement': result.evidence,
+            }
+        )
         input_tokens = counts[0] + counts[1] + release['framing_reserve_candidate']
-        evidence = {'release_sha256': digest, 'strategy': release['strategy'],
-                    'compatibility_proved': False, 'framing_reserve_candidate': release['framing_reserve_candidate'],
-                    'schema': transport.evidence, 'counted_texts': release['counted_texts'],
-                    'count_attempts': attempts, 'input_tokens_candidate': input_tokens}
+        evidence = {
+            'release_sha256': digest,
+            'strategy': release['strategy'],
+            'compatibility_proved': False,
+            'framing_reserve_candidate': release['framing_reserve_candidate'],
+            'schema': transport.evidence,
+            'counted_texts': release['counted_texts'],
+            'count_attempts': attempts,
+            'input_tokens_candidate': input_tokens,
+        }
         if digest in PRACTICAL_RELEASES:
             evidence['admission_mode'] = PRACTICAL_MODE
         # Count calls have separate identities; audit overflow cannot silently
         # discard their history or authorize Chat. Credentials remain private.
         evidence_json = audit_json(evidence, credentials=(profile.api_key,))
-        for count, limit in zip((counts[0], counts[2], counts[3], counts[4]),
-                               (budget['prompt_tokens'], budget['current_user_tokens'], budget['source_tokens'], budget['template_tokens'])):
+        for count, limit in zip(
+            (counts[0], counts[2], counts[3], counts[4]),
+            (
+                budget['prompt_tokens'],
+                budget['current_user_tokens'],
+                budget['source_tokens'],
+                budget['template_tokens'],
+            ),
+        ):
             if count > limit:
                 raise ContextLimitExceeded('Required context exceeds its approved token budget')
-        exceeds_input = input_tokens > budget['input_tokens'] or input_tokens + budget['output_tokens'] > budget['total_tokens']
+        exceeds_input = (
+            input_tokens > budget['input_tokens']
+            or input_tokens + budget['output_tokens'] > budget['total_tokens']
+        )
         if value['history'] and (counts[5] > budget['history_tokens'] or exceeds_input):
-            removed_history.append(value['history'].pop(0)['id']); update_manifest(); continue
+            removed_history.append(value['history'].pop(0)['id'])
+            update_manifest()
+            continue
         if counts[5] > budget['history_tokens']:
             raise ContextLimitExceeded('Empty history exceeds its approved token budget')
         if exceeds_input and optional:
             identity = optional.pop(0)
-            value['current_document']['read_blocks'] = [item for item in value['current_document']['read_blocks'] if item['metadata']['block_id'] != identity]
-            removed_neighbors.append(identity); update_manifest(); continue
+            value['current_document']['read_blocks'] = [
+                item
+                for item in value['current_document']['read_blocks']
+                if item['metadata']['block_id'] != identity
+            ]
+            removed_neighbors.append(identity)
+            update_manifest()
+            continue
         if exceeds_input:
             raise ContextLimitExceeded('Required context exceeds its approved token budget')
         from .context_projection import projected, make_basis
+
         basis = compact(make_basis(value, function)) if projected(function) else None
-        return CountedContext(system, encoded, compact(value['read_manifest']),
-                              len(system.encode('utf-8'))+len(encoded.encode('utf-8')),
-                              tuple(removed_history), tuple(removed_neighbors), input_tokens, evidence_json, basis_json=basis)
+        return CountedContext(
+            system,
+            encoded,
+            compact(value['read_manifest']),
+            len(system.encode('utf-8')) + len(encoded.encode('utf-8')),
+            tuple(removed_history),
+            tuple(removed_neighbors),
+            input_tokens,
+            evidence_json,
+            basis_json=basis,
+        )
 
 
 def counting_snapshot(evidence):
     """Versioned private Chat snapshot; count raw responses stay in the journal."""
-    return {**evidence, 'audit_format':'counts_summary_v1', 'count_attempts':[
-        {**attempt,'measurement':measurement_summary(attempt['measurement'])} for attempt in evidence['count_attempts']]}
+    return {
+        **evidence,
+        'audit_format': 'counts_summary_v1',
+        'count_attempts': [
+            {**attempt, 'measurement': measurement_summary(attempt['measurement'])}
+            for attempt in evidence['count_attempts']
+        ],
+    }
 
 
-def verify_counting_evidence(actual, function, *, system, input_json, manifest_json, evidence, summary=False, profile=None):
+def verify_counting_evidence(
+    actual, function, *, system, input_json, manifest_json, evidence, summary=False, profile=None
+):
     """Replay exact candidates from actual C03 without I/O or token guesses.
 
     Every retained/removed item, text hash, count ownership and each single cut
     must reproduce the final input. This gate grants no sending permission.
     """
     try:
-        if type(evidence) is not dict:raise ValueError('Counting evidence required')
-        digest=evidence.get('release_sha256')
-        release=counting_release(profile,release_sha256=digest);policy=function.context_policy
-        if digest!=release_identity(profile,release_sha256=digest)[1]:raise ValueError('Counting release missing')
-        if function.version in ('v4', 'v5', 'v6', 'v7', 'v8', 'v9') and digest != counting_digest_for_function(profile, function):raise ValueError('Counting release does not belong to this layout')
-        if release.get('decision') in ('CTX-001', 'FLOW-002', 'CTX-002-A') and (release.get('function_version') != function.version or release.get('function_manifest_sha256') != function.manifest_sha256):raise ValueError('Layout counting identity differs from the actual Function')
-        reserve=release['framing_reserve_candidate']
-        model=MODEL_ID if profile is None else profile.model_name
-        if type(reserve) is not int or reserve < 0:raise ValueError('Model-specific framing reserve is unavailable')
-        if policy['budget']!=release['budget'] or policy['trim_order']!=release['trim_order']:raise ValueError('Counting policy')
-        fields={'release_sha256','strategy','compatibility_proved','framing_reserve_candidate','schema','counted_texts','count_attempts','input_tokens_candidate'}
+        if type(evidence) is not dict:
+            raise ValueError('Counting evidence required')
+        digest = evidence.get('release_sha256')
+        release = counting_release(profile, release_sha256=digest)
+        policy = function.context_policy
+        if digest != release_identity(profile, release_sha256=digest)[1]:
+            raise ValueError('Counting release missing')
+        if function.version in (
+            'v4',
+            'v5',
+            'v6',
+            'v7',
+            'v8',
+            'v9',
+        ) and digest != counting_digest_for_function(profile, function):
+            raise ValueError('Counting release does not belong to this layout')
+        if release.get('decision') in ('CTX-001', 'FLOW-002', 'CTX-002-A') and (
+            release.get('function_version') != function.version
+            or release.get('function_manifest_sha256') != function.manifest_sha256
+        ):
+            raise ValueError('Layout counting identity differs from the actual Function')
+        reserve = release['framing_reserve_candidate']
+        model = MODEL_ID if profile is None else profile.model_name
+        if type(reserve) is not int or reserve < 0:
+            raise ValueError('Model-specific framing reserve is unavailable')
+        if policy['budget'] != release['budget'] or policy['trim_order'] != release['trim_order']:
+            raise ValueError('Counting policy')
+        fields = {
+            'release_sha256',
+            'strategy',
+            'compatibility_proved',
+            'framing_reserve_candidate',
+            'schema',
+            'counted_texts',
+            'count_attempts',
+            'input_tokens_candidate',
+        }
         if digest in PRACTICAL_RELEASES:
             fields.add('admission_mode')
-            if evidence.get('admission_mode')!=PRACTICAL_MODE:raise ValueError('Practical admission identity differs')
-        if type(evidence) is not dict or set(evidence)!=fields | ({'audit_format'} if summary else set()):raise ValueError('Counting fields')
-        transport=function_schema(function)
-        if evidence['release_sha256']!=digest or evidence['strategy']!=release['strategy'] or evidence['compatibility_proved'] is not False or type(evidence['framing_reserve_candidate']) is not int or evidence['framing_reserve_candidate']!=reserve or canonical_input(evidence['schema'])!=canonical_input(transport.evidence) or evidence['counted_texts']!=release['counted_texts'] or summary and evidence['audit_format']!='counts_summary_v1':raise ValueError('Counting release identity')
-        expected_system=function.prompt+'\n'+transport.schema_json
-        if system!=expected_system:raise ValueError('Transport System differs')
-        value=assemble_input(actual,function);budget=release['budget']
-        required=set(actual['scope']['required_read_block_ids']) | {item['block_id'] for item in value['allowed_targets']} | set(value['template']['locked_heading_block_ids'])
-        optional=[item['metadata']['block_id'] for item in value['current_document']['read_blocks'] if item['metadata']['block_id'] not in required]
-        history_by_id={item['id']:item for item in actual['history']}
-        removed_history,removed_neighbors=[],[]
-        attempts=evidence['count_attempts']
-        if type(attempts) is not list or not attempts or len(attempts)>1+len(value['history'])+len(optional):raise ValueError('Count attempts')
-        for index,attempt in enumerate(attempts):
-            if type(attempt) is not dict or set(attempt)!={'attempt_no','removed_history_ids','removed_neighbor_ids','measurement'} or type(attempt['attempt_no']) is not int or attempt['attempt_no']!=index+1 or compact(attempt['removed_history_ids'])!=compact(removed_history) or compact(attempt['removed_neighbor_ids'])!=compact(removed_neighbors):raise ValueError('Count cut sequence')
-            encoded=serialize_input(value,function)
-            texts=candidate_texts(value,function,system)
-            counts=restore_measurement(attempt['measurement'],texts,raw_required=not summary,expected_model=model).counts
-            if any(count>budget[limit] for count,limit in zip((counts[0],counts[2],counts[3],counts[4]),('prompt_tokens','current_user_tokens','source_tokens','template_tokens'))):raise ValueError('Required count overflow')
-            total=counts[0]+counts[1]+reserve
-            overflow=total>budget['input_tokens'] or total+budget['output_tokens']>budget['total_tokens']
-            if value['history'] and (counts[5]>budget['history_tokens'] or overflow):
+            if evidence.get('admission_mode') != PRACTICAL_MODE:
+                raise ValueError('Practical admission identity differs')
+        if type(evidence) is not dict or set(evidence) != fields | (
+            {'audit_format'} if summary else set()
+        ):
+            raise ValueError('Counting fields')
+        transport = function_schema(function)
+        if (
+            evidence['release_sha256'] != digest
+            or evidence['strategy'] != release['strategy']
+            or evidence['compatibility_proved'] is not False
+            or type(evidence['framing_reserve_candidate']) is not int
+            or evidence['framing_reserve_candidate'] != reserve
+            or canonical_input(evidence['schema']) != canonical_input(transport.evidence)
+            or evidence['counted_texts'] != release['counted_texts']
+            or summary
+            and evidence['audit_format'] != 'counts_summary_v1'
+        ):
+            raise ValueError('Counting release identity')
+        expected_system = function.prompt + '\n' + transport.schema_json
+        if system != expected_system:
+            raise ValueError('Transport System differs')
+        value = assemble_input(actual, function)
+        budget = release['budget']
+        required = (
+            set(actual['scope']['required_read_block_ids'])
+            | {item['block_id'] for item in value['allowed_targets']}
+            | set(value['template']['locked_heading_block_ids'])
+        )
+        optional = [
+            item['metadata']['block_id']
+            for item in value['current_document']['read_blocks']
+            if item['metadata']['block_id'] not in required
+        ]
+        history_by_id = {item['id']: item for item in actual['history']}
+        removed_history, removed_neighbors = [], []
+        attempts = evidence['count_attempts']
+        if (
+            type(attempts) is not list
+            or not attempts
+            or len(attempts) > 1 + len(value['history']) + len(optional)
+        ):
+            raise ValueError('Count attempts')
+        for index, attempt in enumerate(attempts):
+            if (
+                type(attempt) is not dict
+                or set(attempt)
+                != {'attempt_no', 'removed_history_ids', 'removed_neighbor_ids', 'measurement'}
+                or type(attempt['attempt_no']) is not int
+                or attempt['attempt_no'] != index + 1
+                or compact(attempt['removed_history_ids']) != compact(removed_history)
+                or compact(attempt['removed_neighbor_ids']) != compact(removed_neighbors)
+            ):
+                raise ValueError('Count cut sequence')
+            encoded = serialize_input(value, function)
+            texts = candidate_texts(value, function, system)
+            counts = restore_measurement(
+                attempt['measurement'], texts, raw_required=not summary, expected_model=model
+            ).counts
+            if any(
+                count > budget[limit]
+                for count, limit in zip(
+                    (counts[0], counts[2], counts[3], counts[4]),
+                    ('prompt_tokens', 'current_user_tokens', 'source_tokens', 'template_tokens'),
+                )
+            ):
+                raise ValueError('Required count overflow')
+            total = counts[0] + counts[1] + reserve
+            overflow = (
+                total > budget['input_tokens']
+                or total + budget['output_tokens'] > budget['total_tokens']
+            )
+            if value['history'] and (counts[5] > budget['history_tokens'] or overflow):
                 removed_history.append(value['history'].pop(0)['id'])
-            elif counts[5]>budget['history_tokens']:raise ValueError('History count overflow')
+            elif counts[5] > budget['history_tokens']:
+                raise ValueError('History count overflow')
             elif overflow and optional:
-                identity=optional.pop(0);removed_neighbors.append(identity)
-                value['current_document']['read_blocks']=[item for item in value['current_document']['read_blocks'] if item['metadata']['block_id']!=identity]
-            elif overflow:raise ValueError('Required input overflow')
+                identity = optional.pop(0)
+                removed_neighbors.append(identity)
+                value['current_document']['read_blocks'] = [
+                    item
+                    for item in value['current_document']['read_blocks']
+                    if item['metadata']['block_id'] != identity
+                ]
+            elif overflow:
+                raise ValueError('Required input overflow')
             else:
-                if index!=len(attempts)-1 or input_json!=encoded or compact(strict_json_object(manifest_json))!=compact(value['read_manifest']) or type(evidence['input_tokens_candidate']) is not int or evidence['input_tokens_candidate']!=total:raise ValueError('Counted final request')
+                if (
+                    index != len(attempts) - 1
+                    or input_json != encoded
+                    or compact(strict_json_object(manifest_json)) != compact(value['read_manifest'])
+                    or type(evidence['input_tokens_candidate']) is not int
+                    or evidence['input_tokens_candidate'] != total
+                ):
+                    raise ValueError('Counted final request')
                 return value
-            originals=[actual['user_input'],*(history_by_id[item['id']] for item in value['history'])]
-            ids={item['id'] for item in originals};ids.update(item['reply_to_message_id'] for item in originals if item['message_type']=='CARD_RESPONSE')
-            value['read_manifest']['message_ids']=[identity for identity in actual['read_manifest']['message_ids'] if identity in ids]
-            value['read_manifest']['block_ids']=[item['metadata']['block_id'] for item in value['current_document']['read_blocks']]
+            originals = [
+                actual['user_input'],
+                *(history_by_id[item['id']] for item in value['history']),
+            ]
+            ids = {item['id'] for item in originals}
+            ids.update(
+                item['reply_to_message_id']
+                for item in originals
+                if item['message_type'] == 'CARD_RESPONSE'
+            )
+            value['read_manifest']['message_ids'] = [
+                identity for identity in actual['read_manifest']['message_ids'] if identity in ids
+            ]
+            value['read_manifest']['block_ids'] = [
+                item['metadata']['block_id'] for item in value['current_document']['read_blocks']
+            ]
         raise ValueError('No final counted candidate')
-    except (ValueError,TypeError,KeyError,UnicodeError) as error:
+    except (ValueError, TypeError, KeyError, UnicodeError) as error:
         raise ConfigInvalid('Counted request does not reproduce its actual context') from error

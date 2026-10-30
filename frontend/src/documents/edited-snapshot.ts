@@ -2,46 +2,104 @@ import type { Ctx } from '@milkdown/kit/ctx';
 import { serializerCtx } from '@milkdown/kit/core';
 import { Fragment, type Node } from '@milkdown/kit/prose/model';
 import type { EditorState } from '@milkdown/kit/prose/state';
-import { validateBlockState, validateDocumentReadModel, type BlockMetadata, type BlockState } from './contracts.ts';
+import {
+  validateBlockState,
+  validateDocumentReadModel,
+  type BlockMetadata,
+  type BlockState,
+} from './contracts.ts';
 import { EditorSource, EditorSourceInvalid } from './editor-source.ts';
-import { bindIdentityDocument, hasRawSource, identityState, IdentityInvalid, rebindSourceContext, replaceParsedSourceDocument, replaceLocalRecoveryDocument, sourceRevision, topBlockIds } from './identity.ts';
-import {validateLocalDraftSnapshot} from './recovery-store.ts';
-import { normalizationProof, normalizeRawSourceBlock, type RawSourceNormalization } from './source-normalization.ts';
+import {
+  bindIdentityDocument,
+  hasRawSource,
+  identityState,
+  IdentityInvalid,
+  rebindSourceContext,
+  replaceParsedSourceDocument,
+  replaceLocalRecoveryDocument,
+  sourceRevision,
+  topBlockIds,
+} from './identity.ts';
+import { validateLocalDraftSnapshot } from './recovery-store.ts';
+import {
+  normalizationProof,
+  normalizeRawSourceBlock,
+  type RawSourceNormalization,
+} from './source-normalization.ts';
 
 export interface EditedSnapshot {
   readonly markdown_content: string;
   readonly block_state_json: BlockState;
 }
-interface Unit { id: number; node: Node; raw: string; gap: string; actualGap: string; verbatim: boolean; }
-interface Version { node: Node; raw: string; revision: number; }
-interface Layout { document: Node; markdown: string; units: readonly Unit[]; trailer: string; }
-export interface PreparedEditorSnapshot { readonly state: EditorState; readonly pair: EditedSnapshot; }
+interface Unit {
+  id: number;
+  node: Node;
+  raw: string;
+  gap: string;
+  actualGap: string;
+  verbatim: boolean;
+}
+interface Version {
+  node: Node;
+  raw: string;
+  revision: number;
+}
+interface Layout {
+  document: Node;
+  markdown: string;
+  units: readonly Unit[];
+  trailer: string;
+}
+export interface PreparedEditorSnapshot {
+  readonly state: EditorState;
+  readonly pair: EditedSnapshot;
+}
 export interface ManualDraftSubmission extends EditedSnapshot {
   readonly requirement_id: number;
   readonly expected_version: number;
 }
-const preparations = new WeakMap<PreparedEditorSnapshot, {owner: EditedSnapshotLedger; generation: number; staged: EditedSnapshotLedger}>();
+const preparations = new WeakMap<
+  PreparedEditorSnapshot,
+  { owner: EditedSnapshotLedger; generation: number; staged: EditedSnapshotLedger }
+>();
 const submissions = new WeakMap<ManualDraftSubmission, EditedSnapshotLedger>();
-const creationFields = ['created_by_type', 'created_source_type', 'created_source_id', 'created_at'] as const;
+const creationFields = [
+  'created_by_type',
+  'created_source_type',
+  'created_source_id',
+  'created_at',
+] as const;
 
-function fail(message: string): never { throw new EditorSourceInvalid(message); }
+function fail(message: string): never {
+  throw new EditorSourceInvalid(message);
+}
 function timestamp(value: string): void {
-  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(value) || value.startsWith('0000-') ||
-      !Number.isFinite(new Date(value).getTime()) || new Date(value).toISOString() !== value) fail('编辑时间必须为真实UTC毫秒');
+  if (
+    !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(value) ||
+    value.startsWith('0000-') ||
+    !Number.isFinite(new Date(value).getTime()) ||
+    new Date(value).toISOString() !== value
+  )
+    fail('编辑时间必须为真实UTC毫秒');
 }
 
 // Compare the user's complete node/mark structure, excluding private identity
 // and the code tail derived from source line endings. A serializer may choose
 // another Markdown spelling, but it must not lose text, marks or node content.
 function intent(node: Node): unknown {
-  const attrs = {...node.attrs};
+  const attrs = { ...node.attrs };
   delete attrs.walle_block_id;
   delete attrs.walle_code_tail;
   if (node.type.name === 'heading') delete attrs.id;
   const children: unknown[] = [];
-  node.forEach(child => children.push(intent(child)));
-  return {type: node.type.name, attrs, text: node.text ?? null,
-    marks: node.marks.map(mark => mark.toJSON()), content: children};
+  node.forEach((child) => children.push(intent(child)));
+  return {
+    type: node.type.name,
+    attrs,
+    text: node.text ?? null,
+    marks: node.marks.map((mark) => mark.toJSON()),
+    content: children,
+  };
 }
 
 // An editor-local source ledger. It emits a local pair, never a saved version
@@ -64,18 +122,21 @@ export class EditedSnapshotLedger {
   private confirmedVersion: number;
   private confirmedNext: number;
   private confirmedAt: string;
-  private allocations: {start: number; end: number; at: string}[] = [];
+  private allocations: { start: number; end: number; at: string }[] = [];
   private pending: ManualDraftSubmission | undefined;
   private readonly unresolved = new Set<ManualDraftSubmission>();
   private closed = false;
 
   constructor(ctx: Ctx, input: unknown, state: EditorState) {
-    const {document, source} = validateDocumentReadModel(ctx, input);
+    const { document, source } = validateDocumentReadModel(ctx, input);
     if (document.document_type !== 'MANUAL_DRAFT') fail('只有真实人工草稿可输出编辑快照');
-    const ids = document.block_state_json.blocks.map(block => block.block_id);
+    const ids = document.block_state_json.blocks.map((block) => block.block_id);
     const identity = identityState(state);
-    if (identity.next_block_id !== document.block_state_json.next_block_id ||
-        !state.doc.eq(bindIdentityDocument(source.document, ids, identity.next_block_id))) fail('载入快照与编辑器状态不一致');
+    if (
+      identity.next_block_id !== document.block_state_json.next_block_id ||
+      !state.doc.eq(bindIdentityDocument(source.document, ids, identity.next_block_id))
+    )
+      fail('载入快照与编辑器状态不一致');
     this.ctx = ctx;
     this.sessionId = document.id;
     this.requirementId = document.requirement_id;
@@ -84,69 +145,145 @@ export class EditedSnapshotLedger {
     this.confirmedNext = document.block_state_json.next_block_id;
     this.confirmedAt = document.updated_at;
     this.initialNext = identity.next_block_id;
-    this.units = source.blocks.map((block, index) => ({id: ids[index]!, node: state.doc.child(index),
-      raw: block.markdown, gap: source.parts[index * 2]!, actualGap: source.parts[index * 2]!, verbatim: true}));
+    this.units = source.blocks.map((block, index) => ({
+      id: ids[index]!,
+      node: state.doc.child(index),
+      raw: block.markdown,
+      gap: source.parts[index * 2]!,
+      actualGap: source.parts[index * 2]!,
+      verbatim: true,
+    }));
     this.trailer = source.parts.at(-1)!;
-    this.pair = Object.freeze({markdown_content: document.markdown_content, block_state_json: document.block_state_json});
+    this.pair = Object.freeze({
+      markdown_content: document.markdown_content,
+      block_state_json: document.block_state_json,
+    });
     this.lastTime = document.updated_at;
-    this.layouts = [{document: state.doc, markdown: document.markdown_content,
-      units: this.units.map(unit => ({...unit})), trailer: this.trailer}];
+    this.layouts = [
+      {
+        document: state.doc,
+        markdown: document.markdown_content,
+        units: this.units.map((unit) => ({ ...unit })),
+        trailer: this.trailer,
+      },
+    ];
     this.units.forEach((unit, index) => {
-      this.versions.set(unit.id, [{node: unit.node, raw: unit.raw, revision: sourceRevision(state.doc)}]);
+      this.versions.set(unit.id, [
+        { node: unit.node, raw: unit.raw, revision: sourceRevision(state.doc) },
+      ]);
       this.births.set(unit.id, document.block_state_json.blocks[index]!);
     });
   }
 
-  private live(): void { if (this.closed) fail('编辑会话已结束'); }
+  private live(): void {
+    if (this.closed) fail('编辑会话已结束');
+  }
 
   private creationFor(id: number, at: string) {
     const birth = this.births.get(id);
     if (birth) return birth;
-    const range = this.allocations.find(range => range.start <= id && id < range.end);
-    return {created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
-      created_source_id: this.sessionId, created_at: range?.at ?? at};
+    const range = this.allocations.find((range) => range.start <= id && id < range.end);
+    return {
+      created_by_type: 'USER' as const,
+      created_source_type: 'MANUAL_EDIT' as const,
+      created_source_id: this.sessionId,
+      created_at: range?.at ?? at,
+    };
   }
 
   // The parent sends this exact frozen payload. Local edits may continue while
   // it is in flight; a response alone cannot prove which request it confirms.
   beginSave(): ManualDraftSubmission {
     this.live();
-    if (this.pending || this.confirmedVersion >= Number.MAX_SAFE_INTEGER) fail('已有待确认保存或版本容量耗尽');
-    const submission = Object.freeze({requirement_id: this.requirementId, expected_version: this.confirmedVersion, ...this.pair});
+    if (this.pending || this.confirmedVersion >= Number.MAX_SAFE_INTEGER)
+      fail('已有待确认保存或版本容量耗尽');
+    const submission = Object.freeze({
+      requirement_id: this.requirementId,
+      expected_version: this.confirmedVersion,
+      ...this.pair,
+    });
     submissions.set(submission, this);
     this.pending = submission;
     return submission;
   }
 
-  get currentSnapshot(): EditedSnapshot { this.live(); return this.pair; }
-  get savedVersion(): number { this.live(); return this.confirmedVersion; }
-  get savedAt(): string { this.live(); return this.confirmedAt; }
+  get currentSnapshot(): EditedSnapshot {
+    this.live();
+    return this.pair;
+  }
+  get savedVersion(): number {
+    this.live();
+    return this.confirmedVersion;
+  }
+  get savedAt(): string {
+    this.live();
+    return this.confirmedAt;
+  }
 
   /** User explicitly chose the same-version cache for this actual draft key.
    * Keep the actual server baseline/version; cache metadata remains a local
    * intention until native I11 checks its protected origins and confirms it.
    * Reload does not reconstruct unpersisted undo history or infer missing IDs.
    */
-  prepareLocalRecovery(state:EditorState,input:unknown):PreparedEditorSnapshot {
+  prepareLocalRecovery(state: EditorState, input: unknown): PreparedEditorSnapshot {
     this.live();
-    if(this.generation!==0||this.pending||this.unresolved.size)fail('本地恢复只允许尚未编辑的新载入会话');
-    const local=validateLocalDraftSnapshot(this.ctx,input),identity=identityState(state);
-    if(local.base_confirmed_version!==this.confirmedVersion||local.block_state_json.next_block_id<this.confirmedNext||
-      identity.next_block_id!==this.confirmedNext||!state.doc.eq(this.layouts[0]!.document)||JSON.stringify(topBlockIds(state.doc).filter(id=>id!==null))!==JSON.stringify(this.units.map(unit=>unit.id)))fail('本地恢复缺少实际相同草稿基线');
-    const source=new EditorSource(this.ctx,local.markdown_content);
-    for(const block of local.block_state_json.blocks){
-      const known=this.births.get(block.block_id);
-      if(known&&creationFields.some(field=>block[field]!==known[field]))fail('本地恢复改变实际已知创建事实');
-      if(block.block_id>=this.confirmedNext&&(block.created_by_type!=='USER'||block.created_source_type!=='MANUAL_EDIT'||block.created_source_id!==this.sessionId))fail('本地新身份没有当前人工会话来源');
+    if (this.generation !== 0 || this.pending || this.unresolved.size)
+      fail('本地恢复只允许尚未编辑的新载入会话');
+    const local = validateLocalDraftSnapshot(this.ctx, input),
+      identity = identityState(state);
+    if (
+      local.base_confirmed_version !== this.confirmedVersion ||
+      local.block_state_json.next_block_id < this.confirmedNext ||
+      identity.next_block_id !== this.confirmedNext ||
+      !state.doc.eq(this.layouts[0]!.document) ||
+      JSON.stringify(topBlockIds(state.doc).filter((id) => id !== null)) !==
+        JSON.stringify(this.units.map((unit) => unit.id))
+    )
+      fail('本地恢复缺少实际相同草稿基线');
+    const source = new EditorSource(this.ctx, local.markdown_content);
+    for (const block of local.block_state_json.blocks) {
+      const known = this.births.get(block.block_id);
+      if (known && creationFields.some((field) => block[field] !== known[field]))
+        fail('本地恢复改变实际已知创建事实');
+      if (
+        block.block_id >= this.confirmedNext &&
+        (block.created_by_type !== 'USER' ||
+          block.created_source_type !== 'MANUAL_EDIT' ||
+          block.created_source_id !== this.sessionId)
+      )
+        fail('本地新身份没有当前人工会话来源');
     }
-    const rebound=replaceLocalRecoveryDocument(state,source.document,local.block_state_json.blocks.map(block=>block.block_id),local.block_state_json.next_block_id);
-    const staged=this.fork();
-    staged.units=source.blocks.map((block,index)=>({id:local.block_state_json.blocks[index]!.block_id,node:rebound.doc.child(index),raw:block.markdown,
-      gap:source.parts[index*2]!,actualGap:source.parts[index*2]!,verbatim:true}));
-    staged.trailer=source.parts.at(-1)!;staged.pair=Object.freeze({markdown_content:local.markdown_content,block_state_json:local.block_state_json});
-    for(const block of local.block_state_json.blocks)if(!staged.births.has(block.block_id))staged.births.set(block.block_id,block);
-    staged.lastTime=[this.lastTime,local.updated_at,...local.block_state_json.blocks.map(block=>block.last_modified_at)].sort().at(-1)!;
-    staged.generation++;return this.preparation(staged,rebound,staged.pair);
+    const rebound = replaceLocalRecoveryDocument(
+      state,
+      source.document,
+      local.block_state_json.blocks.map((block) => block.block_id),
+      local.block_state_json.next_block_id,
+    );
+    const staged = this.fork();
+    staged.units = source.blocks.map((block, index) => ({
+      id: local.block_state_json.blocks[index]!.block_id,
+      node: rebound.doc.child(index),
+      raw: block.markdown,
+      gap: source.parts[index * 2]!,
+      actualGap: source.parts[index * 2]!,
+      verbatim: true,
+    }));
+    staged.trailer = source.parts.at(-1)!;
+    staged.pair = Object.freeze({
+      markdown_content: local.markdown_content,
+      block_state_json: local.block_state_json,
+    });
+    for (const block of local.block_state_json.blocks)
+      if (!staged.births.has(block.block_id)) staged.births.set(block.block_id, block);
+    staged.lastTime = [
+      this.lastTime,
+      local.updated_at,
+      ...local.block_state_json.blocks.map((block) => block.last_modified_at),
+    ]
+      .sort()
+      .at(-1)!;
+    staged.generation++;
+    return this.preparation(staged, rebound, staged.pair);
   }
 
   /** An ended browser request can remain unconfirmed at the server. Keep its
@@ -155,57 +292,117 @@ export class EditedSnapshotLedger {
    */
   suspendSave(submission: ManualDraftSubmission): void {
     this.live();
-    if (this.pending !== submission || submissions.get(submission) !== this) fail('不能挂起没有本会话证明的提交');
-    this.unresolved.add(submission); this.pending = undefined;
+    if (this.pending !== submission || submissions.get(submission) !== this)
+      fail('不能挂起没有本会话证明的提交');
+    this.unresolved.add(submission);
+    this.pending = undefined;
   }
 
   /** Used only for a definite rejection, never for network/abort/500/503. */
   rejectSave(submission: ManualDraftSubmission): void {
     this.live();
-    if (submissions.get(submission) !== this || this.pending !== submission && !this.unresolved.has(submission)) fail('不能释放没有本会话证明的提交');
+    if (
+      submissions.get(submission) !== this ||
+      (this.pending !== submission && !this.unresolved.has(submission))
+    )
+      fail('不能释放没有本会话证明的提交');
     if (this.pending === submission) this.pending = undefined;
-    this.unresolved.delete(submission); submissions.delete(submission);
+    this.unresolved.delete(submission);
+    submissions.delete(submission);
   }
 
   acknowledgeSave(submission: ManualDraftSubmission, input: unknown): EditedSnapshot {
     this.live();
-    if (submissions.get(submission) !== this || this.pending !== submission && !this.unresolved.has(submission) || submission.expected_version !== this.confirmedVersion) fail('保存回执没有当前会话的实际提交证明');
-    const {document} = validateDocumentReadModel(this.ctx, input);
-    if (document.id !== this.sessionId || document.requirement_id !== this.requirementId || document.document_type !== 'MANUAL_DRAFT' ||
-        document.created_at !== this.documentCreatedAt || document.content_version !== submission.expected_version + 1 ||
-        document.updated_at < this.confirmedAt || document.markdown_content !== submission.markdown_content ||
-        document.block_state_json.next_block_id !== submission.block_state_json.next_block_id ||
-        document.block_state_json.blocks.some((block, index) => block.block_id !== submission.block_state_json.blocks[index]?.block_id)) fail('保存回执不对应实际提交快照/版本');
-    const received = new Map(document.block_state_json.blocks.map(block => [block.block_id, block]));
-    const newOrigin = (at: string) => ({created_by_type: 'USER' as const, created_source_type: 'MANUAL_EDIT' as const,
-      created_source_id: this.sessionId, created_at: at});
+    if (
+      submissions.get(submission) !== this ||
+      (this.pending !== submission && !this.unresolved.has(submission)) ||
+      submission.expected_version !== this.confirmedVersion
+    )
+      fail('保存回执没有当前会话的实际提交证明');
+    const { document } = validateDocumentReadModel(this.ctx, input);
+    if (
+      document.id !== this.sessionId ||
+      document.requirement_id !== this.requirementId ||
+      document.document_type !== 'MANUAL_DRAFT' ||
+      document.created_at !== this.documentCreatedAt ||
+      document.content_version !== submission.expected_version + 1 ||
+      document.updated_at < this.confirmedAt ||
+      document.markdown_content !== submission.markdown_content ||
+      document.block_state_json.next_block_id !== submission.block_state_json.next_block_id ||
+      document.block_state_json.blocks.some(
+        (block, index) => block.block_id !== submission.block_state_json.blocks[index]?.block_id,
+      )
+    )
+      fail('保存回执不对应实际提交快照/版本');
+    const received = new Map(
+      document.block_state_json.blocks.map((block) => [block.block_id, block]),
+    );
+    const newOrigin = (at: string) => ({
+      created_by_type: 'USER' as const,
+      created_source_type: 'MANUAL_EDIT' as const,
+      created_source_id: this.sessionId,
+      created_at: at,
+    });
     for (const block of document.block_state_json.blocks) {
-      const expected = block.block_id >= this.confirmedNext ? newOrigin(document.updated_at) : this.creationFor(block.block_id, document.updated_at);
-      if (creationFields.some(field => block[field] !== expected[field])) fail('保存回执改变既有出生事实或未证明新分配时间');
+      const expected =
+        block.block_id >= this.confirmedNext
+          ? newOrigin(document.updated_at)
+          : this.creationFor(block.block_id, document.updated_at);
+      if (creationFields.some((field) => block[field] !== expected[field]))
+        fail('保存回执改变既有出生事实或未证明新分配时间');
     }
     const staged = this.fork();
     if (document.block_state_json.next_block_id > this.confirmedNext) {
-      staged.allocations.push({start: this.confirmedNext, end: document.block_state_json.next_block_id, at: document.updated_at});
+      staged.allocations.push({
+        start: this.confirmedNext,
+        end: document.block_state_json.next_block_id,
+        at: document.updated_at,
+      });
     }
     const authoritativeBirth = (block: BlockMetadata): BlockMetadata => {
-      const origin = received.get(block.block_id) ?? (block.block_id >= this.confirmedNext && block.block_id < document.block_state_json.next_block_id ? newOrigin(document.updated_at) : undefined);
+      const origin =
+        received.get(block.block_id) ??
+        (block.block_id >= this.confirmedNext &&
+        block.block_id < document.block_state_json.next_block_id
+          ? newOrigin(document.updated_at)
+          : undefined);
       if (!origin) return block;
-      const creation = Object.fromEntries(creationFields.map(field => [field, origin[field]]));
-      return {...block, ...creation, last_modified_at: block.last_modified_at < origin.created_at ? origin.created_at : block.last_modified_at};
+      const creation = Object.fromEntries(creationFields.map((field) => [field, origin[field]]));
+      return {
+        ...block,
+        ...creation,
+        last_modified_at:
+          block.last_modified_at < origin.created_at ? origin.created_at : block.last_modified_at,
+      };
     };
     staged.births.clear();
-    this.births.forEach((block, id) => staged.births.set(id, Object.freeze(authoritativeBirth(block))));
+    this.births.forEach((block, id) =>
+      staged.births.set(id, Object.freeze(authoritativeBirth(block))),
+    );
     const serverSource = new EditorSource(this.ctx, document.markdown_content);
-    const serverRaw = new Map(document.block_state_json.blocks.map((block, index) => [block.block_id, serverSource.blocks[index]!.markdown]));
-    const currentRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
-    const current = this.pair.block_state_json.blocks.map(block => {
+    const serverRaw = new Map(
+      document.block_state_json.blocks.map((block, index) => [
+        block.block_id,
+        serverSource.blocks[index]!.markdown,
+      ]),
+    );
+    const currentRaw = new Map(this.units.map((unit) => [unit.id, unit.raw]));
+    const current = this.pair.block_state_json.blocks.map((block) => {
       const acknowledged = received.get(block.block_id);
-      const unchanged = acknowledged && currentRaw.get(block.block_id) === serverRaw.get(block.block_id) &&
+      const unchanged =
+        acknowledged &&
+        currentRaw.get(block.block_id) === serverRaw.get(block.block_id) &&
         JSON.stringify(block.section_path) === JSON.stringify(acknowledged.section_path);
       return unchanged ? acknowledged : authoritativeBirth(block);
     });
-    const validated = validateBlockState(this.ctx, this.pair.markdown_content, {...this.pair.block_state_json, blocks: current});
-    staged.pair = Object.freeze({markdown_content: this.pair.markdown_content, block_state_json: validated.state});
+    const validated = validateBlockState(this.ctx, this.pair.markdown_content, {
+      ...this.pair.block_state_json,
+      blocks: current,
+    });
+    staged.pair = Object.freeze({
+      markdown_content: this.pair.markdown_content,
+      block_state_json: validated.state,
+    });
     staged.confirmedVersion = document.content_version;
     staged.confirmedNext = document.block_state_json.next_block_id;
     staged.confirmedAt = document.updated_at;
@@ -236,8 +433,10 @@ export class EditedSnapshotLedger {
   normalizeRawBlock(state: EditorState, index: number): RawSourceNormalization {
     this.live();
     const id = topBlockIds(state.doc)[index];
-    const unit = this.units.find(unit => unit.id === id);
-    const sourceIndex = this.pair.block_state_json.blocks.findIndex(block => block.block_id === id);
+    const unit = this.units.find((unit) => unit.id === id);
+    const sourceIndex = this.pair.block_state_json.blocks.findIndex(
+      (block) => block.block_id === id,
+    );
     if (!unit || sourceIndex < 0) fail('原始节点没有当前账本身份/源码');
     const source = new EditorSource(this.ctx, this.pair.markdown_content);
     const markdown = source.rewriteRawBlock(sourceIndex, unit.node, state.doc.child(index));
@@ -252,30 +451,57 @@ export class EditedSnapshotLedger {
     this.live();
     timestamp(at);
     if (at < this.lastTime) fail('编辑时间不能倒退');
-    const identity = identityState(state), stateIds = topBlockIds(state.doc);
+    const identity = identityState(state),
+      stateIds = topBlockIds(state.doc);
     const initial = new EditorSource(this.ctx, this.pair.markdown_content);
-    let logical = 0, selected = -1;
+    let logical = 0,
+      selected = -1;
     state.doc.forEach((node, _position, childIndex) => {
       if (node.type.name === 'paragraph' && !node.content.size) return;
       const unit = this.units[logical];
-      if (!unit || unit.id !== stateIds[childIndex] || (childIndex !== index && !unit.node.eq(node))) fail('完整原始源编辑没有同次节点身份映射');
+      if (
+        !unit ||
+        unit.id !== stateIds[childIndex] ||
+        (childIndex !== index && !unit.node.eq(node))
+      )
+        fail('完整原始源编辑没有同次节点身份映射');
       if (childIndex === index) selected = logical;
       logical++;
     });
-    if (logical !== this.units.length || selected < 0 || identity.next_block_id < this.pair.block_state_json.next_block_id) fail('完整原始源编辑缺少当前账本基线');
+    if (
+      logical !== this.units.length ||
+      selected < 0 ||
+      identity.next_block_id < this.pair.block_state_json.next_block_id
+    )
+      fail('完整原始源编辑缺少当前账本基线');
     if (!hasRawSource(state.doc.child(index))) fail('完整原始源编辑需要实际原始节点');
     const original = initial.blocks[selected]!;
-    const raw = initial.rewriteRawBlock(selected, this.units[selected]!.node, state.doc.child(index));
+    const raw = initial.rewriteRawBlock(
+      selected,
+      this.units[selected]!.node,
+      state.doc.child(index),
+    );
     if (raw === original.markdown) return this.prepare(state, at);
-    const markdown = this.pair.markdown_content.slice(0, original.start_utf16) + raw + this.pair.markdown_content.slice(original.end_utf16);
-    const source = new EditorSource(this.ctx, markdown), delta = raw.length - original.markdown.length;
-    const owners = initial.blocks.map((block, blockIndex) => ({id: this.units[blockIndex]!.id,
+    const markdown =
+      this.pair.markdown_content.slice(0, original.start_utf16) +
+      raw +
+      this.pair.markdown_content.slice(original.end_utf16);
+    const source = new EditorSource(this.ctx, markdown),
+      delta = raw.length - original.markdown.length;
+    const owners = initial.blocks.map((block, blockIndex) => ({
+      id: this.units[blockIndex]!.id,
       start: block.start_utf16 + (blockIndex > selected ? delta : 0),
-      end: blockIndex === selected ? block.start_utf16 + raw.length : block.end_utf16 + (blockIndex > selected ? delta : 0)}));
-    let ownerIndex = 0, next = identity.next_block_id;
+      end:
+        blockIndex === selected
+          ? block.start_utf16 + raw.length
+          : block.end_utf16 + (blockIndex > selected ? delta : 0),
+    }));
+    let ownerIndex = 0,
+      next = identity.next_block_id;
     const used = new Set<number>();
-    const ids = source.blocks.map(block => {
-      while (ownerIndex < owners.length && owners[ownerIndex]!.end <= block.start_utf16) ownerIndex++;
+    const ids = source.blocks.map((block) => {
+      while (ownerIndex < owners.length && owners[ownerIndex]!.end <= block.start_utf16)
+        ownerIndex++;
       const owner = owners[ownerIndex];
       let id = owner && owner.start < block.end_utf16 ? owner.id : undefined;
       if (id === undefined || used.has(id)) {
@@ -285,26 +511,54 @@ export class EditedSnapshotLedger {
       used.add(id);
       return id;
     });
-    const prior = new Map(this.pair.block_state_json.blocks.map(block => [block.block_id, block]));
-    const oldRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
-    const origin = {last_modified_by_type: 'USER' as const, last_modified_source_type: 'MANUAL_EDIT' as const,
-      last_modified_source_id: this.sessionId, last_modified_at: at};
+    const prior = new Map(
+      this.pair.block_state_json.blocks.map((block) => [block.block_id, block]),
+    );
+    const oldRaw = new Map(this.units.map((unit) => [unit.id, unit.raw]));
+    const origin = {
+      last_modified_by_type: 'USER' as const,
+      last_modified_source_type: 'MANUAL_EDIT' as const,
+      last_modified_source_id: this.sessionId,
+      last_modified_at: at,
+    };
     const blocks = source.blocks.map((block, blockIndex) => {
-      const id = ids[blockIndex]!, old = prior.get(id);
-      const changed = !old || oldRaw.get(id) !== block.markdown || JSON.stringify(old.section_path) !== JSON.stringify(block.section_path);
-      return {block_id: id, ...(old ?? this.creationFor(id, at)), ...(changed ? origin : {}),
-        block_type: block.block_type, section_path: block.section_path};
+      const id = ids[blockIndex]!,
+        old = prior.get(id);
+      const changed =
+        !old ||
+        oldRaw.get(id) !== block.markdown ||
+        JSON.stringify(old.section_path) !== JSON.stringify(block.section_path);
+      return {
+        block_id: id,
+        ...(old ?? this.creationFor(id, at)),
+        ...(changed ? origin : {}),
+        block_type: block.block_type,
+        section_path: block.section_path,
+      };
     });
-    const validated = validateBlockState(this.ctx, markdown, {schema_version: 1, next_block_id: next, blocks});
+    const validated = validateBlockState(this.ctx, markdown, {
+      schema_version: 1,
+      next_block_id: next,
+      blocks,
+    });
     const rebound = replaceParsedSourceDocument(state, source.document, ids, next);
     const staged = this.fork();
-    staged.units = source.blocks.map((block, blockIndex) => ({id: ids[blockIndex]!, node: rebound.doc.child(blockIndex), raw: block.markdown,
-      gap: source.parts[blockIndex * 2]!, actualGap: source.parts[blockIndex * 2]!, verbatim: true}));
+    staged.units = source.blocks.map((block, blockIndex) => ({
+      id: ids[blockIndex]!,
+      node: rebound.doc.child(blockIndex),
+      raw: block.markdown,
+      gap: source.parts[blockIndex * 2]!,
+      actualGap: source.parts[blockIndex * 2]!,
+      verbatim: true,
+    }));
     staged.trailer = source.parts.at(-1)!;
-    staged.pair = Object.freeze({markdown_content: markdown, block_state_json: validated.state});
+    staged.pair = Object.freeze({ markdown_content: markdown, block_state_json: validated.state });
     staged.lastTime = at;
     staged.generation++;
-    staged.units.forEach((unit, blockIndex) => { if (!staged.births.has(unit.id)) staged.births.set(unit.id, validated.state.blocks[blockIndex]!); });
+    staged.units.forEach((unit, blockIndex) => {
+      if (!staged.births.has(unit.id))
+        staged.births.set(unit.id, validated.state.blocks[blockIndex]!);
+    });
     return this.preparation(staged, rebound, staged.pair);
   }
 
@@ -312,7 +566,9 @@ export class EditedSnapshotLedger {
     const staged = Object.create(EditedSnapshotLedger.prototype) as EditedSnapshotLedger;
     Object.assign(staged, this, {
       versions: new Map([...this.versions].map(([id, versions]) => [id, [...versions]])),
-      births: new Map(this.births), units: this.units.map(unit => ({...unit})), layouts: [...this.layouts],
+      births: new Map(this.births),
+      units: this.units.map((unit) => ({ ...unit })),
+      layouts: [...this.layouts],
       allocations: [...this.allocations],
       unresolved: new Set(this.unresolved),
     });
@@ -322,44 +578,76 @@ export class EditedSnapshotLedger {
   // Stage the source ledger and the actual parsed editor state together. No
   // cache, birth fact or timestamp is published until the caller accepts the
   // exact displayed state. This also rebinds references in unedited blocks.
-  prepare(state: EditorState, at: string, normalization?: RawSourceNormalization): PreparedEditorSnapshot {
+  prepare(
+    state: EditorState,
+    at: string,
+    normalization?: RawSourceNormalization,
+  ): PreparedEditorSnapshot {
     this.live();
     const staged = this.fork();
     const pair = staged.capture(state, at, normalization);
     const source = new EditorSource(this.ctx, pair.markdown_content);
-    const parsed = bindIdentityDocument(source.document, pair.block_state_json.blocks.map(block => block.block_id), pair.block_state_json.next_block_id);
+    const parsed = bindIdentityDocument(
+      source.document,
+      pair.block_state_json.blocks.map((block) => block.block_id),
+      pair.block_state_json.next_block_id,
+    );
     let index = 0;
     const children: Node[] = [];
-    state.doc.forEach(node => children.push(node.type.name === 'paragraph' && !node.content.size ? node : parsed.child(index++)));
+    state.doc.forEach((node) =>
+      children.push(
+        node.type.name === 'paragraph' && !node.content.size ? node : parsed.child(index++),
+      ),
+    );
     if (index !== source.blocks.length) fail('完整源码重绑定没有逐块映射');
     const rebound = rebindSourceContext(state, state.doc.copy(Fragment.fromArray(children)));
     return this.preparation(staged, rebound, pair);
   }
 
-  private preparation(staged: EditedSnapshotLedger, rebound: EditorState, pair: EditedSnapshot): PreparedEditorSnapshot {
+  private preparation(
+    staged: EditedSnapshotLedger,
+    rebound: EditorState,
+    pair: EditedSnapshot,
+  ): PreparedEditorSnapshot {
     const actual = new Map<number, Node>();
-    rebound.doc.forEach(node => { const id = Number(node.attrs.walle_block_id); if (id > 0) actual.set(id, node); });
-    staged.units = staged.units.map(unit => ({...unit, node: actual.get(unit.id)!}));
-    staged.units.forEach(unit => {
+    rebound.doc.forEach((node) => {
+      const id = Number(node.attrs.walle_block_id);
+      if (id > 0) actual.set(id, node);
+    });
+    staged.units = staged.units.map((unit) => ({ ...unit, node: actual.get(unit.id)! }));
+    staged.units.forEach((unit) => {
       const versions = staged.versions.get(unit.id) ?? [];
-      if (!versions.some(version => version.node.eq(unit.node) && version.raw === unit.raw)) {
-        versions.push({node: unit.node, raw: unit.raw, revision: sourceRevision(rebound.doc)});
+      if (!versions.some((version) => version.node.eq(unit.node) && version.raw === unit.raw)) {
+        versions.push({ node: unit.node, raw: unit.raw, revision: sourceRevision(rebound.doc) });
       }
       staged.versions.set(unit.id, versions);
     });
-    if (!staged.layouts.some(layout => layout.document.eq(rebound.doc) && layout.markdown === pair.markdown_content)) {
-      staged.layouts.push({document: rebound.doc, markdown: pair.markdown_content,
-        units: staged.units.map(unit => ({...unit})), trailer: staged.trailer});
+    if (
+      !staged.layouts.some(
+        (layout) => layout.document.eq(rebound.doc) && layout.markdown === pair.markdown_content,
+      )
+    ) {
+      staged.layouts.push({
+        document: rebound.doc,
+        markdown: pair.markdown_content,
+        units: staged.units.map((unit) => ({ ...unit })),
+        trailer: staged.trailer,
+      });
     }
-    const preparation = Object.freeze({state: rebound, pair});
-    preparations.set(preparation, {owner: this, generation: this.generation, staged});
+    const preparation = Object.freeze({ state: rebound, pair });
+    preparations.set(preparation, { owner: this, generation: this.generation, staged });
     return preparation;
   }
 
   accept(preparation: PreparedEditorSnapshot, displayed: EditorState): EditedSnapshot {
     this.live();
     const proof = preparations.get(preparation);
-    if (!proof || proof.owner !== this || proof.generation !== this.generation || preparation.state !== displayed) {
+    if (
+      !proof ||
+      proof.owner !== this ||
+      proof.generation !== this.generation ||
+      preparation.state !== displayed
+    ) {
       fail('编辑输出没有同次未过期视图/账本证明');
     }
     Object.assign(this, proof.staged);
@@ -372,20 +660,39 @@ export class EditedSnapshotLedger {
     timestamp(at);
     if (at < this.lastTime) fail('编辑时间不能倒退');
     const identity = identityState(state);
-    if (identity.next_block_id < this.pair.block_state_json.next_block_id) fail('编辑高水位不能倒退');
+    if (identity.next_block_id < this.pair.block_state_json.next_block_id)
+      fail('编辑高水位不能倒退');
     const ids = topBlockIds(state.doc);
     const revision = sourceRevision(state.doc);
     const normalized = normalization ? normalizationProof(normalization, state) : undefined;
-    const sourceOverrides = new Map<number, {raw: string; gap: string; index: number}>();
+    const sourceOverrides = new Map<number, { raw: string; gap: string; index: number }>();
     if (normalized) {
       const beforeNext = identityState(normalized.before).next_block_id;
-      const sourceIds = normalized.source.blocks.map((_block, index) => ids[normalized.index + index]!);
-      if (sourceIds.some((id, index) => id === null || !identity.known_ids.has(id) ||
-          (index === 0 ? id !== normalized.original_id : id !== beforeNext + index - 1))) fail('重新分块没有实际身份映射');
-      const expected = bindIdentityDocument(normalized.source.document, sourceIds, identity.next_block_id);
+      const sourceIds = normalized.source.blocks.map(
+        (_block, index) => ids[normalized.index + index]!,
+      );
+      if (
+        sourceIds.some(
+          (id, index) =>
+            id === null ||
+            !identity.known_ids.has(id) ||
+            (index === 0 ? id !== normalized.original_id : id !== beforeNext + index - 1),
+        )
+      )
+        fail('重新分块没有实际身份映射');
+      const expected = bindIdentityDocument(
+        normalized.source.document,
+        sourceIds,
+        identity.next_block_id,
+      );
       normalized.source.blocks.forEach((block, index) => {
-        if (!expected.child(index).eq(state.doc.child(normalized.index + index))) fail('重新分块改变实际解析内容');
-        sourceOverrides.set(sourceIds[index]!, {raw: block.markdown, gap: normalized.source.parts[index * 2]!, index});
+        if (!expected.child(index).eq(state.doc.child(normalized.index + index)))
+          fail('重新分块改变实际解析内容');
+        sourceOverrides.set(sourceIds[index]!, {
+          raw: block.markdown,
+          gap: normalized.source.parts[index * 2]!,
+          index,
+        });
       });
     }
     const targets: Unit[] = [];
@@ -394,20 +701,39 @@ export class EditedSnapshotLedger {
       // Empty paragraphs are caret/gap positions, not Markdown blocks.
       if (node.type.name === 'paragraph' && node.content.size === 0) return;
       const id = ids[index];
-      if (id == null || id >= identity.next_block_id || !identity.known_ids.has(id) ||
-          (!this.births.has(id) && id < this.initialNext) || used.has(id)) fail('区块没有同会话身份证明');
+      if (
+        id == null ||
+        id >= identity.next_block_id ||
+        !identity.known_ids.has(id) ||
+        (!this.births.has(id) && id < this.initialNext) ||
+        used.has(id)
+      )
+        fail('区块没有同会话身份证明');
       used.add(id);
       const override = sourceOverrides.get(id);
-      const previous = this.versions.get(id)?.findLast(version => version.revision <= revision && version.node.eq(node));
-      const raw = override?.raw ?? previous?.raw ?? (node.type.name === 'walle_raw_source' ? node.textContent :
-        this.ctx.get(serializerCtx)(state.doc.copy(Fragment.from(node))));
-      targets.push({id, node, raw, gap: '', actualGap: '', verbatim: override !== undefined || previous !== undefined});
+      const previous = this.versions
+        .get(id)
+        ?.findLast((version) => version.revision <= revision && version.node.eq(node));
+      const raw =
+        override?.raw ??
+        previous?.raw ??
+        (node.type.name === 'walle_raw_source'
+          ? node.textContent
+          : this.ctx.get(serializerCtx)(state.doc.copy(Fragment.from(node))));
+      targets.push({
+        id,
+        node,
+        raw,
+        gap: '',
+        actualGap: '',
+        verbatim: override !== undefined || previous !== undefined,
+      });
     });
 
     // Preserve authored gaps. A removed block transfers its gap to the next
     // survivor (or trailer); moves carry their own gap. New blocks before a
     // survivor receive its gap. No raw bytes of surviving blocks are trimmed.
-    const surviving = new Set(targets.map(unit => unit.id));
+    const surviving = new Set(targets.map((unit) => unit.id));
     const emptySuccessors = new Map<number, number>();
     let successor: number | undefined;
     for (let index = ids.length - 1; index >= 0; index--) {
@@ -420,26 +746,38 @@ export class EditedSnapshotLedger {
     let pending = '';
     for (const old of this.units) {
       pending += old.gap;
-      if (normalized?.source.blocks.length === 0 && old.id === normalized.original_id) pending += normalized.source.markdown;
+      if (normalized?.source.blocks.length === 0 && old.id === normalized.original_id)
+        pending += normalized.source.markdown;
       const recipient = surviving.has(old.id) ? old.id : emptySuccessors.get(old.id);
-      if (recipient !== undefined && !gaps.has(recipient)) { gaps.set(recipient, pending); pending = ''; }
+      if (recipient !== undefined && !gaps.has(recipient)) {
+        gaps.set(recipient, pending);
+        pending = '';
+      }
     }
     let trailer = pending + this.trailer;
     let runStart = 0;
     targets.forEach((unit, index) => {
       if (!gaps.has(unit.id)) return;
       let recipient = runStart;
-      while (recipient < index && (sourceOverrides.get(targets[recipient]!.id)?.index ?? 0) > 0) recipient++;
+      while (recipient < index && (sourceOverrides.get(targets[recipient]!.id)?.index ?? 0) > 0)
+        recipient++;
       targets[recipient]!.gap = gaps.get(unit.id)!;
       runStart = index + 1;
     });
     if (normalized) {
-      targets.forEach(unit => { unit.gap += sourceOverrides.get(unit.id)?.gap ?? ''; });
-      const trailing = normalized.source.blocks.length ? normalized.source.parts.at(-1)! :
-        this.units.some(unit => unit.id === normalized.original_id) ? '' : normalized.source.markdown;
+      targets.forEach((unit) => {
+        unit.gap += sourceOverrides.get(unit.id)?.gap ?? '';
+      });
+      const trailing = normalized.source.blocks.length
+        ? normalized.source.parts.at(-1)!
+        : this.units.some((unit) => unit.id === normalized.original_id)
+          ? ''
+          : normalized.source.markdown;
       if (trailing) {
-        const followingIds = new Set(ids.slice(normalized.index + normalized.source.blocks.length).filter(id => id !== null));
-        const following = targets.find(unit => followingIds.has(unit.id));
+        const followingIds = new Set(
+          ids.slice(normalized.index + normalized.source.blocks.length).filter((id) => id !== null),
+        );
+        const following = targets.find((unit) => followingIds.has(unit.id));
         if (following) following.gap = trailing + following.gap;
         else trailer = trailing + trailer;
       }
@@ -447,9 +785,11 @@ export class EditedSnapshotLedger {
     // Same-session history can restore a complete prior node layout, including
     // its authored gaps. This does not assign identities: the identity plugin
     // has already proved every ID above. Content alone never selects an ID.
-    const restoredLayout = normalized ? undefined : this.layouts.findLast(layout => layout.document.eq(state.doc));
+    const restoredLayout = normalized
+      ? undefined
+      : this.layouts.findLast((layout) => layout.document.eq(state.doc));
     if (restoredLayout) {
-      const restored = new Map(restoredLayout.units.map(unit => [unit.id, unit]));
+      const restored = new Map(restoredLayout.units.map((unit) => [unit.id, unit]));
       for (const unit of targets) {
         const original = restored.get(unit.id);
         if (!original || !original.node.eq(unit.node)) fail('恢复源码没有完整同会话布局');
@@ -459,21 +799,32 @@ export class EditedSnapshotLedger {
       }
       trailer = restoredLayout.trailer;
     }
-    const adjacent = new Set(this.units.slice(1).map((unit, index) => `${this.units[index]!.id}:${unit.id}`));
-    const oldRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
-    const oldActualGaps = new Map(this.units.map(unit => [unit.id, unit.actualGap]));
+    const adjacent = new Set(
+      this.units.slice(1).map((unit, index) => `${this.units[index]!.id}:${unit.id}`),
+    );
+    const oldRaw = new Map(this.units.map((unit) => [unit.id, unit.raw]));
+    const oldActualGaps = new Map(this.units.map((unit) => [unit.id, unit.actualGap]));
     let markdown = '';
     const starts: number[] = [];
     for (const [index, unit] of targets.entries()) {
       let gap = unit.gap;
       const previous = targets[index - 1];
-      const unchangedBoundary = previous && adjacent.has(`${previous.id}:${unit.id}`) &&
-        previous.raw === oldRaw.get(previous.id) && unit.raw === oldRaw.get(unit.id);
-      const normalizedBoundary = previous && sourceOverrides.has(previous.id) && sourceOverrides.has(unit.id) &&
+      const unchangedBoundary =
+        previous &&
+        adjacent.has(`${previous.id}:${unit.id}`) &&
+        previous.raw === oldRaw.get(previous.id) &&
+        unit.raw === oldRaw.get(unit.id);
+      const normalizedBoundary =
+        previous &&
+        sourceOverrides.has(previous.id) &&
+        sourceOverrides.has(unit.id) &&
         sourceOverrides.get(previous.id)!.index + 1 === sourceOverrides.get(unit.id)!.index;
       if (unchangedBoundary) gap = oldActualGaps.get(unit.id)!;
       if (previous && !unchangedBoundary && !normalizedBoundary) {
-        const boundary = (/[ \t\r\n]*$/.exec(markdown)?.[0] ?? '') + unit.gap + (/^[ \t\r\n]*/.exec(unit.raw)?.[0] ?? '');
+        const boundary =
+          (/[ \t\r\n]*$/.exec(markdown)?.[0] ?? '') +
+          unit.gap +
+          (/^[ \t\r\n]*/.exec(unit.raw)?.[0] ?? '');
         const endings = boundary.match(/\r\n|\r|\n/g)?.length ?? 0;
         const ending = markdown.endsWith('\r\n') ? '\r\n' : markdown.endsWith('\r') ? '\r' : '\n';
         gap = ending.repeat(Math.max(0, 2 - endings)) + gap;
@@ -488,44 +839,94 @@ export class EditedSnapshotLedger {
     if (source.blocks.length !== targets.length) fail('重组源码吞掉、合并或新增区块');
     source.blocks.forEach((block, index) => {
       const unit = targets[index]!;
-      const suffix = block.markdown.startsWith(unit.raw) ? block.markdown.slice(unit.raw.length) : null;
-      const appendedEnding = !/[\r\n]$/.test(unit.raw) && ['\r\n', '\r', '\n'].includes(suffix ?? '');
-      if ((!restoredLayout && block.start_utf16 !== starts[index]) || !(suffix === '' || appendedEnding)) fail('重组源码改变区块边界');
+      const suffix = block.markdown.startsWith(unit.raw)
+        ? block.markdown.slice(unit.raw.length)
+        : null;
+      const appendedEnding =
+        !/[\r\n]$/.test(unit.raw) && ['\r\n', '\r', '\n'].includes(suffix ?? '');
+      if (
+        (!restoredLayout && block.start_utf16 !== starts[index]) ||
+        !(suffix === '' || appendedEnding)
+      )
+        fail('重组源码改变区块边界');
       const literal = unit.node.type.name === 'walle_raw_source';
-      if (literal ? block.block_type !== unit.node.attrs.kind ||
-          !(block.plain_text === unit.node.textContent || appendedEnding && block.plain_text === unit.node.textContent + suffix) :
-          !unit.verbatim && JSON.stringify(intent(block.node)) !== JSON.stringify(intent(unit.node))) fail('序列化改变区块解释或丢失编辑内容');
+      if (
+        literal
+          ? block.block_type !== unit.node.attrs.kind ||
+            !(
+              block.plain_text === unit.node.textContent ||
+              (appendedEnding && block.plain_text === unit.node.textContent + suffix)
+            )
+          : !unit.verbatim &&
+            JSON.stringify(intent(block.node)) !== JSON.stringify(intent(unit.node))
+      )
+        fail('序列化改变区块解释或丢失编辑内容');
     });
-    const prior = new Map(this.pair.block_state_json.blocks.map(block => [block.block_id, block]));
-    const priorRaw = new Map(this.units.map(unit => [unit.id, unit.raw]));
+    const prior = new Map(
+      this.pair.block_state_json.blocks.map((block) => [block.block_id, block]),
+    );
+    const priorRaw = new Map(this.units.map((unit) => [unit.id, unit.raw]));
     const blocks = targets.map((unit, index) => {
       const parsed = source.blocks[index]!;
       const old = prior.get(unit.id);
       const birth = this.births.get(unit.id);
-      const changed = !old || priorRaw.get(unit.id) !== parsed.markdown ||
+      const changed =
+        !old ||
+        priorRaw.get(unit.id) !== parsed.markdown ||
         JSON.stringify(old.section_path) !== JSON.stringify(parsed.section_path);
-      const origin = {last_modified_by_type: 'USER' as const, last_modified_source_type: 'MANUAL_EDIT' as const,
-        last_modified_source_id: this.sessionId, last_modified_at: at};
-      return {block_id: unit.id, ...(old ?? birth ?? this.creationFor(unit.id, at)), ...(changed ? origin : {}),
-        block_type: parsed.block_type, section_path: parsed.section_path};
+      const origin = {
+        last_modified_by_type: 'USER' as const,
+        last_modified_source_type: 'MANUAL_EDIT' as const,
+        last_modified_source_id: this.sessionId,
+        last_modified_at: at,
+      };
+      return {
+        block_id: unit.id,
+        ...(old ?? birth ?? this.creationFor(unit.id, at)),
+        ...(changed ? origin : {}),
+        block_type: parsed.block_type,
+        section_path: parsed.section_path,
+      };
     });
-    const validated = validateBlockState(this.ctx, markdown, {schema_version: 1, next_block_id: identity.next_block_id, blocks});
-    const nextPair = Object.freeze({markdown_content: markdown, block_state_json: validated.state});
+    const validated = validateBlockState(this.ctx, markdown, {
+      schema_version: 1,
+      next_block_id: identity.next_block_id,
+      blocks,
+    });
+    const nextPair = Object.freeze({
+      markdown_content: markdown,
+      block_state_json: validated.state,
+    });
     // Publish ledger updates only after the complete pair has passed. Failed
     // composition cannot poison later retries or manufacture creation facts.
     targets.forEach((unit, index) => {
       if (!this.births.has(unit.id)) this.births.set(unit.id, validated.state.blocks[index]!);
       const history = this.versions.get(unit.id) ?? [];
       const raw = source.blocks[index]!.markdown;
-      if (!history.some(version => version.node.eq(unit.node) && version.raw === raw && version.revision <= revision)) history.push({node: unit.node, raw, revision});
+      if (
+        !history.some(
+          (version) =>
+            version.node.eq(unit.node) && version.raw === raw && version.revision <= revision,
+        )
+      )
+        history.push({ node: unit.node, raw, revision });
       this.versions.set(unit.id, history);
     });
     // Only authored gaps transfer on a later edit. Syntax separators added by
     // composition are recomputed, so split/join/undo cannot accumulate them.
-    this.units = targets.map((unit, index) => ({...unit, raw: source.blocks[index]!.markdown, actualGap: source.parts[index * 2]!}));
+    this.units = targets.map((unit, index) => ({
+      ...unit,
+      raw: source.blocks[index]!.markdown,
+      actualGap: source.parts[index * 2]!,
+    }));
     this.trailer = trailer;
-    if (!restoredLayout) this.layouts.push({document: state.doc, markdown,
-      units: this.units.map(unit => ({...unit})), trailer});
+    if (!restoredLayout)
+      this.layouts.push({
+        document: state.doc,
+        markdown,
+        units: this.units.map((unit) => ({ ...unit })),
+        trailer,
+      });
     this.pair = nextPair;
     this.lastTime = at;
     this.generation++;

@@ -5,6 +5,7 @@ postprocessor rejects them, losing possible valid matches. Separate widths
 only during its real delimiter pairing, then restore the installed rule's
 marker before postprocessing. No text rewriting or rendered-HTML reparsing.
 """
+
 from markdown_it import MarkdownIt
 
 DOUBLE_TILDE = 0x1007E  # Private pairing key; never enters source or tokens.

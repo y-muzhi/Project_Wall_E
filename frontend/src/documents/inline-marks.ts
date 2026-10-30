@@ -9,7 +9,10 @@ export function collapseNestedDeletion(root: MarkdownNode): void {
     if (!node.children) return;
     const active = inside || node.type === 'delete';
     for (const child of node.children) visit(child, active);
-    if (active) node.children = node.children.flatMap(child => child.type === 'delete' ? child.children ?? [] : [child]);
+    if (active)
+      node.children = node.children.flatMap((child) =>
+        child.type === 'delete' ? (child.children ?? []) : [child],
+      );
   }
   visit(root, false);
 }

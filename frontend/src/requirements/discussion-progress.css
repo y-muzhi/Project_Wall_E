@@ -1,91 +1,495 @@
 /* Dedicated full-height tab; nested disclosures keep the shared motion. */
-.detail-product #detail-panel-PROGRESS { display:flex;flex-direction:column;overflow:hidden;padding:0; }
-.discussion-progress { flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-bottom:1px solid var(--border-light);font-size:13px;line-height:1.6;scrollbar-width:thin;scrollbar-gutter:stable;scrollbar-color:#c5cad3 transparent; }
-.discussion-progress summary { cursor:pointer;list-style:none; }
-.discussion-progress summary::-webkit-details-marker { display:none; }
-.discussion-progress summary:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;border-radius:6px; }
-.progress-panel-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:var(--surface-base);position:sticky;top:0;z-index:2;border-bottom:1px solid var(--border-light); }
-.progress-panel-heading > div { display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0; }
-.progress-panel-heading h2 { margin:0;font-size:16px;line-height:1.5; }
-.progress-panel-heading > button { flex:none;min-height:32px;font-size:12px; }
-.progress-phase-label { flex:none;border:1px solid var(--border-light);border-radius:6px;padding:2px 6px;color:var(--muted);font-size:11px; }
-.progress-chevron { display:inline-flex;flex:none;color:var(--muted);transition:rotate var(--motion-disclosure) var(--motion-ease); }
-.progress-mainline[open] > summary > .progress-chevron,.progress-topic[open] > summary > .progress-chevron { rotate:90deg; }
-.progress-body { padding:16px;display:grid;gap:18px;min-width:0; }
-.discussion-progress p { margin:0;white-space:pre-wrap;overflow-wrap:anywhere; }
-.discussion-progress h3,.discussion-progress h4 { margin:0;font-size:13px;line-height:1.6; }
-.progress-focus-card { padding:10px 12px;border:1px solid #dbe4ff;border-left:3px solid var(--accent);border-radius:8px;background:#f5f7ff;min-width:0; }
-.progress-focus-card > div { display:flex;align-items:center;justify-content:space-between;gap:8px; }
-.progress-eyebrow { display:block;color:var(--muted);font-size:11px;font-weight:500; }
-.progress-focus-card h3 { font-size:15px;margin:5px 0 3px;overflow-wrap:anywhere; }
-.progress-focus-card:focus-visible { outline:2px solid var(--accent);outline-offset:2px; }
-.progress-focus-card p { color:var(--text);font-size:12px; }
-.progress-next-step { padding:0 2px 0 12px;border-left:2px solid var(--border);display:grid;gap:3px;min-width:0; }
-.progress-next-step > strong { font-size:13px; }
-.progress-next-step > p,.progress-next-step > ul { font-size:12px;color:var(--muted); }
-.progress-next-step ul { margin:3px 0 0;padding-left:18px; }
-.progress-route-heading { display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;justify-content:space-between; }
-.progress-route-heading > span { color:var(--muted);font-size:11px; }
-.progress-mainlines { display:grid;gap:6px;list-style:none;padding:0;margin:0;min-width:0; }
-.progress-mainlines > li { min-width:0; }
-.progress-mainline { border:1px solid var(--border-light);border-radius:8px;overflow:clip; }
-.progress-mainline > summary { display:flex;gap:8px;align-items:center;min-height:40px;padding:8px 10px;background:#fafbfc; }
-.progress-mainline > summary > strong { flex:1;min-width:0;overflow-wrap:anywhere; }
-.progress-mainline-number { color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums; }
-.progress-mainline-count { flex:none;color:var(--muted);font-size:11px; }
-.progress-mainline-body { padding:8px;display:grid;gap:8px;border-top:1px solid var(--border-light); }
-.progress-mainline-purpose { font-size:12px;color:var(--muted);padding:0 2px 2px; }
-.progress-topic { min-width:0;border:1px solid var(--border-light);border-radius:7px;overflow:clip; }
-.progress-topic[data-current=true] { border-color:#ccd9ff; }
-.progress-topic > summary { display:flex;align-items:flex-start;gap:6px;padding:9px 8px; }
-.progress-topic > summary > .progress-chevron { margin-top:3px; }
-.progress-topic-heading { flex:1;min-width:0; }
-.progress-topic-title { display:block;font-weight:600;overflow-wrap:anywhere; }
-.progress-current-label { display:inline-block;margin-right:5px;color:var(--accent);font-size:11px;font-weight:500; }
-.progress-topic-meta { display:flex;flex-wrap:wrap;gap:2px 8px;font-size:11px;font-weight:400;color:var(--muted); }
-.progress-topic-meta > span:first-child:not(:last-child) { color:#8a5200; }
-.progress-assessment { display:inline-block;flex:none;font-size:11px;font-weight:400;white-space:nowrap;border-radius:4px;padding:1px 5px;background:var(--surface);color:var(--muted); }
-.progress-assessment[data-assessment=DISCUSSING] { background:var(--accent-soft);color:var(--accent); }
-.progress-assessment[data-assessment=SUPPORTED] { background:#edf7f0;color:#287144; }
-.progress-assessment[data-assessment=REVIEW_REQUIRED] { background:#fff3df;color:#8a5200; }
-.progress-topic-body { padding:0 10px 10px;display:grid;gap:14px;min-width:0; }
-.progress-topic-body > section { display:grid;gap:6px;min-width:0; }
-.progress-topic-body h4 { font-size:12px;color:var(--text); }
-.progress-topic-body h4 small { font-size:11px;font-weight:400;color:var(--muted);margin-left:4px; }
-.progress-topic-purpose,.progress-empty { color:var(--muted);font-size:12px; }
-.progress-unresolved { padding:8px 10px;border-radius:6px;background:#fff8eb;border-left:2px solid #d59a3f; }
-.progress-unresolved ul,.progress-dependencies ul { margin:0;padding-left:17px;display:grid;gap:4px; }
-.progress-unresolved li { white-space:pre-wrap;overflow-wrap:anywhere; }
-.progress-records,.progress-outcomes ul,.progress-decisions { list-style:none;margin:0;padding:0;display:grid;gap:8px; }
-.progress-records > li { padding:8px 10px;border-radius:6px;background:#f7f8fa;border:1px solid var(--border-light);min-width:0; }
-.progress-records > li[data-state=DISPUTED] { border-color:#e7c58e;background:#fffbf4; }
-.progress-records > li[data-state=SUPERSEDED] { color:var(--muted); }
-.progress-record-meta { display:flex;flex-wrap:wrap;gap:3px 8px;color:var(--muted);font-size:11px;margin-bottom:4px; }
-.progress-record-meta > [data-origin=USER_DECISION] { color:#287144;font-weight:500; }
-.progress-record-meta > [data-origin=AI_PROPOSAL] { color:var(--accent); }
-.progress-sources { margin-top:5px; }
-.progress-sources > summary,.progress-history > summary { font-size:11px;color:var(--muted);padding:2px 0;text-decoration:underline;text-underline-offset:3px; }
-.progress-sources > ul { padding-left:14px;margin:4px 0 0; }
-.progress-sources .source-reference > summary { padding:4px 0;color:var(--accent); }
-.progress-sources pre { max-height:240px;overflow:auto; }
-.progress-outcomes li { border-left:2px solid var(--border-light);padding-left:9px;font-size:12px; }
-.progress-outcomes li > strong { font-weight:500; }
-.progress-outcomes li > p { color:var(--muted);margin-top:2px; }
-.progress-decisions > li { padding:8px 10px;border:1px solid var(--border-light);border-radius:6px; }
-.progress-decisions > li > span { display:block;font-size:11px;color:var(--muted);margin-bottom:3px; }
-.progress-phase-decisions { display:grid;gap:8px; }
-.progress-settings { border-top:1px solid var(--border-light);padding-top:9px; }
-.progress-settings > summary { display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;min-height:32px; }
-.progress-settings > summary > span { font-size:11px;color:var(--muted); }
-.progress-settings-body { padding-top:6px;display:grid;gap:8px; }
-.progress-setting-section { padding:8px 10px;border:1px solid var(--border-light);border-radius:7px; }
-.progress-setting-section > summary { font-weight:500;padding:2px 0; }
-.progress-setting-section label { display:grid;gap:5px;margin-block:10px; }
-.progress-setting-section fieldset { min-width:0;border:1px solid var(--border-light);border-radius:6px;padding:8px; }
-.progress-setting-section fieldset label { display:flex;align-items:flex-start;gap:7px;overflow-wrap:anywhere; }
-.progress-setting-section fieldset input { flex:none;width:16px;height:16px;margin:3px 0 0; }
-.progress-setting-section textarea { width:100%;min-height:72px;box-sizing:border-box;resize:vertical; }
-.progress-setting-section > .field-help { margin-top:8px; }
-.progress-notice { padding:8px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:12px; }
-.progress-notice > button { margin:4px 0 0 6px; }
-@media(max-width:1279px) { .progress-body { padding:14px;gap:16px; }.progress-mainline > summary { padding:8px; }.progress-topic > summary { flex-wrap:wrap; }.progress-topic > summary > .progress-assessment { margin-left:22px; }.progress-topic-heading { flex-basis:calc(100% - 24px); } }
+.detail-product #detail-panel-PROGRESS {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+.discussion-progress {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+  line-height: 1.6;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  scrollbar-color: #c5cad3 transparent;
+}
+.discussion-progress summary {
+  cursor: pointer;
+  list-style: none;
+}
+.discussion-progress summary::-webkit-details-marker {
+  display: none;
+}
+.discussion-progress summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+.progress-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface-base);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid var(--border-light);
+}
+.progress-panel-heading > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.progress-panel-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.progress-panel-heading > button {
+  flex: none;
+  min-height: 32px;
+  font-size: 12px;
+}
+.progress-phase-label {
+  flex: none;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.progress-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+  transition: rotate var(--motion-disclosure) var(--motion-ease);
+}
+.progress-mainline[open] > summary > .progress-chevron,
+.progress-topic[open] > summary > .progress-chevron {
+  rotate: 90deg;
+}
+.progress-body {
+  padding: 16px;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.discussion-progress p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.discussion-progress h3,
+.discussion-progress h4 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.progress-focus-card {
+  padding: 10px 12px;
+  border: 1px solid #dbe4ff;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: #f5f7ff;
+  min-width: 0;
+}
+.progress-focus-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.progress-eyebrow {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.progress-focus-card h3 {
+  font-size: 15px;
+  margin: 5px 0 3px;
+  overflow-wrap: anywhere;
+}
+.progress-focus-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.progress-focus-card p {
+  color: var(--text);
+  font-size: 12px;
+}
+.progress-next-step {
+  padding: 0 2px 0 12px;
+  border-left: 2px solid var(--border);
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.progress-next-step > strong {
+  font-size: 13px;
+}
+.progress-next-step > p,
+.progress-next-step > ul {
+  font-size: 12px;
+  color: var(--muted);
+}
+.progress-next-step ul {
+  margin: 3px 0 0;
+  padding-left: 18px;
+}
+.progress-route-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+}
+.progress-route-heading > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.progress-mainlines {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.progress-mainlines > li {
+  min-width: 0;
+}
+.progress-mainline {
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: clip;
+}
+.progress-mainline > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  background: #fafbfc;
+}
+.progress-mainline > summary > strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.progress-mainline-number {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.progress-mainline-count {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.progress-mainline-body {
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--border-light);
+}
+.progress-mainline-purpose {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 2px 2px;
+}
+.progress-topic {
+  min-width: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  overflow: clip;
+}
+.progress-topic[data-current='true'] {
+  border-color: #ccd9ff;
+}
+.progress-topic > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 9px 8px;
+}
+.progress-topic > summary > .progress-chevron {
+  margin-top: 3px;
+}
+.progress-topic-heading {
+  flex: 1;
+  min-width: 0;
+}
+.progress-topic-title {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.progress-current-label {
+  display: inline-block;
+  margin-right: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+.progress-topic-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.progress-topic-meta > span:first-child:not(:last-child) {
+  color: #8a5200;
+}
+.progress-assessment {
+  display: inline-block;
+  flex: none;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.progress-assessment[data-assessment='DISCUSSING'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.progress-assessment[data-assessment='SUPPORTED'] {
+  background: #edf7f0;
+  color: #287144;
+}
+.progress-assessment[data-assessment='REVIEW_REQUIRED'] {
+  background: #fff3df;
+  color: #8a5200;
+}
+.progress-topic-body {
+  padding: 0 10px 10px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.progress-topic-body > section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.progress-topic-body h4 {
+  font-size: 12px;
+  color: var(--text);
+}
+.progress-topic-body h4 small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.progress-topic-purpose,
+.progress-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+.progress-unresolved {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fff8eb;
+  border-left: 2px solid #d59a3f;
+}
+.progress-unresolved ul,
+.progress-dependencies ul {
+  margin: 0;
+  padding-left: 17px;
+  display: grid;
+  gap: 4px;
+}
+.progress-unresolved li {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.progress-records,
+.progress-outcomes ul,
+.progress-decisions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.progress-records > li {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f7f8fa;
+  border: 1px solid var(--border-light);
+  min-width: 0;
+}
+.progress-records > li[data-state='DISPUTED'] {
+  border-color: #e7c58e;
+  background: #fffbf4;
+}
+.progress-records > li[data-state='SUPERSEDED'] {
+  color: var(--muted);
+}
+.progress-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.progress-record-meta > [data-origin='USER_DECISION'] {
+  color: #287144;
+  font-weight: 500;
+}
+.progress-record-meta > [data-origin='AI_PROPOSAL'] {
+  color: var(--accent);
+}
+.progress-sources {
+  margin-top: 5px;
+}
+.progress-sources > summary,
+.progress-history > summary {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.progress-sources > ul {
+  padding-left: 14px;
+  margin: 4px 0 0;
+}
+.progress-sources .source-reference > summary {
+  padding: 4px 0;
+  color: var(--accent);
+}
+.progress-sources pre {
+  max-height: 240px;
+  overflow: auto;
+}
+.progress-outcomes li {
+  border-left: 2px solid var(--border-light);
+  padding-left: 9px;
+  font-size: 12px;
+}
+.progress-outcomes li > strong {
+  font-weight: 500;
+}
+.progress-outcomes li > p {
+  color: var(--muted);
+  margin-top: 2px;
+}
+.progress-decisions > li {
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+}
+.progress-decisions > li > span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.progress-phase-decisions {
+  display: grid;
+  gap: 8px;
+}
+.progress-settings {
+  border-top: 1px solid var(--border-light);
+  padding-top: 9px;
+}
+.progress-settings > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  min-height: 32px;
+}
+.progress-settings > summary > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.progress-settings-body {
+  padding-top: 6px;
+  display: grid;
+  gap: 8px;
+}
+.progress-setting-section {
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+}
+.progress-setting-section > summary {
+  font-weight: 500;
+  padding: 2px 0;
+}
+.progress-setting-section label {
+  display: grid;
+  gap: 5px;
+  margin-block: 10px;
+}
+.progress-setting-section fieldset {
+  min-width: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 8px;
+}
+.progress-setting-section fieldset label {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  overflow-wrap: anywhere;
+}
+.progress-setting-section fieldset input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+}
+.progress-setting-section textarea {
+  width: 100%;
+  min-height: 72px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+.progress-setting-section > .field-help {
+  margin-top: 8px;
+}
+.progress-notice {
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.progress-notice > button {
+  margin: 4px 0 0 6px;
+}
+@media (max-width: 1279px) {
+  .progress-body {
+    padding: 14px;
+    gap: 16px;
+  }
+  .progress-mainline > summary {
+    padding: 8px;
+  }
+  .progress-topic > summary {
+    flex-wrap: wrap;
+  }
+  .progress-topic > summary > .progress-assessment {
+    margin-left: 22px;
+  }
+  .progress-topic-heading {
+    flex-basis: calc(100% - 24px);
+  }
+}

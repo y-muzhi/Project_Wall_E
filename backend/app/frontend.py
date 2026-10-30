@@ -1,4 +1,5 @@
 """Serve the actual compiled SPA alongside the existing local API."""
+
 from pathlib import Path
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
@@ -23,4 +24,9 @@ def install_frontend(app, directory):
         # requirements through the real I03 error, never an empty document.
         return await shell()
 
-    app.add_api_route('/requirements/{identity}', requirement_shell, methods=['GET', 'HEAD'], include_in_schema=False)
+    app.add_api_route(
+        '/requirements/{identity}',
+        requirement_shell,
+        methods=['GET', 'HEAD'],
+        include_in_schema=False,
+    )

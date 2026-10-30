@@ -1,4 +1,5 @@
 """Server-derived focus/read ranges and write authority (SHR-SCOPE/D-004)."""
+
 from dataclasses import dataclass
 import json
 from functools import lru_cache
@@ -27,7 +28,18 @@ class AllowedTarget:
     row_selectors: tuple[tuple[int, str], ...] | None = None
 
     def as_dict(self) -> dict:
-        return {'block_id': self.block_id, 'operations': list(self.operations), 'selection_range': None if self.selection_range is None else {'start_offset': self.selection_range[0], 'end_offset': self.selection_range[1]}, 'row_selectors': None if self.row_selectors is None else [{'key_column_index': column, 'key_value': key} for column, key in self.row_selectors]}
+        return {
+            'block_id': self.block_id,
+            'operations': list(self.operations),
+            'selection_range': None
+            if self.selection_range is None
+            else {'start_offset': self.selection_range[0], 'end_offset': self.selection_range[1]},
+            'row_selectors': None
+            if self.row_selectors is None
+            else [
+                {'key_column_index': column, 'key_value': key} for column, key in self.row_selectors
+            ],
+        }
 
 
 class WriteAuthority(Protocol):
@@ -40,7 +52,9 @@ class FrozenAuthority:
 
     @property
     def state_json(self) -> str:
-        return canonical_input({'schema_version': 1, 'targets': [target.as_dict() for target in self.allowed_targets]})
+        return canonical_input(
+            {'schema_version': 1, 'targets': [target.as_dict() for target in self.allowed_targets]}
+        )
 
 
 @dataclass(frozen=True)
@@ -75,7 +89,13 @@ def _authority_protocol():
     return ResourceCatalog().freeze('MODIFY', 'USER_INSTRUCTION')
 
 
-def restore_authority(snapshot: Snapshot, action_type: str, scope_type: str, scope_ref: dict | None, stored: dict | str) -> FrozenAuthority:
+def restore_authority(
+    snapshot: Snapshot,
+    action_type: str,
+    scope_type: str,
+    scope_ref: dict | None,
+    stored: dict | str,
+) -> FrozenAuthority:
     """Restore the frozen server authority; never fill missing/invalid entries.
 
     The application must first check the same run/requirement and base version.
@@ -87,24 +107,35 @@ def restore_authority(snapshot: Snapshot, action_type: str, scope_type: str, sco
         value = _authority_protocol().validate_allowed_targets(value)
     except (InvalidInput, ProtocolInvalid):
         raise ScopeInvalid('冻结写入权限结构不合法') from None
-    permitted = {target.block_id: target for target in resolve_scope(snapshot, action_type, scope_type, scope_ref).allowed_targets}
+    permitted = {
+        target.block_id: target
+        for target in resolve_scope(snapshot, action_type, scope_type, scope_ref).allowed_targets
+    }
     restored = []
     seen = set()
     for entry in value['targets']:
         identity = entry['block_id']
         ceiling = permitted.get(identity)
-        if identity in seen or ceiling is None or not set(entry['operations']).issubset(ceiling.operations):
+        if (
+            identity in seen
+            or ceiling is None
+            or not set(entry['operations']).issubset(ceiling.operations)
+        ):
             raise ScopeInvalid('冻结权限重复或超过原动作范围')
         seen.add(identity)
         selection = entry['selection_range']
-        selection = None if selection is None else (selection['start_offset'], selection['end_offset'])
+        selection = (
+            None if selection is None else (selection['start_offset'], selection['end_offset'])
+        )
         if selection != ceiling.selection_range:
             raise ScopeInvalid('冻结选区与当前原范围不一致')
         row_selectors = entry['row_selectors']
         if row_selectors is not None:
             if 'REPLACE_TABLE_ROW' not in entry['operations']:
                 raise ScopeInvalid('行选择权限不能用于非行操作')
-            selectors = tuple((item['key_column_index'], item['key_value']) for item in row_selectors)
+            selectors = tuple(
+                (item['key_column_index'], item['key_value']) for item in row_selectors
+            )
             if len(set(selectors)) != len(selectors):
                 raise ScopeInvalid('冻结行权限重复')
             try:
@@ -119,10 +150,17 @@ def restore_authority(snapshot: Snapshot, action_type: str, scope_type: str, sco
     return FrozenAuthority(tuple(restored))
 
 
-def resolve_scope(snapshot: Snapshot, action_type: str, scope_type: str, scope_ref: dict | None = None) -> ResolvedScope:
+def resolve_scope(
+    snapshot: Snapshot, action_type: str, scope_type: str, scope_ref: dict | None = None
+) -> ResolvedScope:
     if type(action_type) is not str or action_type not in ('INITIALIZE', 'ASK', 'REVIEW', 'MODIFY'):
         raise ScopeInvalid('动作未登记')
-    if type(scope_type) is not str or scope_type not in ('DOCUMENT', 'SECTION', 'BLOCK', 'SELECTION'):
+    if type(scope_type) is not str or scope_type not in (
+        'DOCUMENT',
+        'SECTION',
+        'BLOCK',
+        'SELECTION',
+    ):
         raise ScopeInvalid('范围未登记')
     pairs = list(snapshot.by_id.items())
     selection = None
@@ -132,13 +170,19 @@ def resolve_scope(snapshot: Snapshot, action_type: str, scope_type: str, scope_r
         start, end = 0, len(pairs)
         context_ref = None
     else:
-        fields = {'block_id', 'selected_text', 'prefix_text', 'suffix_text'} if scope_type == 'SELECTION' else {'block_id'}
+        fields = (
+            {'block_id', 'selected_text', 'prefix_text', 'suffix_text'}
+            if scope_type == 'SELECTION'
+            else {'block_id'}
+        )
         if type(scope_ref) is not dict or set(scope_ref) != fields:
             raise ScopeInvalid('范围引用字段不完整或含未知字段')
         identity = scope_ref['block_id']
         if type(identity) is not int or not 1 <= identity <= MAX_SAFE_INTEGER:
             raise ScopeInvalid('范围区块身份不合法')
-        start = next((index for index, (block_id, _) in enumerate(pairs) if block_id == identity), None)
+        start = next(
+            (index for index, (block_id, _) in enumerate(pairs) if block_id == identity), None
+        )
         if start is None:
             raise ScopeInvalid('范围区块不存在')
         end = start + 1
@@ -148,7 +192,10 @@ def resolve_scope(snapshot: Snapshot, action_type: str, scope_type: str, scope_r
                 raise ScopeInvalid('章节范围必须引用标题身份')
             while end < len(pairs):
                 following = pairs[end][1][0]
-                if following.heading_level is not None and following.heading_level <= heading.heading_level:
+                if (
+                    following.heading_level is not None
+                    and following.heading_level <= heading.heading_level
+                ):
                     break
                 end += 1
             context_ref = {'heading_block_id': identity}
@@ -156,7 +203,12 @@ def resolve_scope(snapshot: Snapshot, action_type: str, scope_type: str, scope_r
             context_ref = dict(scope_ref)
         if scope_type == 'SELECTION':
             try:
-                location = locate(snapshot, 'SELECTION', identity, {key: scope_ref[key] for key in fields if key != 'block_id'})
+                location = locate(
+                    snapshot,
+                    'SELECTION',
+                    identity,
+                    {key: scope_ref[key] for key in fields if key != 'block_id'},
+                )
             except AnchorInvalid:
                 raise ScopeInvalid('选区结构不合法') from None
             if not location.attached:
@@ -176,7 +228,7 @@ def resolve_scope(snapshot: Snapshot, action_type: str, scope_type: str, scope_r
             required.update(identity for _, identity in ancestors)
     read = set(required)
     if scope_type != 'DOCUMENT':
-        read.update(identity for identity, _ in pairs[max(0, start - 2):min(len(pairs), end + 2)])
+        read.update(identity for identity, _ in pairs[max(0, start - 2) : min(len(pairs), end + 2)])
     targets = []
     if action_type in ('INITIALIZE', 'MODIFY'):
         for index in range(start, end):
@@ -184,10 +236,24 @@ def resolve_scope(snapshot: Snapshot, action_type: str, scope_type: str, scope_r
             if scope_type == 'SELECTION':
                 operations = ('REPLACE_BLOCK',)
             else:
-                operations = tuple(operation for operation in OPERATIONS if operation != 'REPLACE_TABLE_ROW' or block.block_type == 'table')
+                operations = tuple(
+                    operation
+                    for operation in OPERATIONS
+                    if operation != 'REPLACE_TABLE_ROW' or block.block_type == 'table'
+                )
                 if scope_type == 'SECTION' and index == start:
                     # Inserting before this heading is outside the section.
-                    operations = tuple(operation for operation in operations if operation != 'INSERT_BEFORE')
+                    operations = tuple(
+                        operation for operation in operations if operation != 'INSERT_BEFORE'
+                    )
             targets.append(AllowedTarget(identity, operations, selection))
     in_order = lambda identities: tuple(identity for identity, _ in pairs if identity in identities)
-    return ResolvedScope(scope_type, json.dumps(scope_ref, ensure_ascii=False), json.dumps({'scope_type': scope_type, 'scope_ref': context_ref}, ensure_ascii=False), in_order(focus), in_order(required), in_order(read), tuple(targets))
+    return ResolvedScope(
+        scope_type,
+        json.dumps(scope_ref, ensure_ascii=False),
+        json.dumps({'scope_type': scope_type, 'scope_ref': context_ref}, ensure_ascii=False),
+        in_order(focus),
+        in_order(required),
+        in_order(read),
+        tuple(targets),
+    )

@@ -1,4 +1,5 @@
 """Explicit local CLI credential import; never evaluate shell/dotenv code."""
+
 from pathlib import Path
 
 
@@ -11,7 +12,7 @@ def read_local_credential(path):
         left, separator, right = line.partition('=')
         if separator and left.strip() == 'WALLE_MODEL_API_KEY':
             value = right.strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
                 value = value[1:-1]
             values.append(value)
     if len(values) != 1:

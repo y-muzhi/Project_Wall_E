@@ -3,6 +3,7 @@
 Routers require an explicit initialized runtime. Production startup/recovery is
 a separate capability; these adapters do not create a database or skip recovery.
 """
+
 from dataclasses import dataclass
 from typing import Callable
 from urllib.parse import parse_qsl
@@ -29,13 +30,20 @@ class HttpRuntime:
     worker: object | None = None
 
     def commands(self) -> Idempotency:
-        if not isinstance(self.executor, Idempotency) or self.executor.database is not self.database:
+        if (
+            not isinstance(self.executor, Idempotency)
+            or self.executor.database is not self.database
+        ):
             raise ValueError('Command runtime must share the actual database and held process lock')
         return self.executor
 
 
 def idempotency_header(request: Request) -> str:
-    values = [value for name, value in request.scope.get('headers', []) if name.lower() == b'idempotency-key']
+    values = [
+        value
+        for name, value in request.scope.get('headers', [])
+        if name.lower() == b'idempotency-key'
+    ]
     if not values:
         reject('Idempotency-Key', 'REQUIRED', '必须提供此请求头')
     if len(values) != 1:
@@ -56,7 +64,7 @@ async def request_body(request: Request, *, json_required: bool = False) -> dict
     # Count application-visible request bytes, including URI and header fields,
     # before consuming the body. Never trust Content-Length to enforce the cap.
     used = len(request.scope.get('raw_path', b'')) + len(request.scope.get('query_string', b''))
-    used += sum(len(key)+len(value) for key, value in request.scope.get('headers', []))
+    used += sum(len(key) + len(value) for key, value in request.scope.get('headers', []))
     if used > HTTP_REQUEST_BYTES:
         reject('request', 'TOO_LONG', '完整请求超过8MiB容量')
     body = bytearray()
@@ -69,7 +77,11 @@ async def request_body(request: Request, *, json_required: bool = False) -> dict
         body.extend(chunk)
     if not json_required:
         return None
-    media = [value.decode('latin-1') for name, value in request.scope.get('headers', []) if name.lower() == b'content-type']
+    media = [
+        value.decode('latin-1')
+        for name, value in request.scope.get('headers', [])
+        if name.lower() == b'content-type'
+    ]
     if len(media) != 1 or media[0].split(';', 1)[0].strip().lower() != 'application/json':
         reject('Content-Type', 'INVALID_FORMAT', 'JSON请求体必须使用application/json')
     if not body:
@@ -77,12 +89,18 @@ async def request_body(request: Request, *, json_required: bool = False) -> dict
     return strict_json_object(bytes(body))
 
 
-async def handle_http(request: Request, request_model: type, response_model: type, invoke: Callable) -> JSONResponse:
+async def handle_http(
+    request: Request, request_model: type, response_model: type, invoke: Callable
+) -> JSONResponse:
     request_id = new_request_id()
     request.state.request_id = request_id
+
     def failure(code, details=None):
-        projected = error_response(code, details, allowed_errors=response_model.errors, request_id=request_id)
+        projected = error_response(
+            code, details, allowed_errors=response_model.errors, request_id=request_id
+        )
         return JSONResponse(projected.body, status_code=projected.status)
+
     try:
         has_body = getattr(request_model, 'body_fields', None) is not None
         body = await request_body(request, json_required=has_body)
@@ -98,7 +116,9 @@ async def handle_http(request: Request, request_model: type, response_model: typ
         result = await run_in_threadpool(invoke, runtime, parsed)
         if type(result) is not dict or set(result) != {'code', 'data', 'details'}:
             raise ValueError('Invalid application result contract')
-        success_codes = getattr(response_model, 'success_codes', (getattr(response_model, 'success_code', 'READ_OK'),))
+        success_codes = getattr(
+            response_model, 'success_codes', (getattr(response_model, 'success_code', 'READ_OK'),)
+        )
         if result['code'] not in success_codes:
             if result['data'] is not None:
                 raise ValueError('Failure results cannot carry success data')
@@ -107,7 +127,12 @@ async def handle_http(request: Request, request_model: type, response_model: typ
             raise ValueError('Success results cannot carry error details')
         if runtime.worker is not None:
             from backend.app.guide.worker import GuideWorker
-            base = runtime.database.database if isinstance(runtime.database, LeasedDatabase) else runtime.database
+
+            base = (
+                runtime.database.database
+                if isinstance(runtime.database, LeasedDatabase)
+                else runtime.database
+            )
             if not isinstance(runtime.worker, GuideWorker) or runtime.worker.database is not base:
                 raise ValueError('Post-commit dispatcher must own this actual runtime database')
             await runtime.worker.after_commit(result)
@@ -116,8 +141,14 @@ async def handle_http(request: Request, request_model: type, response_model: typ
         meta = {'request_id': request_id}
         if pagination is not None:
             meta['pagination'] = pagination
-        status = response_model.status_for(data) if hasattr(response_model, 'status_for') else getattr(response_model, 'status', 200)
-        return JSONResponse({'success': True, 'data': data, 'error': None, 'meta': meta}, status_code=status)
+        status = (
+            response_model.status_for(data)
+            if hasattr(response_model, 'status_for')
+            else getattr(response_model, 'status', 200)
+        )
+        return JSONResponse(
+            {'success': True, 'data': data, 'error': None, 'meta': meta}, status_code=status
+        )
     except ExecutionRetired:
         return failure('STORAGE_UNAVAILABLE')
     except Exception:

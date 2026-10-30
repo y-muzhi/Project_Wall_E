@@ -3,6 +3,7 @@
 The actual Database still owns BEGIN/schema/authorizer/rollback/commit. Only
 worker transactions use this wrapper; public command transactions stay native.
 """
+
 from contextlib import contextmanager
 import sqlite3
 import sys
@@ -23,10 +24,12 @@ class ExecutionLease:
 
     @property
     def retired(self):
-        with self._gate: return self._retired
+        with self._gate:
+            return self._retired
 
     def _check(self):
-        if self._retired: raise ExecutionRetired()
+        if self._retired:
+            raise ExecutionRetired()
 
     def retire(self):
         # Commit and retirement compete on the same gate. A completed commit
@@ -34,8 +37,10 @@ class ExecutionLease:
         with self._gate:
             self._retired = True
             for connection in tuple(self._connections):
-                try: connection.interrupt()
-                except sqlite3.Error: pass  # Already closed, never commit proof.
+                try:
+                    connection.interrupt()
+                except sqlite3.Error:
+                    pass  # Already closed, never commit proof.
 
 
 class LeasedDatabase(Database):
@@ -48,14 +53,16 @@ class LeasedDatabase(Database):
     @contextmanager
     def transaction(self, *, write=False):
         lease = self.lease
-        with lease._gate: lease._check()
+        with lease._gate:
+            lease._check()
         manager = self.database.transaction(write=write)
         connection = manager.__enter__()
         registered = False
         try:
             with lease._gate:
                 lease._check()
-                lease._connections.add(connection); registered = True
+                lease._connections.add(connection)
+                registered = True
             try:
                 yield connection
             except BaseException:
@@ -75,4 +82,5 @@ class LeasedDatabase(Database):
                 manager.__exit__(*sys.exc_info())
             raise
         finally:
-            with lease._gate: lease._connections.discard(connection)
+            with lease._gate:
+                lease._connections.discard(connection)

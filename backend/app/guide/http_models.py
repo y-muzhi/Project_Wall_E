@@ -1,4 +1,5 @@
 """I16 canonical status input and the complete public status model."""
+
 from dataclasses import dataclass
 from backend.app.shared.http_boundary import request_query
 from backend.app.shared.validation import decimal_integer
@@ -41,9 +42,21 @@ class ListModelCallsResponse:
 
     @staticmethod
     def project(data, request):
-        fields = ('id', 'requirement_id', 'action_type', 'operation', 'status', 'current_step', 'trigger_message_id', 'program_processed', 'items')
+        fields = (
+            'id',
+            'requirement_id',
+            'action_type',
+            'operation',
+            'status',
+            'current_step',
+            'trigger_message_id',
+            'program_processed',
+            'items',
+        )
         value = object_fields(data, 'model_calls', fields, fields)
-        if value['id'] != request.guide_run_id or any(item['guide_run_id'] != value['id'] for item in value['items']):
+        if value['id'] != request.guide_run_id or any(
+            item['guide_run_id'] != value['id'] for item in value['items']
+        ):
             raise ValueError('Calls must belong to the requested run')
         return value, None
 
@@ -63,8 +76,21 @@ class GetModelCallResponse:
 
     @staticmethod
     def project(data, request):
-        fields = ('call', 'requirement_id', 'action_type', 'operation', 'prompt_reference', 'context_reference', 'sections',
-            'included_history_ids', 'budget_removed_history_ids', 'raw_request_json', 'preflight', 'context_strategy', 'selection_summary')
+        fields = (
+            'call',
+            'requirement_id',
+            'action_type',
+            'operation',
+            'prompt_reference',
+            'context_reference',
+            'sections',
+            'included_history_ids',
+            'budget_removed_history_ids',
+            'raw_request_json',
+            'preflight',
+            'context_strategy',
+            'selection_summary',
+        )
         value = object_fields(data, 'model_call', fields, fields)
         if value['call']['id'] != request.llm_use_id:
             raise ValueError('Snapshot must belong to the requested call')
@@ -78,14 +104,28 @@ class CancelGuideRunRequest:
     @classmethod
     def parse(cls, request):
         request_query(request)
-        payload = {'guide_run_id': decimal_integer(request.path_params['guide_run_id'], 'guide_run_id'), 'idempotency_key': idempotency_header(request)}
+        payload = {
+            'guide_run_id': decimal_integer(request.path_params['guide_run_id'], 'guide_run_id'),
+            'idempotency_key': idempotency_header(request),
+        }
         cancel_guide_run_input(payload)
         return cls(payload)
 
 
 class CancelGuideRunResponse:
     success_codes = ('GUIDE_CANCELLED', 'GUIDE_ALREADY_COMPLETED')
-    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+    errors = frozenset(
+        {
+            'INVALID_INPUT',
+            'NOT_FOUND',
+            'STATE_CONFLICT',
+            'WORK_STATE_INCONSISTENT',
+            'IDEMPOTENCY_CONFLICT',
+            'REQUEST_IN_PROGRESS',
+            'STORAGE_UNAVAILABLE',
+            'INTERNAL_ERROR',
+        }
+    )
 
     @staticmethod
     def project(data, request):
@@ -95,7 +135,11 @@ class CancelGuideRunResponse:
                 raise ValueError('Completion belongs to another run')
             return value, None
         value = guide_run_accepted(data)
-        if value['id'] != request.payload['guide_run_id'] or value['status'] != 'CANCELLED' or value['current_step'] != 'FINISHED':
+        if (
+            value['id'] != request.payload['guide_run_id']
+            or value['status'] != 'CANCELLED'
+            or value['current_step'] != 'FINISHED'
+        ):
             raise ValueError('Cancellation response must reference the actual cancelled run')
         return value, None
 
@@ -106,12 +150,28 @@ class ListGuideRunsRequest:
 
     @classmethod
     def parse(cls, request):
-        payload = request_query(request, singles=('page',), arrays={'status': GUIDE_STATUSES, 'action_type': ('ASK', 'GENERATE', 'REVIEW', 'MODIFY')})
-        payload['requirement_id'] = decimal_integer(request.path_params['requirement_id'], 'requirement_id')
+        payload = request_query(
+            request,
+            singles=('page',),
+            arrays={
+                'status': GUIDE_STATUSES,
+                'action_type': ('ASK', 'GENERATE', 'REVIEW', 'MODIFY'),
+            },
+        )
+        payload['requirement_id'] = decimal_integer(
+            request.path_params['requirement_id'], 'requirement_id'
+        )
         if 'page' in payload:
             payload['page'] = decimal_integer(payload['page'], 'page', maximum=100000)
         validated = list_guide_runs_input(payload)
-        return cls({'requirement_id': validated.requirement_id, 'page': validated.page, 'status': list(validated.status), 'action_type': list(validated.action_type)})
+        return cls(
+            {
+                'requirement_id': validated.requirement_id,
+                'page': validated.page,
+                'status': list(validated.status),
+                'action_type': list(validated.action_type),
+            }
+        )
 
 
 class ListGuideRunsResponse:
@@ -124,28 +184,63 @@ class ListGuideRunsResponse:
             if value['requirement_id'] != request.payload['requirement_id']:
                 raise ValueError('History response contains another requirement')
             return value
+
         return page(data, project_item, request.payload['page'])
 
 
 class CreateGuideRunRequest(CommandRequest):
-    body_fields = ('expected_discussion_version', 'operation', 'instruction', 'target', 'scope', 'source_refs', 'proposal_ref', 'acknowledge_source_changes')
+    body_fields = (
+        'expected_discussion_version',
+        'operation',
+        'instruction',
+        'target',
+        'scope',
+        'source_refs',
+        'proposal_ref',
+        'acknowledge_source_changes',
+    )
     mandatory = body_fields
     validate = staticmethod(create_guide_run_input)
-    normalize = staticmethod(lambda payload, validated: validated.business_input() | {'idempotency_key': validated.idempotency_key})
+    normalize = staticmethod(
+        lambda payload, validated: (
+            validated.business_input() | {'idempotency_key': validated.idempotency_key}
+        )
+    )
 
 
 class CreateGuideRunResponse:
     success_code = 'GUIDE_ACCEPTED'
     status = 202
-    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT', 'DISCUSSION_VERSION_CONFLICT', 'CONTENT_VERSION_CONFLICT', 'SOURCE_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID', 'CONFIG_INVALID', 'IDEMPOTENCY_CONFLICT', 'REQUEST_IN_PROGRESS', 'CAPACITY_EXHAUSTED', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+    errors = frozenset(
+        {
+            'INVALID_INPUT',
+            'NOT_FOUND',
+            'STATE_CONFLICT',
+            'WORK_STATE_CONFLICT',
+            'WORK_STATE_INCONSISTENT',
+            'DISCUSSION_VERSION_CONFLICT',
+            'CONTENT_VERSION_CONFLICT',
+            'SOURCE_VERSION_CONFLICT',
+            'SOURCE_INVALID',
+            'SCOPE_INVALID',
+            'CONFIG_INVALID',
+            'IDEMPOTENCY_CONFLICT',
+            'REQUEST_IN_PROGRESS',
+            'CAPACITY_EXHAUSTED',
+            'STORAGE_UNAVAILABLE',
+            'INTERNAL_ERROR',
+        }
+    )
 
     @staticmethod
     def project(data, request):
         from backend.app.shared.validation import strict_enum, strict_integer
+
         fields = ('processing', 'guide_run_id', 'user_message_id')
         value = object_fields(data, 'data', fields, fields)
         strict_enum(value['processing'], 'processing', ('MODEL',))
-        strict_integer(value['guide_run_id'], 'guide_run_id');strict_integer(value['user_message_id'], 'user_message_id')
+        strict_integer(value['guide_run_id'], 'guide_run_id')
+        strict_integer(value['user_message_id'], 'user_message_id')
         return value, None
 
 
@@ -158,14 +253,26 @@ class ContinueGuideRunRequest(CommandRequest):
     def parse(cls, request, body):
         request_query(request)
         value = object_fields(body, 'body', cls.body_fields, cls.mandatory)
-        validated = continue_guide_run_input({**value, 'guide_run_id': decimal_integer(request.path_params['guide_run_id'], 'guide_run_id'), 'idempotency_key': idempotency_header(request)})
+        validated = continue_guide_run_input(
+            {
+                **value,
+                'guide_run_id': decimal_integer(
+                    request.path_params['guide_run_id'], 'guide_run_id'
+                ),
+                'idempotency_key': idempotency_header(request),
+            }
+        )
         return cls(validated.business_input() | {'idempotency_key': validated.idempotency_key})
 
 
 class ContinueGuideRunResponse(CreateGuideRunResponse):
     success_code = 'GUIDE_CONTINUED'
     status = 202
-    errors = CreateGuideRunResponse.errors - {'CONTENT_VERSION_CONFLICT', 'SOURCE_INVALID', 'SCOPE_INVALID'}
+    errors = CreateGuideRunResponse.errors - {
+        'CONTENT_VERSION_CONFLICT',
+        'SOURCE_INVALID',
+        'SCOPE_INVALID',
+    }
 
     @staticmethod
     def project(data, request):
@@ -184,7 +291,13 @@ class ModifyFromCommentRequest(CommandRequest):
     def parse(cls, request, body):
         request_query(request)
         value = object_fields(body, 'body', cls.body_fields, cls.mandatory)
-        parsed = modify_from_comment_input({**value, 'comment_id': decimal_integer(request.path_params['comment_id'], 'comment_id'), 'idempotency_key': idempotency_header(request)})
+        parsed = modify_from_comment_input(
+            {
+                **value,
+                'comment_id': decimal_integer(request.path_params['comment_id'], 'comment_id'),
+                'idempotency_key': idempotency_header(request),
+            }
+        )
         return cls(parsed.business_input() | {'idempotency_key': parsed.idempotency_key})
 
 
@@ -205,7 +318,14 @@ class RetryGuideRunRequest:
     @classmethod
     def parse(cls, request):
         request_query(request)
-        value = retry_guide_run_input({'guide_run_id': decimal_integer(request.path_params['guide_run_id'], 'guide_run_id'), 'idempotency_key': idempotency_header(request)})
+        value = retry_guide_run_input(
+            {
+                'guide_run_id': decimal_integer(
+                    request.path_params['guide_run_id'], 'guide_run_id'
+                ),
+                'idempotency_key': idempotency_header(request),
+            }
+        )
         return cls(value.business_input() | {'idempotency_key': value.idempotency_key})
 
 
@@ -218,5 +338,7 @@ class RetryGuideRunResponse:
     def project(data, request):
         value, _ = CreateGuideRunResponse.project(data, request)
         if value['guide_run_id'] == request.payload['guide_run_id']:
-            raise ValueError('Retry response must reference a new accepted run and actual predecessor')
+            raise ValueError(
+                'Retry response must reference a new accepted run and actual predecessor'
+            )
         return value, None

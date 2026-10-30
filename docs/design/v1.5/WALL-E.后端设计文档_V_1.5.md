@@ -12,9 +12,11 @@
 | 目标软件版本 | V1.5 |
 | 规格版本 | 1.0 |
 | 文档状态 | EFFECTIVE（正式设计基线） |
-| 最后更新时间 | 2026-10-26（Asia/Hong_Kong；评论材料来源解析修复，保留接受回执／状态查询职责澄清） |
+| 最后更新时间 | 2026-10-30（Asia/Hong_Kong；M15-CODE-01代码维护约束及实现定位同步；保留M15-DOC-02整理和此前专项） |
 
 规格完成及实现验收分别按8.5判断。本文沿用[统一需求规格说明完整模板](../../templates/统一需求规格说明_完整模板_重构版.md)的章节职责和条目格式；0→1改为增量只影响规格类型与复用说明，不删去对象、能力、交互、入口及依赖的必要契约。
+
+文档修订追溯见[H10整理记录](../../archive/merges/v1.5/合并记录-2026-10-30-文档职责整理.md)，其中链接原专项合入记录。软件版本V1.5、规格版本1.0及EFFECTIVE状态保持；更新时间不代表代码发布或验收日期。
 
 ### 1.2 目标与范围
 
@@ -35,8 +37,10 @@
 4. 多个同类对象、能力、页面、接口逐项套用原模板；不以专题说明或一张目录表代替条目。
 5. 条件小节只在实际触发时填写；本版有异步、并发、模型调用和编辑恢复，必须保留其完成范围与失败处置。
 6. 一个事实只有一处正式定义。本文负责业务规则、对象、应用、模型上下文、HTTP、存储和共享验收；前端负责页面、组件、交互及浏览器存储，并引用本文契约。不另设共同规格文件。
-7. 实施状态、静态核对和实际测试结果只在verification记录，正文定义目标与完成条件。本轮不修改模板源文件、正式资源、代码或数据。
+7. 实施状态在需求实现映射汇总，静态核对和实际测试结果在verification记录；正文定义目标与完成条件。设计定版不自动授权修改模板、资源、代码或数据，实施范围按当前任务确定。
 8. 对原稿的补充说明只限“沿用／修改／新增／不适用”和来源，不改变模板表头；内部函数名可由实现者确定，业务规则、外部字段和关键保证不可临时选择。
+
+M15-CODE-01：实现遵守根AGENTS.md的代码清晰性与旧流程清理规则；使用锁定格式配置，复杂校验、状态变化和副作用保持清楚边界。替代实现必须核对生产、工具、测试及历史读取依赖，无必要旧业务流程应删除；共享算法和冻结来源不按年代删除。此要求不改变业务协议或授权边界。
 
 ### 1.4 术语与缩写
 
@@ -1510,7 +1514,7 @@ C06的正式回答摘要由服务器从原题和所选标签构造，不套用�
 
 |所属模块或关键路径|关键入口或资源|承载内容|
 |---|---|---|
-|backend/app/guide/commands.py、confirmed_response.py|submit_card_responses、complete_confirmed_response|整组回答事务及程序直接确认写入|
+|backend/app/guide/card_commands.py、fact_confirmation.py|submit、apply_confirmed_action|整组回答事务及程序直接确认写入|
 |backend/app/guide/contracts.py|submit_card_responses_input / submit_card_responses_result|应用输入输出；不含HTTP或ORM对象|
 
 **执行实现补充**
@@ -1524,7 +1528,7 @@ responses首先加载消息及purpose，验证整组答案、未回答、版本�
 | DOCUMENT_ACTION接受 | 保存回答＋按卡片固定目标接受GENERATE／REVISE等，一次202；不再额外调用POST guide-runs |
 | DOCUMENT_ACTION拒绝／暂缓 | 保存回答及disposition；200，无运行；不暗中继续提问 |
 | PHASE_CHANGE接受／暂缓 | 程序执行阶段命令或记录处置；200，无运行 |
-| FACT_CONFIRMATION确认 | 复用confirmed_response精确核实及事务采用；200，无运行；已有确认补丁不再交模型重生成 |
+| FACT_CONFIRMATION确认 | 复用fact_confirmation精确核实及事务采用；200，无运行；已有确认补丁不再交模型重生成 |
 
 每次新的模型轮次都结束运行，卡片交互状态由消息投影决定。新continue从已结束父运行取得工作关联，重新检查当前discussion_version，保留新用户原话和当前有效依据；不沿用父运行的一次性写入许可。
 
@@ -1964,7 +1968,7 @@ material_manifest每项至少为`{ref,kind,document_id,revision_id,content_versi
 
 资源头必须给guide key／version和本轮schema约束，供basis_ref对应。变化的discussion_version、目标和用户输入放任务数据后段，不写入稳定系统头。不是给每个请求写一份全新的system Prompt。
 
-逐phase的mainline和成果方法必须是实际发布的完整资源内容；仅有“循序渐进”一句话不能视为落实指引。发布资源前按电影案例和其他需求类型离线检查字段／例子，随后获准再做有限真实效果评估；本轮不运行。
+逐phase的mainline和成果方法必须是实际发布的完整资源内容；仅有“循序渐进”一句话不能视为落实指引。发布资源前按电影案例和其他需求类型离线检查字段／例子，随后在明确授权范围内做有限真实效果评估；实际执行及未覆盖内容记录在verification。
 
 **技术实现补充：计数与用量**
 
@@ -2863,7 +2867,7 @@ DISCUSS、COMPARE和REVIEW的structure为null；GENERATE选择用户指定类型
 
 使用JSON Schema 2020-12。所有对象默认严格字段且必须显式给出nullable字段；缺失不等于null。数组维持来源顺序，唯一性／归属／权限／版本按第6项语义规则检查。 TopicChange.evidence_refs直接用Schema区分讨论依据eN／new_eN与消息mN，来源消息只能进入EvidenceChange.source_refs；合法格式不代表引用已存在，具体归属及同轮映射仍由程序验证。此细化保持schema_version=1及89个具名类型，发布新的contract／受影响输出Schema资源版本，不能修改旧冻结资源或把其准入摘要用于新闭包。ID为1—9007199254740991；字符串按Unicode码点限长，禁止非法代理码点；请求／审计字节上限仍沿用原机制，不提升现有容量。正文字符串不trim、不做Unicode归一化，原文比较保留逐字语义。
 
-下方bundle是完整Schema源。legacy_前缀表示静态承接既有结构，已将其传递引用一并内嵌，不依赖网络Schema解析。来源为[现有ASK_CANONICAL_INPUT.v1](../../../backend/resources/v8/schemas/ASK_CANONICAL_INPUT.v1.json)，读取时摘要`f6e90ee5ef1affd6153c007ddcb309de750ab7d0da048f67c46d1e493f5a14d4`。其中卡片related_spec_context在本版增加document_id与content_version，以消除多文档block_id歧义；其余原卡片选项、正式回答语义、Scope与五种Patch继续复用。源资源本轮不改，派生定义只在新资源中发布。
+下方bundle是完整Schema源。legacy_前缀表示静态承接既有结构，已将其传递引用一并内嵌，不依赖网络Schema解析。来源为[现有ASK_CANONICAL_INPUT.v1](../../../backend/resources/v8/schemas/ASK_CANONICAL_INPUT.v1.json)，读取时摘要`f6e90ee5ef1affd6153c007ddcb309de750ab7d0da048f67c46d1e493f5a14d4`。其中卡片related_spec_context在本版增加document_id与content_version，以消除多文档block_id歧义；其余原卡片选项、正式回答语义、Scope与五种Patch继续复用。冻结源资源保持原始字节，派生定义只在新资源中发布。
 
 Root仅用于资源自检；消息持久化额外选择MessageStructures中的StoredCardGroup或StoredResponses入口，执行字段在原responses请求中传输，不增加接口。运行时必须选择指定入口：Canonical用于程序装配，ContextBasis用于私有保存，Wire用于发送前验证，operation对应Output*用于返回处理。不能因为某对象匹配bundle的其他入口就当作当前请求合法。
 
@@ -3083,7 +3087,7 @@ model_calls列表与详情增加该GuideRun实际operation（六操作枚举）�
 
 preflight.component_counts按计数向量使用system、input、current_request、structure、documents、recent_history、goal_and_decisions、position_topic八个键；position_topic是项目进展与当前主题的合并计数，不能复制到两个分区冒充各自精确token。实际input/output/total/cache_hit仍来自供应方usage。现有model_calls查询与严格解码按此键集合适配，不能套用旧六项索引。
 
-实施必须验证：四阶段资源与Schema可独立取得；按operation的Schema闭包无悬空引用；用户明确生成／更新直接保存且异常不半写；五态任意切换不取消在途任务；同轮进度不使新卡片立即过期；跨10条窗口pending和硬约束不丢；重复原文只发一次；无效进度与有效正文分别处理；固定快照可重放同一system／user字节；3批计数停止边界及准入状态真实；电影案例和至少一种不同业务类型按EV逐项检查。上述为待实施的验收定义，本轮不执行产品或供应方调用。
+实施必须验证：四阶段资源与Schema可独立取得；按operation的Schema闭包无悬空引用；用户明确生成／更新直接保存且异常不半写；五态任意切换不取消在途任务；同轮进度不使新卡片立即过期；跨10条窗口pending和硬约束不丢；重复原文只发一次；无效进度与有效正文分别处理；固定快照可重放同一system／user字节；3批计数停止边界及准入状态真实；电影案例和至少一种不同业务类型按EV逐项检查。上述为验收要求，不表示当前实施或验证状态；实际完成范围见需求实现映射及verification，供应方调用须取得当前明确授权。
 
 
 #### 4.8 实现定位
@@ -6070,7 +6074,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 
 | 事项 | 确定定义 |
 | --- | --- |
-| 入口与执行条件 | 独立显式新库初始化；本轮不执行；不匹配现有schema的路径拒绝 |
+| 入口与执行条件 | 独立显式新库初始化；按当前任务授权执行；不匹配现有schema的路径拒绝 |
 | 结构与初始数据 | 从零建立本节全部表／索引／触发器／序列和必要资源目录；不假设旧库已存在 |
 | 重复执行与版本不匹配 | 同schema只校验结构和摘要；错误版本保留数据并拒绝，不自动迁移／清库 |
 | 失败与再次执行 | 结构创建在事务内；失败回滚，明确原因后可再次初始化新目标，不篡改旧测试库 |
@@ -6191,6 +6195,8 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 本章A15为正式场景表；后端重点覆盖A15-01、03—15的真实HTTP／SQLite／Worker结果。评论来源、卡片程序分派、版本原子提交及恢复都须观察真实持久状态，不仅检查Mock调用。
 
 ### 8.2 关键技术保证验证
+
+M15-CHECK-01：本地与仓库自动检查复用同一离线入口，收集当前V1.5测试及资源／模型快照审计专项。检查使用隔离数据库、清除产品凭据并限制真实外部调用；仅保留Markdown摘要，临时数据／构建在退出时清理。报告须区分选定范围、退出状态、源码一致性与清理状态；失败／超时／取消不得报完整通过。离线通过不等同真实供应方兼容、语义效果或整版验收；远程执行证据与本地证据分开。
 
 | 实际承诺 | 验证必须观察的内容 | 必要方法 |
 | --- | --- | --- |

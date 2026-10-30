@@ -4,6 +4,7 @@ Never renders HTML. The full document is kept separately from block spans, so
 blank separators, CRLF, definitions and inert HTML cannot silently disappear.
 Frontend editor parity must be proved separately with the shared fixtures.
 """
+
 from dataclasses import dataclass
 import re
 
@@ -16,7 +17,21 @@ from .raw_source import install_raw_source
 
 MAX_MARKDOWN_CODEPOINTS = 1_000_000
 MAX_BLOCKS = 10_000
-BLOCK_TYPES = frozenset({'heading', 'paragraph', 'blockquote', 'bullet_list', 'ordered_list', 'task_list', 'code_block', 'thematic_break', 'table', 'html_block', 'link_definition'})
+BLOCK_TYPES = frozenset(
+    {
+        'heading',
+        'paragraph',
+        'blockquote',
+        'bullet_list',
+        'ordered_list',
+        'task_list',
+        'code_block',
+        'thematic_break',
+        'table',
+        'html_block',
+        'link_definition',
+    }
+)
 
 
 class DocumentInvalid(ValueError):
@@ -44,7 +59,7 @@ class ParsedMarkdown:
         parts = []
         offset = 0
         for block in self.blocks:
-            parts.extend((self.markdown[offset:block.start_offset], block.markdown))
+            parts.extend((self.markdown[offset : block.start_offset], block.markdown))
             offset = block.end_offset
         parts.append(self.markdown[offset:])
         return tuple(parts)
@@ -54,14 +69,21 @@ def _mark_task_items(state):
     # Mark before the official tasklist plugin inserts a generated checkbox.
     # Authored HTML that happens to resemble a checkbox remains inert raw text.
     for index, token in enumerate(state.tokens):
-        if index >= 2 and token.type == 'inline' and state.tokens[index - 1].type == 'paragraph_open' and state.tokens[index - 2].type == 'list_item_open':
+        if (
+            index >= 2
+            and token.type == 'inline'
+            and state.tokens[index - 1].type == 'paragraph_open'
+            and state.tokens[index - 2].type == 'list_item_open'
+        ):
             match = re.match(r'^\[[ xX]\]([ \t\n\r]+)', token.content)
             if match:
                 token.meta['walle_task_whitespace'] = len(match[1])
 
 
 def _parser() -> MarkdownIt:
-    parser = MarkdownIt('commonmark', {'html': True, 'inline_definitions': True, 'typographer': False})
+    parser = MarkdownIt(
+        'commonmark', {'html': True, 'inline_definitions': True, 'typographer': False}
+    )
     parser.enable(['table', 'strikethrough'])
     install_strikethrough(parser)
     install_autolinks(parser)
@@ -105,6 +127,7 @@ def _plain(tokens: list[Token], kind: str, raw: str) -> str:
         return ''
     if kind == 'code_block':
         return tokens[0].content
+
     # Follow the actual block structure. A flat scan loses empty structural
     # children and changes tables nested inside quotes/lists into LF cells.
     def children(index: int) -> tuple[list[str], int]:
@@ -162,14 +185,24 @@ def parse_markdown(markdown: str) -> ParsedMarkdown:
                     break
             else:
                 raise DocumentInvalid('解析器区块未完整闭合')
-        grouped = tokens[index:last_index + 1]
+        grouped = tokens[index : last_index + 1]
         kind = {
-            'heading_open': 'heading', 'paragraph_open': 'paragraph', 'blockquote_open': 'blockquote',
-            'bullet_list_open': 'bullet_list', 'ordered_list_open': 'ordered_list',
-            'code_block': 'code_block', 'fence': 'code_block', 'hr': 'thematic_break',
-            'table_open': 'table', 'html_block': 'html_block', 'definition': 'link_definition',
+            'heading_open': 'heading',
+            'paragraph_open': 'paragraph',
+            'blockquote_open': 'blockquote',
+            'bullet_list_open': 'bullet_list',
+            'ordered_list_open': 'ordered_list',
+            'code_block': 'code_block',
+            'fence': 'code_block',
+            'hr': 'thematic_break',
+            'table_open': 'table',
+            'html_block': 'html_block',
+            'definition': 'link_definition',
         }.get(first.type)
-        if first.type in ('bullet_list_open', 'ordered_list_open') and first.attrGet('class') == 'contains-task-list':
+        if (
+            first.type in ('bullet_list_open', 'ordered_list_open')
+            and first.attrGet('class') == 'contains-task-list'
+        ):
             kind = 'task_list'
         if kind is None:
             raise DocumentInvalid('解析器区块类型未注册')
@@ -179,7 +212,9 @@ def parse_markdown(markdown: str) -> ParsedMarkdown:
         if first.type in ('bullet_list_open', 'ordered_list_open'):
             # markdown-it includes following blank separator lines in a list's
             # map. Keep those outside the block, still intact in source_parts.
-            while end_line > start_line + 1 and not markdown[offsets[end_line - 1]:offsets[end_line]].strip(' \t\r\n'):
+            while end_line > start_line + 1 and not markdown[
+                offsets[end_line - 1] : offsets[end_line]
+            ].strip(' \t\r\n'):
                 end_line -= 1
         start, end = offsets[start_line], offsets[end_line]
         if start < previous_end:
@@ -191,7 +226,11 @@ def parse_markdown(markdown: str) -> ParsedMarkdown:
             while headings and headings[-1][0] >= level:
                 headings.pop()
             headings.append((level, plain))
-        blocks.append(ParsedBlock(kind, raw, plain, tuple(heading[1] for heading in headings), level, start, end))
+        blocks.append(
+            ParsedBlock(
+                kind, raw, plain, tuple(heading[1] for heading in headings), level, start, end
+            )
+        )
         if len(blocks) > MAX_BLOCKS:
             raise DocumentInvalid('顶层区块超过容量')
         previous_end = end

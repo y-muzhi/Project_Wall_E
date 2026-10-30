@@ -3,6 +3,7 @@
 Only parsed/defaulted business input is accepted here. Endpoint adapters own
 normalization and success projection. No Provider call belongs in execute().
 """
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
@@ -58,7 +59,9 @@ def canonical_input(value: dict) -> str:
     if type(value) is not dict:
         raise ValueError('Parsed business input must be an object')
     _json_value(value)
-    return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(',', ':'))
+    return json.dumps(
+        value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(',', ':')
+    )
 
 
 class IdempotencyConflict(RuntimeError):
@@ -80,7 +83,10 @@ class Scope:
     key: str
 
     def __post_init__(self):
-        if type(self.capability_id) is not str or re.fullmatch(r'APP-[A-Z]+-CMD-C[0-9]{2}', self.capability_id) is None:
+        if (
+            type(self.capability_id) is not str
+            or re.fullmatch(r'APP-[A-Z]+-CMD-C[0-9]{2}', self.capability_id) is None
+        ):
             raise ValueError('A complete registered command capability ID is required')
         if type(self.target_identity) is not str or not self.target_identity:
             raise ValueError('Complete target identity is required')
@@ -101,7 +107,12 @@ class Success:
             raise ValueError('Only successful HTTP status can be stored')
         if type(self.result) is not dict or set(self.result) != {'code', 'data', 'details'}:
             raise ValueError('Complete application result required')
-        if type(self.result['code']) is not str or not self.result['code'] or type(self.result['data']) is not dict or self.result['details'] is not None:
+        if (
+            type(self.result['code']) is not str
+            or not self.result['code']
+            or type(self.result['data']) is not dict
+            or self.result['details'] is not None
+        ):
             raise ValueError('Only successful application payload can be stored')
         return canonical_input(self.result)
 
@@ -109,6 +120,7 @@ class Success:
 @dataclass(frozen=True)
 class CommentAnchorRejected:
     """C05's explicit committed anchor correction, never a stored success."""
+
     comment_id: int
 
     @property
@@ -129,7 +141,13 @@ class Claim:
 
 
 class Idempotency:
-    def __init__(self, database: Database, process_lock: ProcessLock, *, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
+    def __init__(
+        self,
+        database: Database,
+        process_lock: ProcessLock,
+        *,
+        clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+    ):
         process_lock.assert_owned()
         if process_lock.path != ProcessLock.for_database(database.path).path:
             raise ValueError('Execution lock must be bound to this exact database')
@@ -150,7 +168,10 @@ class Idempotency:
         self._owned()
         input_json = canonical_input(business_input)
         with self.database.transaction(write=True) as connection:
-            row = connection.execute('SELECT * FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=?', scope.identity).fetchone()
+            row = connection.execute(
+                'SELECT * FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=?',
+                scope.identity,
+            ).fetchone()
             if row is not None:
                 if row['business_input_json'] != input_json:
                     raise IdempotencyConflict('同一幂等键对应了不同请求')
@@ -162,20 +183,42 @@ class Idempotency:
                 success.encoded()  # Corrupt persisted result must never become success.
                 return Replay(success)
             time = self._time()
-            connection.execute('INSERT INTO idempotency_records(capability_id,target_identity,idempotency_key,business_input_json,status,owner_epoch,created_at,updated_at,success_result_json,http_status) VALUES (?,?,?,?,?,?,?,?,?,?)', (*scope.identity, input_json, 'PROCESSING', self.owner_epoch, time, time, None, None))
+            connection.execute(
+                'INSERT INTO idempotency_records(capability_id,target_identity,idempotency_key,business_input_json,status,owner_epoch,created_at,updated_at,success_result_json,http_status) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                (
+                    *scope.identity,
+                    input_json,
+                    'PROCESSING',
+                    self.owner_epoch,
+                    time,
+                    time,
+                    None,
+                    None,
+                ),
+            )
         return Claim(scope, input_json, self.owner_epoch)
 
     def assert_claim(self, connection: sqlite3.Connection, claim: Claim) -> None:
         self._owned()
         require_write_transaction(connection)
-        row = connection.execute('SELECT business_input_json,status,owner_epoch FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=?', claim.scope.identity).fetchone()
-        if claim.owner_epoch != self.owner_epoch or row is None or tuple(row) != (claim.input_json, 'PROCESSING', self.owner_epoch):
+        row = connection.execute(
+            'SELECT business_input_json,status,owner_epoch FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=?',
+            claim.scope.identity,
+        ).fetchone()
+        if (
+            claim.owner_epoch != self.owner_epoch
+            or row is None
+            or tuple(row) != (claim.input_json, 'PROCESSING', self.owner_epoch)
+        ):
             raise ClaimLost('Claim no longer belongs to this execution')
 
     def succeed(self, connection: sqlite3.Connection, claim: Claim, success: Success) -> None:
         self.assert_claim(connection, claim)
         encoded = success.encoded()
-        connection.execute("UPDATE idempotency_records SET status='SUCCEEDED',success_result_json=?,http_status=?,updated_at=? WHERE capability_id=? AND target_identity=? AND idempotency_key=?", (encoded, success.http_status, self._time(), *claim.scope.identity))
+        connection.execute(
+            "UPDATE idempotency_records SET status='SUCCEEDED',success_result_json=?,http_status=?,updated_at=? WHERE capability_id=? AND target_identity=? AND idempotency_key=?",
+            (encoded, success.http_status, self._time(), *claim.scope.identity),
+        )
 
     def abandon(self, claim: Claim) -> None:
         """Only after a known rejection/rollback, never after an unknown commit."""
@@ -183,16 +226,27 @@ class Idempotency:
         if claim.owner_epoch != self.owner_epoch:
             raise ClaimLost('Cannot abandon a different process claim')
         with self.database.transaction(write=True) as connection:
-            connection.execute("DELETE FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=? AND business_input_json=? AND status='PROCESSING' AND owner_epoch=?", (*claim.scope.identity, claim.input_json, claim.owner_epoch))
+            connection.execute(
+                "DELETE FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=? AND business_input_json=? AND status='PROCESSING' AND owner_epoch=?",
+                (*claim.scope.identity, claim.input_json, claim.owner_epoch),
+            )
 
     def recover_previous_process(self) -> int:
         """Startup only, holding OS lock. Success facts are never pruned/replayed."""
         self._owned()
         with self.database.transaction(write=True) as connection:
-            cursor = connection.execute("DELETE FROM idempotency_records WHERE status='PROCESSING' AND owner_epoch<>?", (self.owner_epoch,))
+            cursor = connection.execute(
+                "DELETE FROM idempotency_records WHERE status='PROCESSING' AND owner_epoch<>?",
+                (self.owner_epoch,),
+            )
             return cursor.rowcount
 
-    def execute(self, scope: Scope, business_input: dict, operation: Callable[[sqlite3.Connection], Success | CommentAnchorRejected]) -> Success | CommentAnchorRejected:
+    def execute(
+        self,
+        scope: Scope,
+        business_input: dict,
+        operation: Callable[[sqlite3.Connection], Success | CommentAnchorRejected],
+    ) -> Success | CommentAnchorRejected:
         claimed = self.claim(scope, business_input)
         if isinstance(claimed, Replay):
             return claimed.success
@@ -201,16 +255,35 @@ class Idempotency:
                 self.assert_claim(connection, claimed)
                 success = operation(connection)
                 if isinstance(success, CommentAnchorRejected):
-                    if type(success.comment_id) is not int or not 1 <= success.comment_id <= MAX_SAFE_INTEGER or scope.capability_id != 'APP-GUIDE-CMD-C05' or scope.target_identity != f'Comment:{success.comment_id}':
-                        raise ValueError('Committed rejection is restricted to the actual C05 comment target')
-                    row = connection.execute('SELECT anchor_status FROM comments WHERE id=?', (success.comment_id,)).fetchone()
+                    if (
+                        type(success.comment_id) is not int
+                        or not 1 <= success.comment_id <= MAX_SAFE_INTEGER
+                        or scope.capability_id != 'APP-GUIDE-CMD-C05'
+                        or scope.target_identity != f'Comment:{success.comment_id}'
+                    ):
+                        raise ValueError(
+                            'Committed rejection is restricted to the actual C05 comment target'
+                        )
+                    row = connection.execute(
+                        'SELECT anchor_status FROM comments WHERE id=?', (success.comment_id,)
+                    ).fetchone()
                     if row is None or row['anchor_status'] != 'ORPHANED':
-                        raise ValueError('Committed rejection requires the actual corrected comment')
+                        raise ValueError(
+                            'Committed rejection requires the actual corrected comment'
+                        )
                     self.assert_claim(connection, claimed)
-                    removed = connection.execute("DELETE FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=? AND business_input_json=? AND status='PROCESSING' AND owner_epoch=?", (*scope.identity, claimed.input_json, claimed.owner_epoch))
-                    if removed.rowcount != 1: raise ClaimLost('Correction must release its own processing claim atomically')
+                    removed = connection.execute(
+                        "DELETE FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=? AND business_input_json=? AND status='PROCESSING' AND owner_epoch=?",
+                        (*scope.identity, claimed.input_json, claimed.owner_epoch),
+                    )
+                    if removed.rowcount != 1:
+                        raise ClaimLost(
+                            'Correction must release its own processing claim atomically'
+                        )
                 elif not isinstance(success, Success):
-                    raise ValueError('Operation must explicitly produce a successful application result')
+                    raise ValueError(
+                        'Operation must explicitly produce a successful application result'
+                    )
                 else:
                     self.succeed(connection, claimed, success)
         except CommitOutcomeUnknown:
