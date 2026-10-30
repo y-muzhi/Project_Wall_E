@@ -68,6 +68,7 @@ const shapes = {
       <path d="M8 7v4m0-7v.5" />
     </>
   ),
+  comment: <path d="M3 2.5h10v8H7l-4 3v-11Z" />,
   warning: (
     <>
       <path d="m8 2 6.5 12h-13L8 2Z" />

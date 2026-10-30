@@ -113,7 +113,16 @@ export function BlockAuxiliary({
 }) {
   const state = useSyncExternalStore(navigation.subscribe, navigation.getSnapshot),
     trigger = useRef<HTMLButtonElement>(null),
-    popover = useRef<HTMLDivElement>(null);
+    popover = useRef<HTMLDivElement>(null),
+    handle = useRef<HTMLButtonElement>(null),
+    menu = useRef<HTMLDivElement>(null),
+    menuId = useId();
+  const [menuBlock, setMenuBlock] = useState<number | null>(null),
+    open =
+      state.toolbar !== null &&
+      state.selected_block !== null &&
+      menuBlock === state.selected_block &&
+      !state.error;
   const block = state.content?.blocks.find((item) => item.block_id === state.source_block);
   const present = useMotionPresence(block !== undefined),
     lastBlock = useRef(block);
@@ -126,8 +135,9 @@ export function BlockAuxiliary({
     let restoreFocus = true;
     element?.focus();
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !activeModal()) {
+      if (event.key === 'Escape' && !event.defaultPrevented && !activeModal()) {
         event.preventDefault();
+        event.stopPropagation();
         navigation.source(null);
       }
     };
@@ -160,21 +170,145 @@ export function BlockAuxiliary({
         previous.focus({ preventScroll: true });
     };
   }, [navigation, block?.block_id]);
+  useEffect(() => {
+    if (state.toolbar === null) setMenuBlock(null);
+  }, [state.toolbar]);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (
+        menu.current?.contains(event.target as Node) ||
+        handle.current?.contains(event.target as Node) ||
+        popover.current?.contains(event.target as Node)
+      )
+        return;
+      setMenuBlock(null);
+      if (!block) navigation.dismissAuxiliary();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || block || activeModal()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuBlock(null);
+      handle.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [navigation, open, block]);
+  const anchor = state.toolbar,
+    menuWidth = 160,
+    menuHeight = 84;
+  const menuPosition = anchor
+    ? {
+        left: Math.max(
+          8,
+          Math.min(
+            window.innerWidth - menuWidth - 8,
+            anchor.left >= menuWidth + 16 ? anchor.left - menuWidth - 8 : anchor.left,
+          ),
+        ),
+        top: Math.max(
+          8,
+          Math.min(
+            window.innerHeight - menuHeight - 8,
+            anchor.top + (anchor.left >= menuWidth + 16 ? 0 : 36),
+          ),
+        ),
+      }
+    : undefined;
   return createPortal(
     <>
-      {state.toolbar && state.selected_block !== null && !state.error && (
-        <div className="block-auxiliary" aria-label="区块辅助栏" style={state.toolbar}>
+      {anchor && state.selected_block !== null && !state.error && (
+        <button
+          ref={handle}
+          type="button"
+          className="ui-button icon-button block-operation-trigger"
+          style={anchor}
+          aria-label="区块操作"
+          title="区块操作"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onMouseDown={(event) => event.preventDefault()}
+          onPointerEnter={() => setMenuBlock(state.selected_block)}
+          onClick={() => setMenuBlock(state.selected_block)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              setMenuBlock(state.selected_block);
+              requestAnimationFrame(() =>
+                menu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(),
+              );
+            }
+          }}
+        >
+          <Icon name="more" />
+        </button>
+      )}
+      {open && (
+        <div
+          ref={menu}
+          id={menuId}
+          className="block-auxiliary"
+          role="menu"
+          aria-label="区块操作栏"
+          style={menuPosition}
+          onKeyDown={(event) => {
+            if (
+              event.key !== 'ArrowDown' &&
+              event.key !== 'ArrowUp' &&
+              event.key !== 'Home' &&
+              event.key !== 'End'
+            )
+              return;
+            event.preventDefault();
+            const buttons = Array.from(
+                menu.current!.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+              ),
+              index = buttons.indexOf(document.activeElement as HTMLButtonElement),
+              next =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? buttons.length - 1
+                    : event.key === 'ArrowDown'
+                      ? (index + 1) % buttons.length
+                      : (index - 1 + buttons.length) % buttons.length;
+            buttons[next]?.focus();
+          }}
+        >
           <button
             className="ui-button"
+            role="menuitem"
             type="button"
             ref={trigger}
             aria-expanded={block !== undefined}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => navigation.source(block ? null : state.selected_block)}
           >
             <Icon name="info" />
             来源
           </button>
-          {extra}
+          {extra ?? (
+            <button
+              className="ui-button"
+              role="menuitem"
+              type="button"
+              disabled
+              title={
+                state.content?.kind === 'REVISION'
+                  ? '历史版本不可新增评论。'
+                  : '请在正式正文阅读页面评论区块。'
+              }
+            >
+              <Icon name="comment" />
+              评论区块
+            </button>
+          )}
         </div>
       )}
       {present && shown && (

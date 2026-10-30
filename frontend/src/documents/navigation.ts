@@ -113,6 +113,8 @@ export class DocumentNavigation {
   private closed = false;
   private visible = true;
   private interacting = false;
+  private hovered: HTMLElement | null = null;
+  private leaveTimer: ReturnType<typeof setTimeout> | undefined;
   private highlighted: HTMLElement | null = null;
   private highlightTimer: ReturnType<typeof setTimeout> | undefined;
   private value: NavigationState = Object.freeze({
@@ -138,18 +140,28 @@ export class DocumentNavigation {
     };
     listen(window, 'scroll', () => this.schedule(false), true);
     listen(window, 'resize', () => this.schedule(false));
-    listen(root, 'pointerover', (event) => this.selectTarget(event.target));
+    listen(root, 'pointerover', (event) => {
+      this.cancelLeave();
+      this.selectTarget(event.target);
+    });
     listen(root, 'focusin', (event) => this.selectTarget(event.target));
     const inAuxiliary = (target: EventTarget | null) =>
-      target instanceof Element && !!target.closest('.block-auxiliary,.block-source-popover');
+      target instanceof Element &&
+      !!target.closest(
+        '.block-operation-trigger,.block-auxiliary,.block-source-popover,.block-selection-comment',
+      );
+    const leave = () => {
+      this.cancelLeave();
+      this.leaveTimer = setTimeout(() => {
+        this.leaveTimer = undefined;
+        if (root.contains(document.activeElement) || inAuxiliary(document.activeElement)) return;
+        this.interacting = false;
+        this.measure();
+      }, 180);
+    };
     listen(root, 'pointerleave', (event) => {
-      if (
-        inAuxiliary((event as PointerEvent).relatedTarget) ||
-        root.contains(document.activeElement)
-      )
-        return;
-      this.interacting = false;
-      this.measure();
+      if (inAuxiliary((event as PointerEvent).relatedTarget)) return;
+      leave();
     });
     listen(root, 'focusout', (event) => {
       if (
@@ -157,20 +169,14 @@ export class DocumentNavigation {
         inAuxiliary((event as FocusEvent).relatedTarget)
       )
         return;
-      this.interacting = false;
-      this.measure();
+      leave();
     });
     listen(document, 'pointerover', (event) => {
-      if (
-        root.contains(event.target as Node | null) ||
-        inAuxiliary(event.target) ||
-        root.contains(document.activeElement) ||
-        inAuxiliary(document.activeElement) ||
-        !this.interacting
-      )
+      if (root.contains(event.target as Node | null) || inAuxiliary(event.target)) {
+        this.cancelLeave();
         return;
-      this.interacting = false;
-      this.measure();
+      }
+      if (this.interacting && this.leaveTimer === undefined) leave();
     });
     listen(root, 'compositionstart', () => this.schedule(true));
     listen(root, 'compositionend', () => this.schedule(true));
@@ -283,6 +289,7 @@ export class DocumentNavigation {
       });
       this.measure();
     } catch {
+      this.hover(null);
       this.publish({
         error: '当前输入尚未形成完整文档，大纲和区块来源暂不可操作。',
         toolbar: null,
@@ -328,14 +335,15 @@ export class DocumentNavigation {
       box &&
       box.bottom > bounds.top &&
       box.top < bounds.bottom;
-    // CSS aligns the toolbar's right edge with this anchor, within the actual
-    // document viewport instead of placing it over the left outline/panel.
+    this.hover(visible ? element : null);
+    // The document reserves a left gutter. Controls stay outside its text and
+    // inside the visible document viewport, even for a partly scrolled block.
     this.publish({
       active_heading: heading,
       toolbar: visible
         ? Object.freeze({
-            left: Math.max(bounds.left + 8, Math.min(bounds.right - 8, box.right)),
-            top: Math.max(bounds.top + 4, Math.min(bounds.bottom - 40, box.top)),
+            left: Math.max(bounds.left + 4, Math.min(bounds.right - 36, box.left - 36)),
+            top: Math.max(bounds.top + 4, Math.min(bounds.bottom - 36, box.top)),
           })
         : null,
     });
@@ -343,6 +351,7 @@ export class DocumentNavigation {
   private selectTarget(target: EventTarget | null): void {
     if (!this.visible || this.value.error || !this.value.content || !(target instanceof Node))
       return;
+    if (this.value.source_block !== null) return;
     for (const block of this.value.content.blocks) {
       const element = this.port.element(block.block_id);
       if (element && (element === target || element.contains(target))) {
@@ -352,6 +361,23 @@ export class DocumentNavigation {
         return;
       }
     }
+  }
+  private cancelLeave(): void {
+    if (this.leaveTimer !== undefined) clearTimeout(this.leaveTimer);
+    this.leaveTimer = undefined;
+  }
+  private hover(element: HTMLElement | null): void {
+    if (this.hovered === element) return;
+    this.hovered?.classList.remove('block-hover-highlight');
+    this.hovered = element;
+    this.hovered?.classList.add('block-hover-highlight');
+  }
+  dismissAuxiliary(): void {
+    if (this.closed) return;
+    this.cancelLeave();
+    this.interacting = false;
+    this.hover(null);
+    this.publish({ toolbar: null, source_block: null });
   }
   private clearHighlight(): void {
     if (this.highlightTimer !== undefined) clearTimeout(this.highlightTimer);
@@ -404,6 +430,8 @@ export class DocumentNavigation {
     this.visible = visible;
     if (visible) this.refresh();
     else {
+      this.cancelLeave();
+      this.hover(null);
       this.clearHighlight();
       this.publish({ toolbar: null, source_block: null, active_heading: null });
     }
@@ -411,6 +439,8 @@ export class DocumentNavigation {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    this.cancelLeave();
+    this.hover(null);
     this.clearHighlight();
     for (const remove of this.removers) remove();
     this.observer.disconnect();

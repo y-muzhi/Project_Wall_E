@@ -401,7 +401,10 @@ export function NewDocumentButton({
 }) {
   const flow = owner.regions!.directory;
   useSyncExternalStore(flow.subscribe, flow.getSnapshot);
+  const editing =
+    useSyncExternalStore(owner.documents.subscribe, owner.documents.getSnapshot).mode === 'MANUAL';
   const create = useContext(DocumentCreationContext);
+  if (editing) return null;
   return (
     <button
       className={'ui-button' + (iconOnly ? ' icon-button document-create-trigger' : '')}
@@ -426,6 +429,8 @@ export function DocumentMetadataBar({
   const detail = useSyncExternalStore(owner.subscribe, owner.getSnapshot).detail,
     flow = owner.regions!.directory,
     state = useSyncExternalStore(flow.subscribe, flow.getSnapshot);
+  const editing =
+    useSyncExternalStore(owner.documents.subscribe, owner.documents.getSnapshot).mode === 'MANUAL';
   const [renaming, setRenaming] = useState<DocumentSummary | null>(null),
     [name, setName] = useState(''),
     [archive, setArchive] = useState<DocumentSummary | null>(null),
@@ -463,9 +468,13 @@ export function DocumentMetadataBar({
   return (
     <section className="document-metadata-bar" aria-label="当前阅读文档">
       {current ? (
-        <>
-          <strong tabIndex={-1}>{current.name}</strong>
-          <div className="document-metadata-row">
+        <strong tabIndex={-1}>{current.name}</strong>
+      ) : detail?.documents.length ? (
+        <p>尚未选择文档</p>
+      ) : null}
+      {(current || detail?.activity.kind === 'MANUAL') && (
+        <div className="document-metadata-row">
+          {current && (
             <div className="document-metadata-summary">
               {navigation}
               <span>
@@ -476,6 +485,13 @@ export function DocumentMetadataBar({
                 {current.archived_at !== null ? ' · 已归档' : ''}
               </span>
             </div>
+          )}
+          {detail?.activity.kind === 'MANUAL' && (
+            <p className="document-editing-status" role="status">
+              正在进行人工编辑
+            </p>
+          )}
+          {current && !editing && (
             <span className="document-metadata-actions">
               {current.archived_at === null ? (
                 <>
@@ -528,15 +544,8 @@ export function DocumentMetadataBar({
                 </button>
               )}
             </span>
-          </div>
-        </>
-      ) : detail?.documents.length ? (
-        <p>尚未选择文档</p>
-      ) : null}
-      {detail?.activity.kind === 'MANUAL' && (
-        <p role="status">
-          正在编辑：{detail.activity.target.name} · V{detail.activity.target.content_version}
-        </p>
+          )}
+        </div>
       )}
       {renaming && (
         <form
