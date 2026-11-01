@@ -3,8 +3,8 @@ import { ApiRejected, snapshotObject } from '../api/client.ts';
 import { requirementCatalog } from './catalog.ts';
 import { ordinaryInput } from '../shared/text.ts';
 
-export type CreateDraft = Readonly<{ title: string; type: 'NEW' | 'CHANGE' | null; idea: string }>;
-export const emptyCreateDraft: CreateDraft = Object.freeze({ title: '', type: null, idea: '' });
+export type CreateDraft = Readonly<{ title: string; type: 'NEW' | 'CHANGE' | null }>;
+export const emptyCreateDraft: CreateDraft = Object.freeze({ title: '', type: null });
 export type CreateErrors = Readonly<Partial<Record<keyof CreateDraft, string>>>;
 type Created = Awaited<
   ReturnType<ReturnType<WalleApi['prepareCreateRequirement']>['submit']>
@@ -22,8 +22,7 @@ export function createPayload(draft: CreateDraft): {
   fields: CreateErrors;
 } {
   const errors: Partial<Record<keyof CreateDraft, string>> = {};
-  let title = '',
-    idea = '';
+  let title = '';
   try {
     title = ordinaryInput(draft.title, 'title', 1, 20, false);
   } catch (error) {
@@ -34,16 +33,11 @@ export function createPayload(draft: CreateDraft): {
     !requirementCatalog.requirement_types.some((option) => option.value === draft.type)
   )
     errors.type = '请选择需求类型';
-  try {
-    idea = ordinaryInput(draft.idea, 'idea', 1, 10000);
-  } catch (error) {
-    errors.idea = (error as Error).message;
-  }
   return {
     fields: Object.freeze(errors),
     payload: Object.keys(errors).length
       ? null
-      : Object.freeze({ title, requirement_type: draft.type!, initial_idea: idea }),
+      : Object.freeze({ title, requirement_type: draft.type! }),
   };
 }
 export class CreateRequirementFlow {
@@ -68,7 +62,7 @@ export class CreateRequirementFlow {
   }
   get hasInput(): boolean {
     const draft = this.value.draft;
-    return !!(draft.title || draft.idea || draft.type);
+    return !!(draft.title || draft.type);
   }
   subscribe(listener: (state: CreateState) => void): () => void {
     this.listeners.add(listener);
@@ -90,8 +84,8 @@ export class CreateRequirementFlow {
     if (this.closed || this.value.busy || this.value.unknown || this.value.result)
       throw new Error('Original create action must be resolved first');
     const captured = snapshotObject(value) as unknown as CreateDraft;
-    if (Object.keys(captured).sort().join(',') !== 'idea,title,type')
-      throw new TypeError('Three controlled fields required');
+    if (Object.keys(captured).sort().join(',') !== 'title,type')
+      throw new TypeError('Title and type are required controlled fields');
     const next = Object.freeze({ ...captured });
     if (JSON.stringify(next) === JSON.stringify(this.value.draft)) return;
     this.action = undefined;
@@ -128,7 +122,6 @@ export class CreateRequirementFlow {
             const mapping: Record<string, keyof CreateDraft> = {
               title: 'title',
               requirement_type: 'type',
-              initial_idea: 'idea',
             };
             if (error.code === 'VALIDATION_FAILED' && Array.isArray(error.details?.field_errors)) {
               for (const entry of error.details.field_errors) {

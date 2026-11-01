@@ -57,7 +57,7 @@ test('the actual API keeps read results immutable and a failed command also fenc
 
 test('the actual API merges equal message windows and keeps cursors and document indices distinct',async()=>{
  const held=deferred();let reads=0;
- const api=new WalleApi({read:async path=>{reads++;await held.promise;return {data:{items:[]},meta:path.endsWith('/messages')?{pagination:{page_size:20,has_more:false,next_cursor:null}}:{}};}},{}).forDetailReads();
+ const api=new WalleApi({read:async path=>{reads++;await held.promise;return {data:{items:[]},meta:path.endsWith('/messages')?{pagination:{page_size:20,has_more:false,next_cursor:null}}:{}};}},{}).forDetailReads().forDocumentAssistant(2);
  const latest=api.listMessages(1),same=api.listMessages(1),older=api.listMessages(1,8),index=api.getCommentIndex(1,2),other=api.getCommentIndex(1,3);
  await flush();assert.equal(reads,4);held.resolve();await Promise.all([latest,same,older,index,other]);api.disposeDetailReads();
 });

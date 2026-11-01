@@ -152,7 +152,7 @@ class ListGuideRunsRequest:
     def parse(cls, request):
         payload = request_query(
             request,
-            singles=('page',),
+            singles=('page', 'document_id'),
             arrays={
                 'status': GUIDE_STATUSES,
                 'action_type': ('ASK', 'GENERATE', 'REVIEW', 'MODIFY'),
@@ -161,12 +161,14 @@ class ListGuideRunsRequest:
         payload['requirement_id'] = decimal_integer(
             request.path_params['requirement_id'], 'requirement_id'
         )
+        payload['document_id'] = decimal_integer(payload.get('document_id'), 'document_id')
         if 'page' in payload:
             payload['page'] = decimal_integer(payload['page'], 'page', maximum=100000)
         validated = list_guide_runs_input(payload)
         return cls(
             {
                 'requirement_id': validated.requirement_id,
+                'document_id': validated.document_id,
                 'page': validated.page,
                 'status': list(validated.status),
                 'action_type': list(validated.action_type),
@@ -190,6 +192,7 @@ class ListGuideRunsResponse:
 
 class CreateGuideRunRequest(CommandRequest):
     body_fields = (
+        'document_id',
         'expected_discussion_version',
         'operation',
         'instruction',

@@ -135,7 +135,7 @@ def _accept_collaboration(
     from backend.app.requirements.contracts import requirement_read_model
 
     requirements = RequirementRepository(connection)
-    root = requirements.get(request.requirement_id)
+    root = requirements.get_for_document(request.requirement_id, request.document_id)
     if root is None:
         raise Rejected('NOT_FOUND')
     if root['discussion_version'] != request.expected_discussion_version:
@@ -161,6 +161,7 @@ def _accept_collaboration(
     if reuse_message is None:
         message_id = entity_id(connection, EntityKind.MESSAGE)
         associations = {
+            'document_id': request.document_id,
             'phase_ref': discussion['phase']['phase_ref'],
             'topic_refs': ()
             if discussion['focus_topic_ref'] is None
@@ -200,7 +201,8 @@ def _accept_collaboration(
         if discussion != root['discussion_state_json']
         else root
     )
-    occupied = requirements.occupy_guide(root['id'], run_id, at)
+    requirements.occupy_guide(root['id'], run_id, at)
+    occupied = requirements.get_for_document(root['id'], request.document_id)
     user_message = {key: message[key] for key in message.keys() if key != 'idempotency_key'}
     basis = {
         'schema_version': 1,
@@ -283,7 +285,9 @@ def continue_guide_run(executor: Idempotency, payload: object, *, catalog=None, 
             raise Rejected('NOT_FOUND')
         if previous['status'] not in TERMINAL_RUNS:
             raise Rejected('STATE_CONFLICT')
-        root = RequirementRepository(connection).get(previous['requirement_id'])
+        root = RequirementRepository(connection).get_for_document(
+            previous['requirement_id'], previous['document_id']
+        )
         if root is None:
             raise Rejected('WORK_STATE_INCONSISTENT')
         binding = root['discussion_state_json']['binding']
@@ -302,6 +306,7 @@ def continue_guide_run(executor: Idempotency, payload: object, *, catalog=None, 
         internal = create_guide_run_input(
             {
                 'requirement_id': root['id'],
+                'document_id': root['assistant_document_id'],
                 'expected_discussion_version': request.expected_discussion_version,
                 'operation': 'DISCUSS',
                 'instruction': request.instruction,
@@ -373,7 +378,9 @@ def modify_from_comment(
         if row is None:
             raise Rejected('NOT_FOUND')
         comment = get_comment_result(row)
-        root = RequirementRepository(connection).get(comment['requirement_id'])
+        root = RequirementRepository(connection).get_for_document(
+            comment['requirement_id'], comment['document_id']
+        )
         if root is None:
             raise Rejected('WORK_STATE_INCONSISTENT')
         if comment['status'] != 'OPEN' or comment['deleted_at'] is not None:
@@ -441,6 +448,7 @@ def modify_from_comment(
         internal = create_guide_run_input(
             {
                 'requirement_id': root['id'],
+                'document_id': root['assistant_document_id'],
                 'expected_discussion_version': request.expected_discussion_version,
                 'operation': 'PROPOSE_CHANGES',
                 'instruction': comment['content'],
@@ -494,7 +502,9 @@ def retry_guide_run(executor: Idempotency, payload: object, *, catalog=None, clo
             raise Rejected('NOT_FOUND')
         if previous['status'] != 'FAILED':
             raise Rejected('STATE_CONFLICT')
-        root = RequirementRepository(connection).get(previous['requirement_id'])
+        root = RequirementRepository(connection).get_for_document(
+            previous['requirement_id'], previous['document_id']
+        )
         if root is None or root['discussion_version'] != previous['discussion_version_snapshot']:
             raise Rejected('STATE_CONFLICT')
         basis = strict_json_object(previous['execution_basis_json'])

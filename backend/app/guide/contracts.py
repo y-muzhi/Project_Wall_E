@@ -26,6 +26,7 @@ GUIDE_STEPS = ('PREPARING', 'CALLING_MODEL', 'VALIDATING', 'PERSISTING', 'FINISH
 STATUS_FIELDS = (
     'id',
     'requirement_id',
+    'document_id',
     'action_type',
     'function_type',
     'source_type',
@@ -78,6 +79,7 @@ ACTION_TYPES = {
 @dataclass(frozen=True)
 class CreateGuideRunInput:
     requirement_id: int
+    document_id: int
     expected_discussion_version: int
     operation: str
     instruction: str
@@ -97,6 +99,7 @@ class CreateGuideRunInput:
             key: getattr(self, key)
             for key in (
                 'requirement_id',
+                'document_id',
                 'expected_discussion_version',
                 'operation',
                 'instruction',
@@ -115,6 +118,7 @@ def create_guide_run_input(payload):
 
     fields = (
         'requirement_id',
+        'document_id',
         'expected_discussion_version',
         'operation',
         'instruction',
@@ -172,6 +176,7 @@ def create_guide_run_input(payload):
         reject('instruction', 'TOO_SHORT', 'An instruction is required')
     result = CreateGuideRunInput(
         strict_integer(data['requirement_id'], 'requirement_id'),
+        strict_integer(data['document_id'], 'document_id'),
         strict_integer(data['expected_discussion_version'], 'expected_discussion_version'),
         operation,
         text,
@@ -496,7 +501,7 @@ def _guide_model(data: object, *, summary: bool) -> dict:
         data, 'read_model', fields if summary else (*fields, 'returned_responses'), fields
     )
     resources = discussion_resources()
-    for field in ('id', 'requirement_id', 'discussion_version_snapshot'):
+    for field in ('id', 'requirement_id', 'document_id', 'discussion_version_snapshot'):
         strict_integer(value[field], field)
     strict_enum(value['operation'], 'operation', OPERATIONS)
     if (
@@ -846,6 +851,7 @@ def cancel_guide_run_result(row) -> dict:
 @dataclass(frozen=True)
 class ListGuideRunsInput:
     requirement_id: int
+    document_id: int
     status: tuple[str, ...]
     action_type: tuple[str, ...]
     page: int
@@ -853,7 +859,10 @@ class ListGuideRunsInput:
 
 def list_guide_runs_input(payload: object) -> ListGuideRunsInput:
     data = object_fields(
-        payload, 'query', ('requirement_id', 'status', 'action_type', 'page'), ('requirement_id',)
+        payload,
+        'query',
+        ('requirement_id', 'document_id', 'status', 'action_type', 'page'),
+        ('requirement_id', 'document_id'),
     )
 
     def choices(field, allowed):
@@ -870,6 +879,7 @@ def list_guide_runs_input(payload: object) -> ListGuideRunsInput:
 
     return ListGuideRunsInput(
         strict_integer(data['requirement_id'], 'requirement_id'),
+        strict_integer(data['document_id'], 'document_id'),
         choices('status', GUIDE_STATUSES),
         choices('action_type', ('ASK', 'GENERATE', 'REVIEW', 'MODIFY')),
         page_number(data.get('page', 1)),
@@ -880,7 +890,11 @@ def list_guide_runs_result(items: list[dict], request: ListGuideRunsInput, total
     if type(items) is not list or len(items) > 20:
         raise ValueError('Guide history must contain at most one fixed page')
     values = [guide_run_summary(item) for item in items]
-    if any(item['requirement_id'] != request.requirement_id for item in values):
+    if any(
+        item['requirement_id'] != request.requirement_id
+        or item['document_id'] != request.document_id
+        for item in values
+    ):
         raise ValueError('History contains another requirement')
     return {'items': values, **page_metadata(request.page, total)}
 

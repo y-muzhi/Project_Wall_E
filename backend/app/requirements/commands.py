@@ -33,7 +33,7 @@ def update_discussion(executor, payload, *, catalog=None, clock=None):
 
     def operation(connection):
         repository = RequirementRepository(connection)
-        root = repository.get(request.requirement_id)
+        root = repository.get_for_document(request.requirement_id, request.document_id)
         if root is None:
             raise Rejected('NOT_FOUND')
         if root['discussion_version'] != request.expected_discussion_version:
@@ -84,6 +84,7 @@ def update_discussion(executor, payload, *, catalog=None, clock=None):
             content,
             request.idempotency_key,
             at,
+            document_id=request.document_id,
             phase_ref=root['discussion_state_json']['phase']['phase_ref'],
             topic_refs=() if state['focus_topic_ref'] is None else (state['focus_topic_ref'],),
             document_ids=() if target is None else (target,),

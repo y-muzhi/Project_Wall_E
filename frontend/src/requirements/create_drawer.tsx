@@ -44,7 +44,7 @@ export function CreateRequirementDrawer({
   }, [open]);
   useLayoutEffect(() => {
     if (!open) return;
-    const first = (['title', 'type', 'idea'] as const).find((field) => state.fields[field]);
+    const first = (['title', 'type'] as const).find((field) => state.fields[field]);
     if (first) dialog.current?.querySelector<HTMLElement>(`[data-field="${first}"]`)?.focus();
   }, [open, state.fields]);
   if (!present) return null;
@@ -145,20 +145,7 @@ export function CreateRequirementDrawer({
             />
             {error('type')}
           </div>
-          <div>
-            <label htmlFor={id + '-idea'}>初始想法</label>
-            <textarea
-              className="ui-input"
-              {...field('idea')}
-              rows={10}
-              value={draft.idea}
-              disabled={locked}
-              onChange={(event) => edit({ ...draft, idea: event.currentTarget.value })}
-            />
-            <small>请描述目标、背景或已有想法，最多 10000 个字符</small>
-            {error('idea')}
-          </div>
-          <p className="secondary-text">创建后可开始讨论并生成文档</p>
+          <p className="secondary-text">创建后可添加文档</p>
         </div>
         <footer>
           <button className="ui-button" type="button" disabled={locked} onClick={cancel}>

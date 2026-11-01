@@ -39,7 +39,7 @@ def test_temporary_worker_start_recovers_durable_response_without_auto_dispatch_
         with database.transaction() as connection:
             assert connection.execute('SELECT status FROM guide_runs').fetchone()[0] == 'COMPLETED'
             assert connection.execute('SELECT count(*) FROM llm_uses').fetchone()[0] == 1
-            assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
+            assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 2
 
 
 def test_lease_retirement_wins_against_uncommitted_native_write_and_rolls_back_actual_transaction(workspace):

@@ -57,7 +57,11 @@ export class RequirementConversation {
     readActual: () => Promise<DetailSnapshot>,
     adoptActual: (actual: DetailSnapshot) => Promise<void>,
     openPanel: () => void | Promise<void>,
-    drafts = new CardDrafts(),
+    drafts = new CardDrafts(
+      undefined,
+      undefined,
+      detail.selected_document_id ?? detail.current?.id ?? null,
+    ),
     observeActual = readActual,
   ) {
     if (
@@ -204,7 +208,8 @@ export class RequirementConversation {
           previous = this.value.batch?.getSnapshot().batch,
           selected = lease?.startsWith('BATCH:')
             ? Number(lease.slice(6))
-            : active.kind === 'BATCH'
+            : active.kind === 'BATCH' &&
+                active.batch.target_document_id === this.value.detail.selected_document_id
               ? active.batch.id
               : (parent.run?.suggestion_batch_id ??
                 (parent.run === null && parent.selected === previous?.guide_run_id
@@ -252,6 +257,7 @@ export class RequirementConversation {
   adopt(actual: DetailSnapshot): void {
     if (this.closed) return;
     if (
+      actual.selected_document_id !== this.value.detail.selected_document_id ||
       actual.requirement.id !== this.value.detail.requirement.id ||
       (actual.current !== null &&
         (actual.current.document_type !== 'CURRENT' ||

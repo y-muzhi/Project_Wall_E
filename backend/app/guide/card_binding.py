@@ -85,7 +85,9 @@ def bind_cards(connection, root, run, context, value, catalog, *, reference_map=
             any(ref is None for ref in refs)
             or len(set(refs)) != len(refs)
             or not set(refs)
-            <= discussion_references(connection, root['id'], root['discussion_state_json'])
+            <= discussion_references(
+                connection, root['id'], root['discussion_state_json'], root['assistant_document_id']
+            )
         ):
             raise CardsInvalid('Phase suggestion refers to missing or ambiguous outcomes')
         payload['unresolved_refs'] = refs

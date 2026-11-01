@@ -120,7 +120,7 @@ export class DraftRecoveryStore {
       throw TypeError('The draft is distinct from its target');
     this.binding = Object.freeze({ ...binding });
     this.ctx = ctx;
-    this.name = diagnostic.name ?? 'walle-v1.5';
+    this.name = diagnostic.name ?? 'walle-v1.5-document-assistant';
     this.factory = diagnostic.factory ?? (() => globalThis.indexedDB);
   }
   private key(requirement: number, draft: number): [number, number, number, number] {

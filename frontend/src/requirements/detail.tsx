@@ -280,29 +280,62 @@ function LoadedDetail({
               />
             </>
           )}
-          ai={<GuideConversation owner={regions.conversation} documents={owner.documents} />}
+          ai={
+            actual.current ? (
+              <GuideConversation
+                key={actual.current.id}
+                owner={regions.conversation}
+                documents={owner.documents}
+              />
+            ) : (
+              <EmptyState icon="robot" message="请先创建或选择文档" fill />
+            )
+          }
           suggestions={
             <ConversationSuggestions
+              key={actual.selected_document_id}
               owner={regions.conversation}
               documents={owner.documents}
               toasts={owner.toasts}
             />
           }
           progress={
-            <DiscussionProgress
-              owner={owner}
-              active={supported && geometry.right_open && geometry.right_tab === 'PROGRESS'}
-              blocked={blocked || document.busy || historical}
-              discuss={discuss}
+            actual.current ? (
+              <DiscussionProgress
+                key={actual.selected_document_id}
+                owner={owner}
+                active={
+                  actual.current !== null &&
+                  supported &&
+                  geometry.right_open &&
+                  geometry.right_tab === 'PROGRESS'
+                }
+                blocked={blocked || document.busy || historical}
+                discuss={discuss}
+              />
+            ) : (
+              <EmptyState icon="outline" message="请选择文档查看进展" fill />
+            )
+          }
+          comments={
+            <CommentPanel
+              key={actual.selected_document_id}
+              panel={regions.comments}
+              documents={owner.documents}
             />
           }
-          comments={<CommentPanel panel={regions.comments} documents={owner.documents} />}
           revisions={
             <DocumentRecords
+              key={actual.selected_document_id}
               cache={regions.conversation.modelCalls}
               modelCallApi={regions.conversation.modelCallApi}
               requirementId={actual.requirement.id}
-              active={supported && geometry.right_open && geometry.right_tab === 'REVISIONS'}
+              active={
+                actual.current !== null &&
+                supported &&
+                geometry.right_open &&
+                geometry.right_tab === 'REVISIONS'
+              }
               blocked={blocked || document.busy}
               revisions={owner.documents.revisions}
               history={regions.conversation.read.history}

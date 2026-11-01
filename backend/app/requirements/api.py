@@ -43,7 +43,10 @@ async def get_requirement_http(request: Request):
         GetRequirementRequest,
         GetRequirementResponse,
         lambda runtime, parsed: queries.get_requirement(
-            runtime.database, parsed.requirement_id, expand=parsed.expand
+            runtime.database,
+            parsed.requirement_id,
+            expand=parsed.expand,
+            document_id=parsed.document_id,
         ),
     )
 

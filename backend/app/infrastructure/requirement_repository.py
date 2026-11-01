@@ -70,6 +70,31 @@ class RequirementRepository:
         ).fetchone()
         return None if row is None else _record(row)
 
+    def get_for_document(self, requirement_id: int, document_id: int):
+        """Keep requirement identity/occupancy; load only this document's discussion."""
+        if type(document_id) is not int or document_id <= 0:
+            return None
+        root = self.get(requirement_id)
+        if root is None:
+            return None
+        row = self.connection.execute(
+            "SELECT discussion_version,discussion_state_json FROM requirement_documents WHERE id=? AND requirement_id=? AND document_type='CURRENT'",
+            (document_id, requirement_id),
+        ).fetchone()
+        if row is None:
+            return None
+        from backend.app.requirements.discussion import validate_discussion
+        from backend.app.shared.validation import strict_json_object
+
+        return {
+            **root,
+            'assistant_document_id': document_id,
+            'discussion_version': row['discussion_version'],
+            'discussion_state_json': validate_discussion(
+                strict_json_object(row['discussion_state_json'])
+            ),
+        }
+
     def create(
         self,
         identity: int,
@@ -161,19 +186,24 @@ class RequirementRepository:
 
         require_write_transaction(self.connection)
         state = validate_discussion(discussion)
+        if 'assistant_document_id' not in current:
+            raise ValueError('Discussion mutation requires an explicit document owner')
         result = self.connection.execute(
-            'UPDATE requirements SET discussion_state_json=?,discussion_version=?,updated_at=? WHERE id=? AND discussion_version=?',
+            "UPDATE requirement_documents SET discussion_state_json=?,discussion_version=? WHERE id=? AND requirement_id=? AND document_type='CURRENT' AND discussion_version=?",
             (
                 canonical_input(state),
                 increment(current['discussion_version']),
-                at,
+                current['assistant_document_id'],
                 current['id'],
                 current['discussion_version'],
             ),
         )
         if result.rowcount != 1:
-            raise ValueError('Discussion changed inside the shared write transaction')
-        return self.get(current['id'])
+            raise ValueError('Document discussion changed inside the shared transaction')
+        self.connection.execute(
+            'UPDATE requirements SET updated_at=? WHERE id=?', (at, current['id'])
+        )
+        return self.get_for_document(current['id'], current['assistant_document_id'])
 
     def occupy_manual_draft(self, identity: int, draft_id: int, at: str) -> dict:
         require_write_transaction(self.connection)

@@ -101,7 +101,7 @@ def validate_discussion(value, resources=None):
     return state
 
 
-def discussion_references(connection, requirement_id, state):
+def discussion_references(connection, requirement_id, state, document_id):
     """Stable references established by state or real user phase events."""
     import json
 
@@ -116,8 +116,8 @@ def discussion_references(connection, requirement_id, state):
         ),
     }
     for row in connection.execute(
-        "SELECT payload_json FROM document_change_audits WHERE requirement_id=? AND event_type='PHASE_CHANGED'",
-        (requirement_id,),
+        "SELECT payload_json FROM document_change_audits WHERE requirement_id=? AND document_id=? AND event_type='PHASE_CHANGED'",
+        (requirement_id, document_id),
     ):
         event = json.loads(row['payload_json'])
         for field in ('phase_before', 'phase_after'):
@@ -142,7 +142,7 @@ def apply_user_command(connection, root, command, message_id, catalog):
     resources = catalog.collaboration
     state = deepcopy(root['discussion_state_json'])
     kind = command['type']
-    known = discussion_references(connection, root['id'], state)
+    known = discussion_references(connection, root['id'], state, root['assistant_document_id'])
     closed_phase = None
     if kind == 'SET_BINDING':
         verify_source_refs(connection, root['id'], command['source_refs'], resources=resources)
@@ -152,6 +152,8 @@ def apply_user_command(connection, root, command, message_id, catalog):
             if command['scope'] is not None:
                 raise Rejected('SCOPE_INVALID')
         else:
+            if target != root['assistant_document_id']:
+                raise Rejected('SOURCE_INVALID')
             current = DocumentRepository(connection).get_current(root['id'], target)
             if current is None:
                 raise Rejected('SOURCE_INVALID')

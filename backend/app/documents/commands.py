@@ -379,7 +379,13 @@ def create_document(executor, payload, *, catalog=None, clock=None):
         document_id = entity_id(connection, EntityKind.DOCUMENT)
         message_id = entity_id(connection, EntityKind.MESSAGE)
         MessageRepository(connection).create_user_text(
-            message_id, root['id'], None, '新建文档：' + request.name, request.idempotency_key, at
+            message_id,
+            root['id'],
+            None,
+            '新建文档：' + request.name,
+            request.idempotency_key,
+            at,
+            document_id=document_id,
         )
         origin = {'kind': 'MESSAGE', 'message_id': message_id}
         sources = DocumentSources(

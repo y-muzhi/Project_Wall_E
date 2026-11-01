@@ -48,6 +48,62 @@ export class RequirementDetailOwner {
   private readonly width: () => number;
   private readonly storage: Pick<Storage, 'getItem' | 'setItem'> | null;
   private bindings: DetailBindings | null = null;
+  private readonly assistants = new Map<
+    number | null,
+    Pick<DetailBindings, 'conversation' | 'discussion' | 'comments'>
+  >();
+  private assistantDocumentId: number | null | undefined;
+  private async readAssistantDocument(documentId: number | null): Promise<DetailSnapshot> {
+    if (
+      !this.read.getSnapshot().loading &&
+      this.read.getSnapshot().confirmed?.selected_document_id === documentId
+    ) {
+      const actual = await this.readActual();
+      if (actual.selected_document_id === documentId) return actual;
+    }
+    const reader = new RequirementDetailRead(
+      this.read.getSnapshot().confirmed!.requirement.id,
+      this.api,
+      // Background reconciliation must not replace the user's reading preference.
+      () => ({ getItem: () => null, setItem: () => {} }),
+      documentId,
+    );
+    try {
+      if (!(await reader.refresh()))
+        throw Error(reader.getSnapshot().error ?? '文档助手暂时无法读取');
+      return reader.getSnapshot().confirmed!;
+    } finally {
+      reader.dispose();
+    }
+  }
+  private assistantRegions(actual: DetailSnapshot, layout: DetailLayout) {
+    const documentId = actual.selected_document_id;
+    const retained = this.assistants.get(documentId);
+    if (retained) return retained;
+    const api = this.api.forDocumentAssistant(documentId);
+    const read = () => this.readAssistantDocument(documentId);
+    const adopt = async (next: DetailSnapshot) => {
+      if (next.selected_document_id !== documentId) throw Error('助手文档归属不一致');
+      if (this.read.getSnapshot().confirmed?.selected_document_id === documentId)
+        await this.adoptActual(next);
+    };
+    const conversation = new RequirementConversation(actual, api, read, adopt, () => {
+      if (this.read.getSnapshot().confirmed?.selected_document_id === documentId)
+        layout.openTab('AI');
+    });
+    const comments = new RequirementCommentPanel(
+      actual,
+      api,
+      read,
+      adopt,
+      conversation.receive,
+      this.notifyConfirmed,
+    );
+    const discussion = new RequirementDiscussion(actual, api, read);
+    const regions = { conversation, comments, discussion };
+    this.assistants.set(documentId, regions);
+    return regions;
+  }
   private readonly listeners = new Set<() => void>();
   private readonly releases: (() => void)[] = [];
   private value: DetailOwnerState = Object.freeze({
@@ -151,26 +207,8 @@ export class RequirementDetailOwner {
         },
       }),
       header = new RequirementHeaderCommands(actual, this.api);
-    const conversation = new RequirementConversation(
-      actual,
-      this.api,
-      this.readActual,
-      this.adoptActual,
-      () => {
-        layout.openTab('AI');
-        this.sync();
-      },
-      undefined,
-      this.readObserved,
-    );
-    const comments = new RequirementCommentPanel(
-      actual,
-      this.api,
-      this.readActual,
-      this.adoptActual,
-      conversation.receive,
-      this.notifyConfirmed,
-    );
+    const { conversation, comments, discussion } = this.assistantRegions(actual, layout);
+    this.assistantDocumentId = actual.selected_document_id;
     const directory = new DocumentDirectoryCommands(
       actual,
       this.api,
@@ -178,7 +216,6 @@ export class RequirementDetailOwner {
       (identity) => this.selectDocument(identity),
       () => layout.ensureAssistantVisible(),
     );
-    const discussion = new RequirementDiscussion(actual, this.api, this.refresh);
     this.bindings = Object.freeze({
       documents: this.documents,
       directory,
@@ -200,8 +237,15 @@ export class RequirementDetailOwner {
     this.syncing = true;
     try {
       const document = this.documents.getSnapshot(),
-        actual = document.detail,
-        regions = this.bindings;
+        actual = document.detail;
+      let regions = this.bindings;
+      if (actual && regions && this.assistantDocumentId !== actual.selected_document_id) {
+        regions.conversation.setView(false, false, false);
+        this.assistantDocumentId = actual.selected_document_id;
+        regions = Object.freeze({ ...regions, ...this.assistantRegions(actual, regions.layout) });
+        this.bindings = regions;
+        this.previous = null;
+      }
       if (actual && regions && actual !== this.previous) {
         const changedCurrent =
           this.previous !== null &&
@@ -229,7 +273,7 @@ export class RequirementDetailOwner {
         // reconciliation. Visual availability follows stable view gates only.
         regions.conversation.setView(
           this.supported && geometry.right_open && geometry.right_tab === 'AI',
-          !historical,
+          !historical && actual?.current !== null,
           this.supported && geometry.right_open && geometry.right_tab === 'SUGGESTIONS',
         );
         regions.comments.setView(
@@ -327,6 +371,11 @@ export class RequirementDetailOwner {
   async readPanel(tab: DetailTab, signal: AbortSignal): Promise<void> {
     const regions = this.bindings;
     if (!regions || !this.supported || signal.aborted) throw Error('Panel is unavailable');
+    if (
+      this.value.detail?.selected_document_id === null &&
+      ['AI', 'PROGRESS', 'SUGGESTIONS', 'REVISIONS'].includes(tab)
+    )
+      return;
     if (tab === 'AI') {
       if (this.documents.historical) return;
       await regions.conversation.refresh();
@@ -354,7 +403,12 @@ export class RequirementDetailOwner {
   readRunRecord = async (identity: number, signal: AbortSignal) => {
     if (this.closed || signal.aborted) throw Error('Record view is unavailable');
     const run = (await this.api.getGuideRun(identity, signal)).data;
-    if (this.closed || signal.aborted || run.requirement_id !== this.value.detail?.requirement.id)
+    if (
+      this.closed ||
+      signal.aborted ||
+      run.requirement_id !== this.value.detail?.requirement.id ||
+      run.document_id !== this.value.detail?.selected_document_id
+    )
       throw Error('Owned run record required');
     return run;
   };
@@ -389,9 +443,12 @@ export class RequirementDetailOwner {
     this.bindings?.viewport.dispose();
     this.bindings?.header.dispose();
     this.bindings?.directory.dispose();
-    this.bindings?.discussion.dispose();
-    this.bindings?.conversation.dispose();
-    this.bindings?.comments.dispose();
+    for (const assistant of this.assistants.values()) {
+      assistant.discussion.dispose();
+      assistant.conversation.dispose();
+      assistant.comments.dispose();
+    }
+    this.assistants.clear();
     this.value.revisionSave?.dispose();
     this.read.dispose();
     this.api.disposeDetailReads();

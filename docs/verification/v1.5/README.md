@@ -1,5 +1,11 @@
 # V1.5检查记录索引
 
+- [文档级助手与两字段创建归并／Git收口](document-assistant-closeout-2026-11-01.md)。
+
+- [新建需求移除初始想法](create-without-initial-idea-2026-11-01.md)。
+
+- [文档级AI助手数据隔离、回归与测试库重建](document-assistant-isolation-2026-11-01.md)。
+
 - [待合并迭代集中归并与Git收口](iteration-closeout-2026-11-01.md)。
 
 - [无折叠区块操作间距](block-control-gap-2026-11-01.md)。

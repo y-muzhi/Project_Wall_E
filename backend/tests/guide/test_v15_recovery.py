@@ -51,10 +51,10 @@ def test_saved_return_completes_one_real_document_once_with_no_dispatch_count_or
     monkeypatch.setattr('backend.app.infrastructure.tokenization.TokenizationGateway.count', forbidden)
     result = recover(workspace, at+timedelta(seconds=3));assert result['code'] == 'RECOVERED', result
     assert result['data']['recovered_run_ids'] == [1]
-    before = counts(workspace[0]);assert before['requirement_documents'] == 1 and before['revisions'] == 1 and before['llm_uses'] == 1
+    before = counts(workspace[0]);assert before['requirement_documents'] == 2 and before['revisions'] == 2 and before['llm_uses'] == 1
     with workspace[0].transaction() as connection:
         assert connection.execute('SELECT status FROM guide_runs').fetchone()[0] == 'COMPLETED'
-        assert RequirementRepository(connection).get(1)['document_work_state'] == 'IDLE'
+        assert RequirementRepository(connection).get_for_document(1,1)['document_work_state'] == 'IDLE'
     assert recover(workspace, at+timedelta(seconds=4))['code'] == 'RECOVERY_NO_CHANGE'
     assert counts(workspace[0]) == before
 
@@ -66,9 +66,9 @@ def test_unknown_external_request_becomes_interrupted_without_document_and_keeps
         run = connection.execute('SELECT * FROM guide_runs').fetchone();row = connection.execute('SELECT * FROM llm_uses').fetchone()
         assert run['status'] == 'FAILED' and run['error_code'] == 'INTERRUPTED'
         assert row['input_tokens'] is None and row['raw_response_json'] is None
-        root = RequirementRepository(connection).get(1)
+        root = RequirementRepository(connection).get_for_document(1,1)
         assert root['document_work_state'] == 'IDLE' and root['discussion_state_json']['pending_user_message_ids'] == [run['trigger_message_id']]
-    assert counts(workspace[0])['requirement_documents'] == 0
+    assert counts(workspace[0])['requirement_documents'] == 1
 
 
 def test_unprovable_saved_basis_never_replays_a_content_commit(workspace, monkeypatch):
@@ -78,7 +78,7 @@ def test_unprovable_saved_basis_never_replays_a_content_commit(workspace, monkey
         snapshot['context_basis']['wire_sha256'] = '0'*64
         connection.execute('UPDATE llm_uses SET request_snapshot_json=?', (json.dumps(snapshot),))
     result = recover(workspace, at+timedelta(seconds=3));assert result['code'] == 'RECOVERED', result
-    assert counts(workspace[0])['requirement_documents'] == 0
+    assert counts(workspace[0])['requirement_documents'] == 1
     with workspace[0].transaction() as connection:
         assert connection.execute('SELECT error_code FROM guide_runs').fetchone()[0] == 'INTERRUPTED'
         assert connection.execute('SELECT raw_response_json FROM llm_uses').fetchone()[0] is not None
@@ -91,7 +91,7 @@ def test_live_startup_run_and_fresh_progress_are_preserved_then_timeout_releases
     result = recover(workspace, at+timedelta(minutes=15), reason='NO_PROGRESS', live={1});assert result['code'] == 'RECOVERED', result
     with workspace[0].transaction() as connection:
         assert connection.execute('SELECT error_code FROM guide_runs').fetchone()[0] == 'EXECUTION_TIMEOUT'
-        assert RequirementRepository(connection).get(1)['document_work_state'] == 'IDLE'
+        assert RequirementRepository(connection).get_for_document(1,1)['document_work_state'] == 'IDLE'
     assert counts(workspace[0])['llm_uses'] == 1
 
 
@@ -101,7 +101,7 @@ def test_durable_unparsed_response_is_parsed_and_committed_in_one_recovery_trans
     with workspace[0].transaction() as connection:
         assert connection.execute('SELECT parse_status FROM llm_uses').fetchone()[0] == 'SUCCEEDED'
         assert connection.execute('SELECT status FROM guide_runs').fetchone()[0] == 'COMPLETED'
-        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
+        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 2
 
 
 def test_unparsed_recovery_storage_failure_rolls_back_parse_and_content_then_original_return_can_complete(workspace, monkeypatch):
@@ -119,4 +119,4 @@ def test_unparsed_recovery_storage_failure_rolls_back_parse_and_content_then_ori
         assert connection.execute('SELECT status FROM guide_runs').fetchone()[0] == 'RUNNING'
     monkeypatch.setattr(RevisionRepository, 'insert_content', original)
     assert recover(workspace, at+timedelta(seconds=4))['code'] == 'RECOVERED'
-    assert counts(workspace[0])['llm_uses'] == 1 and counts(workspace[0])['revisions'] == 1
+    assert counts(workspace[0])['llm_uses'] == 1 and counts(workspace[0])['revisions'] == 2

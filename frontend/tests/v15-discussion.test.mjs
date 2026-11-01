@@ -35,7 +35,7 @@ test('new detail version or active occupancy requires fresh progress and never g
 test('the existing PATCH carries a strict discussion receipt and accepts reordered JSON keys',async()=>{
  const requests=[],key='00000000-0000-4000-8000-000000000001';
  const api=new WalleApi(new ApiClient(async(path,init)=>{requests.push({path,init});const discussion=state();discussion.binding.source_refs=[{message_id:1,kind:'MESSAGE'}];
-  return new Response(JSON.stringify({success:true,data:{requirement_id:1,discussion_version:2,discussion},error:null,meta:{request_id:key}}),{status:200,headers:{'Content-Type':'application/json'}});},()=>key),null);
+  return new Response(JSON.stringify({success:true,data:{requirement_id:1,discussion_version:2,discussion},error:null,meta:{request_id:key}}),{status:200,headers:{'Content-Type':'application/json'}});},()=>key),null).forDocumentAssistant(2);
  const action=api.prepareUpdateDiscussion(1,{expected_discussion_version:1,discussion_command:{type:'SET_BINDING',target_document_id:null,source_refs:[{kind:'MESSAGE',message_id:1}],scope:null}});
  const result=await action.submit();assert.equal(result.data.discussion_version,2);assert.equal(requests[0].path,'/api/v1/requirements/1');assert.equal(requests[0].init.method,'PATCH');assert.equal(JSON.parse(requests[0].init.body).discussion_command.type,'SET_BINDING');
 });

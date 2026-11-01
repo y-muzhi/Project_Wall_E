@@ -24,10 +24,19 @@ def prepare(database, lock, catalog):
         'initial_idea': '为个人电影记录工具明确记录、评分与推荐的范围。', 'idempotency_key': str(uuid4())})
     if created['code'] != 'CREATED':
         raise RuntimeError('Isolated requirement creation failed')
+    from backend.app.documents.commands import create_document
+
+    owner = create_document(executor, {
+        'requirement_id': created['data']['requirement']['id'], 'name':'电影记录工作文档',
+        'document_kind':'REQUIREMENT_BRIEF', 'template_ref':None, 'idempotency_key':str(uuid4())
+    },catalog=catalog)
+    if owner['code'] != 'CREATED':
+        raise RuntimeError('Isolated document creation failed')
     result = create_guide_run(executor, {'requirement_id': created['data']['requirement']['id'],
+        'document_id':owner['data']['document']['id'],
         'expected_discussion_version': 1, 'operation': 'DISCUSS',
         'instruction': '请讨论首版目标、主要场景与推荐取舍，不生成文档。',
-        'target': None, 'scope': None, 'source_refs': [], 'proposal_ref': None,
+        'target': None, 'scope': None, 'source_refs': [{'kind':'MESSAGE','message_id':created['data']['initial_message_id']}], 'proposal_ref': None,
         'acknowledge_source_changes': False, 'idempotency_key': str(uuid4())}, catalog=catalog)
     if result['code'] != 'GUIDE_ACCEPTED':
         raise RuntimeError('Isolated observation acceptance failed')

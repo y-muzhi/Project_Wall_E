@@ -96,7 +96,10 @@ export class RequirementGuideComposer {
     adoptActual: (actual: DetailSnapshot) => Promise<void>,
     receive: (run: Pick<GuideRun, 'id' | 'requirement_id'>) => Promise<void>,
     refreshMessages: () => Promise<void>,
-    drafts = new ComposerDrafts(),
+    drafts = new ComposerDrafts(
+      undefined,
+      detail.selected_document_id ?? detail.current?.id ?? null,
+    ),
     readAccepted = readActual,
   ) {
     this.readAccepted = readAccepted;
@@ -110,7 +113,16 @@ export class RequirementGuideComposer {
     this.value = Object.freeze({
       detail: capture(detail),
       action: 'DISCUSS',
-      target: null,
+      target:
+        detail.current === null
+          ? null
+          : {
+              document_id: detail.current.id,
+              content_version: detail.current.content_version,
+              scope: { scope_type: 'DOCUMENT' as const, scope_ref: null },
+              label: '整篇文档',
+              selection: null,
+            },
       new_target: {
         kind: 'NEW' as const,
         name: '',
@@ -158,6 +170,7 @@ export class RequirementGuideComposer {
     const state = this.value;
     if (
       this.closed ||
+      state.detail.current === null ||
       !state.available ||
       state.needs_refresh ||
       state.refreshing ||
@@ -172,7 +185,12 @@ export class RequirementGuideComposer {
     const target = state.target;
     if (target !== null) {
       const actual = state.detail.documents.find((document) => document.id === target.document_id);
-      if (!actual || actual.content_version !== target.content_version) return false;
+      if (
+        !actual ||
+        actual.id !== (state.detail.selected_document_id ?? state.detail.current?.id) ||
+        actual.content_version !== target.content_version
+      )
+        return false;
       if (['REVISE', 'PROPOSE_CHANGES'].includes(state.action) && actual.archived_at !== null)
         return false;
     }
@@ -265,6 +283,8 @@ export class RequirementGuideComposer {
       this.publish({ target: null });
       return;
     }
+    const owner = this.value.detail.selected_document_id ?? this.value.detail.current?.id;
+    if (identity !== owner) throw TypeError('请先切换到目标文档，再使用该文档的AI助手');
     const document = this.value.detail.documents.find((item) => item.id === identity);
     if (!document) throw TypeError('Actual target document required');
     this.publish({

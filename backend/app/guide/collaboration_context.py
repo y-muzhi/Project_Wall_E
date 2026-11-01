@@ -60,7 +60,9 @@ def read_canonical(connection, identity, catalog, *, require_current=True):
         raise Rejected('NOT_FOUND')
     if run['function_type'] != 'collaboration_v1' or run['execution_basis_json'] is None:
         raise Rejected('SOURCE_INVALID')
-    root = RequirementRepository(connection).get(run['requirement_id'])
+    root = RequirementRepository(connection).get_for_document(
+        run['requirement_id'], run['document_id']
+    )
     if root is None:
         raise Rejected('SOURCE_INVALID')
     if run['status'] == 'RUNNING' and require_current:
@@ -83,7 +85,10 @@ def read_canonical(connection, identity, catalog, *, require_current=True):
         raise Rejected('SOURCE_INVALID')
     request = accepted['request']
     if (
-        request['operation'] != run['operation']
+        request['document_id'] != run['document_id']
+        or accepted['user_message']['document_id'] != run['document_id']
+        or any(row['document_id'] != run['document_id'] for row in accepted['recent_messages'])
+        or request['operation'] != run['operation']
         or accepted['user_message']['id'] != run['trigger_message_id']
     ):
         raise Rejected('SOURCE_INVALID')
@@ -694,7 +699,14 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
             }
         )
 
-    goal_message(canonical['requirement']['initial_message_id'], 'INITIAL_GOAL')
+    # Historic snapshots and explicitly selected requirement descriptions retain
+    # their original deterministic ordering. A document never auto-selects it.
+    initial = canonical['requirement']['initial_message_id']
+    if any(
+        source['kind'] == 'MESSAGE' and source['message_id'] == initial
+        for source in canonical['source_refs']
+    ):
+        goal_message(initial, 'INITIAL_GOAL')
     for source in canonical['source_refs']:
         if source['kind'] in ('MESSAGE', 'CARD_ANSWER'):
             goal_message(source['message_id'], 'FIXED_OR_LONG_TERM_INPUT', source.get('card_key'))

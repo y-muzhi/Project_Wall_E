@@ -15,22 +15,26 @@ class MessageRepository:
             'SELECT * FROM conversation_messages WHERE id=?', (identity,)
         ).fetchone()
 
-    def window(self, requirement_id: int, cursor: int | None):
+    def window(self, requirement_id: int, cursor: int | None, document_id: int):
         condition = '' if cursor is None else ' AND sequence_no<?'
-        parameters = (requirement_id,) if cursor is None else (requirement_id, cursor)
+        parameters = (
+            (requirement_id, document_id)
+            if cursor is None
+            else (requirement_id, document_id, cursor)
+        )
         rows = self.connection.execute(
-            'SELECT * FROM conversation_messages WHERE requirement_id=?'
+            'SELECT * FROM conversation_messages WHERE requirement_id=? AND document_id=?'
             + condition
             + ' ORDER BY sequence_no DESC LIMIT 20',
             parameters,
         ).fetchall()
         return list(reversed(rows))
 
-    def older_exists(self, requirement_id: int, sequence: int):
+    def older_exists(self, requirement_id: int, sequence: int, document_id: int):
         return (
             self.connection.execute(
-                'SELECT 1 FROM conversation_messages WHERE requirement_id=? AND sequence_no<? LIMIT 1',
-                (requirement_id, sequence),
+                'SELECT 1 FROM conversation_messages WHERE requirement_id=? AND document_id=? AND sequence_no<? LIMIT 1',
+                (requirement_id, document_id, sequence),
             ).fetchone()
             is not None
         )
@@ -42,7 +46,7 @@ class MessageRepository:
 
     def guide_binding(self, identity: int):
         return self.connection.execute(
-            'SELECT id,requirement_id FROM guide_runs WHERE id=?', (identity,)
+            'SELECT id,requirement_id,document_id FROM guide_runs WHERE id=?', (identity,)
         ).fetchone()
 
     def activities(self, requirement_id: int):
@@ -72,31 +76,36 @@ class MessageRepository:
 
     def formal_responses(self, message_id: int):
         return self.connection.execute(
-            "SELECT id,requirement_id,guide_run_id,sequence_no,created_at FROM conversation_messages WHERE message_type='CARD_RESPONSE' AND reply_to_message_id=? LIMIT 2",
+            "SELECT id,requirement_id,document_id,guide_run_id,sequence_no,created_at FROM conversation_messages WHERE message_type='CARD_RESPONSE' AND reply_to_message_id=? LIMIT 2",
             (message_id,),
         ).fetchall()
 
-    def latest_card_id(self, requirement_id: int):
+    def latest_card_id(self, requirement_id: int, document_id: int):
         row = self.connection.execute(
-            "SELECT id FROM conversation_messages WHERE requirement_id=? AND role='ASSISTANT' AND message_type='INTERACTION_CARDS' ORDER BY sequence_no DESC LIMIT 1",
-            (requirement_id,),
+            "SELECT id FROM conversation_messages WHERE requirement_id=? AND document_id=? AND role='ASSISTANT' AND message_type='INTERACTION_CARDS' ORDER BY sequence_no DESC LIMIT 1",
+            (requirement_id, document_id),
         ).fetchone()
         return None if row is None else row['id']
 
     def newer_input_exists(self, message):
         return (
             self.connection.execute(
-                "SELECT 1 FROM conversation_messages WHERE requirement_id=? AND role='USER' AND sequence_no>? AND (message_type<>'CARD_RESPONSE' OR reply_to_message_id<>?) LIMIT 1",
-                (message['requirement_id'], message['sequence_no'], message['id']),
+                "SELECT 1 FROM conversation_messages WHERE requirement_id=? AND document_id IS ? AND role='USER' AND sequence_no>? AND (message_type<>'CARD_RESPONSE' OR reply_to_message_id<>?) LIMIT 1",
+                (
+                    message['requirement_id'],
+                    message['document_id'],
+                    message['sequence_no'],
+                    message['id'],
+                ),
             ).fetchone()
             is not None
         )
 
-    def newer_run_exists(self, requirement_id: int, run_id: int):
+    def newer_run_exists(self, requirement_id: int, run_id: int, document_id: int):
         return (
             self.connection.execute(
-                'SELECT 1 FROM guide_runs WHERE requirement_id=? AND id>? LIMIT 1',
-                (requirement_id, run_id),
+                'SELECT 1 FROM guide_runs WHERE requirement_id=? AND document_id=? AND id>? LIMIT 1',
+                (requirement_id, document_id, run_id),
             ).fetchone()
             is not None
         )
@@ -119,10 +128,11 @@ class MessageRepository:
         phase_ref=None,
         topic_refs=(),
         document_ids=(),
+        document_id=None,
     ) -> sqlite3.Row:
         require_write_transaction(self.connection)
         self.connection.execute(
-            "INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_ids) VALUES (?,?,?,?,'USER',?,'TEXT',NULL,NULL,?,?,?,?,?)",
+            "INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_id,document_ids) VALUES (?,?,?,?,'USER',?,'TEXT',NULL,NULL,?,?,?,?,?,?)",
             (
                 identity,
                 requirement_id,
@@ -133,6 +143,7 @@ class MessageRepository:
                 at,
                 phase_ref,
                 json.dumps(list(topic_refs)),
+                document_id,
                 json.dumps(list(document_ids)),
             ),
         )
@@ -157,6 +168,7 @@ class MessageRepository:
         phase_ref=None,
         topic_refs=(),
         document_ids=(),
+        document_id=None,
     ):
         require_write_transaction(self.connection)
         if (
@@ -168,7 +180,7 @@ class MessageRepository:
                 'Formal response requires the actual assistant card of this requirement'
             )
         self.connection.execute(
-            "INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_ids) VALUES (?,?,?,?,'USER',?,'CARD_RESPONSE',?,?,?,?,?,?,?)",
+            "INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_id,document_ids) VALUES (?,?,?,?,'USER',?,'CARD_RESPONSE',?,?,?,?,?,?,?,?)",
             (
                 identity,
                 requirement_id,
@@ -181,6 +193,7 @@ class MessageRepository:
                 at,
                 phase_ref,
                 json.dumps(list(topic_refs)),
+                document_id,
                 json.dumps(list(document_ids)),
             ),
         )
@@ -218,10 +231,11 @@ class MessageRepository:
         phase_ref,
         topic_refs=(),
         document_ids=(),
+        document_id=None,
     ):
         require_write_transaction(self.connection)
         self.connection.execute(
-            "INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_ids) VALUES (?,?,?,?,'ASSISTANT',?,?,?,NULL,NULL,?,?,?,?)",
+            "INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_id,document_ids) VALUES (?,?,?,?,'ASSISTANT',?,?,?,NULL,NULL,?,?,?,?,?)",
             (
                 identity,
                 requirement_id,
@@ -233,6 +247,7 @@ class MessageRepository:
                 at,
                 phase_ref,
                 json.dumps(list(topic_refs)),
+                document_id,
                 json.dumps(list(document_ids)),
             ),
         )

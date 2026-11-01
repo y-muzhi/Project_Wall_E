@@ -445,11 +445,16 @@ export function DiscussionProgress({
                       value={selectedTarget === null ? 'NONE' : String(selectedTarget)}
                       options={[
                         { value: 'NONE', label: '不绑定文档' },
-                        ...actual.documents.map((document) => ({
-                          value: String(document.id),
-                          label:
-                            document.name + (document.archived_at === null ? '' : '（已归档）'),
-                        })),
+                        ...actual.documents
+                          .filter(
+                            (document) =>
+                              document.id === owner.getSnapshot().detail?.selected_document_id,
+                          )
+                          .map((document) => ({
+                            value: String(document.id),
+                            label:
+                              document.name + (document.archived_at === null ? '' : '（已归档）'),
+                          })),
                       ]}
                       change={(value) => setTarget(value === 'NONE' ? null : Number(value))}
                     />

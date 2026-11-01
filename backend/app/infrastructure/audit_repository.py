@@ -32,7 +32,9 @@ def _owned(connection, run):
         raise Rejected('NOT_FOUND')
     if run['status'] != 'RUNNING':
         raise Rejected('STATE_CONFLICT')
-    root = RequirementRepository(connection).get(run['requirement_id'])
+    root = RequirementRepository(connection).get_for_document(
+        run['requirement_id'], run['document_id']
+    )
     if (
         root is None
         or root['document_work_state'] != 'GUIDE_ACTIVE'
@@ -380,10 +382,11 @@ class AuditRepository:
             'phase_after': after['discussion_state_json']['phase'],
         }
         self.connection.execute(
-            "INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,NULL,'USER_ACTION',?,?,NULL,NULL,?,?,NULL,NULL,?)",
+            "INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,?,'USER_ACTION',?,?,NULL,NULL,?,?,NULL,NULL,?)",
             (
                 entity_id(self.connection, EntityKind.DOCUMENT_AUDIT),
                 before['id'],
+                before['assistant_document_id'],
                 message_id,
                 event,
                 at,

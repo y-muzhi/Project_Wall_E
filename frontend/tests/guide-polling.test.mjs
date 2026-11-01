@@ -18,7 +18,7 @@ test('H04 hanging status request times out, preserves confirmed state and uses n
  }finally{poll.dispose();}
 });
 function run(status = 'RUNNING', changes = {}) {
-  return guideRun({ id: 2, requirement_id: 1, action_type: 'ASK', function_type:'collaboration_v1', source_type: 'USER_INSTRUCTION', source_id: null,
+  return guideRun({ id: 2, requirement_id: 1, document_id:2, action_type: 'ASK', function_type:'collaboration_v1', source_type: 'USER_INSTRUCTION', source_id: null,
     scope: { scope_type: 'DOCUMENT', scope_ref: null }, status, current_step: status === 'RUNNING' ? 'PREPARING' : 'FINISHED',
     final_result: status === 'COMPLETED' ? { summary: '完成', assistant_message_id: 1, current_document_version: null, suggestion_batch_id:null,analysis:null} : null,
     suggestion_batch_id: null, latest_assistant_message_id: null, error_code: status === 'FAILED' ? 'CONFIG_INVALID' : null,

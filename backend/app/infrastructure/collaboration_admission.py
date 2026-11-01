@@ -16,7 +16,7 @@ from backend.app.documents.snapshot import _time
 from backend.app.shared.validation import object_fields, strict_integer
 from .collaboration_resources import sha256
 from .counting_journal import CountingJournal
-from .database import Database, StorageUnavailable
+from .database import Database, Migration, SchemaMismatch, StorageUnavailable
 from .idempotency import canonical_input
 from .model_profile import ModelProfile
 from .resources import ConfigInvalid
@@ -36,6 +36,26 @@ class AdmissionEvidence:
     @property
     def value(self):
         return deepcopy(self._value)
+
+
+def evidence_database(path):
+    """Frozen provider evidence may predate business ownership; never migrate it."""
+    import sqlite3
+
+    source = Path(path).resolve()
+    connection = sqlite3.connect(source.as_uri() + '?mode=ro', uri=True)
+    try:
+        versions = connection.execute(
+            'SELECT version FROM schema_migrations ORDER BY version'
+        ).fetchall()
+    except sqlite3.Error:
+        raise SchemaMismatch('Missing frozen evidence schema metadata') from None
+    finally:
+        connection.close()
+    if versions == [(150,)]:
+        schema = Path(__file__).with_name('schemas') / 'v1_5_evidence_150.sql'
+        return Database(source, migration=Migration(schema, 150))
+    return Database(source)
 
 
 class CollaborationAdmission:
@@ -60,7 +80,7 @@ class CollaborationAdmission:
         source = Path(path)
         if not source.is_absolute() or not source.is_file():
             raise ConfigInvalid('The original evidence database must remain available')
-        with Database(source).transaction() as connection:
+        with evidence_database(source).transaction() as connection:
             row = connection.execute('SELECT * FROM llm_uses WHERE id=?', (identity,)).fetchone()
             if row is None:
                 raise ConfigInvalid('The original admitted call is unavailable')
@@ -121,7 +141,7 @@ class CollaborationAdmission:
         from .practical_usage import validate_collaboration_measurements
 
         reference = self.resources.reference('collaboration.release')
-        with Database(path).transaction() as connection:
+        with evidence_database(path).transaction() as connection:
             rows = connection.execute(
                 """SELECT input_tokens,output_tokens,
                 json_extract(raw_response_json,'$.model') AS actual_model,

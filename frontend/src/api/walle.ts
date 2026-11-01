@@ -38,7 +38,7 @@ export type GuideFilters = Readonly<{
 export type CreateRequirement = Readonly<{
   title: string;
   requirement_type: 'NEW' | 'CHANGE';
-  initial_idea: string;
+  initial_idea?: string;
 }>;
 export type DiscussionCommand = Readonly<
   | {
@@ -120,13 +120,32 @@ export class WalleApi {
   private readonly client: ApiClient;
   private readonly ctx: Ctx;
   private readonly readScope: DetailReadScope | undefined;
-  constructor(client: ApiClient, ctx: Ctx, readScope?: DetailReadScope) {
+  private readonly assistantDocumentId: number | null;
+  constructor(
+    client: ApiClient,
+    ctx: Ctx,
+    readScope?: DetailReadScope,
+    assistantDocumentId: number | null = null,
+  ) {
+    this.assistantDocumentId = assistantDocumentId;
     this.client = client;
     this.ctx = ctx;
     this.readScope = readScope;
   }
   forDetailReads(): WalleApi {
-    return new WalleApi(this.client, this.ctx, new DetailReadScope());
+    return new WalleApi(this.client, this.ctx, new DetailReadScope(), this.assistantDocumentId);
+  }
+  forDocumentAssistant(documentId: number | null): WalleApi {
+    return new WalleApi(
+      this.client,
+      this.ctx,
+      this.readScope,
+      documentId === null ? null : id(documentId),
+    );
+  }
+  private assistantOwner(): number {
+    if (this.assistantDocumentId === null) throw TypeError('请先选择文档');
+    return this.assistantDocumentId;
   }
   get detailReadEpoch(): number {
     return this.readScope?.generation ?? 0;
@@ -238,18 +257,24 @@ export class WalleApi {
       signal,
     );
   }
-  getRequirementDetail(identity: number, signal?: AbortSignal, expandDiscussion = false) {
+  getRequirementDetail(
+    identity: number,
+    signal?: AbortSignal,
+    expandDiscussion = false,
+    documentId: number | null = this.assistantDocumentId,
+  ) {
     const decode = checked(models.requirementDetail, (value) => {
       require(value.requirement.id === identity);
       require(expandDiscussion === (value.discussion !== null));
     });
-    return this.readTogether(`requirement:${identity}:${expandDiscussion}`, signal, (owned) =>
-      this.single(
-        target('requirements', identity),
-        decode,
-        owned,
-        expandDiscussion ? [['expand', 'discussion']] : [],
-      ),
+    return this.readTogether(
+      `requirement:${identity}:${documentId}:${expandDiscussion}`,
+      signal,
+      (owned) =>
+        this.single(target('requirements', identity), decode, owned, [
+          ...(expandDiscussion ? [['expand', 'discussion'] as const] : []),
+          ...(documentId === null ? [] : [['document_id', String(id(documentId))] as const]),
+        ]),
     );
   }
   async getRequirement(identity: number, signal?: AbortSignal) {
@@ -314,7 +339,15 @@ export class WalleApi {
   }
   getGuideRun(identity: number, signal?: AbortSignal) {
     return this.readTogether(`run:${identity}`, signal, (owned) =>
-      this.single(target('guide-runs', identity), identified(models.guideRun, identity), owned),
+      this.single(
+        target('guide-runs', identity),
+        checked(identified(models.guideRun, identity), (row) =>
+          require(
+            this.assistantDocumentId === null || row.document_id === this.assistantDocumentId,
+          ),
+        ),
+        owned,
+      ),
     );
   }
   listModelCalls(identity: number, signal?: AbortSignal) {
@@ -336,8 +369,10 @@ export class WalleApi {
   listGuideRuns(identity: number, filters: GuideFilters = {}, signal?: AbortSignal) {
     return this.page(
       target('requirements', identity, '/guide-runs'),
-      owned(models.guideSummary, identity),
-      query(filters),
+      checked(owned(models.guideSummary, identity), (row) =>
+        require(row.document_id === this.assistantOwner()),
+      ),
+      [...query(filters), ['document_id', String(this.assistantOwner())]],
       filters.page ?? 1,
       signal,
     );
@@ -361,16 +396,32 @@ export class WalleApi {
       ),
     );
   }
+  getMessage(requirement: number, identity: number, signal?: AbortSignal) {
+    return this.single(
+      target('conversation-messages', identity),
+      checked(owned(models.message, requirement), (row) => require(row.id === identity)),
+      signal,
+      [['requirement_id', String(id(requirement))]],
+    );
+  }
   async listMessages(identity: number, before: number | null = null, signal?: AbortSignal) {
     const parameters: [string, string][] =
       before === null ? [] : [['before_sequence_no', String(id(before))]];
+    parameters.push(['document_id', String(this.assistantOwner())]);
     const response = await this.readTogether(
-      `messages:${identity}:${before}`,
+      `messages:${identity}:${this.assistantDocumentId}:${before}`,
       signal,
       (ownedSignal) =>
         this.client.read(
           target('requirements', identity, '/messages'),
-          shape({ items: array(owned(models.message, identity), 20) }),
+          shape({
+            items: array(
+              checked(owned(models.message, identity), (row) =>
+                require(row.document_id === this.assistantOwner()),
+              ),
+              20,
+            ),
+          }),
           parameters,
           ownedSignal,
         ),
@@ -403,7 +454,7 @@ export class WalleApi {
       `${root}/requirements`,
       body,
       (original) => {
-        bodyFields(original!, ['title', 'requirement_type', 'initial_idea']);
+        bodyFields(original!, ['title', 'requirement_type'], ['initial_idea']);
         return checked(
           shape({
             requirement: models.requirement,
@@ -455,30 +506,35 @@ export class WalleApi {
     identity: number,
     body: Readonly<{ expected_discussion_version: number; discussion_command: DiscussionCommand }>,
   ) {
-    return this.action('PATCH', target('requirements', identity), body, (original) => {
-      bodyFields(original!, ['expected_discussion_version', 'discussion_command']);
-      const version = id(original!.expected_discussion_version);
-      return checked(
-        shape({ requirement_id: id, discussion_version: id, discussion: models.discussionState }),
-        (value) => {
-          require(
-            value.requirement_id === identity &&
-              (value.discussion_version === version || value.discussion_version === version + 1),
-          );
-          const command = original!.discussion_command as JsonObject;
-          if (command.type === 'SET_FOCUS')
-            require(value.discussion.focus_topic_ref === command.topic_ref);
-          if (command.type === 'CHANGE_PHASE')
-            require(value.discussion.phase.kind === command.phase_kind);
-          if (command.type === 'SET_BINDING')
+    return this.action(
+      'PATCH',
+      target('requirements', identity),
+      { ...body, document_id: this.assistantOwner() },
+      (original) => {
+        bodyFields(original!, ['document_id', 'expected_discussion_version', 'discussion_command']);
+        const version = id(original!.expected_discussion_version);
+        return checked(
+          shape({ requirement_id: id, discussion_version: id, discussion: models.discussionState }),
+          (value) => {
             require(
-              value.discussion.binding.target_document_id === command.target_document_id &&
-                sameJson(value.discussion.binding.source_refs, command.source_refs) &&
-                sameJson(value.discussion.binding.scope, command.scope),
+              value.requirement_id === identity &&
+                (value.discussion_version === version || value.discussion_version === version + 1),
             );
-        },
-      );
-    });
+            const command = original!.discussion_command as JsonObject;
+            if (command.type === 'SET_FOCUS')
+              require(value.discussion.focus_topic_ref === command.topic_ref);
+            if (command.type === 'CHANGE_PHASE')
+              require(value.discussion.phase.kind === command.phase_kind);
+            if (command.type === 'SET_BINDING')
+              require(
+                value.discussion.binding.target_document_id === command.target_document_id &&
+                  sameJson(value.discussion.binding.source_refs, command.source_refs) &&
+                  sameJson(value.discussion.binding.scope, command.scope),
+              );
+          },
+        );
+      },
+    );
   }
   prepareStartManualDraft(
     identity: number,
@@ -667,9 +723,10 @@ export class WalleApi {
     return this.action(
       'POST',
       target('requirements', identity, '/guide-runs'),
-      body,
+      { ...body, document_id: this.assistantOwner() },
       (original) => {
         bodyFields(original!, [
+          'document_id',
           'expected_discussion_version',
           'operation',
           'instruction',

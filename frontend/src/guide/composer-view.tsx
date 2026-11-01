@@ -308,10 +308,12 @@ export function GuideComposer({
                   value={target === null ? 'NONE' : String(target.document_id)}
                   options={[
                     { value: 'NONE', label: '不指定文档' },
-                    ...state.detail.documents.map((item) => ({
-                      value: String(item.id),
-                      label: item.name + (item.archived_at === null ? '' : '（已归档）'),
-                    })),
+                    ...state.detail.documents
+                      .filter((item) => item.id === state.detail.selected_document_id)
+                      .map((item) => ({
+                        value: String(item.id),
+                        label: item.name + (item.archived_at === null ? '' : '（已归档）'),
+                      })),
                   ]}
                   change={(value) => owner.selectDocument(value === 'NONE' ? null : Number(value))}
                 />

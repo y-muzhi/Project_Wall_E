@@ -9,7 +9,7 @@ const at='2026-10-22T00:00:00.000Z',key='00000000-0000-4000-8000-000000000001';
 const definition=(program=false)=>cards({schema_version:1,intro:'',purpose:program?'PHASE_CHANGE':'CLARIFICATION',cards:[{card_key:'c1',card_type:program?'CONFIRM':'SINGLE_SELECT',question:'选择',context:'',required:true,
  options:(program?['accept','defer']:['a','b']).map(value=>({option_key:value,label:value,description:'不回传',impact:'',risks:''})),selection_rule:{min:1,max:1},custom_answer:{enabled:false,max_length:0},recommendation:null,related_spec_context:[]}],
  action_payload:program?{phase_kind:'SOLUTION',closure_summary:'进入方案',unresolved_refs:[],basis_discussion_version:2}:null,program_binding:{discussion_version:3,target_content_version:null,source_heads:[]}});
-const base=(changes={})=>({id:20,requirement_id:1,guide_run_id:10,sequence_no:2,role:'ASSISTANT',content:'提问',message_type:'INTERACTION_CARDS',structured_content:definition(),reply_to_message_id:null,created_at:at,card_state:'AVAILABLE',phase_ref:'p1',topic_refs:[],document_ids:[],program_receipt:null,...changes});
+const base=(changes={})=>({id:20,requirement_id:1,document_id:2,guide_run_id:10,sequence_no:2,role:'ASSISTANT',content:'提问',message_type:'INTERACTION_CARDS',structured_content:definition(),reply_to_message_id:null,created_at:at,card_state:'AVAILABLE',phase_ref:'p1',topic_refs:[],document_ids:[],program_receipt:null,...changes});
 const detail=version=>({requirement:{id:1,discussion_version:version,document_work_state:'IDLE',active_operation_id:null,active_operation_type:null,status:'CLOSED'},current:null,documents:[],activity:{kind:'IDLE'}});
 const programReceipt={processing:'PROGRAM',user_message_id:21,requirement_id:1,discussion_version:4,purpose:'PHASE_CHANGE',result:'APPLIED',document_effect:null};
 const modelReceipt={processing:'MODEL',user_message_id:21,guide_run_id:11};
@@ -20,7 +20,7 @@ function fixture({program=false,unknown=false,loseRead=false}={}){
  const api={prepareCardResponses(id,body,version){counts.prepares++;assert.equal(id,20);assert.equal(version,3);assert.deepEqual(body,answers);return {async submit(){counts.sends++;committed=true;if(unknown&&counts.sends===1)throw new ApiUnknown(true);return {data:receipt};}};},
   async listMessages(){return {data:{items:[message(base({structured_content:group,card_state:committed?'ANSWERED':'AVAILABLE'})),...(committed?[formal()]:[])]},meta:{pagination:{has_more:false,page_size:20,next_cursor:null}}};},
   async getGuideRun(id){counts.runReads++;if(id===11&&loseRead){loseRead=false;throw new ApiUnknown(false);}return {data:id===10?source:{id:11,requirement_id:1,parent_guide_run_id:10,operation:'DISCUSS'}};}};
- const drafts=new CardDrafts(()=>({getItem:()=>null,setItem:()=>{},removeItem:()=>{}})),owner=new InteractionCards(original,source,detail(3),api,drafts,async()=>detail(committed?4:3),async()=>{},async()=>{counts.receives++;},async()=>{});
+ const drafts=new CardDrafts(()=>({getItem:()=>null,setItem:()=>{},removeItem:()=>{}}),undefined,2),owner=new InteractionCards(original,source,detail(3),api,drafts,async()=>detail(committed?4:3),async()=>{},async()=>{counts.receives++;},async()=>{});
  owner.setAvailable(true);owner.toggle('c1',program?'accept':'a',true);return {owner,counts};
 }
 test('MODEL answer observes its actual new run and formal answer; PROGRAM never invents or reads a new run',async()=>{
@@ -31,12 +31,12 @@ test('declared execution choices persist with whole answers and restore in the s
  const definitionValue=structuredClone(definition(true));definitionValue.purpose='DOCUMENT_ACTION';definitionValue.action_payload={operation:'GENERATE',target:{kind:'NEW',name:'建议稿',document_kind:'brief',template_ref:null},scope:null,source_refs:[],basis_discussion_version:2,unresolved_impacts:[],selectable_fields:['target','source_refs']};
  const group=cards(definitionValue),original=message(base({structured_content:group})),source={id:10,requirement_id:1,status:'COMPLETED',operation:'DISCUSS'};
  const memory=new Map(),storage={getItem:key=>memory.get(key)??null,setItem:(key,value)=>memory.set(key,value),removeItem:key=>memory.delete(key)};
- const drafts=new CardDrafts(()=>storage,()=>at),make=()=>new InteractionCards(original,source,detail(3),{},drafts,async()=>detail(3),async()=>{},async()=>{},async()=>{});
+ const drafts=new CardDrafts(()=>storage,()=>at,2),make=()=>new InteractionCards(original,source,detail(3),{},drafts,async()=>detail(3),async()=>{},async()=>{},async()=>{});
  const owner=make();owner.setAvailable(true);
  assert(owner.configureExecution({target:{kind:'NEW',name:'用户选择的新稿',document_kind:'design',template_ref:{key:'structure.design',version:'v1'}}}));
  assert(!owner.configureExecution({scope:{scope_type:'DOCUMENT',scope_ref:null}}));
  owner.toggle('c1','accept',true);
- const saved=JSON.parse(memory.get('walle:v1.5:cards:1:20'));assert.equal(saved.schema_version,2);assert.equal(saved.execution_selection.target.name,'用户选择的新稿');
+ const saved=JSON.parse(memory.get('walle:v1.5:document-cards:1:2:20'));assert.equal(saved.schema_version,2);assert.equal(saved.execution_selection.target.name,'用户选择的新稿');
  const restored=make();assert.deepEqual(restored.getSnapshot().answers,owner.getSnapshot().answers);
  assert.equal(drafts.load(2,20,group).answers,null);restored.dispose();owner.dispose();
 });

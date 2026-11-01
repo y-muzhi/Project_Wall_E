@@ -89,6 +89,13 @@ def test_original_oversized_fixture_is_preserved_and_rejected_locally_without_co
     assert hashlib.sha256(path.read_bytes()).hexdigest() == '6b0de89db48479ef770d6cbc9d4df00a10ff0f748548359f8c72402d4066bdd3'
     spec = spec_from_file_location('walle_v15_original_fixed_input', path)
     original = module_from_spec(spec);sys.modules[spec.name] = original;spec.loader.exec_module(original)
+    from backend.app.guide import commands
+    accept_current = commands.create_guide_run
+    def frozen_input_with_document_owner(executor,payload,**options):
+        target=payload['target']
+        assert target is not None and target['kind']=='EXISTING'
+        return accept_current(executor,{**payload,'document_id':target['document_id']},**options)
+    monkeypatch.setattr(commands,'create_guide_run',frozen_input_with_document_owner)
     value = tool();catalog = ResourceCatalog()
     class NoIO:
         async def count(self, *args):raise AssertionError('Local limit must stop before a delegate is called')

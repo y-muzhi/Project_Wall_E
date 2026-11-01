@@ -21,16 +21,39 @@ from backend.app.shared.http_boundary import HttpRuntime
 
 
 def body(**changes):
-    return {'requirement_id': 1, 'expected_discussion_version': 1, 'operation': 'DISCUSS',
+    return {'requirement_id': 1, 'document_id': 1, 'expected_discussion_version': 1, 'operation': 'DISCUSS',
         'instruction': '  用户原话\r\n保留空白。  ', 'target': None, 'scope': None, 'source_refs': [],
         'proposal_ref': None, 'acknowledge_source_changes': False, 'idempotency_key': str(uuid4()), **changes}
 
 
+def ensure_assistant_document(workspace):
+    # A document-local assistant must have an actual CURRENT before acceptance.
+    # Seed it without a creation-message fixture so existing message provenance
+    # tests retain their independent expected identities.
+    with workspace[0].transaction(write=True) as connection:
+        from backend.app.infrastructure.document_repository import DocumentRepository
+        from backend.app.infrastructure.revision_repository import RevisionRepository
+        from backend.app.infrastructure.identifiers import entity_id, EntityKind
+        from backend.app.documents.snapshot import create_snapshot, Provenance
+        if not DocumentRepository(connection).list_current_summaries(1):
+            at = connection.execute('SELECT created_at FROM requirements WHERE id=1').fetchone()[0]
+            snapshot = create_snapshot('', Provenance('SYSTEM','TEMPLATE',None), at, lambda _: True)
+            current = DocumentRepository(connection).create_current(
+                entity_id(connection,EntityKind.DOCUMENT),1,snapshot,at,name='assistant owner',
+                document_kind='DESIGN',template_ref=None,origin={'kind':'MESSAGE','message_id':1})
+            RevisionRepository(connection).insert_content(entity_id(connection,EntityKind.REVISION),
+                current,[{'kind':'MESSAGE','message_id':1}],'test document',at)
+
+
 def accept(workspace, **changes):
+    ensure_assistant_document(workspace)
+    target = changes.get('target')
+    if 'document_id' not in changes and target is not None and target['kind']=='EXISTING':
+        changes['document_id'] = target['document_id']
     return create_guide_run(workspace[1], body(**changes), catalog=workspace[2])
 
 
-def test_zero_document_acceptance_is_one_message_pending_version_and_actual_run_receipt(workspace):
+def test_document_acceptance_is_one_message_pending_version_and_actual_run_receipt(workspace):
     db = workspace[0]
     key = str(uuid4())
     result = accept(workspace, idempotency_key=key)
@@ -39,7 +62,7 @@ def test_zero_document_acceptance_is_one_message_pending_version_and_actual_run_
     assert accept(workspace, idempotency_key=key) == result
     assert accept(workspace, idempotency_key=key, instruction='different')['code'] == 'IDEMPOTENCY_CONFLICT'
     with db.transaction() as connection:
-        root = connection.execute('SELECT * FROM requirements').fetchone()
+        root = connection.execute('SELECT (SELECT discussion_version FROM requirement_documents WHERE id=1) AS discussion_version, (SELECT discussion_state_json FROM requirement_documents WHERE id=1) AS discussion_state_json, requirements.* FROM requirements').fetchone()
         state = json.loads(root['discussion_state_json'])
         assert state['pending_user_message_ids'] == [2]
         assert root['discussion_version'] == 2 and root['metadata_version'] == 1
@@ -49,14 +72,14 @@ def test_zero_document_acceptance_is_one_message_pending_version_and_actual_run_
         assert basis['discussion_version'] == run['discussion_version_snapshot'] == 2
         assert basis['requirement']['active_operation_id'] == run['id']
         assert basis['target_document'] is None and basis['authorization']['allowed_targets'] == []
-        assert basis['source_snapshots'][0]['value']['message']['id'] == 1
+        assert basis['source_snapshots'] == []
         assert basis['user_message']['content'] == body()['instruction']
         assert basis['resources']['structure'] is None
     run = get_guide_run(db, 1)
     assert run['code'] == 'READ_OK', run
     assert run['data']['operation'] == 'DISCUSS' and run['data']['target'] is None
     assert run['data']['material_summary'] is None and run['data']['application_result'] is None
-    assert counts(db)['requirement_documents'] == counts(db)['llm_uses'] == 0
+    assert counts(db)['requirement_documents'] == 1 and counts(db)['llm_uses'] == 0
 
 
 def test_explicit_generate_freezes_new_attributes_without_creating_a_document(workspace):
@@ -69,7 +92,7 @@ def test_explicit_generate_freezes_new_attributes_without_creating_a_document(wo
         assert run['action_type'] == 'GENERATE' and run['target_document_id'] is None
         basis = json.loads(run['execution_basis_json'])
         assert basis['request']['target'] == target and basis['resources']['structure']['key'] == 'structure.brief'
-    assert counts(workspace[0])['requirement_documents'] == 0
+    assert counts(workspace[0])['requirement_documents'] == 1
 
 
 def test_existing_target_scope_and_revision_sources_are_fixed_and_do_not_grant_reference_writes(workspace):
@@ -88,6 +111,8 @@ def test_existing_target_scope_and_revision_sources_are_fixed_and_do_not_grant_r
 
 
 def test_version_and_input_rejections_cannot_leave_user_messages_or_occupancy(workspace):
+    if not counts(workspace[0])['requirement_documents']:
+        document(workspace)
     before = counts(workspace[0])
     for changes, code in [({'expected_discussion_version': 2}, 'DISCUSSION_VERSION_CONFLICT'),
             ({'operation': 'GENERATE'}, 'INVALID_INPUT'), ({'operation': 'REVIEW'}, 'INVALID_INPUT'),
@@ -102,6 +127,8 @@ def test_version_and_input_rejections_cannot_leave_user_messages_or_occupancy(wo
 
 
 def test_acceptance_rollback_and_concurrent_version_competition(workspace, monkeypatch):
+    if not counts(workspace[0])['requirement_documents']:
+        document(workspace)
     before = counts(workspace[0])
     def fail(*args, **kwargs):
         raise ValueError('Injected acceptance failure')
@@ -126,7 +153,7 @@ def test_cancel_during_persisting_releases_only_the_actual_run_and_keeps_pending
     assert run['code'] == 'READ_OK', run
     assert run['data']['status'] == 'CANCELLED' and run['data']['progress_result'] == 'NOT_REQUESTED'
     with workspace[0].transaction() as connection:
-        root = connection.execute('SELECT * FROM requirements').fetchone()
+        root = connection.execute('SELECT (SELECT discussion_version FROM requirement_documents WHERE id=1) AS discussion_version, (SELECT discussion_state_json FROM requirement_documents WHERE id=1) AS discussion_state_json, requirements.* FROM requirements').fetchone()
         assert root['document_work_state'] == 'IDLE' and json.loads(root['discussion_state_json'])['pending_user_message_ids'] == [2]
 
 
@@ -149,6 +176,7 @@ def test_offline_release_blocks_before_context_counting_chat_and_cleans_occupanc
 
 
 def test_http_run_receipt_and_actual_new_run_history(workspace):
+    ensure_assistant_document(workspace)
     app = FastAPI();app.include_router(guide_router)
     app.state.walle_runtime = HttpRuntime(workspace[0], workspace[2], workspace[1])
     with TestClient(app) as client:
@@ -158,7 +186,7 @@ def test_http_run_receipt_and_actual_new_run_history(workspace):
         assert response.json()['data'] == {'processing': 'MODEL', 'guide_run_id': 1, 'user_message_id': 2}
         read = client.get('/api/v1/guide-runs/1');assert read.status_code == 200, read.text
         assert read.json()['data']['material_summary'] is None
-        history = client.get('/api/v1/requirements/1/guide-runs');assert history.status_code == 200, history.text
+        history = client.get('/api/v1/requirements/1/guide-runs?document_id=1');assert history.status_code == 200, history.text
         assert history.json()['meta']['pagination']['total'] == 1
         assert client.get('/api/v1/requirements/1/guide-runs?status=WAITING_USER').status_code == 422
 
@@ -200,4 +228,4 @@ def test_explicit_retry_reuses_original_input_and_builds_new_authority_without_r
         run = connection.execute('SELECT * FROM guide_runs WHERE id=2').fetchone()
         assert run['retry_of_guide_run_id'] == 1 and run['trigger_type'] == 'RETRY'
         assert run['discussion_version_snapshot'] == 2
-        assert json.loads(connection.execute('SELECT discussion_state_json FROM requirements').fetchone()[0])['pending_user_message_ids'] == [2]
+        assert json.loads(connection.execute('SELECT discussion_state_json FROM requirement_documents').fetchone()[0])['pending_user_message_ids'] == [2]

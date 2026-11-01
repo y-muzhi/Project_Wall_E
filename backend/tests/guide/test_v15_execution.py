@@ -78,7 +78,7 @@ def test_one_discussion_round_persists_exact_basis_count_usage_and_terminal_rele
     assert run['data']['status'] == 'COMPLETED' and run['data']['progress_result'] == 'APPLIED'
     assert run['data']['application_result'] == 'NOT_REQUESTED' and run['data']['document_effect'] is None
     with workspace[0].transaction() as connection:
-        root = RequirementRepository(connection).get(1)
+        root = RequirementRepository(connection).get_for_document(1,1)
         assert root['document_work_state'] == 'IDLE' and root['discussion_version'] == 3
         assert root['discussion_state_json']['pending_user_message_ids'] == []
         row = connection.execute('SELECT * FROM llm_uses').fetchone();snapshot = json.loads(row['request_snapshot_json'])
@@ -87,7 +87,7 @@ def test_one_discussion_round_persists_exact_basis_count_usage_and_terminal_rele
         assert row['call_no'] == row['attempt_no'] == 1 and row['input_tokens'] == 1200
         assert row['validation_status'] == 'SUCCEEDED'
         assert len(snapshot['counting']['count_attempts']) == 1
-    assert counts(workspace[0])['requirement_documents'] == 0
+    assert counts(workspace[0])['requirement_documents'] == 1
 
 
 @pytest.mark.parametrize('missing', [('document_result',), ('suggestions',), ('analysis',),
@@ -106,14 +106,14 @@ def test_missing_required_null_roots_remain_readable_but_are_never_invented_or_a
         assert row['validation_status'] == 'FAILED' and row['trusted_output_json'] is None
         parsed = json.loads(row['parsed_output_json'])
         assert all(key not in parsed for key in missing)
-        root = RequirementRepository(connection).get(1)
+        root = RequirementRepository(connection).get_for_document(1,1)
         assert root['document_work_state'] == 'IDLE' and root['discussion_version'] == 2
         assert root['discussion_state_json']['pending_user_message_ids']
         message = connection.execute("SELECT content,structured_content_json FROM conversation_messages WHERE role='ASSISTANT'").fetchone()
         displayed = json.loads(message['content'])
         assert displayed == parsed and all(key not in displayed for key in missing)
         assert message['structured_content_json'] is None
-        assert connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0] == 0
+        assert connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0] == 1
     run = get_guide_run(workspace[0], 1)['data']
     assert run['status'] == 'COMPLETED' and run['progress_result'] == 'NOT_REQUESTED'
     assert run['application_result'] == 'NOT_REQUESTED'
@@ -136,7 +136,7 @@ def test_clarification_null_payload_is_required_without_losing_valid_same_round_
         assert (row['trusted_output_json'] is None) is missing_payload
         message = connection.execute("SELECT structured_content_json FROM conversation_messages WHERE role='ASSISTANT'").fetchone()
         assert (message['structured_content_json'] is None) is missing_payload
-        root = RequirementRepository(connection).get(1)
+        root = RequirementRepository(connection).get_for_document(1,1)
         assert root['document_work_state'] == 'IDLE' and root['discussion_version'] == 3
         assert root['discussion_state_json']['pending_user_message_ids'] == []
     run = get_guide_run(workspace[0], 1)['data']
@@ -209,13 +209,13 @@ def test_generate_directly_creates_one_current_revision_and_audit_without_second
     assert run['document_effect']['result'] == 'CREATED' and run['document_effect']['after_content_version'] == 1
     assert run['returned_responses']
     with workspace[0].transaction() as connection:
-        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
+        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 2
         assert connection.execute("SELECT count(*) FROM document_change_audits WHERE guide_run_id=1 AND event_type='CONTENT_COMMITTED'").fetchone()[0] == 1
-        root = RequirementRepository(connection).get(1)
+        root = RequirementRepository(connection).get_for_document(1,1)
         assert root['discussion_state_json']['pending_user_message_ids'] == [2]
     with pytest.raises(Exception):
         persist_collaboration_result(workspace[0], 1, process_lock=workspace[1].process_lock, profile=PROFILE, catalog=workspace[2])
-    assert counts(workspace[0])['revisions'] == 1
+    assert counts(workspace[0])['revisions'] == 2
 
 
 def test_revise_commits_target_only_and_preserves_independent_business_status(workspace, monkeypatch):
@@ -231,7 +231,7 @@ def test_revise_commits_target_only_and_preserves_independent_business_status(wo
     with workspace[0].transaction() as connection:
         assert DocumentRepository(connection).get_current(1, current['id'])['content_version'] == 2
         assert DocumentRepository(connection).get_current(1, other['id'])['markdown_content'] == ''
-        assert RequirementRepository(connection).get(1)['status'] == 'CLOSED'
+        assert RequirementRepository(connection).get_for_document(1,1)['status'] == 'CLOSED'
 
 
 def test_invalid_main_result_still_commits_valid_progress_and_preserves_complete_return(workspace, monkeypatch):
@@ -241,7 +241,7 @@ def test_invalid_main_result_still_commits_valid_progress_and_preserves_complete
     assert execute(workspace, gateway)['code'] == 'AI_FINISHED'
     run = get_guide_run(workspace[0], 1)['data']
     assert run['progress_result'] == 'APPLIED' and run['application_result'] == 'NOT_APPLIED'
-    assert counts(workspace[0])['requirement_documents'] == 0
+    assert counts(workspace[0])['requirement_documents'] == 1
     assert run['returned_responses'] and 'not a document' in run['returned_responses'][0]['content']
 
 
@@ -252,7 +252,7 @@ def test_bad_json_delivers_raw_once_without_removing_pending(workspace, monkeypa
     assert len(gateway.calls) == 1
     with workspace[0].transaction() as connection:
         assert connection.execute("SELECT content FROM conversation_messages WHERE role='ASSISTANT'").fetchone()[0].startswith('```json')
-        assert RequirementRepository(connection).get(1)['discussion_state_json']['pending_user_message_ids'] == [2]
+        assert RequirementRepository(connection).get_for_document(1,1)['discussion_state_json']['pending_user_message_ids'] == [2]
 
 
 def test_retryable_transport_failure_is_one_chat_and_no_automatic_count_or_transport_retry(workspace, monkeypatch):
@@ -276,11 +276,11 @@ def test_document_storage_failure_rolls_back_progress_content_assistant_and_revi
     result = execute(workspace, gateway)
     assert result['code'] == 'AI_FAILED' and result['details']['error_code'] == 'STORAGE_UNAVAILABLE', result
     with workspace[0].transaction() as connection:
-        root = RequirementRepository(connection).get(1)
+        root = RequirementRepository(connection).get_for_document(1,1)
         assert root['discussion_version'] == 2 and root['discussion_state_json']['pending_user_message_ids'] == [2]
         assert root['discussion_state_json']['evidence'] == [] and root['document_work_state'] == 'IDLE'
-        assert connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0] == 0
-        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 0
+        assert connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0] == 1
+        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM conversation_messages WHERE role='ASSISTANT'").fetchone()[0] == 0
         row = connection.execute('SELECT * FROM llm_uses').fetchone()
         assert row['raw_response_json'] is not None and row['input_tokens'] == 1200 and row['call_status'] == 'SUCCEEDED'
@@ -320,7 +320,7 @@ def test_cancellation_wins_before_late_transport_business_commit(workspace, monk
         assert connection.execute("SELECT count(*) FROM conversation_messages WHERE role='ASSISTANT'").fetchone()[0] == 0
         row = connection.execute('SELECT * FROM llm_uses').fetchone()
         assert row['call_status'] == 'CANCELLED' and row['raw_response_json'] is not None and row['input_tokens'] == 1200
-        assert RequirementRepository(connection).get(1)['document_work_state'] == 'IDLE'
+        assert RequirementRepository(connection).get_for_document(1,1)['document_work_state'] == 'IDLE'
 
 
 def test_explicit_saved_material_reads_only_actual_transmitted_units_and_deduplicates_current_evidence(workspace, monkeypatch):

@@ -38,7 +38,7 @@ def tmp_path():
 @pytest.fixture
 def setup(tmp_path):
     db = Database(tmp_path / 'v15.sqlite')
-    assert db.initialize()['schema_version'] == 150
+    assert db.initialize()['schema_version'] == 151
     with ProcessLock.for_database(db.path) as lock:
         executor = Idempotency(db, lock)
         yield db, executor
@@ -138,11 +138,18 @@ def test_attribute_replay_conflict_and_concurrent_versions(setup):
 
 
 def seed_running(db):
+    from backend.tests.guide.test_v15_acceptance import ensure_assistant_document
+    ensure_assistant_document((db,None,None))
     # Storage-level in-flight fixture; no model/acceptance or fake paid receipt.
     with db.transaction(write=True) as connection:
         at = connection.execute('SELECT updated_at FROM requirements WHERE id=1').fetchone()[0]
-        connection.execute("""INSERT INTO guide_runs(id,requirement_id,idempotency_key,trigger_message_id,trigger_type,source_type,source_id,function_type,context_template_key,context_template_version,prompt_version,action_type,mode_snapshot,instruction_summary,scope_type,scope_ref_json,read_scope_manifest_json,allowed_targets_json,status,current_step,final_result_json,created_at,started_at,waiting_user_at,ended_at,updated_at,error_code,error_message,cancel_reason,retry_of_guide_run_id,operation,target_document_id,parent_guide_run_id,discussion_version_snapshot,execution_basis_json)
-            VALUES (10,1,?,1,'USER_INSTRUCTION','USER_INSTRUCTION',NULL,'collaboration_v1','collaboration_context_v1','v1','v1','ASK',NULL,'讨论',NULL,NULL,'{}','{}','RUNNING','PREPARING',NULL,?,NULL,NULL,NULL,?,NULL,NULL,NULL,NULL,'DISCUSS',NULL,NULL,1,'{}')""", (str(uuid4()), at, at))
+        from backend.app.infrastructure.message_repository import MessageRepository
+        from backend.app.infrastructure.identifiers import entity_id,EntityKind
+        message_id=entity_id(connection,EntityKind.MESSAGE)
+        MessageRepository(connection).create_user_text(
+            message_id,1,None,'owned run input',str(uuid4()),at,document_id=1)
+        connection.execute("""INSERT INTO guide_runs(id,requirement_id,document_id,idempotency_key,trigger_message_id,trigger_type,source_type,source_id,function_type,context_template_key,context_template_version,prompt_version,action_type,mode_snapshot,instruction_summary,scope_type,scope_ref_json,read_scope_manifest_json,allowed_targets_json,status,current_step,final_result_json,created_at,started_at,waiting_user_at,ended_at,updated_at,error_code,error_message,cancel_reason,retry_of_guide_run_id,operation,target_document_id,parent_guide_run_id,discussion_version_snapshot,execution_basis_json)
+            VALUES (10,1,1,?,?,'USER_INSTRUCTION','USER_INSTRUCTION',NULL,'collaboration_v1','collaboration_context_v1','v1','v1','ASK',NULL,'讨论',NULL,NULL,'{}','{}','RUNNING','PREPARING',NULL,?,NULL,NULL,NULL,?,NULL,NULL,NULL,NULL,'DISCUSS',NULL,NULL,1,'{}')""", (str(uuid4()), message_id, at, at))
         RequirementRepository(connection).occupy_guide(1, 10, at)
 
 
@@ -192,12 +199,22 @@ def test_http_new_contracts_replay_errors_and_removed_initialization(setup):
     app.state.walle_runtime = HttpRuntime(db, ResourceCatalog(), executor)
     with TestClient(app) as client:
         headers = {'Idempotency-Key': str(uuid4())}
-        body = {'title': 'HTTP创建', 'requirement_type': 'NEW', 'initial_idea': '初始内容'}
+        body = {'title': 'HTTP创建', 'requirement_type': 'NEW'}
         response = client.post('/api/v1/requirements', json=body, headers=headers)
         assert response.status_code == 201, response.text
         replay = client.post('/api/v1/requirements', json=body, headers=headers)
         assert replay.status_code == 201 and replay.json()['data'] == response.json()['data']
         assert replay.json()['meta']['request_id'] != response.json()['meta']['request_id']
+        empty_replay = client.post('/api/v1/requirements', json={**body, 'initial_idea': ''}, headers=headers)
+        assert empty_replay.status_code == 201 and empty_replay.json()['data'] == response.json()['data']
+        with db.transaction() as connection:
+            initial = connection.execute('SELECT content,document_id FROM conversation_messages WHERE id=?',
+                (response.json()['data']['initial_message_id'],)).fetchone()
+            assert initial['content'] == '' and initial['document_id'] is None
+        for value in (None, 'x' * 10001):
+            invalid = client.post('/api/v1/requirements', json={**body, 'initial_idea': value},
+                headers={'Idempotency-Key': str(uuid4())})
+            assert invalid.status_code == 422
         assert client.get('/api/v1/requirements/1').json()['data']['documents'] == []
         assert client.get('/api/v1/requirements/1?expand=discussion').json()['data']['discussion']['phase']['kind'] == 'DISCOVERY'
         assert client.get('/api/v1/requirements?status=PLANNING').json()['meta']['pagination']['total'] == 1

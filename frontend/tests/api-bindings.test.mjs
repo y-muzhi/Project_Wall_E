@@ -10,7 +10,7 @@ const root = () => ({id:1,requirement_no:'REQ000001',requirement_type:'NEW',titl
  document_work_state:'IDLE',active_operation_type:null,active_operation_id:null,created_at:at,updated_at:at,completed_at:null,closed_at:null,state_started_at:null});
 const detail=(requirement=root())=>({requirement,documents:[],discussion_summary:{discussion_version:1,phase_ref:'p1',phase_kind:'DISCOVERY',focus_topic_ref:null,focus_title:null,next_step:null,pending_count:0},discussion:null,active_operation:null});
 const created=()=>({requirement:root(),initial_message_id:1,documents:[]});
-const create = () => ({title:'标题😀',requirement_type:'NEW',initial_idea:'原始想法'});
+const create = () => ({title:'标题😀',requirement_type:'NEW'});
 const emptyState = { schema_version: 1, next_block_id: 1, blocks: [] };
 const guide={expected_discussion_version:7,operation:'DISCUSS',instruction:'提问',target:null,scope:null,source_refs:[],proposal_ref:null,acknowledge_source_changes:false};
 const answer = { schema_version: 1, responses: [{ card_key: 'c', selected_option_keys: ['yes'], custom_answer: null, skipped: false }],execution_selection:null };
@@ -20,11 +20,12 @@ const json = (data, status = 200, pagination) => new Response(JSON.stringify({ s
 const rejected = () => new Response(JSON.stringify({ success: false, data: null,
   error: { code: 'VALIDATION_FAILED', message: '请求参数不合法', details: { field_errors: [{ field: 'body', reason: 'REQUIRED', message: '必须提供' }] } },
   meta: { request_id: REQUEST } }), { status: 422, headers: { 'Content-Type': 'application/json' } });
-const api = (send, uuid = () => KEY) => new WalleApi(new ApiClient(send, uuid), undefined);
+const api = (send, uuid = () => KEY) => new WalleApi(new ApiClient(send, uuid), undefined).forDocumentAssistant(2);
 
 // Independent endpoint matrix from the public I01-I37 contracts. Transport
 // responses here are explicit fixtures; this is not backend/page acceptance.
 const cases = [
+  ['I43','getMessage',[1,5],'GET','/conversation-messages/5',null,false],
   ['I01', 'listRequirements', [{}], 'GET', '/requirements', null, false],
   ['I02', 'prepareCreateRequirement', [create()], 'POST', '/requirements', create(), true],
   ['I03', 'getRequirement', [1], 'GET', '/requirements/1', null, false],
@@ -35,7 +36,7 @@ const cases = [
   ['I11', 'prepareSaveManualDraft', [1, {document_id:2,draft_id:3,expected_version:4,markdown_content:'',block_state_json:emptyState}], 'PUT', '/requirements/1/manual-draft', {document_id:2,draft_id:3,expected_version:4,markdown_content:'',block_state_json:emptyState}, true],
   ['I13', 'prepareCancelManualDraft', [1,2,3,4], 'DELETE', '/requirements/1/manual-draft', {document_id:2,draft_id:3,expected_version:4}, true],
   ['I12', 'prepareCompleteManualDraft', [1,2,3,4], 'POST', '/requirements/1/manual-draft/complete', {document_id:2,draft_id:3,expected_version:4}, true],
-  ['I14', 'prepareCreateGuide', [1, guide], 'POST', '/requirements/1/guide-runs', guide, true],
+  ['I14', 'prepareCreateGuide', [1, guide], 'POST', '/requirements/1/guide-runs', {...guide,document_id:2}, true],
   ['I15', 'prepareContinueGuide', [2,'补充',7], 'POST', '/guide-runs/2/continue', {instruction:'补充',expected_discussion_version:7}, true],
   ['I16', 'getGuideRun', [2], 'GET', '/guide-runs/2', null, false],
   ['I17', 'prepareCancelGuide', [2], 'POST', '/guide-runs/2/cancel', null, true],
@@ -83,14 +84,14 @@ test('all active client bindings reach exact public method/path/body/key policy;
   }
   const serverOnly=['POST /requirements/:id/complete-initialization','POST /requirements/:id/complete','POST /requirements/:id/reactivate'];
   const bindings = cases.map(([, , , method, path]) => method + ' ' + path.replace(/\/[0-9]+(?=\/|$)/g, '/:id'));
-  assert.equal(registered.length,42);assert.equal(cases.length,39);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
+  assert.equal(registered.length,43);assert.equal(cases.length,40);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
 });
 test('one creation captures body and response expectations once; loss/replay retains key while next action gets a new key', async () => {
   const calls = []; let attempt = 0, keys = 0, getters = 0;
   const service = api(async (url, options) => { calls.push({ url, ...options }); if (attempt++ === 0) throw new Error('lost');
     return json(created(),201); }, () => keys++ === 0 ? KEY : REQUEST);
   const source = create(); Object.defineProperty(source,'title',{enumerable:true,get(){getters++;return '标题😀';}});
-  const action = service.prepareCreateRequirement(source); source.initial_idea='changed';
+  const action = service.prepareCreateRequirement(source); source.requirement_type='CHANGE';
   await assert.rejects(action.submit(), error => error instanceof ApiUnknown && error.mutation);
   assert.equal((await action.submit()).data.documents.length,0); assert.equal(getters, 1); assert.equal(keys, 1);
   assert.equal(calls[0].body, calls[1].body); assert.equal(calls[1].headers['Idempotency-Key'], KEY);
@@ -129,7 +130,7 @@ test('workbench keeps server order and raw display time while invalid business t
   await assert.rejects(api(async () => json(detail({...root(),updated_at:'invalid-time'}))).getRequirement(1), ApiUnknown);
 });
 test('message cursor is exclusive, ascending and independently continued by first sequence', async () => {
-  const message = sequence => ({ id: sequence, requirement_id: 1, guide_run_id: null, sequence_no: sequence, role: 'USER', content: '原文',
+  const message = sequence => ({ id: sequence, requirement_id: 1, document_id:2, guide_run_id: null, sequence_no: sequence, role: 'USER', content: '原文',
     message_type: 'TEXT', structured_content: null, reply_to_message_id: null, created_at:at,card_state:null,phase_ref:null,topic_refs:[],document_ids:[],program_receipt:null});
   let sent; const service = api(async url => { sent = url; return json({ items: [message(3), message(5)] }, 200, { page_size: 20, next_cursor: 3, has_more: true }); });
   assert.equal((await service.listMessages(1, 6)).meta.pagination.next_cursor, 3); assert.equal(new URL(sent, 'http://local').searchParams.get('before_sequence_no'), '6');

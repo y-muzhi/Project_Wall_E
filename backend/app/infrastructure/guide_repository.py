@@ -6,7 +6,7 @@ from .idempotency import canonical_input
 from backend.app.documents.snapshot import _time
 from backend.app.shared.pagination import PAGE_SIZE, page_offset
 
-STATUS_COLUMNS = 'id,requirement_id,action_type,function_type,source_type,source_id,scope_type,scope_ref_json,status,current_step,error_code,error_message,cancel_reason,retry_of_guide_run_id,created_at,started_at,waiting_user_at,ended_at,updated_at'
+STATUS_COLUMNS = 'id,requirement_id,document_id,action_type,function_type,source_type,source_id,scope_type,scope_ref_json,status,current_step,error_code,error_message,cancel_reason,retry_of_guide_run_id,created_at,started_at,waiting_user_at,ended_at,updated_at'
 
 
 class GuideRepository:
@@ -85,7 +85,11 @@ class GuideRepository:
         trigger_type=None,
     ):
         require_write_transaction(self.connection)
-        if message['requirement_id'] != root['id'] or message['role'] != 'USER':
+        if (
+            message['requirement_id'] != root['id']
+            or message['document_id'] != request.document_id
+            or message['role'] != 'USER'
+        ):
             raise ValueError('Acceptance requires the actual owned user input')
         if retry_of is None:
             if message['guide_run_id'] != identity:
@@ -104,6 +108,7 @@ class GuideRepository:
         values = {
             'id': identity,
             'requirement_id': root['id'],
+            'document_id': request.document_id,
             'idempotency_key': request.idempotency_key,
             'trigger_message_id': message['id'],
             'trigger_type': trigger_type
@@ -279,7 +284,10 @@ class GuideRepository:
         ).fetchone()[0]
 
     def list_history(self, request) -> tuple[int, list[sqlite3.Row]]:
-        clauses, values = ['requirement_id=?'], [request.requirement_id]
+        clauses, values = (
+            ['requirement_id=?', 'document_id=?'],
+            [request.requirement_id, request.document_id],
+        )
         for field in ('status', 'action_type'):
             choices = getattr(request, field)
             if choices:

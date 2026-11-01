@@ -104,7 +104,7 @@ def test_two_explicit_chapters_then_truncation_keep_completed_content(workspace,
     original_third='# 第三章\n\n保留丙\n'
     for index,heading,body in [(1,1,'# 第一章\n\n第一章完整内容\n'),(2,3,'# 第二章\n\n第二章完整内容\n'),(3,5,'{"schema_version":1')]:
         with current[0].transaction() as connection:
-            root=connection.execute('SELECT * FROM requirements').fetchone()
+            root=connection.execute('SELECT (SELECT discussion_version FROM requirement_documents WHERE id=1) AS discussion_version, (SELECT discussion_state_json FROM requirement_documents WHERE id=1) AS discussion_state_json, requirements.* FROM requirements').fetchone()
             before=dict(connection.execute('SELECT * FROM requirement_documents WHERE id=?',(document['id'],)).fetchone())
         accepted=accept(current,expected_discussion_version=root['discussion_version'],operation='REVISE',
             target={'kind':'EXISTING','document_id':document['id'],'expected_content_version':before['content_version']},
@@ -149,4 +149,4 @@ def test_truncated_generation_creates_no_document_and_explains_framework_route(w
     assert run['application_result']=='NOT_APPLIED' and '固定框架' in run['final_result']['summary']
     assert len(run['returned_responses'])==1 and len(gateway.calls)==1
     with current[0].transaction() as connection:
-        assert connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0]==0
+        assert connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0]==1

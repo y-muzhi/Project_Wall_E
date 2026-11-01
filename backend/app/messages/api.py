@@ -33,3 +33,17 @@ async def submit_card_responses_http(request: Request):
             runtime.commands(), parsed.payload, catalog=runtime.catalog
         ),
     )
+
+
+@message_router.get('/conversation-messages/{message_id}')
+async def get_message_http(request: Request):
+    from .http_models import GetMessageRequest, GetMessageResponse
+
+    return await read_http(
+        request,
+        GetMessageRequest,
+        GetMessageResponse,
+        lambda runtime, parsed: queries.get_message(
+            runtime.database, parsed.requirement_id, parsed.message_id, catalog=runtime.catalog
+        ),
+    )

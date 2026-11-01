@@ -48,7 +48,7 @@ def seed_cards(workspace, monkeypatch, purpose='CLARIFICATION', *, progress=True
         return output(context, cards=group(purpose, payload), progress_delta=delta(context) if progress else None)
     result = execute(workspace, Gateway(returned))
     assert result['code'] == 'AI_FINISHED', result
-    messages = list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2])
+    messages = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2])
     assert messages['code'] == 'READ_OK', messages
     return messages['data']['items'][-1]
 
@@ -76,7 +76,7 @@ def test_same_round_progress_binds_available_card_to_actual_final_version_then_a
     assert context.input['current_request']['content'] is None
     assert context.input['current_request']['formal_answers'][0]['selected_options'] == [{'option_key': 'a', 'label': 'a'}]
     assert context.input_json.count('请选择下一步') == 1
-    rows = list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2])
+    rows = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2])
     assert rows['code'] == 'READ_OK', rows
     assert next(row for row in rows['data']['items'] if row['id'] == message['id'])['card_state'] == 'ANSWERED'
     assert rows['data']['items'][-1]['guide_run_id'] == result['data']['guide_run_id']
@@ -89,9 +89,9 @@ def test_phase_confirmation_is_program_only_with_immutable_answer_and_readable_p
     assert result['data']['processing'] == 'PROGRAM' and result['data']['result'] == 'APPLIED'
     assert counts(workspace[0])['guide_runs'] == before['guide_runs'] and counts(workspace[0])['llm_uses'] == before['llm_uses']
     with workspace[0].transaction() as connection:
-        root = RequirementRepository(connection).get(1)
+        root = RequirementRepository(connection).get_for_document(1,1)
         assert root['discussion_state_json']['phase']['kind'] == 'SOLUTION' and root['document_work_state'] == 'IDLE'
-    rows = list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
+    rows = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
     formal = rows['data']['items'][-1]
     assert formal['guide_run_id'] is None and formal['program_receipt'] == result['data']
     assert submit(workspace, request) == result
@@ -108,13 +108,13 @@ def test_phase_card_resolves_same_round_topic_evidence_and_outcome_before_progra
             'basis_discussion_version': context.input['current_request']['basis_ref']['discussion_version']}
         return output(context, progress_delta=progress_delta(), cards=group('PHASE_CHANGE', payload))
     result = execute(workspace, Gateway(returned));assert result['code'] == 'AI_FINISHED', result
-    rows = list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
+    rows = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
     message = rows['data']['items'][-1]
     assert message['card_state'] == 'AVAILABLE'
     assert message['structured_content']['action_payload']['unresolved_refs'] == ['t1', 'e1', 't1:o1']
     result = submit(workspace, body(message, 'accept'));assert result['code'] == 'PROGRAM_PROCESSED', result
     with workspace[0].transaction() as connection:
-        state = RequirementRepository(connection).get(1)['discussion_state_json']
+        state = RequirementRepository(connection).get_for_document(1,1)['discussion_state_json']
         audit = json.loads(connection.execute("SELECT payload_json FROM document_change_audits WHERE event_type='PHASE_CHANGED' ORDER BY id DESC LIMIT 1").fetchone()[0])
         assert audit['phase_before']['closure']['unresolved_refs'] == ['t1', 'e1', 't1:o1']
         assert state['phase']['kind'] == 'SOLUTION'
@@ -127,7 +127,7 @@ def test_defer_program_records_a_real_disposition_without_model_or_document_side
     assert result['code'] == 'PROGRAM_PROCESSED' and result['data']['result'] == 'DEFERRED', result
     assert all(counts(workspace[0])[key] == before[key] for key in ('guide_runs', 'llm_uses', 'requirement_documents', 'revisions'))
     with workspace[0].transaction() as connection:
-        state = RequirementRepository(connection).get(1)['discussion_state_json']
+        state = RequirementRepository(connection).get_for_document(1,1)['discussion_state_json']
         assert state['dispositions'][-1]['message_id'] == result['data']['user_message_id']
 
 
@@ -143,7 +143,7 @@ def test_document_action_accepts_one_fixed_new_target_and_does_not_rewrite_it_or
     with workspace[0].transaction() as connection:
         run = connection.execute('SELECT * FROM guide_runs WHERE id=?', (result['data']['guide_run_id'],)).fetchone()
         assert run['operation'] == 'GENERATE' and json.loads(run['execution_basis_json'])['request']['target'] == payload['target']
-    assert counts(workspace[0])['requirement_documents'] == 0
+    assert counts(workspace[0])['requirement_documents'] == 1
 
 
 @pytest.mark.parametrize('purpose', ['PHASE_CHANGE', 'CLARIFICATION'])
@@ -155,7 +155,7 @@ def test_http_uses_200_program_receipt_and_202_new_model_receipt_on_the_same_rou
         response = client.post('/api/v1/conversation-messages/'+str(message['id'])+'/responses', json=request, headers={'Idempotency-Key': key})
         assert response.status_code == (200 if purpose == 'PHASE_CHANGE' else 202), response.text
         assert response.json()['data']['processing'] == ('PROGRAM' if purpose == 'PHASE_CHANGE' else 'MODEL')
-        messages = client.get('/api/v1/requirements/1/messages')
+        messages = client.get('/api/v1/requirements/1/messages?document_id=1')
         assert messages.status_code == 200, messages.text
         formal = messages.json()['data']['items'][-1]
         if purpose == 'PHASE_CHANGE':
@@ -178,7 +178,7 @@ def test_exact_fact_confirmation_writes_directly_through_real_session_without_ne
         action = {'confirmed_fact_patches': [{'patch': patch, 'evidence': [{'message_id': context.input['current_request']['message_id'], 'quoted_text': '用户原话'}]}]}
         return output(context, cards=group('FACT_CONFIRMATION', action))
     result = execute(workspace, Gateway(returned));assert result['code'] == 'AI_FINISHED', result
-    rows = list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
+    rows = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
     message = rows['data']['items'][-1];assert message['card_state'] == 'AVAILABLE' and message['structured_content']['purpose'] == 'FACT_CONFIRMATION'
     assert update(workspace[1], 1, {'status': 'CLOSED'})['code'] == 'UPDATED'
     before = counts(workspace[0]);request = body(message, 'confirm');result = submit(workspace, request)
@@ -193,9 +193,9 @@ def test_exact_fact_confirmation_writes_directly_through_real_session_without_ne
         assert connection.execute('SELECT count(*) FROM suggestion_batches').fetchone()[0] == 0
         sessions = connection.execute('SELECT * FROM manual_edit_sessions').fetchall()
         assert len(sessions) == 1 and sessions[0]['status'] == 'COMPLETED'
-        assert RequirementRepository(connection).get(1)['document_work_state'] == 'IDLE'
-        assert RequirementRepository(connection).get(1)['status'] == 'CLOSED'
-    assert list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2])['code'] == 'READ_OK'
+        assert RequirementRepository(connection).get_for_document(1,1)['document_work_state'] == 'IDLE'
+        assert RequirementRepository(connection).get_for_document(1,1)['status'] == 'CLOSED'
+    assert list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2])['code'] == 'READ_OK'
 
 
 def test_stale_version_invalid_selection_and_parallel_answers_do_not_half_write(workspace, monkeypatch):
@@ -223,11 +223,11 @@ def test_source_head_change_needs_explicit_ack_without_rebasing_fixed_revision(w
             'unresolved_impacts': [], 'selectable_fields': []}
         return output(context, cards=group('DOCUMENT_ACTION', action))
     assert execute(workspace, Gateway(returned))['code'] == 'AI_FINISHED'
-    message = list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2])['data']['items'][-1]
+    message = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2])['data']['items'][-1]
     draft = start(workspace)['data']['manual_draft'];saved = save(workspace, draft, candidate(workspace, draft, '# 已变更的来源'))
     assert saved['code'] == 'DRAFT_SAVED', saved
     assert finish(workspace, saved['data'])['code'] == 'DRAFT_COMPLETED'
-    refreshed = list_messages(workspace[0], {'requirement_id': 1}, catalog=workspace[2])['data']['items'][-1]
+    refreshed = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2])['data']['items'][-1]
     assert refreshed['id'] == message['id'] and refreshed['card_state'] == 'AVAILABLE'
     selection = {'target': message['structured_content']['action_payload']['target'], 'scope': None, 'source_refs': message['structured_content']['action_payload']['source_refs'], 'acknowledge_source_changes': False}
     before = counts(workspace[0]);result = submit(workspace, body(message, 'accept', selection=selection))

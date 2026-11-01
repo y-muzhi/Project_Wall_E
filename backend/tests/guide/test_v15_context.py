@@ -7,7 +7,7 @@ import pytest
 
 from backend.tests.requirements.test_v15_foundation import tmp_path, setup, counts
 from backend.tests.documents.test_v15_documents import workspace, document
-from backend.tests.guide.test_v15_acceptance import accept
+from backend.tests.guide.test_v15_acceptance import accept, ensure_assistant_document
 from backend.app.guide.collaboration_context import read_canonical, compile_context
 from backend.app.guide.model_context import get_model_context
 from backend.app.infrastructure.collaboration_resources import sha256
@@ -33,7 +33,7 @@ def test_zero_document_context_is_deterministic_and_private_authority_never_reac
     assert wire['documents'] == [] and wire['structure'] is None
     assert wire['current_request']['content'] == '  用户原话\r\n保留空白。  '
     assert wire['recent_history'] == []
-    assert wire['goal_and_decisions'][0]['ref'] == 'm1'
+    assert wire['goal_and_decisions'][0]['ref'] == 'm2'
     assert context.input_json.count('用户原话') == 1
     assert 'allowed_targets' not in context.input_json and 'block_state' not in context.input_json
     assert basis['wire_sha256'] == sha256(context.input_json)
@@ -45,13 +45,14 @@ def test_zero_document_context_is_deterministic_and_private_authority_never_reac
 
 
 def test_long_term_pending_survives_recent_ten_without_refilling_deduplicated_history(workspace):
+    ensure_assistant_document(workspace)
     db, _, resources = workspace
     with db.transaction(write=True) as connection:
-        root = RequirementRepository(connection).get(1);state = deepcopy(root['discussion_state_json'])
+        root = RequirementRepository(connection).get_for_document(1,1);state = deepcopy(root['discussion_state_json'])
         pending = None
         for index in range(15):
             identity = entity_id(connection, EntityKind.MESSAGE)
-            row = MessageRepository(connection).create_user_text(identity, 1, None, '长程原话' if index == 0 else '历史'+str(index), str(uuid4()), root['updated_at'])
+            row = MessageRepository(connection).create_user_text(identity, 1, None, '长程原话' if index == 0 else '历史'+str(index), str(uuid4()), root['updated_at'], document_id=1)
             if index == 0:
                 pending = identity
         state['pending_user_message_ids'] = [pending]
@@ -106,16 +107,17 @@ def test_generation_structure_is_task_specific_and_discussion_does_not_load_a_te
 def test_runtime_discussion_version_change_stops_before_context_is_used(workspace):
     assert accept(workspace)['code'] == 'GUIDE_ACCEPTED'
     with workspace[0].transaction(write=True) as connection:
-        connection.execute('UPDATE requirements SET discussion_version=discussion_version+1 WHERE id=1')
+        connection.execute('UPDATE requirement_documents SET discussion_version=discussion_version+1 WHERE id=1')
     with workspace[0].transaction() as connection, pytest.raises(Rejected) as error:
         read_canonical(connection, 1, workspace[2])
     assert error.value.code == 'DISCUSSION_VERSION_CONFLICT'
 
 
 def test_selected_formal_answer_carries_only_original_question_and_chosen_labels(workspace):
+    ensure_assistant_document(workspace)
     db = workspace[0]
     with db.transaction(write=True) as connection:
-        root = RequirementRepository(connection).get(1);at = root['updated_at']
+        root = RequirementRepository(connection).get_for_document(1,1);at = root['updated_at']
         card = {'card_key': 'c1', 'card_type': 'SINGLE_SELECT', 'question': '真实原题', 'context': '不得发送的选项说明', 'required': False,
             'options': [{'option_key': key, 'label': label, 'description': '完整说明不回传', 'impact': '', 'risks': ''} for key, label in [('a', '选中标签'), ('b', '未选标签')]],
             'selection_rule': {'min': 0, 'max': 1}, 'custom_answer': {'enabled': False, 'max_length': 0}, 'recommendation': None, 'related_spec_context': []}
@@ -125,7 +127,7 @@ def test_selected_formal_answer_carries_only_original_question_and_chosen_labels
         original, response = entity_id(connection, EntityKind.MESSAGE), entity_id(connection, EntityKind.MESSAGE)
         for identity, role, kind, text, structured, parent in [(original, 'ASSISTANT', 'INTERACTION_CARDS', '真实原题', group, None),
                 (response, 'USER', 'CARD_RESPONSE', '重复的答案摘要', answer, original)]:
-            connection.execute("INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_ids) VALUES (?,1,NULL,?,?,?,?,?,?,?,?,NULL,'[]','[]')",
+            connection.execute("INSERT INTO conversation_messages(id,requirement_id,guide_run_id,sequence_no,role,content,message_type,structured_content_json,reply_to_message_id,idempotency_key,created_at,phase_ref,topic_refs,document_id,document_ids) VALUES (?,1,NULL,?,?,?,?,?,?,?,?,NULL,'[]',1,'[]')",
                 (identity, identity, role, text, kind, json.dumps(structured), parent, str(uuid4()) if role == 'USER' else None, at))
     assert accept(workspace, source_refs=[{'kind': 'CARD_ANSWER', 'message_id': response, 'card_key': 'c1'}])['code'] == 'GUIDE_ACCEPTED'
     context = compiled(workspace)

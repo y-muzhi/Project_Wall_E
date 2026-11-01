@@ -27,7 +27,7 @@ def test_provider_total_and_cache_anomalies_remain_original_and_do_not_write_con
     gateway = UsageGateway(lambda context: output(context, response_type='DOCUMENT_RESULT', document_result={
         'name': '不应写入的稿件', 'document_kind': 'brief', 'markdown_content': '完整但不可采用的正文。', 'change_summary': '不可应用'}, progress_delta=delta(context)))
     assert execute(workspace, gateway)['code'] == 'AI_FINISHED'
-    assert len(gateway.calls) == 1 and counts(workspace[0])['requirement_documents'] == counts(workspace[0])['revisions'] == 0
+    assert len(gateway.calls) == 1 and counts(workspace[0])['requirement_documents'] == counts(workspace[0])['revisions'] == 1
     run = get_guide_run(workspace[0], 1, catalog=workspace[2]);assert run['code'] == 'READ_OK', run
     assert run['data']['application_result'] == 'NOT_APPLIED' and run['data']['progress_result'] != 'APPLIED'
     assert run['data']['returned_responses']
@@ -39,4 +39,4 @@ def test_provider_total_and_cache_anomalies_remain_original_and_do_not_write_con
     with workspace[0].transaction() as connection:
         row = connection.execute('SELECT validation_status,raw_response_json FROM llm_uses').fetchone()
         assert row[0] == 'FAILED' and json.loads(row[1])['usage'].get('total_tokens') == total
-        assert json.loads(connection.execute('SELECT discussion_state_json FROM requirements').fetchone()[0])['pending_user_message_ids'] == [2]
+        assert json.loads(connection.execute('SELECT discussion_state_json FROM requirement_documents').fetchone()[0])['pending_user_message_ids'] == [2]

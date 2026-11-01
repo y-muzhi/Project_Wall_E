@@ -42,18 +42,28 @@ def list_requirements(database: Database, payload: object = MISSING) -> dict:
     )
 
 
-def get_requirement(database: Database, requirement_id: object = MISSING, *, expand=None) -> dict:
+def get_requirement(
+    database: Database, requirement_id: object = MISSING, *, expand=None, document_id=None
+) -> dict:
     from backend.app.shared.validation import strict_enum
 
     def validate():
         if expand is not None:
             strict_enum(expand, 'expand', ('discussion',))
+        if document_id is not None:
+            from backend.app.shared.validation import strict_integer
+
+            strict_integer(document_id, 'document_id')
         return get_requirement_input(requirement_id)
 
     def read(repository: RequirementRepository, identity: int) -> dict | None:
         from backend.app.infrastructure.document_repository import DocumentRepository
 
-        root = repository.get(identity)
+        root = (
+            repository.get(identity)
+            if document_id is None
+            else repository.get_for_document(identity, document_id)
+        )
         if root is None:
             return None
         discussion = root['discussion_state_json']

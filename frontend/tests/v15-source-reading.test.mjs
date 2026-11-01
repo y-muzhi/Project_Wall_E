@@ -12,11 +12,13 @@ test('revision source reads its explicit immutable version and rejects foreign d
  await assert.rejects(readSource(2,source,api,signal()));
 });
 test('formal answer source uses the actual parent question and selected labels, without unselected descriptions',async()=>{
- const pages=[];const api={listMessages:async(req,cursor)=>{assert.equal(req,1);pages.push(cursor);return {data:{items:cursor===null?[{
-  id:21,requirement_id:1,role:'USER',message_type:'CARD_RESPONSE',reply_to_message_id:20,structured_content:{responses:[{card_key:'c1',selected_option_keys:['a'],custom_answer:'自定义说明',skipped:false}]}}]:[{
-  id:20,requirement_id:1,role:'ASSISTANT',structured_content:{cards:[{card_key:'c1',question:'原问题',options:[{option_key:'a',label:'正式选项',description:'不应作为选择'},{option_key:'b',label:'未选内容'}]}]}}]},meta:{pagination:cursor===null?{has_more:true,next_cursor:21}:{has_more:false,next_cursor:null}}};}};
+ const reads=[];const values=[
+ {id:21,requirement_id:1,document_id:2,role:'USER',message_type:'CARD_RESPONSE',reply_to_message_id:20,structured_content:{responses:[{card_key:'c1',selected_option_keys:['a'],custom_answer:'自定义说明',skipped:false}]}},
+ {id:20,requirement_id:1,document_id:2,role:'ASSISTANT',structured_content:{cards:[{card_key:'c1',question:'原问题',options:[{option_key:'a',label:'正式选项',description:'不应作为选择'},{option_key:'b',label:'未选内容'}]}]}}
+ ];const api={getMessage:async(req,id)=>{assert.equal(req,1);reads.push(id);return {data:values.find(row=>row.id===id)};}};
+
  const result=await readSource(1,{kind:'CARD_ANSWER',message_id:21,card_key:'c1'},api,signal());
- assert.equal(result.content,'原问题\n正式选项\n自定义说明');assert(!result.content.includes('未选内容'));assert(pages.includes(21));
+ assert.equal(result.content,'原问题\n正式选项\n自定义说明');assert(!result.content.includes('未选内容'));assert.deepEqual(reads,[21,20]);
 });
 test('saved run material exposes only actually selected Wire units and cannot read a private basis as material',async()=>{
  const request={message_id:2,message_ref:'m2',content:'已实际发送的用户原话',formal_answers:null,operation:'DISCUSS',target:null,scope:null,source_refs:[],basis_ref:{discussion_version:2,phase_ref:'p1',guide_key:'collaboration.discovery',guide_version:'v1'}};

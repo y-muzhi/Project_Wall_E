@@ -12,7 +12,7 @@
 | 目标软件版本 | V1.5 |
 | 规格版本 | 1.0 |
 | 文档状态 | EFFECTIVE（正式设计基线） |
-| 最后更新时间 | 2026-10-30（Asia/Hong_Kong；M15-CODE-01代码维护约束及实现定位同步；保留M15-DOC-02整理和此前专项） |
+| 最后更新时间 | 2026-11-01（Asia/Hong_Kong；M15-DOC-AI-01文档级助手与M15-CREATE-IDEA-01创建输入合入） |
 
 规格完成及实现验收分别按8.5判断。本文沿用[统一需求规格说明完整模板](../../templates/统一需求规格说明_完整模板_重构版.md)的章节职责和条目格式；0→1改为增量只影响规格类型与复用说明，不删去对象、能力、交互、入口及依赖的必要契约。
 
@@ -49,7 +49,7 @@ M15-CODE-01：实现遵守根AGENTS.md的代码清晰性与旧流程清理规则
 | 工作文档 | CURRENT | OBJ-DOC中可独立阅读的正式工作实例；不表示已确认 |
 | 人工草稿 | MANUAL_DRAFT | OBJ-DOC中绑定真实目标的编辑会话实例 |
 | 内容历史 | Revision | OBJ-REV；不可变内容快照，文档内编号 |
-| 需求级讨论状态 | DiscussionState | OBJ-REQ内部SHR-DISCUSSION；不是新任务／主题聚合 |
+| 文档级讨论状态 | DiscussionState | OBJ-DOC CURRENT内部SHR-DISCUSSION；原OBJ-REQ字段保留，不共享各文档进展 |
 | 执行依据 | ContextBasis | GuideRun私有快照，程序保存完整权限，模型只收必要范围 |
 | 正式回答 | CARD_RESPONSE | 用户对不可变卡片组的一次提交；推荐不算选择 |
 | 模型请求 | LLMUse | GuideRun内部每一次实际供应方请求 |
@@ -112,9 +112,9 @@ OBJ、APP、BND、INF、SHR、A15和EV均在所属条目定义。沿用V1.0的�
 | --- | --- |
 | requirement_id／document_id／revision_id | 既有业务实体身份；跨需求／跨文档引用必须服务端检查 |
 | metadata_version | Requirement或RequirementDocument的属性修改版本，各自从1递增；用于标题、业务状态、改名、归档、确认 |
-| discussion_version | 需求当前讨论状态版本，从1递增；路线、焦点、依据及阶段处置的乐观锁 |
+| discussion_version | 所属CURRENT文档当前讨论状态版本，从1递增；路线、焦点、依据及阶段处置的乐观锁；与需求元数据及正文版本分开 |
 | content_version | 文档当前内容版本，从1递增；正式内容提交时变化；人工草稿仍有自己的版本 |
-| phase_ref／topic_ref／evidence_ref | 需求内稳定引用，分别为p1、t1、e1等；计数器归discussion_state，不建独立实体序列／表 |
+| phase_ref／topic_ref／evidence_ref | 文档内稳定引用，分别为p1、t1、e1等；计数器归discussion_state，不建独立实体序列／表 |
 | message_id＋card_key | 一条不可变助手消息内的具体问题或建议；建议变更用新消息，不维护另一套proposal版本 |
 | guide_run_id／llm_use_id | 一次用户工作和其中一次实际供应方调用；不以供应方session替代需求对话关系 |
 
@@ -174,6 +174,12 @@ metadata_version不因updated_at刷新或AI讨论结果而递增。discussion_ve
 
 CONFIRM只确认当前文档的当前CONTENT Revision，带metadata_version和expected_content_version核对；同事务更新confirmed_revision_id并写真实用户确认审计，不生成新正文或新Revision，不调用模型、不切换需求状态。相同Revision再次确认无变化。新内容提交后保留旧confirmed_revision_id，只有它等于当前CONTENT Revision时当前稿才显示“已确认”；V2确认后形成V3，V3为“未确认”，历史V2仍能查到确认事实。确认不锁定文档、不阻止继续维护；归档文档的维护限制和内容写入互斥仍按原能力处理。
 
+**助手归属与引用（M15-DOC-AI-01）**
+
+requirement_id继续表示所属需求，不改为文档身份；消息与GuideRun新增document_id，CURRENT文档独立保存discussion_version／discussion_state_json。所有助手对话、卡片／正式回答、阶段／主题／依据／pending／处置／下一步、运行／请求详情按所属文档读取与写回；document_ids只读关联、target_document_id执行目标均不能替代所属字段。需求级工作互斥继续保留，不增加跨文档并行AI。
+
+服务端核实需求＋文档、父／重试运行、原卡片及消息同一所属；局部phase_ref／topic_ref／evidence_ref只在该文档有效。现有文档操作只能写所属文档，其他文档经明确SourceRef只读选择；引用不继承对方讨论状态、操作卡片权限或正文写权限。GENERATE创建新文档时运行仍归原助手，新文档以独立空讨论开始。无所属文档不能接受AI工作。完整跨文档对话／进展引用管理交互留后续，当前复用显式SourceRef及固定快照。
+
 ### 2.3 运行配置与生命周期
 
 | 配置项 | 类型与允许范围 | 来源及优先级 | 必填与默认值 | 敏感性及暴露限制 | 无效时处理 |
@@ -212,7 +218,7 @@ CONFIRM只确认当前文档的当前CONTENT Revision，带metadata_version和ex
 | 内容 | 确定定义 |
 | --- | --- |
 | 对象引用与名称 | OBJ-REQ Requirement |
-| 业务含义 | 同一需求的身份、人工业务状态、讨论状态和工作占用 |
+| 业务含义 | 同一需求身份、人工业务状态与共享工作占用；根初始字段保留，实际助手讨论状态归CURRENT文档 |
 | 身份或相等规则 | 沿用本种类正安全整数ID；实体种类＋id相同才相等 |
 | 所属与组成 | 既有聚合根；嵌套结构为值对象，不额外建根 |
 | 是否共享定义 | 是；前后端及入口引用，不共享可变实例 |
@@ -234,9 +240,9 @@ CONFIRM只确认当前文档的当前CONTENT Revision，带metadata_version和ex
 | state_started_at | UtcTime | 当前非 IDLE 工作状态的开始时间 | 是 | null | 沿用V1.0 OBJ-REQ同名字段；本版跨字段约束优先 |
 | status | Text | 人工业务状态 | 否 | PLANNING | SHR-STATUS五态；仅用户转换，任意两态可切换 |
 | metadata_version | PositiveInt | 属性并发版本 | 否 | 1 | SHR-VERSION |
-| initial_message_id | ID | 初始用户原话 | 否 | 无 | 同需求USER TEXT；初始描述只一份事实源 |
-| discussion_version | PositiveInt | 讨论并发版本 | 否 | 1 | SHR-VERSION |
-| discussion_state_json | SHR-DISCUSSION | 讨论路线／依据／绑定 | 否 | 无 | 本对象内部值对象，不单独建表／根 |
+| initial_message_id | ID | 根创建记录 | 否 | 无 | 同需求USER TEXT；可无正文，不自动作为任何文档助手历史或长期依据 |
+| discussion_version | PositiveInt | 根初始投影保留字段 | 否 | 1 | 指定document_id读取时同名投影取所属CURRENT版本；助手更新不写需求共享版本 |
+| discussion_state_json | SHR-DISCUSSION | 根初始值保留字段 | 否 | 无 | 新文档实际状态见OBJ-DOC；不作为文档助手共享状态 |
 | closed_at | UtcTime | 关闭时间 | 是 | null | SHR-STATUS：进入CLOSED记录本次UTC时间，离开CLOSED清空；同状态不变更 |
 
 | 约束名称或引用 | 作用范围 | 必须成立的条件 | 违反时的确定行为 |
@@ -257,17 +263,17 @@ document_work_state继续使用IDLE、MANUAL_EDITING、GUIDE_ACTIVE、SUGGESTION
 
 | 字段路径 | 逻辑类型或定义引用 | 业务含义 | 可为null | 对象默认值 | 字段规则或派生依据 |
 | --- | --- | --- | --- | --- | --- |
-| phase | PhaseState | `{phase_ref,kind,guide_ref,closure}`；kind=DISCOVERY／SOLUTION／SPECIFICATION／REVIEW；guide_ref含key、version、digest；closure为空或用户收束事件引用 | 否 | 无 | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| focus_topic_ref | Text | 当前主题引用或null；必须属于当前阶段 | 是 | null | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| topics | TopicState[] | 按稳定顺序的主题；每项包含topic_ref、phase_ref、mainline_ref、title、purpose、expected_outcomes、assessment、evidence_refs、dependencies、unresolved_impacts、updated_by_message_id | 否 | [] | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| evidence | EvidenceState[] | 来源索引；每项包含evidence_ref、assertion、origin、source_refs、state、supersedes、topic_refs | 否 | [] | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| pending_user_message_ids | ID[] | 已接受但尚未被有效进度处理的用户输入；当前输入也在其中，但发送时按身份去重；失败／增量无效不能使其从长期上下文消失 | 否 | [] | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| binding | WorkBinding | `{target_document_id,source_refs,scope,document_kind}`；可空目标；只由用户明确绑定或接受的建议更新 | 否 | 无 | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| dispositions | Disposition[] | 用户暂缓、不适用、拒绝出稿、改换目标等处置；必须有真实USER消息／正式回答引用及适用范围 | 否 | [] | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| last_step | NextStep | 最近已保存next_step与助手message_id；用于恢复页面，不构成后台自动执行队列 | 是 | null | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
-| counters | CounterState | phase／topic／evidence下一个本地引用号 | 否 | 无 | 下方字段／来源约束；创建场景由APP-REQ-CMD-C01给定 |
+| phase | PhaseState | `{phase_ref,kind,guide_ref,closure}`；kind=DISCOVERY／SOLUTION／SPECIFICATION／REVIEW；guide_ref含key、version、digest；closure为空或用户收束事件引用 | 否 | 无 | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| focus_topic_ref | Text | 当前主题引用或null；必须属于当前阶段 | 是 | null | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| topics | TopicState[] | 按稳定顺序的主题；每项包含topic_ref、phase_ref、mainline_ref、title、purpose、expected_outcomes、assessment、evidence_refs、dependencies、unresolved_impacts、updated_by_message_id | 否 | [] | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| evidence | EvidenceState[] | 来源索引；每项包含evidence_ref、assertion、origin、source_refs、state、supersedes、topic_refs | 否 | [] | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| pending_user_message_ids | ID[] | 已接受但尚未被有效进度处理的用户输入；当前输入也在其中，但发送时按身份去重；失败／增量无效不能使其从长期上下文消失 | 否 | [] | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| binding | WorkBinding | `{target_document_id,source_refs,scope,document_kind}`；可空目标；只由用户明确绑定或接受的建议更新 | 否 | 无 | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| dispositions | Disposition[] | 用户暂缓、不适用、拒绝出稿、改换目标等处置；必须有真实USER消息／正式回答引用及适用范围 | 否 | [] | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| last_step | NextStep | 最近已保存next_step与助手message_id；用于恢复页面，不构成后台自动执行队列 | 是 | null | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
+| counters | CounterState | phase／topic／evidence下一个本地引用号 | 否 | 无 | 下方字段／来源约束；新文档创建由APP-DOC-CMD-C05或生成提交给定 |
 
-assessment取NOT_STARTED、DISCUSSING、SUPPORTED、REVIEW_REQUIRED。DEFERRED／NOT_APPLICABLE作为用户处置单列，不能由模型自己判断后伪装成用户决定。expected_outcomes每条有需求内outcome_ref、描述及成果判断要求。
+assessment取NOT_STARTED、DISCUSSING、SUPPORTED、REVIEW_REQUIRED。DEFERRED／NOT_APPLICABLE作为用户处置单列，不能由模型自己判断后伪装成用户决定。expected_outcomes每条有文档内outcome_ref、描述及成果判断要求。
 
 origin取USER_STATEMENT、USER_DECISION、AI_PROPOSAL；AI抽取的assertion始终是整理文本。USER_DECISION必须关联实际用户采用／选择，不能只指向推荐。state取ACTIVE、SUPERSEDED、DISPUTED；修正保留旧条目及替代关系。AI提出冲突不自动决定哪个用户来源失效。每条另有nature=FACT／CONSTRAINT／PROPOSAL及applies_to=GLOBAL或具体topic_refs，用于确定选材；这些语义分类仍标AI整理，可由用户纠正。
 
@@ -279,7 +285,7 @@ M15-COMMENT-01：RUN_MATERIAL的原始SourceRef与本轮selected／aliases的展
 
 用户纠正、确定采用、暂缓和阶段处置先保存不可变消息，再以同事务更新索引。模型给出的主题与依据增量只在该次实际材料清单内验证；拒绝无效增量不删除原始回复，不触发格式修复调用。
 
-默认阶段为DISCOVERY／p1并引用当前冻结指引，topics为空、焦点为空；第一轮由AI细化。接受模型工作时保存用户输入到pending并递增discussion_version，运行冻结递增后的版本。有效progress_delta只能确认处理本轮实际携带的pending消息，移除与增量同事务；未发送、未处理或处理失败的消息继续保留，不受10条窗口淘汰。
+每个新文档默认DISCOVERY／p1并引用冻结指引，topics／evidence／pending为空、焦点为空。接受工作只将所属文档的真实用户输入加入pending并递增其discussion_version；运行冻结该版本。有效progress_delta只处理本轮实际携带的同文档pending，失败或未发送输入继续保留，不受10条窗口淘汰。
 
 #### 3.3 关系与状态
 
@@ -292,11 +298,11 @@ M15-COMMENT-01：RUN_MATERIAL的原始SourceRef与本轮selected／aliases的展
 **存储与实现补充**
 
 
-RequirementRepository继续为唯一需求仓储，加入metadata_version、initial_message_id、discussion_version、discussion_state_json及新状态字段。DiscussionState作为校验过的JSON值对象，由requirements/contracts统一解析；查询投影不能直接把任意JSON当合法对象。
+RequirementRepository保留原需求元数据／占用及根字段；get_for_document(requirement_id,document_id)核实同需求CURRENT后，使用该文档讨论版本／状态形成助手读取投影。DiscussionState结构仍复用requirements/contracts，不新增讨论根或共享文档状态。
 
 DDL与应用层共同约束：状态枚举与时间对应；正版本；所有活动占用字段配套；initial_message_id必须同需求USER TEXT；讨论引用唯一、父主题／阶段存在、依赖不自指、不形成循环；未决引用和来源真实可回查。JSON形状、跨记录同归属及依赖图由应用层核对，不能声称SQLite外键自动验证嵌套JSON。
 
-讨论更新采用`UPDATE ... WHERE id=? AND discussion_version=?`，成功后+1；属性更新同理使用metadata_version。业务状态变化与主题评估分开事务入口。对同一次命令的用户消息、用户处置、讨论索引和审计必须在同一事务，不发生记录先后不一致。
+讨论更新按(requirement_id,document_id,discussion_version)定位CURRENT，成功后文档版本+1；同步需求updated_at但不改其metadata_version。消息、用户处置、讨论索引及审计同事务；属性／人工状态仍按需求metadata_version独立校验。
 
 人工修改讨论绑定时不得覆盖模型记录的整个JSON，只接受APP-REQ-CMD-C06／4.2的四种明确命令。AI增量合并以basis版本为前提；对修改已有主题的引用、临时引用映射、来源和替代关系逐项检查，再原子提交整个有效增量。含错误的增量整体不更新，原回复保留；不允许部分提交路线后再报错。
 
@@ -336,12 +342,15 @@ DDL与应用层共同约束：状态枚举与时间对应；正版本；所有�
 | metadata_version | PositiveInt | 文档属性版本 | 否 | 1 | SHR-VERSION |
 | archived_at | UtcTime | 归档时间 | 是 | null | 归档仍可读；修改须恢复 |
 | confirmed_revision_id | ID | 已确认历史版本 | 是 | null | 同文档已存在的当前CONTENT Revision；按SHR-CONFIRM |
+| discussion_version | PositiveInt | 当前文档讨论并发版本 | 否 | 1 | CURRENT助手使用；不随正文或名称变化递增 |
+| discussion_state_json | SHR-DISCUSSION | 当前文档阶段／主题／依据／绑定 | 是 | null | CURRENT新建时由仓储初始化独立完整值；MANUAL_DRAFT不作为助手状态来源 |
 | target_document_id | ID | 人工草稿真实目标 | 是 | null | CURRENT为空，MANUAL_DRAFT指同需求CURRENT |
 | template_ref | TemplateRef | 文档所用结构资源 | 是 | null | key／version／digest；不从Requirement读取唯一模板 |
 | origin | SourceRef | 文档创建来源 | 否 | 无 | 真实运行或用户框架创建事件 |
 
 | 约束名称或引用 | 作用范围 | 必须成立的条件 | 违反时的确定行为 |
 | --- | --- | --- | --- |
+| OBJ-DOC-V15-ASSISTANT | CURRENT讨论状态 | discussion_version从1递增，discussion_state_json为独立SHR-DISCUSSION；MANUAL_DRAFT不承载另一套助手状态 | 身份／版本错误拒绝，其他文档状态不变 |
 | OBJ-DOC-V15-VALID | 全部字段 | 表内字段齐备、枚举／可空性合法，未被本版替代的V1.0同名字段规则继续适用 | 拒绝构造／变更，OBJECT_INVALID；不部分修改 |
 | OBJ-DOC-V15-OWNER | 关联字段 | CURRENT需求内多份；MANUAL_DRAFT绑定一个CURRENT；同需求至多一个活动编辑。 | 应用核实外部关系，失败不持久化；存储保证见INF-DB |
 
@@ -371,7 +380,10 @@ manual_draft_context继续保存draft_id、current_document_id、base_content_ve
 
 模板规则不再来自Requirement的唯一模板。SPECIFICATION文档按自身template_ref应用冻结结构保护；需求说明／设计方案使用各自轻量结构，不套完整规格标题锁。来源证明解析DocumentSources显式接受目标文档及其资源引用。人工回退使用历史正文内容与现有编辑器身份继承算法生成合法新快照，不能将旧BlockState直接覆盖当前身份分配计数器。
 
+新建CURRENT同时初始化独立空助手状态；不能从来源文档复制消息或进展。引用来源／版本仍保存在既有Revision与SourceRef，不由讨论状态复制形成。
+
 <a id="obj-rev"></a>
+
 
 ### OBJ-REV Revision
 
@@ -457,6 +469,7 @@ document_change_audits扩展为原表内的内容／元数据事件承载。内�
 | 字段路径 | 逻辑类型或定义引用 | 业务含义 | 可为null | 对象默认值 | 字段规则或派生依据 |
 | --- | --- | --- | --- | --- | --- |
 | id | ID | 纯数字主键 | 否 | 无 | 沿用V1.0 OBJ-MSG同名字段；本版跨字段约束优先 |
+| document_id | ID | 助手所属文档 | 是 | 无 | 助手消息必须同需求CURRENT；仅需求initial_message_id允许null |
 | requirement_id | ID | 所属 Requirement | 否 | 无 | 沿用V1.0 OBJ-MSG同名字段；本版跨字段约束优先 |
 | guide_run_id | ID | 消息所属或触发的 GuideRun | 是 | null | 沿用V1.0 OBJ-MSG同名字段；本版跨字段约束优先 |
 | sequence_no | PositiveInt | Requirement 连续对话中的顺序 | 否 | 无 | 沿用V1.0 OBJ-MSG同名字段；本版跨字段约束优先 |
@@ -471,16 +484,16 @@ document_change_audits扩展为原表内的内容／元数据事件承载。内�
 | intro | string | 卡片引导文字 | message_type=INTERACTION_CARDS 且结构有效时必有 | 否 | 沿用V1.0 OBJ-MSG同名字段；本版跨字段约束优先 |
 | cards | array[object] | 卡片组 | message_type=INTERACTION_CARDS 且结构有效时必有 | 否 | 沿用V1.0 OBJ-MSG同名字段；本版跨字段约束优先 |
 | responses | array[object] | 整组回答 | message_type=CARD_RESPONSE 且结构有效时必有 | 否 | 沿用V1.0 OBJ-MSG同名字段；本版跨字段约束优先 |
-| phase_ref | Text | 阶段关联 | 是 | null | 需求内稳定引用 |
+| phase_ref | Text | 阶段关联 | 是 | null | 文档内稳定引用 |
 | topic_refs | Text[] | 主题关联 | 否 | [] | 不复制消息到多个会话 |
 | document_ids | ID[] | 文档关联 | 否 | [] | 均属于同需求 |
 
 | 约束名称或引用 | 作用范围 | 必须成立的条件 | 违反时的确定行为 |
 | --- | --- | --- | --- |
 | OBJ-MSG-V15-VALID | 全部字段 | 表内字段齐备、枚举／可空性合法，未被本版替代的V1.0同名字段规则继续适用 | 拒绝构造／变更，OBJECT_INVALID；不部分修改 |
-| OBJ-MSG-V15-OWNER | 关联字段 | CARD_RESPONSE指同需求助手卡片，整组至多一份正式回答；运行关联可空。 | 应用核实外部关系，失败不持久化；存储保证见INF-DB |
+| OBJ-MSG-V15-OWNER | 关联字段 | 正式回答、原卡片、触发与所属运行必须同requirement_id＋document_id；原卡片至多一份正式回答 | 数据库复合外键及应用校验拒绝混接，整事务回滚 |
 
-保留需求内顺序、USER／ASSISTANT、TEXT／INTERACTION_CARDS／CARD_RESPONSE、不可变原文及reply_to_message_id。新增可空phase_ref、topic_refs、document_ids，供只读筛选；不把一条消息复制到多份会话。
+保留需求内sequence_no、USER／ASSISTANT、TEXT／INTERACTION_CARDS／CARD_RESPONSE与不可变原文。消息按所属document_id过滤游标，序号可有跨文档间隔；phase_ref／topic_refs／document_ids为只读关联，不用于猜所属或复制会话。只有根创建记录可无文档且无正文，不进入默认文档历史。
 
 structured_content采用AI-RESOURCE的StoredCardGroup／StoredResponses完整定义，不新增消息表根或业务对象。新增组用途`purpose`：CLARIFICATION、DOCUMENT_ACTION、PHASE_CHANGE、FACT_CONFIRMATION。每组只有一种用途；同组仍整组提交、至多一个正式响应。普通卡片沿用单选／多选／确认、自定义与暂缓语义，技术容量1—5题；产品指引默认优先1—3个必要选择，不作为完整性硬门禁。
 
@@ -522,6 +535,7 @@ CARD_RESPONSE指同需求助手卡片，整组至多一份正式回答；运行�
 | 字段路径 | 逻辑类型或定义引用 | 业务含义 | 可为null | 对象默认值 | 字段规则或派生依据 |
 | --- | --- | --- | --- | --- | --- |
 | id | ID | 纯数字主键 | 否 | 无 | 沿用V1.0 OBJ-GUIDE同名字段；本版跨字段约束优先 |
+| document_id | ID | 助手所属文档 | 否 | 无 | 创建时固定的同需求CURRENT；与target_document_id分开，续轮／重试不可改属 |
 | requirement_id | ID | 所属 Requirement | 否 | 无 | 沿用V1.0 OBJ-GUIDE同名字段；本版跨字段约束优先 |
 | idempotency_key | Text | 防止同一用户动作重复创建 | 否 | 无 | 沿用V1.0 OBJ-GUIDE同名字段；本版跨字段约束优先 |
 | trigger_message_id | ID | 本轮启动或最近一次继续输入的用户消息ID；初次创建与消息归属在同事务形成 | 是 | null | 沿用V1.0 OBJ-GUIDE同名字段；本版跨字段约束优先 |
@@ -562,7 +576,7 @@ CARD_RESPONSE指同需求助手卡片，整组至多一份正式回答；运行�
 | OBJ-GUIDE-V15-VALID | 全部字段 | 表内字段齐备、枚举／可空性合法，未被本版替代的V1.0同名字段规则继续适用 | 拒绝构造／变更，OBJECT_INVALID；不部分修改 |
 | OBJ-GUIDE-V15-OWNER | 关联字段 | LLMUse为聚合内实体，经GuideRun统一修改；每次实际调用一份记录；完整权限不发给模型。 | 应用核实外部关系，失败不持久化；存储保证见INF-DB |
 
-沿用GuideRun、Worker、执行租约、取消／显式重试、模型网关、逐次LLMUse及审计。新增operation、target_document_id、parent_guide_run_id、discussion_version_snapshot、execution_basis_json。action_type映射见SHR-GUIDE-INPUT；执行依据只由服务端生成。
+沿用GuideRun、Worker、租约、取消／显式重试、LLMUse及审计。新增所属document_id并保留requirement_id；operation、target_document_id、parent_guide_run_id、discussion_version_snapshot与execution_basis_json继续复用。trigger、父／重试轮次、回答与进展必须属于同一助手文档；NEW生成目标不是运行归属。
 
 execution_basis包含用户消息／卡片引用、动作、预期版本、新文档属性或目标、作用范围、固定来源、资源版本、程序权限和占用；不得由模型回填。实际模型输入在context_projection另行形成。
 
@@ -665,7 +679,7 @@ LLMUse为聚合内实体，经GuideRun统一修改；每次实际调用一份记
 
 SuggestionBatch增加target_document_id、source_refs_json；所有Suggestion的block_id、original_content与scope都归同一目标及基准版本，禁止一个批次改多份文档。采用、拒绝、编辑和完成沿用既有入口及补丁算法。来源A只读，不因采用B的建议而改A。
 
-BatchView及所有命令回执中的batch沿既有元数据字段增加target_document_id和source_refs（source_refs_json的只读数组投影）。source_refs是本轮实际冻结的完整来源集合，包含长期需求等隐式必要来源，不仅是用户显式勾选项；来源版本保持固定。完成回执为`{batch,counts,current_document,document_effect,applied_suggestion_ids}`，current_document是批次固定目标的原正文快照投影，字段恰为id、requirement_id、document_type、markdown_content、block_state_json、content_version、created_at、updated_at；不是带名称／模板／确认元数据的完整DocumentView，元数据由既有指定文档GET读取。applied_suggestion_ids按原建议顺序记录实际ACCEPTED／EDITED项；全拒绝为空数组且DocumentEffect=NO_CHANGE，不新增CONTENT。正文实际变化沿commit_content同事务保存CONTENT、审计及同文档评论锚点，释放该批占用。当前阅读文档和人工业务状态不替换目标或阻断该流程。
+BatchView及所有命令回执中的batch沿既有元数据字段增加target_document_id和source_refs（source_refs_json的只读数组投影）。source_refs是本轮实际冻结的完整来源集合，包含所属文档的有效依据及明确引用的跨文档来源，不扩大为需求级共享材料；来源版本保持固定。完成回执为`{batch,counts,current_document,document_effect,applied_suggestion_ids}`，current_document是批次固定目标的原正文快照投影，字段恰为id、requirement_id、document_type、markdown_content、block_state_json、content_version、created_at、updated_at；不是带名称／模板／确认元数据的完整DocumentView，元数据由既有指定文档GET读取。applied_suggestion_ids按原建议顺序记录实际ACCEPTED／EDITED项；全拒绝为空数组且DocumentEffect=NO_CHANGE，不新增CONTENT。正文实际变化沿commit_content同事务保存CONTENT、审计及同文档评论锚点，释放该批占用。当前阅读文档和人工业务状态不替换目标或阻断该流程。
 
 **内部成员：Suggestion**
 
@@ -800,14 +814,14 @@ CommentRepository以document_id过滤和定位；原话／软删除／锚点状�
 | --- | --- | --- | --- | --- | --- |
 | title | Text | 调用参数 | 是 | 否 | 1—20码点 |
 | requirement_type | NEW／CHANGE | 调用参数 | 是 | 否 | 必填，不接受null |
-| initial_idea | Text | 调用参数 | 是 | 否 | 1—10000码点 |
+| initial_idea | Text | 现行工具显式原始来源，可省略 | 否 | 否 | 省略为空正文；提供时0—10000有效Unicode码点，null拒绝；普通表单不发送 |
 | idempotency_key | RequestKey | 入口上下文 | 是 | 否 | 可信入口取得；SHR-IDEMPOTENCY |
 
 
 #### 4.3 处理过程
 
 1. 校验输入与幂等；不要求模板、初始化模式或已有文档。
-2. 分配需求编号、Requirement及USER TEXT；message.guide_run_id=null，建立空SHR-DISCUSSION。
+2. 分配Requirement与根创建记录身份；按实际initial_idea保存USER TEXT，省略则为空正文，不以标题／固定文字补写原话。创建只建零文档需求，不触发运行。
 3. 保存initial_message_id、IDLE和初始版本；在同一事务提交后返回。
 
 #### 4.4 结果与完成范围
@@ -909,6 +923,7 @@ CommentRepository以document_id过滤和定位；原话／软删除／锚点状�
 | 输入项 | 类型或结构引用 | 来源与用途 | 必须提供 | 可为null | 缺失、默认及校验规则 |
 | --- | --- | --- | --- | --- | --- |
 | requirement_id | ID | 调用参数 | 是 | 否 | 真实需求身份 |
+| document_id | ID | 助手所属文档 | 是 | 否 | 必须为本需求真实CURRENT，状态／版本及引用按该文档核实 |
 | expected_discussion_version | PositiveInt | 调用参数 | 是 | 否 | 必填，不接受null |
 | discussion_command | DiscussionCommand | 调用参数 | 是 | 否 | SET_BINDING／SET_FOCUS／CHANGE_PHASE／SET_DISPOSITION互斥联合 |
 | idempotency_key | RequestKey | 入口上下文 | 是 | 否 | 可信入口取得；SHR-IDEMPOTENCY |
@@ -1336,6 +1351,7 @@ DiscussionCommand以`type`判别，四种命令的其余字段均必传：SET_BI
 | 输入项 | 类型或结构引用 | 来源与用途 | 必须提供 | 可为null | 缺失、默认及校验规则 |
 | --- | --- | --- | --- | --- | --- |
 | requirement_id | ID | 调用参数 | 是 | 否 | 真实需求身份 |
+| document_id | ID | 助手所属文档 | 是 | 否 | 必须为本需求真实CURRENT，状态／版本及引用按该文档核实 |
 | expected_discussion_version | PositiveInt | 调用参数 | 是 | 否 | 必填，不接受null |
 | operation | Operation | 调用参数 | 是 | 否 | 必填，不接受null |
 | instruction | Text | 调用参数 | 是 | 否 | 1—10000码点，保存原文 |
@@ -1370,7 +1386,7 @@ instruction保存原用户文字；点击建议可保存程序按钮文案及真
 
 #### 4.3 处理过程
 
-1. 校验幂等、归属、版本、IDLE和已授权动作；proposal_ref必须指向真实具体建议。
+1. 校验幂等、所属需求＋document_id、该文档讨论版本、需求IDLE及原授权；EXISTING目标必须等于助手所属文档，proposal_ref指向同文档真实建议。
 2. 冻结目标／来源／资源与scope；复杂不明确意图只整理建议，不擅自提升DISCUSS权限。
 3. 保存用户消息并加入pending，discussion_version递增；冻结递增后的依据，建立RUNNING／PREPARING及占用。
 4. 接受事务提交后才交现有Worker；Provider和计数不在写事务内。
@@ -1942,9 +1958,9 @@ REVISE的document_result可以返回完整目标稿以简化模型格式，但�
 
 **技术实现补充：装配与私有材料清单**
 
-1. model_context读取GuideRun冻结的执行依据，恢复所选资源；从同一数据库快照取初始消息、DiscussionState及固定Revision。对NEW目标不调用get_current。
+1. model_context读取GuideRun冻结的执行依据，恢复所选资源；从同一数据库快照取所属文档消息、DiscussionState及固定Revision；需求初始消息只在明确SourceRef中读取。对NEW目标不调用get_current。
 2. 将本轮正式回答还原为原题＋所选label＋custom_answer。被引用的原卡片在私有清单保留，模型只得到答案事实单元及必要上下文，不得到所有未选项长说明。
-3. 根据当前phase/topic、绑定source_refs及跨主题硬约束选长期依据；原始需求必选。按AI-EVIDENCE的当前主题／依赖＋GLOBAL约束＋pending集合确定选择，不新调模型筛选。索引只指向原始来源，源内容不靠模型再次生成。
+3. 根据当前phase/topic、绑定source_refs及跨主题硬约束选长期依据；不隐式选取需求根描述或其他文档进展。按AI-EVIDENCE的当前主题／依赖＋GLOBAL约束＋pending集合确定选择，不新调模型筛选。索引只指向原始来源，源内容不靠模型再次生成。
 4. 解析目标scope；分别建立read_set与write_set。同文档不同来源用途合并读取键但保留多用途标签。邻近区块只读不扩权。
 5. 按AI-CONTEXT顺序构造wire，单个引用实体只序列化一次正文；其他位置使用短ref。正式答案已在CURRENT_REQUEST则不又出现在GOAL或HISTORY。
 6. 保存私有ContextBasis和候选material_manifest，记录读取、选材、重复移除及原因。再对实际wire计数；每次改变候选必须重新计数。
@@ -1992,7 +2008,7 @@ GuideDefinition由现有ResourceCatalog加载为版本化资源。payload必填k
 
 DISCOVERY包含目标价值、角色场景、核心闭环、关键规则信息、范围约束、成功判断六条主线；SOLUTION围绕已知约束、候选方案、推荐取舍、主要交互及风险；SPECIFICATION围绕确定行为、对象／数据、异常、配置及验收；REVIEW围绕变更来源、实际影响、冲突和局部建议。各阶段完整主线、成果判断及设计方法见本文AI-RESOURCE，不再依赖早期规划稿补充正式内容。
 
-首轮AI根据原始描述提出项目主题，临时主题引用由程序接受后映射为需求内topic_ref。expected_outcomes表达应形成的理解／设计成果，而非“用户回答了第几题”。有依据的主题直接整理结论；不照模板从第一项开始逐个提问。
+首轮AI根据所属文档本轮输入及已有明确来源提出主题，临时主题引用由程序接受后映射为文档内topic_ref。expected_outcomes表达应形成的理解／设计成果，而非“用户回答了第几题”。有依据的主题直接整理结论；不照模板从第一项开始逐个提问。
 
 模型每轮主行动优先：响应用户明确工作→处理纠正或关键冲突→给推荐设计／建议出稿→只问必要事实与取舍→总结并衔接下一主题。必要不确定性未解决时可标待定出稿；不能要求全主题结束。用户拒绝出稿保存适用处置，下一轮不机械重复同一建议。
 
@@ -2000,11 +2016,11 @@ DISCOVERY包含目标价值、角色场景、核心闭环、关键规则信息�
 
 **长期依据：AI-EVIDENCE**
 
-创建时initial_message_id永久进入候选依据。正式回答以“原问题＋用户所选名称＋用户填写”形成可发送事实单元，原始卡片与回答仍分别保存；不回传整套未选项说明，也不只传“已选择第一个”。
+需求initial_message_id不自动进入文档候选依据；明确提供且有正文时，仅显式SourceRef可读。正式回答仍以原问题＋用户所选名称＋填写形成可发送事实单元；默认候选仅所属文档，跨文档来源须明确选择。根创建空正文不补成用户目标。
 
 模型在正常响应的progress_delta中给出结论、引用及替代建议；程序验证引用在本轮清单内，保存AI整理。用户明确采用设计选项可标USER_DECISION；仅有AI推荐只能标AI_PROPOSAL。没有额外摘要模型调用。
 
-程序选材不调用另一个模型判断“相关性”：先取当前主题及其已登记依赖主题，再取这些主题关联的ACTIVE／DISPUTED依据、GLOBAL有效约束、当前绑定来源，以及全部pending用户输入。无当前主题时取原始描述、GLOBAL依据和pending输入，供AI建立路线。跨主题摘要只给短总览；AI发现缺材料在回复中提出，不默默加载全部历史。旧决定是否属于全局／当前主题依据已有索引，不能仅靠关键词匹配推断。
+程序选材先限定所属文档，取当前主题／已登记依赖主题、关联ACTIVE／DISPUTED依据、该文档GLOBAL有效约束、明确绑定来源及全部同文档pending。不调用另一个模型判断相关性。无当前主题时取该文档已确认来源、GLOBAL依据及pending建立路线；无隐式需求原话或其他文档进展。跨主题短总览仍在文档内，缺材料由AI提出，不加载全需求历史。
 
 新增用户修正先与既有相关依据共同发送。除明确用户处置或精确卡片选择外，模型提出supersedes只标待复核／DISPUTED，不直接删除旧用户决定。用户接受新的具体决定后，同事务记录替代关系。主题跳转不使其他主线的硬约束失效。
 
@@ -2020,14 +2036,14 @@ DISCOVERY包含目标价值、角色场景、核心闭环、关键规则信息�
 | --- | --- | --- | --- | --- |
 | 1 SYSTEM | 当前阶段指导、行为边界、一次必要输出Schema | 冻结Function／当前GuideDefinition | 按实际顺序1；由冻结Function引用；不重复嵌套同一Schema，不装四阶段全文 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
 | 2 STRUCTURE | 本任务文档类型结构；必要时完整规格模板 | 所选文档结构资源 | 按实际顺序2；DISCUSS／COMPARE默认无完整模板；GENERATE按类型；局部REVISE只取对应结构规则 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
-| 3 GOAL_AND_DECISIONS | 原始描述、当前任务相关有效用户决定与硬约束 | 原始消息／有效依据索引 | 按实际顺序3；跨10条窗口保留；来源身份清楚，一条原话只出现一次 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
-| 4 PROJECT_POSITION | 阶段、主线短结论、当前焦点和关键跨主题约束 | Requirement讨论状态快照 | 按实际顺序4；不发送全量DiscussionState、所有事件或完整权限 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
+| 3 GOAL_AND_DECISIONS | 原始描述、当前任务相关有效用户决定与硬约束 | 所属文档消息／有效依据索引与显式来源 | 按实际顺序3；跨10条窗口保留；来源身份清楚，一条原话只出现一次 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
+| 4 PROJECT_POSITION | 阶段、主线短结论、当前焦点和关键跨主题约束 | 所属CURRENT讨论状态快照 | 按实际顺序4；不发送全量DiscussionState、所有事件或完整权限 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
 | 5 CURRENT_TOPIC | 当前主题目的、成果要求、相关决定和未决影响 | 当前主题及依赖 | 按实际顺序5；引用分区3已存在的evidence_ref，不重复正文 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
 | 6 DOCUMENTS | 实际需要的目标原文、选定来源版本及区块 | 固定Revision／目标scope | 按实际顺序6；每个(document_id,content_version,block_id)仅一份；祖先标题作为索引不冒充已读正文 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
-| 7 RECENT_HISTORY | 最近最多10条有用消息 | 现有消息读取窗口 | 按实际顺序7；保持时间顺序；排除已在3／5／8展示的消息／回答；不再取全量历史冒充记忆 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
+| 7 RECENT_HISTORY | 最近最多10条有用消息 | 所属文档消息读取窗口 | 按实际顺序7；保持时间顺序；排除已在3／5／8展示的消息／回答；不再取全量历史冒充记忆 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
 | 8 CURRENT_REQUEST | 本轮原输入／正式回答、模式、目标和必要范围说明 | 真实当前USER消息／正式回答 | 按实际顺序8；易变内容靠后；一个问题／回答的文字只发送一次 | AI-BUDGET：必需材料不裁剪；可选历史／背景按已定义顺序；仍超限不Chat |
 
-普通讨论：必须有原始目标、本轮输入、当前阶段指引、当前主题及相关有效约束；无目标时不读取模板占位正文。当前任务关联的长期结论来自索引，原话不足或冲突时按引用补读，不让用户重新填写已有事实。
+普通讨论：携带所属文档已有目标／明确来源（如有）、本轮输入、当前阶段指引、当前主题及相关有效约束；无目标时不读取模板占位正文。当前任务关联的长期结论来自索引，原话不足或冲突时按引用补读，不让用户重新填写已有事实。
 
 生成新稿：所选类型结构＋已有讨论成果＋用户确认来源，不发送一个尚不存在的目标全文。局部修订：目标选区／区块／章节原文、该部分约束及显式来源；不得仅因选过文档就发送全文。全文核对：必须携带实际全文，或用户明确选择分批并展示覆盖清单；局部结果不标成全文完成。
 
@@ -2038,6 +2054,8 @@ DISCOVERY包含目标价值、角色场景、核心闭环、关键规则信息�
 **程序私有依据：AI-CONTEXT-BASIS**
 
 ContextBasis保存完整执行依据、权限、执行核查所需对象字段、来源解析、读取／写入集合、版本、资源摘要、选择和剔除原因。模型只接收操作类型、目标身份、实际可用区块及必要范围；不接收全部allowed_targets展开、BlockState审计副本、任意文档全元数据或可执行凭据。
+
+运行document_id与冻结request的所属一致；同名requirement.discussion_version及discussion投影来自该文档，不能从需求根共享状态重建。保存的Canonical／Wire结构继续使用现有冻结协议，根initial_message_id只是可追溯元数据，不因此自动选作材料。
 
 GuideRun的execution_basis_json先保存接受时私有快照（schema_version、原request／user_message、冻结requirement／discussion／discussion_version、目标、授权、来源内容、最近候选与资源）；它不是可直接发送的ContextBasis。执行装配后，Canonical.selected保留接受时固定的近期候选标识，Canonical.omitted保留读取阶段剔除依据；实际候选的选中／剔除清单放在ContextBasis.selected／omitted，避免重放时扩大历史窗口。APP-GUIDE-QUERY-C03只读返回装配的ContextBasis，不重新计数或发送Chat。
 
@@ -2094,7 +2112,7 @@ progress_delta另外必填processed_user_message_ids，只能是本轮已携带p
 
 DOCUMENT_ACTION卡片的action_payload固定为`{operation,target,scope,source_refs,basis_discussion_version,unresolved_impacts,selectable_fields}`；target、scope沿SHR-GUIDE-INPUT。StoredResponses根固定schema_version、responses、execution_selection；execution_selection为`{target,scope,source_refs,acknowledge_source_changes}`或null，只有卡片声明可由用户选择的字段才能调整，其余必须与建议相同；程序仍复核身份和版本。PHASE_CHANGE的action_payload为`{phase_kind,closure_summary,unresolved_refs,basis_discussion_version}`；FACT_CONFIRMATION采用原精确变更结构，不混入以上payload。
 
-完整DiscussionState首批上限为每需求200主题、1000条依据索引及每项不超过1000码点的短结论；长原文只引用。达到上限仍可读，新增增量不应用并明确提示整理范围；不得自动删除旧决定或另启背景摘要模型。pending必要原文不以条数截断，最终仍受硬Token预算约束。
+完整DiscussionState首批上限为每文档200主题、1000条依据索引及每项不超过1000码点的短结论；长原文只引用。达到上限仍可读，新增增量不应用并明确提示整理范围；不得自动删除旧决定或另启背景摘要模型。pending必要原文不以条数截断，最终仍受硬Token预算约束。
 
 <a id="ai-example"></a>
 
@@ -3065,9 +3083,9 @@ Release中admission仅记录摘要、状态、计数及观测引用；完整实�
 
 准入持久化复用正常LLMUse及CountingJournal审计目录，不改变冻结Release文件的OFFLINE_READY字节或新增业务根。程序配置仅保存schema_version、source_database、llm_use_id、approved_at与Admission；读取时重新核实原调用、profile／release、精确请求／计数及usage，来源丢失或损坏拒绝普通调度。普通执行在装配、每个计数候选、实际计数／Chat IO及准备审计时复核，同一有效Admission保存在程序私有请求快照，不进入Wire。后续异常从原LLMUse持久推导SUSPENDED；同release不能用新成功样本或修改配置抹去异常，须修订资源并重新授权观测。
 
-隔离观测复用同一接受、编译、计数、网关及审计链路。专用CLI默认使用退出即清理的新临时库离线预览，不读取环境密钥或执行provider IO；真实执行须明确新绝对目录、1—3计数批、1次Chat及所选冻结profile的完整总量（旧139264／新163840），保持匹配的8192／32768输出、1024预留、零传输重试。以原子mkdir占用不可重用槽，失败／取消／未知结果均保留正常数据库与计数审计，不自动再发送；每次IO前消耗额度，异常不返还。内部能力绑定实际主库连接、唯一DISCUSS运行、零文档、profile与release，并在准备审计的同一事务复核；普通HTTP输入和Worker选项不能安装该能力。快照保存初始OFFLINE_READY及私有observation预算，合格实际返回才为隔离库记录准入，导入其他库是独立明确操作；技术准入不代替语义效果EV，也不授予额外真实调用许可。
+隔离观测复用同一接受、编译、计数、网关及审计链路。专用CLI默认使用退出即清理的新临时库离线预览，不读取环境密钥或执行provider IO；真实执行须明确新绝对目录、1—3计数批、1次Chat及所选冻结profile的完整总量（旧139264／新163840），保持匹配的8192／32768输出、1024预留、零传输重试。以原子mkdir占用不可重用槽，失败／取消／未知结果均保留正常数据库与计数审计，不自动再发送；每次IO前消耗额度，异常不返还。内部能力绑定实际主库连接、唯一DISCUSS运行、唯一无正文的助手所属CURRENT、profile与release，并在准备审计的同一事务复核；普通HTTP输入和Worker选项不能安装该能力。快照保存初始OFFLINE_READY及私有observation预算，合格实际返回才为隔离库记录准入，导入其他库是独立明确操作；技术准入不代替语义效果EV，也不授予额外真实调用许可。
 
-本地启动助手默认仅检查V1.5资源及固定模型预算，不读取密钥、不打开业务库、不启动服务或调用供应方。显式--start必须先核对绝对已存在schema150数据库和同release正常准入证据，再安全读取明确凭证来源，仅配置该启动进程环境并走原单worker服务入口；不初始化／迁移库、不自动导入技术证据，不沿用旧context_projection准入说明。
+本地启动助手默认仅检查V1.5资源及固定模型预算，不读取密钥、不打开业务库、不启动服务或调用供应方。显式--start必须先核对绝对已存在schema151数据库和同release正常准入证据，再安全读取明确凭证来源，仅配置该启动进程环境并走原单worker服务入口；不初始化／迁移库、不自动导入技术证据，不沿用旧context_projection准入说明。
 
 1.5路径复用practical_usage的安全核查职责，必须登记新release并按最终8项计数收据适配；原函数对非旧PRACTICAL_RELEASES的提前return不能作为新版放行条件。新版入口遇未知release直接CONFIG_INVALID，不继承旧六项计数的索引假设。
 
@@ -3681,6 +3699,7 @@ backend/app/guide/{model_context,context_builder,context_projection,counted_cont
 | 输入项 | 类型或结构引用 | 来源与用途 | 必须提供 | 可为null | 缺失、默认及校验规则 |
 | --- | --- | --- | --- | --- | --- |
 | requirement_id | ID | 调用参数／由可信入口绑定 | 是 | 否 | 真实需求 |
+| document_id | ID | 所属助手文档投影选择 | 否 | 否 | 提供时必须同需求CURRENT，讨论摘要／完整状态与requirement.discussion_version取该文档；省略仅返回根初始投影，不能用于助手命令 |
 | expand | Text | 调用参数／由可信入口绑定 | 否 | 否 | 仅discussion；省略不取完整讨论 |
 
 #### 4.3 处理过程
@@ -3729,7 +3748,7 @@ backend/app/guide/{model_context,context_builder,context_projection,counted_cont
 | application_result | 具名读取结构；字段完整集合及类型采用右列明确映射 | 可空字段必有null；仅discussion按expand返回或null | 运行中尚未提交时为null；终态为NOT_REQUESTED／APPLIED／NO_CHANGE／NOT_APPLIED；APPLIED必须有真实DocumentEffect或批次结果；不能由response_type推断 |
 | progress_result | 具名读取结构；字段完整集合及类型采用右列明确映射 | 可空字段必有null；仅discussion按expand返回或null | NOT_REQUESTED／APPLIED／NO_CHANGE／REJECTED；运行中尚未提交时为null；终态为NOT_REQUESTED／APPLIED／NO_CHANGE／REJECTED；REJECTED以progress_error附安全原因，不把语义错误变成已更新 |
 | material_summary | 具名读取结构；字段完整集合及类型采用右列明确映射 | 可空字段必有null；仅discussion按expand返回或null | `{document_count,block_count,history_count,pending_count,omitted_count}`；来自最终实际请求，尚未装配时为null，不伪造零 |
-| MessageView | 具名读取结构；字段完整集合及类型采用右列明确映射 | 可空字段必有null；仅discussion按expand返回或null | 沿原消息字段，增加phase_ref、topic_refs、document_ids及可空program_receipt；程序结果不伪造ASSISTANT模型消息 |
+| MessageView | 具名读取结构；字段完整集合及类型采用右列明确映射 | 可空字段必有null；仅discussion按expand返回或null | 沿原消息字段，增加document_id、phase_ref、topic_refs、document_ids及可空program_receipt；程序结果不伪造ASSISTANT模型消息 |
 | RevisionSummary | 具名读取结构；字段完整集合及类型采用右列明确映射 | 可空字段必有null；仅discussion按expand返回或null | id、requirement_id、document_id、version_no、source_content_version、created_at、change_summary、source_refs、markers；markers为人工说明事件投影 |
 
 ACTIVE来源所引Revision仍可读但源头已变为另一版时为UPDATED；源头归档但原版仍可读并非UNAVAILABLE。来源查询失败或引用不存在才标UNAVAILABLE。源头没变化不代表模型已经复核语义一致，source_status只是版本比较。
@@ -4272,6 +4291,7 @@ RunView.final_result在完成时沿原summary、assistant_message_id、current_d
 | requirement_id | ID | 调用参数／由可信入口绑定 | 是 | 否 | 真实需求 |
 | status | GuideStatus[] | 调用参数／由可信入口绑定 | 否 | 否 | 缺失／空集不限制，新四态 |
 | action_type | ActionType[] | 调用参数／由可信入口绑定 | 否 | 否 | 缺失／空集不限制，含GENERATE |
+| document_id | ID | 运行所属文档 | 是 | 否 | 同需求CURRENT，所有筛选／分页总量先限定此文档 |
 | page | PositiveInt | 调用参数／由可信入口绑定 | 否 | 否 | 省略1 |
 
 #### 4.3 处理过程
@@ -4494,13 +4514,13 @@ RunView.final_result在完成时沿原summary、assistant_message_id、current_d
 | --- | --- | --- | --- | --- | --- |
 | requirement_id | ID | 调用参数／由可信入口绑定 | 是 | 否 | 真实需求 |
 | before_sequence_no | PositiveInt | 调用参数／由可信入口绑定 | 否 | 否 | 省略最新页 |
-| document_id | ID | 调用参数／由可信入口绑定 | 否 | 否 | 省略不按文档过滤 |
+| document_id | ID | 调用参数／由可信入口绑定 | 是 | 否 | 同需求真实CURRENT；只读取该文档所属消息，不以document_ids关联列表匹配 |
 | phase_ref | Text | 调用参数／由可信入口绑定 | 否 | 否 | 省略不按阶段过滤 |
 
 #### 4.3 处理过程
 
 1. 验证输入与真实对象归属，打开只读一致快照。
-2. 需求内序号；20条游标，保持顺序；过滤只改变阅读，不复制会话。
+2. 先按助手所属document_id限定消息，再使用需求内sequence_no作20条游标；核实同文档卡片／回答与状态，不读取根创建消息。
 3. 按SHR-READ-MODELS或V1.0未变投影返回；无列表项返回空集，单对象缺失NOT_FOUND，不产生业务副作用。
 
 #### 4.4 结果与完成范围
@@ -4520,7 +4540,7 @@ RunView.final_result在完成时沿原summary、assistant_message_id、current_d
 
 | 查询规则 | 确定定义 |
 | --- | --- |
-| 筛选／排序／分页 | 需求内序号；20条游标，保持顺序；过滤只改变阅读，不复制会话 |
+| 筛选／排序／分页 | 需求内sequence_no保持原顺序，但先按document_id限定，再20条游标；同文档卡片回答及可用性核实，不包含需求根创建记录 |
 | 并发变化与一致性 | 同一次读取快照；后续页反映请求当时状态，游标绑定同需求 |
 | 关联缺失 | 单实体NOT_FOUND；必要结构损坏不静默修正，返回存储／契约失败 |
 
@@ -4530,6 +4550,44 @@ RunView.final_result在完成时沿原summary、assistant_message_id、current_d
 |---|---|---|
 |backend/app/messages/queries.py|list_messages|APP-MSG-QUERY-C01|
 |backend/app/messages/contracts.py|list_messages_input / list_messages_result|应用输入输出；不含HTTP或ORM对象|
+
+<a id="app-msg-query-c02"></a>
+
+### APP-MSG-QUERY-C02 读取显式消息来源
+
+增量说明：复用MessageRepository与MessageView，增加明确单消息读取能力，避免为来源阅读扫描整个需求的共享历史。
+
+#### 4.1 能力说明
+
+| 内容 | 确定定义 |
+| --- | --- |
+| 能力引用与名称 | APP-MSG-QUERY-C02 读取显式消息来源 |
+| 处理目标 | 按明确消息身份读取保存原话／卡片回答，不改助手归属 |
+| 完成方式 | 同步只读 |
+
+#### 4.2 输入与来源
+
+| 输入项 | 类型 | 来源与用途 | 必须提供 | 可为null | 校验规则 |
+| --- | --- | --- | --- | --- | --- |
+| requirement_id | ID | 指定来源所在需求 | 是 | 否 | 真实需求 |
+| message_id | ID | 显式SourceRef消息身份 | 是 | 否 | 必须属于该需求；根创建消息只允许真实initial_message_id |
+
+#### 4.3 处理过程
+
+1. 在一致只读快照中核实消息与需求；有document_id时核实同需求文档。
+2. 使用来源文档的讨论投影核实结构化卡片／正式答案，返回实际MessageView。
+3. 只读来源不进入调用方默认历史，不切换所属或授予操作该来源卡片／正文的权限。
+
+#### 4.4 结果与完成范围
+
+| 结果 | 完成范围 | 输出 |
+| --- | --- | --- |
+| READ_OK | 同步只读 | MessageView，包含真实document_id；仅根创建记录可null |
+| INVALID_INPUT／NOT_FOUND／STORAGE_UNAVAILABLE／INTERNAL_ERROR | 无业务副作用 | 公共安全错误；不加载任意其他消息补位 |
+
+#### 4.8 实现定位
+
+backend/app/messages/{queries,api,http_models}.py与MessageRepository；前端source-reading复用getMessage，不新增来源服务。
 
 ## 6. 接口与其他入口
 
@@ -4623,7 +4681,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | Idempotency-Key | Header／RequestKey | 必传、非null；重复头拒绝 | 入口取得注入应用idempotency_key |
 | title | Body／Text | 必传：是；可null：否；1—20码点 | 同名映射APP-REQ-CMD-C01／4.2；未知字段拒绝 |
 | requirement_type | Body／NEW／CHANGE | 必传：是；可null：否；必填，不接受null | 同名映射APP-REQ-CMD-C01／4.2；未知字段拒绝 |
-| initial_idea | Body／Text | 必传：是；可null：否；1—10000码点 | 同名映射APP-REQ-CMD-C01／4.2；未知字段拒绝 |
+| initial_idea | Body／Text | 可选，省略为空正文；不可null；0—10000有效Unicode码点 | 同名映射APP-REQ-CMD-C01；正常表单仅title／requirement_type，无占位正文 |
 
 **响应与结果映射**
 
@@ -4655,6 +4713,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | 参数或参数集合 | 位置及传输结构 | 必传、可空与缺失规则 | 应用输入映射及附加接入限制 |
 | --- | --- | --- | --- |
 | requirement_id | Path／ID | 必传、非null；十进制正安全整数 | 映射同名应用字段，归属由APP核实 |
+| document_id | Query／ID | 可选、非null，同需求CURRENT | 映射APP-REQ-QUERY-C02的文档讨论投影；页面选定文档后显式传入 |
 | expand | Query／Text | 可选，仅discussion；省略discussion为null | 同名映射应用查询结构；不同筛选AND，多值自身OR |
 | Body | 无请求体 | 不得提供 | 查询只读，不模型／计数 |
 
@@ -4690,7 +4749,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | requirement_id | Path／ID | 必传、非null；十进制正安全整数 | 映射同名应用字段，归属由APP核实 |
 | Idempotency-Key | Header／RequestKey | 必传、非null；重复头拒绝 | 入口取得注入应用idempotency_key |
 | 属性变更Body | {expected_metadata_version,changes:{title?,status?}} | 与讨论命令互斥，至少一项变化字段；null拒绝 | APP-REQ-CMD-C02；缺失changes子项保持原值 |
-| 讨论命令Body | {expected_discussion_version,discussion_command} | 与属性变更互斥；命令见APP-REQ-CMD-C06 | 不得接受完整discussion_state_json覆盖 |
+| 讨论命令Body | {document_id,expected_discussion_version,discussion_command} | 与属性变更互斥，document_id必填且同需求CURRENT；命令见APP-REQ-CMD-C06 | 不得接受完整discussion_state_json覆盖 |
 
 **响应与结果映射**
 
@@ -5030,6 +5089,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | --- | --- | --- | --- |
 | requirement_id | Path／ID | 必传、非null；十进制正安全整数 | 映射同名应用字段，归属由APP核实 |
 | Idempotency-Key | Header／RequestKey | 必传、非null；重复头拒绝 | 入口取得注入应用idempotency_key |
+| document_id | Body／ID | 必传、非null，同需求CURRENT | APP-GUIDE-CMD-C01助手所属；不同于target中的文档身份 |
 | expected_discussion_version | Body／PositiveInt | 必传：是；可null：否；必填，不接受null | 同名映射APP-GUIDE-CMD-C01／4.2；未知字段拒绝 |
 | operation | Body／Operation | 必传：是；可null：否；必填，不接受null | 同名映射APP-GUIDE-CMD-C01／4.2；未知字段拒绝 |
 | instruction | Body／Text | 必传：是；可null：否；1—10000码点，保存原文 | 同名映射APP-GUIDE-CMD-C01／4.2；未知字段拒绝 |
@@ -5207,6 +5267,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | requirement_id | Path／ID | 必传、非null；十进制正安全整数 | 映射同名应用字段，归属由APP核实 |
 | status | Query／GuideStatus[] | 可选重复参数名，4种新状态 | 同名映射应用查询结构；不同筛选AND，多值自身OR |
 | action_type | Query／ActionType[] | 可选重复参数名，含GENERATE | 同名映射应用查询结构；不同筛选AND，多值自身OR |
+| document_id | Query／ID | 必传、非null，同需求CURRENT | 运行历史与分页总量限定所属document_id |
 | page | Query／PositiveInt | 可选默认1 | 同名映射应用查询结构；不同筛选AND，多值自身OR |
 | Body | 无请求体 | 不得提供 | 查询只读，不模型／计数 |
 
@@ -5746,8 +5807,8 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | --- | --- | --- | --- |
 | requirement_id | Path／ID | 必传、非null；十进制正安全整数 | 映射同名应用字段，归属由APP核实 |
 | before_sequence_no | Query／PositiveInt | 可选；省略读取最新页 | 同名映射应用查询结构；不同筛选AND，多值自身OR |
-| document_id | Query／ID | 可选，只过滤阅读关联，不复制消息 | 同名映射应用查询结构；不同筛选AND，多值自身OR |
-| phase_ref | Query／Text | 可选，需求内真实阶段 | 同名映射应用查询结构；不同筛选AND，多值自身OR |
+| document_id | Query／ID | 必传、非null，同需求CURRENT | APP-MSG-QUERY-C01真实所属，不是可选关联阅读过滤 |
+| phase_ref | Query／Text | 可选，所属文档内真实阶段 | 同名映射应用查询结构；不同筛选AND，多值自身OR |
 | Body | 无请求体 | 不得提供 | 查询只读，不模型／计数 |
 
 **响应与结果映射**
@@ -5996,6 +6057,33 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 
 <a id="bnd-worker"></a>
 
+<a id="bnd-msg-api-i43"></a>
+
+### BND-MSG-API-I43 读取显式消息来源
+
+#### 6.2 HTTP接口
+
+| 内容 | 确定定义 |
+| --- | --- |
+| 接口引用与名称 | BND-MSG-API-I43 读取显式消息来源 |
+| 方法与路径 | GET /api/v1/conversation-messages/{message_id} |
+| 用途与响应方式 | 显式来源同步JSON读取，不扫描共享会话 |
+| 公共契约 | BND-HTTP-COMMON |
+| 应用绑定 | APP-MSG-QUERY-C02 |
+
+| 参数 | 位置及结构 | 必传、可空与规则 | 映射 |
+| --- | --- | --- | --- |
+| message_id | Path／ID | 必传、非null，正安全整数 | 同名应用字段 |
+| requirement_id | Query／ID | 必传、非null，正安全整数 | 同名应用字段，同需求核实 |
+| Body | 无 | 不得提供 | 不执行业务写入／装配／计数／Chat |
+
+| 结果 | HTTP | 输出及保证 |
+| --- | --- | --- |
+| READ_OK | 200 | data为MessageView；不能以当前选中文档伪造来源归属 |
+| 应用错误／公共解析失败 | BND-HTTP-COMMON | 白名单安全错误，无业务副作用 |
+
+接口实现定位：backend/app/messages/{api,http_models}.py；frontend/src/api/walle.ts的getMessage。
+
 ### BND-WORKER 后台执行与恢复入口
 
 #### 6.4 事件、调度、Tool与其他入口
@@ -6037,11 +6125,11 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 
 | 对象、成员或技术记录 | 表或其他载体及关联键 | 持久化字段范围 | 未存储字段及恢复来源 |
 | --- | --- | --- | --- |
-| OBJ-REQ | requirements，id | 本文全部根字段；discussion_state_json存值对象 | 读取摘要派生，不存AI完整率 |
-| OBJ-DOC | requirement_documents，id／requirement_id／target_document_id | 本文全部根字段与正式Markdown／BlockState | 确认标记由confirmed_revision_id与当前Revision派生 |
+| OBJ-REQ | requirements，id | 原需求字段／根初始投影保留；实际助手讨论不存为需求共享状态 | 文档级投影由get_for_document读取 |
+| OBJ-DOC | requirement_documents，id／requirement_id | 原根字段、Markdown／BlockState及CURRENT独立discussion_version／discussion_state_json | 确认由Revision派生；新文档助手独立初始化 |
 | OBJ-REV | revisions，id／document_id | 不可变CONTENT快照与来源／摘要 | 人工标记说明从事件投影 |
-| OBJ-MSG | conversation_messages，id／requirement_id／sequence_no | 原消息、结构化卡片／响应和关联 | 不复制多份对话 |
-| OBJ-GUIDE／LLMUse | guide_runs／llm_uses，run_id／call_no／attempt_no | 冻结依据、步骤、实际请求／响应、用量和结果 | 模型不可见私有部分只存ContextBasis |
+| OBJ-MSG | conversation_messages，id／requirement_id／document_id／sequence_no | 原消息、卡片／答案及真实所属；sequence_no仍按需求 | 文档游标索引，不复制对话 |
+| OBJ-GUIDE／LLMUse | guide_runs的requirement_id＋document_id，llm_uses的run_id／call_no／attempt_no | 原执行依据／模型请求及结果，运行所属不可变 | 执行目标与所属分开；仅私有依据保存完整权限 |
 | OBJ-BATCH／Suggestion | suggestion_batches／suggestions，batch_id／target_document_id | 固定补丁、决定、来源、实际应用 | 不为候选再建平行表 |
 | OBJ-COMMENT | comments，id／document_id | 原话、锚点、状态与软删除 | 动态定位可从当前快照重算，但历史来源用冻结材料 |
 | 编辑／幂等／序列 | manual_draft_context及原来源证明表、idempotency_records、sequences | 沿用原职责，所有文档引用改显式目标 | 不迁移旧记录 |
@@ -6066,7 +6154,8 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | 消息序号／正式回答 | UNIQUE(requirement_id,sequence_no)；每原卡片至多一CARD_RESPONSE | 原题与答案唯一 | CARD_ALREADY_ANSWERED或幂等原结果 |
 | 运行／真实调用 | UNIQUE(guide_run_id,call_no,attempt_no)；真实父／重试关系 | 实际用量及一次调用记录 | 不合并／漏计实际调用 |
 | 状态／占用配套 | 枚举及时间CHECK；IDLE无活动字段，其他状态指真实活动对象 | SHR-OCCUPANCY | WORK_STATE_INCONSISTENT，不自动猜测修正 |
-| 原始描述循环引用 | 初始消息与Requirement在同事务建立，相关FK可延迟到提交检查 | 创建无半份消息／根 | 同事务失败回滚 |
+| 助手所属与查询索引 | 消息／运行／回答复合归属外键，只有需求initial_message_id可空document_id；运行所属不可变；messages_document_cursor与guide_runs_document_history按需求＋文档 | 服务端文档级隔离 | 错归属／混接拒绝并回滚，读取不能退回需求共享窗口 |
+| 根创建记录循环引用 | 初始消息与Requirement在同事务建立，相关FK可延迟到提交检查 | 创建无半份消息／根 | 同事务失败回滚 |
 | 引用／删除 | 引用对象存在；正式内容／历史无级联物理删除；归档和软删除按APP | 不可丢历史来源 | 关联拒绝；不得级联清除用户正文 |
 | 正式提交幂等关联 | run／document／CONTENT_COMMITTED有唯一业务关联；人工／批次走原幂等及完成记录 | 重启不重复Vn+1 | 已提交则核实完成，未知不自动Chat |
 
@@ -6079,13 +6168,16 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | 重复执行与版本不匹配 | 同schema只校验结构和摘要；错误版本保留数据并拒绝，不自动迁移／清库 |
 | 失败与再次执行 | 结构创建在事务内；失败回滚，明确原因后可再次初始化新目标，不篡改旧测试库 |
 
-现有Database采用schema版本、脚本摘要和启动校验；1.5应增加独立的新库初始化方案及明确的应用schema版本，不编辑已冻结的001—004历史脚本。启动指向不匹配schema的库时明确拒绝；不得自动清库、迁移或套用旧字段默认值。
+Database当前业务Schema为151，保留版本／SQL脚本摘要校验与显式新库初始化，不编辑冻结001—004脚本；不匹配库拒绝，不自动迁移／清库。用户明确许可的旧V1.5测试库重建由限定路径、进程锁及原子替换工具执行，不能在正常启动中运行。
 
 实施时使用明确配置的新数据路径创建1.5空库，前后端与新资源同步发布。数据路径的实际选定和初始化由后续实施任务完成，本设计不提供可误执行的删库命令。旧测试库不进入运行依赖；源码和设计历史仍保留。
 
 新库必须从零建立全部必要表、触发器、索引、序列、幂等与手工来源证明结构，不能只跑一个假设存在旧库的增量ALTER脚本。保留原模块表名和仓储职责；不引入第二套业务数据库。
 
+原schema150技术调用证据仍按冻结原字节与v1_5_evidence_150.sql只读核实，准入配置及来源独立保留；此路径仅供证据，不为旧业务提供迁移或兼容。未来删除测试数据须另按当前授权，不能复用本轮一次清理许可。
+
 <a id="inf-consistency"></a>
+
 
 ### 7.2 关键读写与一致性保证
 
@@ -6173,7 +6265,7 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 
 | 场景引用与名称 | 规格依据 | 前置条件与输入 | 操作或故障场景 | 预期结果 | 验证方式 |
 | --- | --- | --- | --- | --- | --- |
-| A15-01 S-01 | APP-REQ-CMD-C01 | 独立新数据；新建含初始描述的需求 | 新建含初始描述的需求 | 一条初始消息、零文档、零GuideRun／LLMUse；进入详情不自动Chat | 可控响应＋实际SQLite／HTTP；涉及页面再真实交互 |
+| A15-01 S-01 | APP-REQ-CMD-C01 | 独立新数据；仅标题／类型 | 创建并用原key核实 | 一条无正文根创建记录、零文档／运行／调用；不复制初始原话；省略与显式空正文幂等相同 | 实际HTTP／SQLite与表单 |
 | A15-02 S-02—04 | APP-GUIDE-ORCH-C01／AI-EVIDENCE | 独立新数据；描述电影记录推荐想法，多轮选择后超过10条消息 | 描述电影记录推荐想法，多轮选择后超过10条消息 | AI给推荐主流程，实际请求仍含相关有效决定，不从头重复核心目标；主题评估可追溯 | 可控响应程序测试＋EV-DISCUSS真实模型评测 |
 | A15-03 S-04—05 | APP-GUIDE-CMD-C01／SHR-DOCUMENT-COMMIT | 独立新数据；AI建议出稿但用户未同意；随后点击生成 | AI建议出稿但用户未同意；随后点击生成 | 前者零正文变化；后者一次接受／至多一次Chat，成功出现未确认V1，无二次采用 | 可控响应＋实际SQLite／HTTP；涉及页面再真实交互 |
 | A15-04 S-06—07 | APP-GUIDE-CMD-C07／SHR-DOCUMENT-COMMIT | 独立新数据；读稿指出不足，再明确更新 | 读稿指出不足，再明确更新 | 普通反馈不改稿；明确REVISE只改绑定目标／范围，形成一次新版本 | 可控响应＋实际SQLite／HTTP；涉及页面再真实交互 |
@@ -6186,9 +6278,12 @@ RunReceipt={processing:MODEL,guide_run_id,user_message_id}；ProgramReceipt={pro
 | A15-11 卡片 | APP-GUIDE-CMD-C06 | 独立新数据；正式答案提交、旧卡片过期、精确事实确认 | 正式答案提交、旧卡片过期、精确事实确认 | 问题与选择原文可查；待答卡片不占用需求；精确确认程序直接写入 | 可控响应＋实际SQLite／HTTP；涉及页面再真实交互 |
 | A15-12 上下文 | AI-CONTEXT | 独立新数据；同消息兼作长期依据与近期历史，同块兼作来源／目标 | 同消息兼作长期依据与近期历史，同块兼作来源／目标 | 原始正文各一份且保留多用途引用；不把只读来源变为可写 | 可控响应＋实际SQLite／HTTP；涉及页面再真实交互 |
 | A15-13 输出 | AI-OUTPUT | 独立新数据；格式不符、语义无推进、截断、用量缺失 | 格式不符、语义无推进、截断、用量缺失 | 原始回复可见；不自动修复重试；不写不完整稿；缺失用量为未记录 | 可控响应＋实际SQLite／HTTP；涉及页面再真实交互 |
-| A15-14 复用 | OBJ／BND-API／实现定位 | 独立新数据；静态核对实际改造 | 静态核对实际改造 | 七类根及原编辑／批次／轮询／网关复用，仅两种新增HTTP方法；没有任务／授权／上下文服务族 | 静态契约核对 |
+| A15-14 复用 | OBJ／BND-API／实现定位 | 独立新数据；静态核对实际改造 | 静态核对实际改造 | 七类根及原编辑／批次／轮询／网关复用，文档创建、元数据维护及显式单消息读取方法；没有任务／授权／上下文服务族 | 静态契约核对 |
 | A15-15 新数据范围 | INF-DB初始化 | 独立新数据；新1.5数据库和同步发布客户端 | 新1.5数据库和同步发布客户端 | 不依赖旧记录、旧状态映射或legacy请求；启动不会自动删除／转换旧库 | 可控响应＋实际SQLite／HTTP；涉及页面再真实交互 |
 | A15-16 布局 | BND-DETAIL／SHR-UI | 独立新数据；切换阅读文档、开关请求详情、收窄窗口 | 切换阅读文档、开关请求详情、收窄窗口 | 目标绑定不变、输入和滚动保留，独立滚动与键盘操作可用 | 真实浏览器点击／键盘／视口 |
+| A15-17 文档助手归属 | OBJ-MSG／GUIDE／DOC及SHR-DISCUSSION | 同需求A／B、相同局部引用、两份草稿及历史 | A发起／更新进展后切B，再回A恢复UNKNOWN | 历史／pending／进展／卡片／来源／运行只归各文档；原请求不重绑，晚到响应不覆盖B | 实际SQLite／HTTP、owner专项及隔离浏览器 |
+| A15-18 显式来源 | AI-CONTEXT／APP-MSG-QUERY-C02 | A／B已有不同对话和进展 | A只读引用B某消息／版本／运行材料 | 未引用的B历史／进展不发送；引用固定快照，不复制状态或授予B写权限；根消息仅显式选择可读 | 私有依据／Wire／计数／审计一致性及明确来源GET |
+| A15-19 新文档及无所属 | APP-DOC-CMD-C05／APP-GUIDE-CMD-C01 | 无文档或A生成B | 无所属发送、EXISTING异文档目标、新稿保存 | 无所属及异目标拒绝；生成B后B独立空助手；需求互斥仍有效 | 实际事务／上下文及页面空态 |
 
 **后端验证要求**
 

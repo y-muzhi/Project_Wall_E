@@ -486,6 +486,7 @@ export type RunReceipt = ReturnType<typeof runReceipt>;
 const runFields = {
   id,
   requirement_id: id,
+  document_id: id,
   action_type: choices(runActions),
   function_type: choices(['collaboration_v1']),
   source_type: choices(['USER_INSTRUCTION', 'REVIEW_RESULT', 'COMMENT']),
@@ -726,6 +727,7 @@ export const message = (value: unknown) => {
   const row = exact(value, [
     'id',
     'requirement_id',
+    'document_id',
     'guide_run_id',
     'sequence_no',
     'role',
@@ -743,6 +745,7 @@ export const message = (value: unknown) => {
   const base = shape({
     id,
     requirement_id: id,
+    document_id: nullable(id),
     guide_run_id: nullable(id),
     sequence_no: id,
     role: choices(['USER', 'ASSISTANT']),

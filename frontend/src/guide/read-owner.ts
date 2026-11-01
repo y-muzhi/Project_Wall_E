@@ -93,9 +93,15 @@ export class RequirementAiRead {
       error: null,
       active: true,
     });
-    if (detail.activity.kind === 'GUIDE')
+    if (
+      detail.activity.kind === 'GUIDE' &&
+      detail.activity.run.document_id === detail.selected_document_id
+    )
       this.select(detail.activity.run, 'ACTIVITY', detail.activity.run);
-    else if (detail.activity.kind === 'BATCH')
+    else if (
+      detail.activity.kind === 'BATCH' &&
+      detail.activity.batch.target_document_id === detail.selected_document_id
+    )
       this.select(
         { id: detail.activity.batch.guide_run_id, requirement_id: detail.requirement.id },
         'ACTIVITY',
@@ -124,6 +130,7 @@ export class RequirementAiRead {
   adopt(actual: DetailSnapshot): void {
     if (this.closed) return;
     if (
+      actual.selected_document_id !== this.value.detail.selected_document_id ||
       actual.requirement.id !== this.value.detail.requirement.id ||
       (actual.current !== null &&
         (actual.current.requirement_id !== actual.requirement.id ||
@@ -131,9 +138,17 @@ export class RequirementAiRead {
     )
       throw TypeError('Owned actual detail required');
     this.publish({ detail: capture(actual) });
-    if (actual.activity.kind === 'GUIDE' && this.value.selection !== 'HISTORY')
+    if (
+      actual.activity.kind === 'GUIDE' &&
+      actual.activity.run.document_id === actual.selected_document_id &&
+      this.value.selection !== 'HISTORY'
+    )
       this.select(actual.activity.run, 'ACTIVITY', actual.activity.run);
-    else if (actual.activity.kind === 'BATCH' && this.value.selection !== 'HISTORY')
+    else if (
+      actual.activity.kind === 'BATCH' &&
+      actual.activity.batch.target_document_id === actual.selected_document_id &&
+      this.value.selection !== 'HISTORY'
+    )
       this.select(
         { id: actual.activity.batch.guide_run_id, requirement_id: actual.requirement.id },
         'ACTIVITY',

@@ -17,7 +17,11 @@ from .contracts import MESSAGE_FIELDS, list_messages_input, list_messages_result
 def _same_run_root(repository, row, requirement_id):
     if row['guide_run_id'] is not None:
         run = repository.guide_binding(row['guide_run_id'])
-        if run is None or run['requirement_id'] != requirement_id:
+        if (
+            run is None
+            or run['requirement_id'] != requirement_id
+            or run['document_id'] != row['document_id']
+        ):
             raise ValueError('Message run belongs to another requirement')
 
 
@@ -25,6 +29,7 @@ def card_state(repository, root, row, protocol, catalog=None):
     replies = repository.formal_responses(row['id'])
     if len(replies) > 1 or any(
         reply['requirement_id'] != root['id']
+        or reply['document_id'] != row['document_id']
         or reply['sequence_no'] <= row['sequence_no']
         or reply['created_at'] < row['created_at']
         for reply in replies
@@ -35,7 +40,7 @@ def card_state(repository, root, row, protocol, catalog=None):
     if replies:
         return 'ANSWERED'
     if (
-        repository.latest_card_id(root['id']) != row['id']
+        repository.latest_card_id(root['id'], row['document_id']) != row['id']
         or repository.newer_input_exists(row)
         or row['guide_run_id'] is None
     ):
@@ -47,7 +52,9 @@ def card_state(repository, root, row, protocol, catalog=None):
         or source['function_type'] != 'collaboration_v1'
     ):
         raise ValueError('Card source is not its actual collaboration round')
-    if source['status'] != 'COMPLETED' or repository.newer_run_exists(root['id'], source['id']):
+    if source['status'] != 'COMPLETED' or repository.newer_run_exists(
+        root['id'], source['id'], row['document_id']
+    ):
         return 'EXPIRED'
     cards = decode_cards(row['structured_content_json'], protocol)
     binding = cards['program_binding']
@@ -91,7 +98,9 @@ def project_message(repository, root, row, protocol, catalog=None):
         if field
         not in ('structured_content', 'card_state', 'topic_refs', 'document_ids', 'program_receipt')
     }
-    if row['requirement_id'] != root['id']:
+    if row['requirement_id'] != root['id'] or row['document_id'] != root.get(
+        'assistant_document_id'
+    ):
         raise ValueError('Message belongs to another requirement')
     _same_run_root(repository, row, root['id'])
     import json
@@ -139,25 +148,66 @@ def list_messages(database, payload, *, catalog=None):
         return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
     try:
         with database.transaction() as connection:
-            root = RequirementRepository(connection).get(request.requirement_id)
+            root = RequirementRepository(connection).get_for_document(
+                request.requirement_id, request.document_id
+            )
             if root is None:
                 result = {'code': 'NOT_FOUND', 'data': None, 'details': None}
             else:
                 repository = MessageRepository(connection)
-                rows = repository.window(root['id'], request.before_sequence_no)
+                rows = repository.window(
+                    root['id'], request.before_sequence_no, request.document_id
+                )
                 protocol = (
                     (catalog if catalog is not None else ResourceCatalog()).collaboration
                     if any(row['message_type'] != 'TEXT' for row in rows)
                     else None
                 )
                 items = [project_message(repository, root, row, protocol, catalog) for row in rows]
-                more = bool(rows) and repository.older_exists(root['id'], rows[0]['sequence_no'])
+                more = bool(rows) and repository.older_exists(
+                    root['id'], rows[0]['sequence_no'], request.document_id
+                )
                 result = {
                     'code': 'READ_OK',
                     'data': list_messages_result(items, request, more),
                     'details': None,
                 }
         return result
+    except StorageUnavailable:
+        return {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None}
+    except Exception:
+        return {'code': 'INTERNAL_ERROR', 'data': None, 'details': None}
+
+
+def get_message(database, requirement_id, message_id, *, catalog=None):
+    """Read one explicitly addressed source; never scan other conversations."""
+    try:
+        strict_integer(requirement_id, 'requirement_id')
+        strict_integer(message_id, 'message_id')
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+    try:
+        with database.transaction() as connection:
+            repository = MessageRepository(connection)
+            row = repository.get(message_id)
+            if row is None or row['requirement_id'] != requirement_id:
+                return {'code': 'NOT_FOUND', 'data': None, 'details': None}
+            roots = RequirementRepository(connection)
+            root = (
+                roots.get(requirement_id)
+                if row['document_id'] is None
+                else roots.get_for_document(requirement_id, row['document_id'])
+            )
+            if (
+                root is None
+                or row['document_id'] is None
+                and row['id'] != root['initial_message_id']
+            ):
+                return {'code': 'NOT_FOUND', 'data': None, 'details': None}
+            data = project_message(
+                repository, root, row, (catalog or ResourceCatalog()).collaboration, catalog
+            )
+            return {'code': 'READ_OK', 'data': data, 'details': None}
     except StorageUnavailable:
         return {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None}
     except Exception:

@@ -15,7 +15,7 @@ class ListMessagesRequest:
 
     @classmethod
     def parse(cls, request):
-        query = request_query(request, singles=('before_sequence_no',))
+        query = request_query(request, singles=('before_sequence_no', 'document_id'))
         cursor = (
             None
             if 'before_sequence_no' not in query
@@ -26,6 +26,7 @@ class ListMessagesRequest:
                 request.path_params['requirement_id'], 'requirement_id'
             ),
             'before_sequence_no': cursor,
+            'document_id': decimal_integer(query.get('document_id'), 'document_id'),
         }
         list_messages_input(payload)
         return cls(payload)
@@ -117,4 +118,29 @@ class SubmitCardResponsesResponse:
             from .contracts import program_receipt
 
             value = program_receipt(data)
+        return value, None
+
+
+@dataclass(frozen=True)
+class GetMessageRequest:
+    requirement_id: int
+    message_id: int
+
+    @classmethod
+    def parse(cls, request):
+        query = request_query(request, singles=('requirement_id',))
+        return cls(
+            decimal_integer(query.get('requirement_id'), 'requirement_id'),
+            decimal_integer(request.path_params['message_id'], 'message_id'),
+        )
+
+
+class GetMessageResponse:
+    errors = ListMessagesResponse.errors
+
+    @staticmethod
+    def project(data, request):
+        value = message_read_model(data)
+        if value['id'] != request.message_id or value['requirement_id'] != request.requirement_id:
+            raise ValueError('Explicit message source ownership differs')
         return value, None

@@ -50,17 +50,17 @@ test('refresh failure retains last successful condition and rows, differentiates
   run=controller.query(query({page:99}));await tick();port.calls[4].resolve(page(99,21,[]));await run;assert.equal(controller.phase,'OUT_OF_RANGE');
   run=controller.refresh();await tick();const before=controller.state;controller.dispose();assert.equal(port.calls[5].signal.aborted,true);port.calls[5].resolve(page(99,0,[]));await run;assert.equal(controller.state,before);
 });
-function validDraft() {return {title:' 标题😀 ',type:'NEW',idea:'\u0085初始\r\n想法\u0085'};}
+function validDraft() {return {title:' 标题😀 ',type:'NEW'};}
 function createPort() { const prepared=[],calls=[];return {prepared,calls,api:{prepareCreateRequirement(payload) {const id=prepared.length+1;prepared.push(payload);return {submit() {const wait=deferred();calls.push({id,payload,...wait});return wait.promise;}};}}}; }
-test('three fields preserve native codepoint bounds and never require a template or mode', async () => {
-  assert.deepEqual(Object.keys(createPayload(emptyCreateDraft).fields),['title','type','idea']);
+test('title and type create without an initial idea, template or mode', async () => {
+  assert.deepEqual(Object.keys(createPayload(emptyCreateDraft).fields),['title','type']);
   const port=createPort(),flow=new CreateRequirementFlow(port.api);assert.equal(flow.hasInput,false);await flow.submit();assert.equal(port.prepared.length,0);
   flow.edit({...emptyCreateDraft,type:'NEW'});assert.equal(flow.state.draft.type,'NEW');assert.equal(flow.hasInput,true);
   flow.edit({...emptyCreateDraft});assert.equal(flow.hasInput,false);
-  const valid=validDraft(),payload=createPayload(valid).payload;assert.equal(payload.title,'标题😀');assert.equal(payload.initial_idea,'初始\n想法');
-  assert.deepEqual(Object.keys(payload).sort(),['initial_idea','requirement_type','title']);
-  assert.deepEqual(createPayload({...valid,title:'😀'.repeat(20),idea:'😀'.repeat(10000)}).fields,{});
-  assert.deepEqual(Object.keys(createPayload({...valid,title:'😀'.repeat(21),idea:'😀'.repeat(10001)}).fields),['title','idea']);
+  const valid=validDraft(),payload=createPayload(valid).payload;assert.equal(payload.title,'标题😀');
+  assert.deepEqual(Object.keys(payload).sort(),['requirement_type','title']);
+  assert.deepEqual(createPayload({...valid,title:'😀'.repeat(20)}).fields,{});
+  assert.deepEqual(Object.keys(createPayload({...valid,title:'😀'.repeat(21)}).fields),['title']);
   assert.equal(createPayload({...valid,type:'CHANGE'}).payload.requirement_type,'CHANGE');
   assert.throws(()=>flow.edit({...emptyCreateDraft,template:null}));flow.dispose();
 });
@@ -74,8 +74,8 @@ test('pending create coalesces, unknown preserves exact prepared action/input an
 });
 test('definite server field errors map to form, edits prepare new action; disposal ignores late success without abort or false rollback', async () => {
   const port=createPort(),flow=new CreateRequirementFlow(port.api);flow.edit(validDraft());let pending=flow.submit();await tick();
-  port.calls[0].reject(new ApiRejected('VALIDATION_FAILED','不合法',{field_errors:[{field:'initial_idea',reason:'INVALID_FORMAT',message:'初始想法不合法'}]},'diagnostic',422));await pending;
-  assert.equal(flow.state.unknown,false);assert.deepEqual(flow.state.fields,{idea:'初始想法不合法'});assert.equal(flow.state.error,null);
+  port.calls[0].reject(new ApiRejected('VALIDATION_FAILED','不合法',{field_errors:[{field:'title',reason:'INVALID_FORMAT',message:'标题不合法'}]},'diagnostic',422));await pending;
+  assert.equal(flow.state.unknown,false);assert.deepEqual(flow.state.fields,{title:'标题不合法'});assert.equal(flow.state.error,null);
   flow.edit({...flow.state.draft,title:'新标题'});pending=flow.submit();await tick();assert.equal(port.prepared.length,2);const before=flow.state;flow.dispose();
   port.calls[1].resolve({data:{requirement:{id:9},initial_message_id:10,documents:[]}});await pending;assert.equal(flow.state,before);
 });

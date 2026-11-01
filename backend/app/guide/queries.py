@@ -47,7 +47,8 @@ def list_guide_runs(database: Database, payload: object) -> dict:
         with database.transaction() as connection:
             if (
                 connection.execute(
-                    'SELECT 1 FROM requirements WHERE id=?', (request.requirement_id,)
+                    "SELECT 1 FROM requirement_documents WHERE requirement_id=? AND id=? AND document_type='CURRENT'",
+                    (request.requirement_id, request.document_id),
                 ).fetchone()
                 is None
             ):

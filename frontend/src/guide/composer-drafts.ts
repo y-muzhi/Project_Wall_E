@@ -3,20 +3,29 @@ type StoragePort = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 /** Only unsubmitted text. No operation, scope, API key or command receipt is restored. */
 export class ComposerDrafts {
   private readonly storage: () => StoragePort;
-  constructor(storage: () => StoragePort = () => sessionStorage) {
+  private readonly documentId: number | null;
+  constructor(storage: () => StoragePort = () => sessionStorage, documentId: number | null = null) {
+    this.documentId = documentId;
     this.storage = storage;
   }
   private key(requirement: number): string {
-    return `walle:v1.5:composer:${positiveInteger(requirement)}`;
+    return `walle:v1.5:document-composer:${positiveInteger(requirement)}:${positiveInteger(this.documentId)}`;
   }
   load(requirement: number): Readonly<{ instruction: string; warning: string | null }> {
+    if (this.documentId === null) return { instruction: '', warning: null };
     try {
       const raw = this.storage().getItem(this.key(requirement));
       if (raw === null) return { instruction: '', warning: null };
-      const row = exact(JSON.parse(raw), ['schema_version', 'requirement_id', 'instruction']);
+      const row = exact(JSON.parse(raw), [
+        'schema_version',
+        'requirement_id',
+        'document_id',
+        'instruction',
+      ]);
       if (
         row.schema_version !== 1 ||
         row.requirement_id !== requirement ||
+        row.document_id !== this.documentId ||
         typeof row.instruction !== 'string' ||
         [...row.instruction].length > 10000
       )
@@ -31,7 +40,12 @@ export class ComposerDrafts {
       if ([...instruction].length > 10000) throw TypeError('Oversized draft');
       this.storage().setItem(
         this.key(requirement),
-        JSON.stringify({ schema_version: 1, requirement_id: requirement, instruction }),
+        JSON.stringify({
+          schema_version: 1,
+          requirement_id: requirement,
+          document_id: this.documentId,
+          instruction,
+        }),
       );
       return null;
     } catch {

@@ -43,16 +43,18 @@ class Counter:
 
 
 def inputs(workspace, *, neighbors=False, history=False):
-    if history:
-        with workspace[0].transaction(write=True) as connection:
-            at = connection.execute('SELECT updated_at FROM requirements WHERE id=1').fetchone()[0]
-            identity = entity_id(connection, EntityKind.MESSAGE)
-            MessageRepository(connection).create_user_text(identity, 1, None, '可选旧历史', str(uuid4()), at)
     changes = {}
     if neighbors:
         current = document(workspace, reference=workspace[2].collaboration.reference('structure.brief'))['data']['document']
         changes = {'operation': 'REVISE', 'target': {'kind': 'EXISTING', 'document_id': current['id'], 'expected_content_version': 1},
             'scope': {'scope_type': 'BLOCK', 'scope_ref': {'block_id': current['block_state_json']['blocks'][3]['block_id']}}}
+    from backend.tests.guide.test_v15_acceptance import ensure_assistant_document
+    ensure_assistant_document(workspace)
+    if history:
+        with workspace[0].transaction(write=True) as connection:
+            at = connection.execute('SELECT updated_at FROM requirements WHERE id=1').fetchone()[0]
+            identity = entity_id(connection, EntityKind.MESSAGE)
+            MessageRepository(connection).create_user_text(identity,1,None,'可选旧历史',str(uuid4()),at,document_id=1)
     assert accept(workspace, **changes)['code'] == 'GUIDE_ACCEPTED'
     with workspace[0].transaction() as connection:
         return read_canonical(connection, 1, workspace[2])
@@ -108,7 +110,7 @@ def test_three_candidates_remove_history_then_only_optional_neighbors(workspace,
     assert len(counter.calls) == 3
     assert [len(json.loads(texts[1])['recent_history']) for texts in counter.calls] == [2, 0, 0]
     assert [len(json.loads(texts[1])['documents'][0]['blocks']) for texts in counter.calls] == [5, 5, 1]
-    assert '电影' in result.input_json and result.input['current_request']['content']
+    assert '用户原话' in result.input_json and result.input['current_request']['content']
     assert verify_counted(result, workspace[2], profile) == result.counting_evidence
 
 

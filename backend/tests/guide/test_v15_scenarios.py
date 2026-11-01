@@ -38,10 +38,11 @@ def test_discuss_defer_generate_local_revision_compare_and_review_are_separate_a
             response = client.get('/api/v1'+path);assert response.status_code == 200, response.text
             return response.json()['data']
         def accept(operation, instruction, target=None, scope=None, refs=()):
-            root = get('/requirements/1')['requirement']
-            return command('POST', '/requirements/1/guide-runs', {'expected_discussion_version': root['discussion_version'],
+            owner = target['document_id'] if target is not None and target['kind']=='EXISTING' else 1
+            root = get('/requirements/1?document_id='+str(owner))['requirement']
+            return command('POST', '/requirements/1/guide-runs', {'document_id':owner, 'expected_discussion_version': root['discussion_version'],
                 'operation': operation, 'instruction': instruction, 'target': target, 'scope': scope,
-                'source_refs': list(refs), 'proposal_ref': None, 'acknowledge_source_changes': False})
+                'source_refs': [{'kind':'MESSAGE','message_id':1},*refs], 'proposal_ref': None, 'acknowledge_source_changes': False})
         def execute(receipt, returned):
             gateway = Gateway(returned);counter = Counter(['OK'])
             result = asyncio.run(execute_guide_run(database, {'guide_run_id': receipt['guide_run_id']}, process_lock=executor.process_lock,
@@ -52,6 +53,7 @@ def test_discuss_defer_generate_local_revision_compare_and_review_are_separate_a
 
         created = command('POST', '/requirements', {'title': title, 'requirement_type': 'NEW', 'initial_idea': idea})
         assert created['documents'] == [] and counts(database)['llm_uses'] == counts(database)['guide_runs'] == 0
+        command('POST','/requirements/1/documents',{'name':title+'工作文档','document_kind':'DESIGN','template_ref':None})
         first = accept('DISCUSS', '先讨论首版范围，暂时不写文档。')
         def recommend(context):
             assert context.input_json.count(idea) == 1
@@ -60,15 +62,15 @@ def test_discuss_defer_generate_local_revision_compare_and_review_are_separate_a
                 'scope': None, 'source_refs': [context.input['current_request']['message_ref']],
                 'basis_discussion_version': context.input['current_request']['basis_ref']['discussion_version'],
                 'unresolved_impacts': [], 'selectable_fields': []}))
-        execute(first, recommend);assert counts(database)['requirement_documents'] == 0
-        message = get('/requirements/1/messages')['items'][-1];binding = message['structured_content']['program_binding']
+        execute(first, recommend);assert counts(database)['requirement_documents'] == 1
+        message = get('/requirements/1/messages?document_id=1')['items'][-1];binding = message['structured_content']['program_binding']
         before = counts(database)
         deferred = command('POST', '/conversation-messages/'+str(message['id'])+'/responses', {
             'schema_version': 1, 'expected_discussion_version': binding['discussion_version'],
             'responses': [{'card_key': 'c1', 'selected_option_keys': ['defer'], 'custom_answer': None, 'skipped': False}], 'execution_selection': None})
         assert deferred['processing'] == 'PROGRAM' and deferred['result'] == 'DEFERRED'
         assert counts(database)['guide_runs'] == before['guide_runs'] and counts(database)['llm_uses'] == before['llm_uses']
-        assert counts(database)['requirement_documents'] == 0
+        assert counts(database)['requirement_documents'] == 1
 
         generated = accept('GENERATE', '现在明确生成说明。', {'kind': 'NEW', 'name': title+'说明', 'document_kind': 'brief', 'template_ref': None})
         saved = execute(generated, lambda context: output(context, response_type='DOCUMENT_RESULT', document_result={
@@ -102,7 +104,7 @@ def test_discuss_defer_generate_local_revision_compare_and_review_are_separate_a
             {'scope_type': 'BLOCK', 'scope_ref': {'block_id': block}}, [{'kind': 'RUN_RESULT', 'guide_run_id': compared['guide_run_id']}])
         review = execute(reviewed, analysis)
         assert review['final_result']['analysis']['conclusion'] == 'RESULT'
-        assert review['application_result'] == 'NOT_REQUESTED' and counts(database)['revisions'] == 2
+        assert review['application_result'] == 'NOT_REQUESTED' and counts(database)['revisions'] == 3
         assert counts(database)['llm_uses'] == counts(database)['guide_runs'] == len(calls) == 5
         assert get('/requirements/1')['requirement']['document_work_state'] == 'IDLE'
         with database.transaction() as connection:

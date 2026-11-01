@@ -59,15 +59,15 @@ class CreateRequirementInput:
 
 
 def create_requirement_input(payload: object) -> CreateRequirementInput:
-    from backend.app.shared.validation import initial_idea
+    from backend.app.shared.validation import ordinary_text
     from backend.app.infrastructure.idempotency import canonical_input, request_key
 
     fields = ('title', 'requirement_type', 'initial_idea', 'idempotency_key')
-    data = object_fields(payload, 'body', fields, fields)
+    data = object_fields(payload, 'body', fields, ('title', 'requirement_type', 'idempotency_key'))
     request = CreateRequirementInput(
         title(data['title']),
         strict_enum(data['requirement_type'], 'requirement_type', REQUIREMENT_TYPES),
-        initial_idea(data['initial_idea']),
+        ordinary_text(data.get('initial_idea', ''), 'initial_idea', 0, 10_000),
         request_key(data['idempotency_key'], 'idempotency_key'),
     )
     for field, value in request.business_input().items():
@@ -189,6 +189,7 @@ def update_requirement_result(row: Mapping[str, Any]) -> dict[str, Any]:
 @dataclass(frozen=True)
 class DiscussionCommandInput:
     requirement_id: int
+    document_id: int
     expected_discussion_version: int
     discussion_command: dict
     idempotency_key: str
@@ -196,7 +197,12 @@ class DiscussionCommandInput:
     def business_input(self):
         return {
             key: getattr(self, key)
-            for key in ('requirement_id', 'expected_discussion_version', 'discussion_command')
+            for key in (
+                'requirement_id',
+                'document_id',
+                'expected_discussion_version',
+                'discussion_command',
+            )
         }
 
 
@@ -207,6 +213,7 @@ def discussion_command_input(payload):
 
     fields = (
         'requirement_id',
+        'document_id',
         'expected_discussion_version',
         'discussion_command',
         'idempotency_key',
@@ -287,6 +294,7 @@ def discussion_command_input(payload):
         command['description'] = ordinary_text(command['description'], 'description', 1, 1000)
     request = DiscussionCommandInput(
         requirement_id_input(data['requirement_id']),
+        strict_integer(data['document_id'], 'document_id'),
         strict_integer(data['expected_discussion_version'], 'expected_discussion_version'),
         command,
         request_key(data['idempotency_key'], 'idempotency_key'),

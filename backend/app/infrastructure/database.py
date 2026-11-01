@@ -19,7 +19,7 @@ from .process_lock import ProcessLock
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MIGRATION = Path(__file__).with_name('schemas') / 'v1_5.sql'
-SCHEMA_VERSION = 150
+SCHEMA_VERSION = 151
 
 
 class SchemaMismatch(RuntimeError):

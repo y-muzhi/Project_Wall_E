@@ -51,7 +51,7 @@ def submit(executor, payload, *, catalog=None, clock=None):
             or original['guide_run_id'] is None
         ):
             raise Rejected('SOURCE_INVALID')
-        root = roots.get(original['requirement_id'])
+        root = roots.get_for_document(original['requirement_id'], original['document_id'])
         if root is None:
             raise Rejected('WORK_STATE_INCONSISTENT')
         replies = messages.formal_responses(original['id'])
@@ -127,6 +127,7 @@ def submit(executor, payload, *, catalog=None, clock=None):
                 internal = create_guide_run_input(
                     {
                         'requirement_id': root['id'],
+                        'document_id': original['document_id'],
                         'expected_discussion_version': request.expected_discussion_version,
                         'operation': kind,
                         'instruction': '正式卡片回答',
@@ -163,6 +164,7 @@ def submit(executor, payload, *, catalog=None, clock=None):
             answers,
             request.idempotency_key,
             at,
+            document_id=original['document_id'],
             phase_ref=root['discussion_state_json']['phase']['phase_ref'],
             topic_refs=()
             if root['discussion_state_json']['focus_topic_ref'] is None
@@ -208,7 +210,7 @@ def submit(executor, payload, *, catalog=None, clock=None):
             _invalid('行动卡片必须使用其明确的确认或暂缓选项')
         # The fact operation may temporarily use an existing internal editing
         # session; reread its released root before persisting discussion values.
-        root = roots.get(root['id'])
+        root = roots.get_for_document(root['id'], original['document_id'])
         before = root
         if state != root['discussion_state_json']:
             root = roots.update_discussion(root, state, at)
@@ -237,10 +239,11 @@ def submit(executor, payload, *, catalog=None, clock=None):
         }
         event = 'PHASE_CHANGED' if closed_phase is not None else 'DISCUSSION_UPDATED'
         connection.execute(
-            "INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,NULL,'USER_ACTION',?,'CARD_PROGRAM_ACTION',NULL,NULL,?,?,NULL,NULL,?)",
+            "INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,?,'USER_ACTION',?,'CARD_PROGRAM_ACTION',NULL,NULL,?,?,NULL,NULL,?)",
             (
                 entity_id(connection, EntityKind.DOCUMENT_AUDIT),
                 root['id'],
+                original['document_id'],
                 response_id,
                 at,
                 event,

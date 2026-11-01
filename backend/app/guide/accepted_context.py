@@ -24,7 +24,7 @@ def check_proposal(connection, root, request, resources):
         "SELECT * FROM conversation_messages WHERE id=? AND requirement_id=? AND role='ASSISTANT' AND message_type='INTERACTION_CARDS'",
         (reference['message_id'], root['id']),
     ).fetchone()
-    if row is None:
+    if row is None or row['document_id'] != request.document_id:
         raise Rejected('SOURCE_INVALID')
     cards = resources.validate('StoredCardGroup', json.loads(row['structured_content_json']))
     if cards['purpose'] != 'DOCUMENT_ACTION' or not any(
@@ -177,6 +177,8 @@ def capture_source(connection, root_id, source, resources):
 
 def capture_inputs(connection, root, request, catalog):
     resources = catalog.collaboration
+    if request.document_id != root['assistant_document_id']:
+        raise Rejected('SOURCE_INVALID')
     check_proposal(connection, root, request, resources)
     target, scope = request.target, request.scope
     document = None
@@ -189,6 +191,8 @@ def capture_inputs(connection, root, request, catalog):
         'confirmed_fact_patches': [],
     }
     if target is not None and target['kind'] == 'EXISTING':
+        if target['document_id'] != request.document_id:
+            raise Rejected('SOURCE_INVALID')
         current = DocumentRepository(connection).get_current(root['id'], target['document_id'])
         if current is None:
             raise Rejected('SOURCE_INVALID')
@@ -257,7 +261,6 @@ def capture_inputs(connection, root, request, catalog):
     refs = [
         *request.source_refs,
         *discussion['binding']['source_refs'],
-        {'kind': 'MESSAGE', 'message_id': root['initial_message_id']},
         *(
             {'kind': 'MESSAGE', 'message_id': identity}
             for identity in discussion['pending_user_message_ids']
@@ -272,8 +275,8 @@ def capture_inputs(connection, root, request, catalog):
     history = [
         dict(row)
         for row in connection.execute(
-            "SELECT * FROM conversation_messages WHERE requirement_id=? AND role IN ('USER','ASSISTANT') ORDER BY sequence_no DESC LIMIT 10",
-            (root['id'],),
+            "SELECT * FROM conversation_messages WHERE requirement_id=? AND document_id=? AND role IN ('USER','ASSISTANT') ORDER BY sequence_no DESC LIMIT 10",
+            (root['id'], request.document_id),
         )
     ]
     for message in history:

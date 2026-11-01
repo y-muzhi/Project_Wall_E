@@ -14,14 +14,14 @@ const root=(changes={})=>({id:1,requirement_no:'REQ000001',title:'需求',requir
 const detail=(changes={})=>({requirement:root(changes),current:{id:5,requirement_id:1,document_type:'CURRENT',archived_at:null},documents:[],activity:{kind:'IDLE'}});
 const envelope=data=>new Response(JSON.stringify({success:true,data,error:null,meta:{request_id:key}}),{status:201,headers:{'Content-Type':'application/json'}});
 
-test('creation uses the real three-field wire and strict zero-operation response',async()=>{
+test('creation uses the real two-field wire and strict zero-operation response',async()=>{
  const wires=[];
  const api=new WalleApi(new ApiClient(async(path,options)=>{wires.push({path,options});return envelope({requirement:root(),initial_message_id:1,documents:[]});},()=>key),{});
- const action=api.prepareCreateRequirement({title:'需求',requirement_type:'NEW',initial_idea:'原始想法'});
+ const action=api.prepareCreateRequirement({title:'需求',requirement_type:'NEW'});
  const one=await action.submit();await action.submit();
  assert.equal(one.data.documents.length,0);assert.equal(one.data.requirement.status,'PLANNING');
  assert.equal(wires.length,2);assert.deepEqual(wires[0],wires[1]);
- assert.deepEqual(JSON.parse(wires[0].options.body),{title:'需求',requirement_type:'NEW',initial_idea:'原始想法'});
+ assert.deepEqual(JSON.parse(wires[0].options.body),{title:'需求',requirement_type:'NEW'});
  assert.equal(new Headers(wires[0].options.headers).get('Idempotency-Key'),key);
 });
 

@@ -106,11 +106,12 @@ export class RequirementDetailRead {
     identity: number,
     api: ReadApi,
     storage?: () => Pick<Storage, 'getItem' | 'setItem'>,
+    documentId?: number | null,
   ) {
     this.identity = positiveInteger(identity);
     this.api = api;
     this.reading = new ReadingSelection(identity, storage);
-    this.selected = this.reading.load();
+    this.selected = documentId === undefined ? this.reading.load() : documentId;
   }
   selectDocument(identity: number | null): Promise<boolean> {
     if (identity !== null) {
@@ -304,7 +305,14 @@ export class RequirementDetailRead {
           }
           if (this.closed || generation !== this.generation) return false;
           const latest = captured(
-            (await this.api.getRequirementDetail(this.identity, controller.signal)).data,
+            (
+              await this.api.getRequirementDetail(
+                this.identity,
+                controller.signal,
+                false,
+                documentId,
+              )
+            ).data,
           );
           if (occupancy(root) !== occupancy(latest.requirement)) throw new ReadMismatch('CHANGED');
           if (

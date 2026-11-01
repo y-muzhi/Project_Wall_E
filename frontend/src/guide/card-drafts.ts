@@ -6,15 +6,18 @@ export type DraftRead = Readonly<{ answers: Responses | null; error: string | nu
 export class CardDrafts {
   private readonly storage: () => Storage;
   private readonly now: () => string;
+  private readonly documentId: number | null;
   constructor(
     storage: () => Storage = () => sessionStorage,
     now: () => string = () => new Date().toISOString(),
+    documentId: number | null = null,
   ) {
+    this.documentId = documentId;
     this.storage = storage;
     this.now = now;
   }
   private key(requirement: number, message: number): string {
-    return `walle:v1.5:cards:${positiveInteger(requirement)}:${positiveInteger(message)}`;
+    return `walle:v1.5:document-cards:${positiveInteger(requirement)}:${positiveInteger(this.documentId)}:${positiveInteger(message)}`;
   }
   load(requirement: number, message: number, cards: Cards): DraftRead {
     try {

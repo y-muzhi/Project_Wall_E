@@ -46,7 +46,7 @@ def test_successful_isolated_observation_uses_normal_audit_and_cannot_repeat_slo
         assert snapshot['observation'] == {'count_batches': 1, 'chat_calls': 1, 'input_tokens': 131072,
             'output_tokens': 8192, 'total_tokens': 139264, 'framing_reserve': 1024, 'transport_retries': 0}
         assert 'observation' not in json.loads(snapshot['request']['messages'][1]['content'])
-    assert counts(database)['requirement_documents'] == counts(database)['revisions'] == 0
+    assert counts(database)['requirement_documents'] == counts(database)['revisions'] == 1
     assert ResourceCatalog().collaboration.release['admission']['state'] == 'OFFLINE_READY'
     with pytest.raises(FileExistsError): observe(directory, counter=counter, gateway=gateway)
     assert len(counter.calls) == len(gateway.calls) == 1
@@ -64,7 +64,7 @@ def test_failure_keeps_actual_audit_and_slot_without_retry(tmp_path, failure):
     assert result['admission'] == ('SUSPENDED' if failure == 'usage' else 'OFFLINE_READY'), result
     assert result['count_batches_sent'] == 1 and result['chat_calls_sent'] == (failure == 'usage')
     database = Database(directory/'observation.sqlite')
-    assert counts(database)['revisions'] == counts(database)['requirement_documents'] == 0
+    assert counts(database)['revisions'] == counts(database)['requirement_documents'] == 1
     with pytest.raises(FileExistsError): observe(directory, counter=counter, gateway=gateway)
     assert len(counter.calls) == 1 and len(gateway.calls) == (failure == 'usage')
 

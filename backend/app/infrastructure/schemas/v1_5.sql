@@ -41,6 +41,8 @@ CREATE TABLE requirement_documents (
   document_type TEXT NOT NULL,
   markdown_content TEXT NOT NULL,
   block_state_json TEXT NOT NULL CHECK (json_valid(block_state_json) AND json_type(block_state_json)='object'),
+  discussion_version INTEGER NOT NULL DEFAULT 1 CHECK(discussion_version > 0),
+  discussion_state_json TEXT CHECK(discussion_state_json IS NULL OR json_valid(discussion_state_json)),
   content_version INTEGER NOT NULL CHECK (content_version BETWEEN 1 AND 9007199254740991),
   created_at TEXT NOT NULL CHECK (length(created_at)=24 AND created_at GLOB '????-??-??T??:??:??.???Z'),
   updated_at TEXT NOT NULL CHECK (length(updated_at)=24 AND updated_at GLOB '????-??-??T??:??:??.???Z'),
@@ -102,23 +104,37 @@ CREATE TABLE conversation_messages (
   created_at TEXT NOT NULL CHECK (length(created_at)=24 AND created_at GLOB '????-??-??T??:??:??.???Z'),
   phase_ref TEXT,
   topic_refs TEXT NOT NULL CHECK(json_valid(topic_refs) AND json_type(topic_refs)='array'),
+  document_id INTEGER,
   document_ids TEXT NOT NULL CHECK(json_valid(document_ids) AND json_type(document_ids)='array'),
   UNIQUE(id,requirement_id),
+  UNIQUE(id,requirement_id,document_id),
   FOREIGN KEY (requirement_id) REFERENCES requirements(id),
   CHECK (role IN ('USER', 'ASSISTANT')),
   CHECK (message_type IN ('TEXT', 'INTERACTION_CARDS', 'CARD_RESPONSE')),
   CHECK ((role='USER' AND idempotency_key IS NOT NULL) OR (role='ASSISTANT' AND idempotency_key IS NULL)),
   CHECK ((message_type='TEXT' AND structured_content_json IS NULL AND reply_to_message_id IS NULL) OR (message_type='INTERACTION_CARDS' AND role='ASSISTANT' AND structured_content_json IS NOT NULL AND reply_to_message_id IS NULL) OR (message_type='CARD_RESPONSE' AND role='USER' AND structured_content_json IS NOT NULL AND reply_to_message_id IS NOT NULL)),
+  FOREIGN KEY(document_id,requirement_id) REFERENCES requirement_documents(id,requirement_id) DEFERRABLE INITIALLY DEFERRED,
   UNIQUE (requirement_id, sequence_no),
   FOREIGN KEY (guide_run_id) REFERENCES guide_runs(id) DEFERRABLE INITIALLY DEFERRED,
+  FOREIGN KEY(guide_run_id,requirement_id,document_id) REFERENCES guide_runs(id,requirement_id,document_id) DEFERRABLE INITIALLY DEFERRED,
+  FOREIGN KEY(reply_to_message_id,requirement_id,document_id) REFERENCES conversation_messages(id,requirement_id,document_id),
   FOREIGN KEY (reply_to_message_id) REFERENCES conversation_messages(id)
 ) STRICT;
+
+CREATE TRIGGER conversation_messages_require_owner BEFORE INSERT ON conversation_messages
+WHEN NEW.document_id IS NULL AND NOT EXISTS(
+  SELECT 1 FROM requirements WHERE id=NEW.requirement_id AND initial_message_id=NEW.id
+)
+BEGIN SELECT RAISE(ABORT, 'DOCUMENT_OWNER_REQUIRED'); END;
+
+CREATE INDEX messages_document_cursor ON conversation_messages(requirement_id,document_id,sequence_no DESC);
 
 CREATE TRIGGER conversation_messages_immutable BEFORE UPDATE ON conversation_messages
 BEGIN SELECT RAISE(ABORT, 'IMMUTABLE_RECORD'); END;
 
 CREATE TABLE guide_runs (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id BETWEEN 1 AND 9007199254740991),
+  document_id INTEGER NOT NULL,
   requirement_id INTEGER NOT NULL CHECK (requirement_id BETWEEN 1 AND 9007199254740991),
   idempotency_key TEXT NOT NULL,
   trigger_message_id INTEGER CHECK (trigger_message_id BETWEEN 1 AND 9007199254740991),
@@ -153,6 +169,9 @@ CREATE TABLE guide_runs (
   parent_guide_run_id INTEGER,
   discussion_version_snapshot INTEGER NOT NULL CHECK(discussion_version_snapshot BETWEEN 1 AND 9007199254740991),
   execution_basis_json TEXT NOT NULL CHECK(json_valid(execution_basis_json) AND json_type(execution_basis_json)='object'),
+  UNIQUE(id,requirement_id,document_id),
+  FOREIGN KEY(trigger_message_id,requirement_id,document_id) REFERENCES conversation_messages(id,requirement_id,document_id) DEFERRABLE INITIALLY DEFERRED,
+  FOREIGN KEY(document_id,requirement_id) REFERENCES requirement_documents(id,requirement_id),
   FOREIGN KEY (requirement_id) REFERENCES requirements(id),
   CHECK (action_type IN ('ASK', 'GENERATE', 'REVIEW', 'MODIFY')),
   CHECK (source_type IN ('USER_INSTRUCTION', 'REVIEW_RESULT', 'COMMENT')),
@@ -171,8 +190,10 @@ CREATE TABLE guide_runs (
   FOREIGN KEY(retry_of_guide_run_id,requirement_id) REFERENCES guide_runs(id,requirement_id)
 ) STRICT;
 
+CREATE INDEX guide_runs_document_history ON guide_runs(requirement_id,document_id,created_at DESC,id DESC);
+
 CREATE TRIGGER guide_runs_immutable_fields BEFORE UPDATE ON guide_runs
-WHEN NEW.id IS NOT OLD.id OR NEW.requirement_id IS NOT OLD.requirement_id OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.function_type IS NOT OLD.function_type OR NEW.context_template_key IS NOT OLD.context_template_key OR NEW.context_template_version IS NOT OLD.context_template_version OR NEW.prompt_version IS NOT OLD.prompt_version OR NEW.action_type IS NOT OLD.action_type OR NEW.trigger_message_id IS NOT OLD.trigger_message_id OR NEW.trigger_type IS NOT OLD.trigger_type OR NEW.source_type IS NOT OLD.source_type OR NEW.source_id IS NOT OLD.source_id OR NEW.instruction_summary IS NOT OLD.instruction_summary OR NEW.scope_type IS NOT OLD.scope_type OR NEW.scope_ref_json IS NOT OLD.scope_ref_json OR NEW.read_scope_manifest_json IS NOT OLD.read_scope_manifest_json OR NEW.allowed_targets_json IS NOT OLD.allowed_targets_json OR NEW.mode_snapshot IS NOT OLD.mode_snapshot OR NEW.operation IS NOT OLD.operation OR NEW.target_document_id IS NOT OLD.target_document_id OR NEW.parent_guide_run_id IS NOT OLD.parent_guide_run_id OR NEW.discussion_version_snapshot IS NOT OLD.discussion_version_snapshot OR NEW.execution_basis_json IS NOT OLD.execution_basis_json OR NEW.created_at IS NOT OLD.created_at OR NEW.retry_of_guide_run_id IS NOT OLD.retry_of_guide_run_id
+WHEN NEW.document_id IS NOT OLD.document_id OR NEW.id IS NOT OLD.id OR NEW.requirement_id IS NOT OLD.requirement_id OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.function_type IS NOT OLD.function_type OR NEW.context_template_key IS NOT OLD.context_template_key OR NEW.context_template_version IS NOT OLD.context_template_version OR NEW.prompt_version IS NOT OLD.prompt_version OR NEW.action_type IS NOT OLD.action_type OR NEW.trigger_message_id IS NOT OLD.trigger_message_id OR NEW.trigger_type IS NOT OLD.trigger_type OR NEW.source_type IS NOT OLD.source_type OR NEW.source_id IS NOT OLD.source_id OR NEW.instruction_summary IS NOT OLD.instruction_summary OR NEW.scope_type IS NOT OLD.scope_type OR NEW.scope_ref_json IS NOT OLD.scope_ref_json OR NEW.read_scope_manifest_json IS NOT OLD.read_scope_manifest_json OR NEW.allowed_targets_json IS NOT OLD.allowed_targets_json OR NEW.mode_snapshot IS NOT OLD.mode_snapshot OR NEW.operation IS NOT OLD.operation OR NEW.target_document_id IS NOT OLD.target_document_id OR NEW.parent_guide_run_id IS NOT OLD.parent_guide_run_id OR NEW.discussion_version_snapshot IS NOT OLD.discussion_version_snapshot OR NEW.execution_basis_json IS NOT OLD.execution_basis_json OR NEW.created_at IS NOT OLD.created_at OR NEW.retry_of_guide_run_id IS NOT OLD.retry_of_guide_run_id
 BEGIN SELECT RAISE(ABORT, 'IMMUTABLE_FIELD'); END;
 
 CREATE TABLE llm_uses (

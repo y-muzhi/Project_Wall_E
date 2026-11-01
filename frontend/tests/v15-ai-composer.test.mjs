@@ -8,7 +8,7 @@ import {nextChapter} from '../src/guide/scope.ts';
 
 const root={id:1,discussion_version:7,document_work_state:'IDLE',status:'CLOSED'};
 const doc=id=>({id,content_version:3,current_revision_id:20+id,name:'文档'+id,archived_at:null});
-const detail=(documents=[])=>({requirement:{...root},documents,current:null});
+const detail=(documents=[doc(2)])=>({selected_document_id:2,requirement:{...root},documents,current:documents.find(row=>row.id===2)??doc(2)});
 const receipt={processing:'MODEL',guide_run_id:41,user_message_id:9};
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 test('H06 next chapter skips children and stops before a parent boundary',()=>{
@@ -32,20 +32,20 @@ test('H06 chapter configuration remains frozen while a send result is unknown',a
 });
 function fixture(actual=detail(),overrides={}){
  const counts={prepares:0,sends:0,reads:0,receives:0},bodies=[],values=new Map();
- const drafts=new ComposerDrafts(()=>({getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)}));
+ const drafts=new ComposerDrafts(()=>({getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)}),2);
  const api={prepareCreateGuide(id,body){counts.prepares++;bodies.push(body);return {async submit(){counts.sends++;return {data:receipt};}};},
   async getGuideRun(){counts.reads++;return {data:{id:41,requirement_id:1,operation:bodies[0]?.operation??'DISCUSS',parent_guide_run_id:null}};},
   async listMessages(){return {data:{items:[]}};},...overrides};
  const owner=new RequirementGuideComposer(actual,api,async()=>actual,async()=>{},async()=>{counts.receives++;},async()=>{},drafts);
  owner.setAvailable(true);return {owner,counts,bodies,values,api};
 }
-test('zero-document discussion sends raw user input once and clears draft only after actual acceptance',async()=>{
+test('document discussion sends raw user input once and clears only its accepted draft',async()=>{
  const {owner,counts,bodies,values}=fixture();owner.change('  原话😀\n第二行  ');assert.equal(owner.allowed,true);assert.equal(values.size,1);
  assert.equal(await owner.submit(),true);assert.equal(counts.sends,1);assert.equal(counts.receives,1);assert.equal(values.size,0);
- assert.deepEqual(bodies[0],{expected_discussion_version:7,operation:'DISCUSS',instruction:'  原话😀\n第二行  ',target:null,scope:null,source_refs:[],proposal_ref:null,acknowledge_source_changes:false});owner.dispose();
+ assert.deepEqual(bodies[0],{expected_discussion_version:7,operation:'DISCUSS',instruction:'  原话😀\n第二行  ',target:{kind:'EXISTING',document_id:2,expected_content_version:3},scope:{scope_type:'DOCUMENT',scope_ref:null},source_refs:[],proposal_ref:null,acknowledge_source_changes:false});owner.dispose();
 });
 test('reading selection cannot silently change the configured write target or its captured version',async()=>{
- const actual=detail([doc(2),doc(3)]),{owner,bodies}=fixture(actual);owner.choose('REVISE');assert.equal(owner.allowed,false);
+ const actual=detail([doc(2),doc(3)]),{owner,bodies}=fixture(actual);owner.choose('REVISE');assert.equal(owner.allowed,true);
  owner.selectDocument(2);owner.change('修订目标 A');owner.adopt({...actual,current:doc(3)});assert.equal(await owner.submit(),true);
  assert.deepEqual(bodies[0].target,{kind:'EXISTING',document_id:2,expected_content_version:3});owner.dispose();
 });
@@ -67,12 +67,12 @@ test('accepted receipt followed by failed GET retries reads and never resubmits 
 });
 test('a late binding read cannot replace an explicit target selected while GET was in flight',async()=>{
  const pending=deferred(),{owner}=fixture(detail([doc(2),doc(3)]),{getRequirementDetail:()=>pending.promise});
- const read=owner.loadBinding();owner.selectDocument(3);pending.resolve({data:{requirement:root,discussion:{binding:{target_document_id:2,scope:null,source_refs:[]}}}});
- assert.equal(await read,false);assert.equal(owner.getSnapshot().target.document_id,3);owner.dispose();
+ const read=owner.loadBinding();owner.selectDocument(2);pending.resolve({data:{requirement:root,discussion:{binding:{target_document_id:3,scope:null,source_refs:[]}}}});
+ assert.equal(await read,false);assert.equal(owner.getSnapshot().target.document_id,2);owner.dispose();
 });
 test('the existing guide route transports a strict receipt and a frozen body/key on unknown replay',async()=>{
  const requests=[],key='00000000-0000-4000-8000-000000000001';let lost=true;
- const api=new WalleApi(new ApiClient(async(path,init)=>{requests.push({path,init});if(lost){lost=false;throw Error('lost response');}return new Response(JSON.stringify({success:true,data:receipt,error:null,meta:{request_id:key}}),{status:202,headers:{'Content-Type':'application/json'}});},()=>key),null);
+ const api=new WalleApi(new ApiClient(async(path,init)=>{requests.push({path,init});if(lost){lost=false;throw Error('lost response');}return new Response(JSON.stringify({success:true,data:receipt,error:null,meta:{request_id:key}}),{status:202,headers:{'Content-Type':'application/json'}});},()=>key),null).forDocumentAssistant(2);
  const body={expected_discussion_version:7,operation:'DISCUSS',instruction:' 原话 ',target:null,scope:null,source_refs:[],proposal_ref:null,acknowledge_source_changes:false},action=api.prepareCreateGuide(1,body);
  await assert.rejects(action.submit(),ApiUnknown);body.instruction='改变';assert.deepEqual((await action.submit()).data,receipt);
  assert.equal(requests[0].path,'/api/v1/requirements/1/guide-runs');assert.equal(requests[0].init.body,requests[1].init.body);assert.equal(JSON.parse(requests[0].init.body).instruction,' 原话 ');
@@ -91,11 +91,21 @@ test('Escape invalidates a late opening binding GET without reporting a false re
  const pending=deferred(),{owner}=fixture(detail([doc(2)]),{getRequirementDetail:()=>pending.promise});
  owner.beginSettings();const read=owner.loadBinding();owner.endSettings(true);
  pending.resolve({data:{requirement:root,discussion:{binding:{target_document_id:2,scope:null,source_refs:[]}}}});
- assert.equal(await read,false);assert.equal(owner.getSnapshot().target,null);assert.equal(owner.getSnapshot().error,null);assert.equal(owner.getSnapshot().needs_refresh,false);owner.dispose();
+ assert.equal(await read,false);assert.equal(owner.getSnapshot().target.document_id,2);assert.equal(owner.getSnapshot().error,null);assert.equal(owner.getSnapshot().needs_refresh,false);owner.dispose();
 });
 
 test('closing settings keeps the selected operation, and later Escape cannot undo an accepted send',async()=>{
  const {owner,bodies,counts}=fixture();owner.beginSettings();owner.choose('GENERATE');owner.configureNew('已选稿件','brief',false);owner.endSettings();
  owner.change('明确生成');assert.equal(await owner.submit(),true);owner.endSettings(true);
  assert.equal(bodies[0].operation,'GENERATE');assert.equal(bodies[0].target.name,'已选稿件');assert.equal(counts.sends,1);owner.dispose();
+});
+
+test('without a selected document the composer cannot prepare an AI operation',async()=>{
+ const {owner,counts}=fixture({...detail(),selected_document_id:null,current:null,documents:[]});
+ owner.change('not sent');assert.equal(owner.allowed,false);assert.equal(await owner.submit(),false);assert.equal(counts.prepares,0);owner.dispose();
+});
+
+test('a document assistant rejects an existing work target from another document before preparing a command',()=>{
+ const {owner,counts}=fixture(detail([doc(2),doc(3)]));
+ assert.throws(()=>owner.selectDocument(3),TypeError);assert.equal(owner.getSnapshot().target.document_id,2);assert.equal(counts.prepares,0);owner.dispose();
 });

@@ -16,6 +16,7 @@ from backend.app.documents.snapshot import _time
 MESSAGE_FIELDS = (
     'id',
     'requirement_id',
+    'document_id',
     'guide_run_id',
     'sequence_no',
     'role',
@@ -75,16 +76,21 @@ def program_receipt(data):
 @dataclass(frozen=True)
 class MessageQuery:
     requirement_id: int
+    document_id: int
     before_sequence_no: int | None
 
 
 def list_messages_input(payload):
     value = object_fields(
-        payload, 'query', ('requirement_id', 'before_sequence_no'), ('requirement_id',)
+        payload,
+        'query',
+        ('requirement_id', 'document_id', 'before_sequence_no'),
+        ('requirement_id', 'document_id'),
     )
     cursor = value.get('before_sequence_no')
     return MessageQuery(
         strict_integer(value['requirement_id'], 'requirement_id'),
+        strict_integer(value['document_id'], 'document_id'),
         None if cursor is None else strict_integer(cursor, 'before_sequence_no'),
     )
 
@@ -93,7 +99,7 @@ def message_read_model(data):
     value = object_fields(data, 'message', MESSAGE_FIELDS, MESSAGE_FIELDS)
     for field in ('id', 'requirement_id', 'sequence_no'):
         strict_integer(value[field], field)
-    for field in ('guide_run_id', 'reply_to_message_id'):
+    for field in ('guide_run_id', 'reply_to_message_id', 'document_id'):
         if value[field] is not None:
             strict_integer(value[field], field)
     strict_enum(value['role'], 'role', ('USER', 'ASSISTANT'))
@@ -160,7 +166,11 @@ def list_messages_result(items, request, has_more):
     sequences = [item['sequence_no'] for item in rows]
     if (
         sequences != sorted(set(sequences))
-        or any(item['requirement_id'] != request.requirement_id for item in rows)
+        or any(
+            item['requirement_id'] != request.requirement_id
+            or item['document_id'] != request.document_id
+            for item in rows
+        )
         or request.before_sequence_no is not None
         and any(sequence >= request.before_sequence_no for sequence in sequences)
     ):

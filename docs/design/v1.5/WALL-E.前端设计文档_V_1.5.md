@@ -12,7 +12,7 @@
 | 目标软件版本 | V1.5 |
 | 规格版本 | 1.0 |
 | 文档状态 | EFFECTIVE（正式设计基线） |
-| 最后更新时间 | 2026-11-01（Asia/Hong_Kong；需求操作入口、评论标注／直接操作／状态与对齐、无折叠区块间距归并） |
+| 最后更新时间 | 2026-11-01（Asia/Hong_Kong；M15-DOC-AI-01文档级助手与M15-CREATE-IDEA-01两字段创建已按原职责合入） |
 
 文档修订追溯见[H10整理记录](../../archive/merges/v1.5/合并记录-2026-10-30-文档职责整理.md)，其中链接原专项合入记录。软件版本V1.5、规格版本1.0及EFFECTIVE状态保持；更新时间不代表代码发布或验收日期。
 
@@ -72,7 +72,7 @@ BND-WORKBENCH／DETAIL为页面，BND-EDITOR／CARDS／SUGGESTIONS／MODEL-CALL�
 | [detail-frame](../../../frontend/src/requirements/detail-frame.tsx)、[布局](../../../frontend/src/requirements/detail-layout.ts) | 全局导航、面板开合、偏好与独立滚动 | 左侧合并文档列表／大纲，新增阅读对象标题和空工作区 |
 | [editor](../../../frontend/src/documents/editor.ts)、[autosave](../../../frontend/src/documents/autosave.ts) | Milkdown、格式工具、区块身份、自动保存 | 目标和资源绑定按document_id；文档类型采用相应模板规则 |
 | [恢复存储](../../../frontend/src/documents/recovery-store.ts)、[离开保护](../../../frontend/src/requirements/departure.ts) | 本地草稿、未确认保存保护 | 缓存键包含真实目标、草稿及基准版本，避免多文档串稿 |
-| [conversation-owner](../../../frontend/src/guide/conversation-owner.ts)、[composer](../../../frontend/src/guide/composer.ts) | 需求级对话、输入、动作原请求保留 | 不再依赖必有current；operation与写入绑定独立于阅读文档 |
+| [conversation-owner](../../../frontend/src/guide/conversation-owner.ts)、[composer](../../../frontend/src/guide/composer.ts) | 文档级对话、输入、动作原请求保留 | 按document_id保留owner；无文档禁用发送，原命令不随阅读重绑定 |
 | [cards-view](../../../frontend/src/guide/cards-view.tsx)、[card-drafts](../../../frontend/src/guide/card-drafts.ts) | 原题、正式回答、本地选择及进度 | purpose渲染与MODEL／PROGRAM响应，不复制卡片系统 |
 | [batch-owner](../../../frontend/src/suggestions/batch-owner.ts)、[preview](../../../frontend/src/suggestions/preview.ts) | 差异、逐项决定、精确采用 | 目标及来源显式；禁止读A但把改动应用到B的隐式切换 |
 | [轮询](../../../frontend/src/guide/polling.ts)、[请求详情](../../../frontend/src/guide/model-call-view.tsx) | 单请求轮询、调用摘要、详情懒加载 | 每轮结束及新应用状态、新上下文分区 |
@@ -103,6 +103,10 @@ M15-REQUEST-01读取协调沿原RequirementDetailOwner生命周期建立DetailRe
 每个原ApiAction实际提交前和结束后推进读取epoch、取消旧观察；提交期间新共享读取等待写请求结束，多个重叠写全部结束才发送。写请求失败或UNKNOWN也形成屏障，不能拿写前GET代替写后确认。不修改原method／path／body／key，不合并或自动重发命令。取消一个消费者只释放自身，最后一个消费者退出才取消共享GET；退役清理订阅与等待，不取消后台业务。旧epoch或旧可见代结果不覆盖新状态；本地写屏障取消由观察协调器在提交结束后恢复，不显示为断线、不消耗故障退避。辅助页签仍可见时，面板自身遇到本地AbortError仅重读一次；离开页签不补读，真实读取失败或再次取消仍保留失败及重试入口，不自动重发业务命令。
 
 M15-HTTP-01中，以上“写请求结束”包括HTTP截止后的UNKNOWN：这只释放本地读取屏障，不证明服务端已取消或未提交。之后读取的实际版本／占用与原命令核实仍由原owner负责。多个重叠写需各自结束，不因一个超时就提前放行。统一截止规则见6.1。
+
+**文档级助手归属（M15-DOC-AI-01）**
+
+AI对话、进展、修改建议、评论、记录及请求详情跟随选定CURRENT文档，requirement_id仍为所属需求，document_id为助手所属文档。切换阅读文档即切换到该文档已保留的助手owner，不修改原文档的绑定或在途命令。跨文档来源仅经显式引用只读取得；不合并历史、进展或权限。完整跨文档对话／进展引用管理交互留后续需求，当前SourceRef沿后端契约复用。
 
 ### 2.3 运行配置与生命周期
 
@@ -175,31 +179,31 @@ Ai对话主输入框使用Enter发送、Ctrl／⌘+Enter换行，Shift+Enter保�
 | --- | --- | --- | --- | --- |
 | 需求表格 | RequirementSummary | 零项显示原空结果；失败不伪作空 | 沿原编号、标题、类型、状态、更新时间顺序；真实链接 | 进入详情 |
 | 筛选与分页 | APP-REQ-QUERY-C01 | 加载保持已提交条件 | 沿旧公共筛选草稿／外部点击提交及分页位置 | 提交筛选／翻页 |
-| 创建抽屉 | BND-CREATE | 显式点击新建时打开 | 只含标题、类型、初始想法；无模板／初始化模式 | 创建需求 |
+| 创建抽屉 | BND-CREATE | 显式点击新建时打开 | 只含标题、类型；无初始想法、模板／初始化模式 | 创建需求 |
 
 #### 5.3 页面数据与输入
 
 | 页面数据 | 来源与取得时机 | 输入或计算依据 | 更新方式及失败处理 |
 | --- | --- | --- | --- |
 | 列表 | 进入／筛选提交／翻页读取 | 已提交筛选＋page；未提交选择独立 | 整体替换列表区；旧请求迟到忽略，失败保留原内容 |
-| 创建表单 | 用户打开抽屉本地建立 | 空标题／初始描述，类型按原目录默认 | 提交失败保留；成功才清空并跳详情 |
+| 创建表单 | 用户打开抽屉本地建立 | 空标题、未选类型；不保留初始想法草稿 | 提交失败保留；成功才清空并跳详情 |
 
 | 输入项 | 控件及初始值来源 | 校验与提示 | 提交时机和目标字段 | 清除或重置行为 |
 | --- | --- | --- | --- | --- |
 | keyword／状态／类型 | 公共搜索／筛选 | 规则沿应用查询及后端SHR-STATUS | 沿V1.0提交时机；变更条件页码归1 | 无变化不查询，Esc取消草稿 |
-| title／initial_idea／requirement_type | BND-CREATE | SHR-TEXT码点，不截断；输入法组合期不发送 | 点击创建→APP-REQ-CMD-C01 | 成功清除；失败保留 |
+| title／requirement_type | BND-CREATE | SHR-TEXT码点，不截断；输入法组合期不发送 | 点击创建→APP-REQ-CMD-C01 | 成功清除；失败保留 |
 
 #### 5.4 操作与结果反馈
 
 | 操作与触发 | 可用条件及本地处理 | 调用目标与输入 | 成功或接受后的处理 | 拒绝、失败及再次操作 |
 | --- | --- | --- | --- | --- |
 | 筛选／翻页 | 沿原控件草稿／提交事实 | 原GET requirements | 更新所属列表，不改导航 | 保留原条件／结果，可读重试 |
-| 创建 | 表单合法且未提交；冻结原ApiAction | APP-REQ-CMD-C01；title／type／idea | 201跳详情，显示初始原话；不发Chat | 原输入和key保留，UNKNOWN先核实 |
+| 创建 | 表单合法且未提交；冻结原ApiAction | APP-REQ-CMD-C01；title／type | 201跳详情，零文档且未选助手；不发Chat | 原输入和key保留，UNKNOWN先核实 |
 | 进入需求 | 真实链接／ID合法 | 详情读入口 | 进入BND-DETAIL | 不存在明确显示，不选另一个需求补位 |
 
-工作台沿用列表、筛选、分页和真实链接，新状态标签来自OBJ-REQ。创建抽屉只保留标题、需求类型、初始想法；移除强制完整模板和初始化模式。辅助说明为“创建后可开始讨论并生成文档”，不承诺自动生成。
+工作台沿用列表、筛选、分页和真实链接，新状态标签来自OBJ-REQ。创建抽屉只保留需求标题与需求类型，移除初始想法输入、说明、校验和草稿字段；正常创建正文仅为{title,requirement_type}。辅助说明为“创建后可添加文档”。
 
-创建需求成功进入详情，文档工作区使用BND-EMPTY，显示文档图标及“暂无文档”；对话仍显示用户原始描述。原起步说明及缺省区域内“前往讨论／手动新建文档”按钮移除，新建入口保留在文档导航标题行。用户可从页头展开助手，不预填或覆盖未发送文字、不自动POST guide-runs或轮询虚构运行；初始描述作为原始依据，不重复保存为用户新消息。空正文不伪造文档名称或版本。
+创建需求成功进入详情，文档区使用BND-EMPTY显示文档图标及“暂无文档”，助手显示“请先创建或选择文档”，不构造假CURRENT／假对话。新建入口保留在文档导航标题行；首份真实文档创建后展示独立空助手，不预填用户原话、不自动发起运行。
 
 #### 5.5 特殊状态与生命周期
 
@@ -220,7 +224,7 @@ Ai对话主输入框使用Enter发送、Ctrl／⌘+Enter换行，Shift+Enter保�
 | 内容 | 确定定义 |
 | --- | --- |
 | 页面引用与名称 | BND-DETAIL 需求详情 |
-| 页面职责 | 多文档阅读／编辑、需求级讨论及真实运行／记录；阅读选择和写目标分开 |
+| 页面职责 | 多文档阅读／编辑、文档级助手及真实运行／记录；阅读选择和写目标分开 |
 | 入口与进入条件 | 原需求详情路由＋requirement_id；合法零文档；404不虚构CURRENT |
 | 视觉与交互依据 | SHR-UI及V1.0 BND-DETAIL／编辑器，布局增量如下 |
 
@@ -289,7 +293,7 @@ M15-RECORD-01将“文档记录”入口收进页头右上“更多操作”，�
 | documentSnapshot | 选定document_id与版本的正文 | 懒加载；带读取generation，过期响应不覆盖后选文档 |
 | discussionSummary／discussionState | 服务端进度与按需完整投影 | 原消息、选择、依据有来源；不能本地猜进度已完成 |
 | workBinding | 已确认工作目标、来源、范围及讨论版本 | 用户明确设置／接受建议后更新；读取文档不改变 |
-| composerDraft | 需求级文字、操作模式和尚未提交的配置 | 输入本地保存；提交时冻结原请求，不随刷新改写 |
+| composerDraft | 所属文档的文字、操作模式和尚未提交配置 | 输入本地保存；提交时冻结原请求，不随刷新改写 |
 | editorDraft | 真实target_document_id＋draft_id | 只由对应编辑会话维护；与对话输入分开 |
 | contextDetailSelection | guide_run_id／llm_use_id | 只读懒加载；关闭恢复原视图 |
 
@@ -297,11 +301,11 @@ selectedDocumentId初始选择最近一次仍存在的本地阅读对象，否�
 
 活动会话恢复从RequirementDetail.active_operation.target_document_id取得真实目标，不用当前阅读文档猜测草稿归属；为人工编辑读取该目标的草稿及基准正文，阅读其他文档不改会话目标。
 
-DetailSnapshot不能继续要求`current`必填。RequirementConversation和composer构造函数移除“必须有CURRENT”的假设；人工编辑宿主只在明确选中工作文档时建立。需求级对话owner持续存在，不随每次选文档销毁重建。
+DetailSnapshot.current可空。RequirementDetailOwner按document_id保存conversation／discussion／comments owners，切换时停用原文档可见读取并启用新文档，原owner与UNKNOWN原请求保持；页面退役时统一释放。无选定文档不读取助手列表或发送命令，正文宿主继续沿既有规则管理。固定原文档的后台结果核实使用独立读取及空偏好存储，不能改写当前阅读选择。
 
 | 输入项 | 控件及初始值来源 | 校验与提示 | 提交时机和目标字段 | 清除或重置行为 |
 | --- | --- | --- | --- | --- |
-| 对话文字 | composer需求级本地草稿 | 1—10000码点；组合输入期间不触发快捷提交，不截断 | Enter或发送按钮；Ctrl／⌘+Enter换行，instruction原文 | 确认接受后按原owner规则清空；UNKNOWN保留 |
+| 对话文字 | composer文档级本地草稿 | 1—10000码点；组合输入期间不触发快捷提交，不截断 | Enter或发送按钮；Ctrl／⌘+Enter换行，instruction原文 | 确认接受后按原owner规则清空；UNKNOWN保留 |
 | 操作／目标／来源／范围 | BND-WORK-SETTINGS | 与APP-GUIDE-CMD-C01一致，显式目标版本 | 点击发送或卡片接受，冻结原输入 | 关闭设置不触发请求、不改变实际绑定 |
 | 卡片选择／填写 | BND-CARDS草稿 | 推荐不算已选；整组正式提交 | 原responses入口按purpose | 成功保留正式答案；失败保留草稿 |
 | 正文编辑 | BND-EDITOR人工草稿 | SHR-BLOCK／模板保护及真实目标 | 自动保存仅草稿，完成才正式提交 | 取消／恢复按会话，不删正式正文 |
@@ -375,7 +379,7 @@ AI在可读回复中提到“可以生成”但没有有效结构化建议时，
 
 沿用现有操作设置入口，采用同一弹出面板显示：操作、目标、新文档属性、范围、参考材料。operation标签使用“讨论、生成文档、更新文档、提出修改建议、比较差异、影响复核”，不让用户直接选内部ASK／MODIFY枚举。
 
-GENERATE要求名称／类型，不存在目标document_id；REVISE／PROPOSE_CHANGES要求已有目标及版本、范围；COMPARE／REVIEW要求明确材料。配置只改本地草稿，提交时绑定真实版本；关闭设置不自动调用模型或保存正文。
+当前文档为默认操作目标及所属助手。已有目标操作只能选择该文档，范围与版本同文档；其他文档只能作为明确来源。GENERATE要求NEW名称／类型、scope=null，仍由当前助手发起，生成后新文档拥有空助手；COMPARE／REVIEW必须明确材料。关闭设置不触发请求或写正文。
 
 M15-LONG-01（2026-10-29）：GENERATE设置内提供“创建框架，分章撰写”，复用手动新建弹层，带入名称／类型并预选固定框架；创建仍需明确提交，不发送AI。当前阅读为有效CURRENT且有章节标题时，对话输入区提供“分章节撰写当前文档”，明确将该文档首章配置为REVISE／SECTION。章节列表来自实际编辑器快照，支持同名标题及子章节，以block_id和content_version绑定，不能按标题文字猜目标。
 
@@ -423,7 +427,7 @@ M15-LONG-01（2026-10-29）：GENERATE设置内提供“创建框架，分章撰
 
 | 状态或场景及作用范围 | 进入条件或事件 | 页面表现与操作限制 | 数据保存、清理或恢复 | 离开条件及后续动作 |
 | --- | --- | --- | --- | --- |
-| 零文档 | 新建后documents为空 | 文档区为空，会话可用；不构造CURRENT | 保留初始用户原话；不自动接受运行 | 用户开始讨论／新建框架 |
+| 零文档 | 新建后documents为空 | 文档区为空，助手显示需先创建／选择文档；不构造CURRENT | 不复制根创建记录或虚构原话；不接受运行 | 用户创建并选择真实文档 |
 | 写请求提交／UNKNOWN | 命令已发，回执未知 | 禁重复提交，局部状态可见 | 冻结原method／path／body／key和输入 | 相同动作核实后采用真实结果 |
 | AI运行／卡片待答 | RUNNING或已返回卡片 | 运行占用与待答区分；后者不长期阻塞编辑 | 输入、原题、正式答案独立 | 运行终态停止观察，后续回答新建关联轮次 |
 | 编辑／保存失败／切文档 | 真实人工会话 | 保留编辑器／选区／焦点，必要离开警告 | INF-BROWSER＋服务器草稿分别标事实 | 确认已存才卸载；未确认保留或用户明确离开 |
@@ -436,13 +440,13 @@ M15-LONG-01（2026-10-29）：GENERATE设置内提供“创建框架，分章撰
 
 正文应用结果独立显示：已保存Vn、无内容变化、未写入、仅生成建议。progress_result拒绝时仍可看到有效正文结果及进度未更新说明；不能给整个消息画一个成功图标误导全部完成。
 
-输入草稿按需求隔离；编辑恢复按requirement_id、target_document_id、draft_id、基准content_version隔离。布局偏好可跨需求，正文草稿不可。旧测试浏览器存储不迁移，新增命名空间或schema版本后忽略不兼容值，不自动读取成新文档内容。
+输入、操作设置和卡片草稿按requirement_id＋document_id隔离，消息／运行记录和滚动分页属于各文档owner；编辑恢复仍按真实target_document_id、draft_id和基准content_version隔离。布局偏好可共用。切换后原命令的晚到结果只作用原文档，不能清理另一文档输入；旧测试缓存不迁移。
 
 发送后保留被冻结的method、path、body及Idempotency-Key。网络中断先重放／核实原动作，不能刷新目标后拿原键发新内容。正在UNKNOWN的动作不得被新阅读文档替换；明确撤销本地恢复提示也不等于服务端取消运行。
 
 HTTP长期不返回时沿6.1在截止后离开单次等待：发送进入“结果待核实”，保留原输入与命令，通过既有恢复入口核实；读取提示暂时无法读取，保留最近成功事实。人工保存超时进入“保存结果待核实”并按原规则读取／核实原请求；后续编辑继续进入本地恢复快照，不提前更新已确认版本。完成编辑须等待保存核实，核实失败则进入错误状态并可继续编辑，不发送完成命令或清理草稿。核实包含多个HTTP交换，每次有独立上限，不承诺整套保存／核实流程总计30秒。
 
-页面实现定位：requirements/{detail-owner,detail-read,document-owner,detail-layout,detail-frame,departure}.ts(x)，guide/{conversation-owner,composer,polling}.ts；改造必有CURRENT构造假设，需求级会话不随阅读切换销毁。
+页面实现定位：requirements/{detail-owner,detail-read,document-owner,detail-layout,detail-frame,departure}.ts(x)，guide/{conversation-owner,composer,polling}.ts；助手按文档保活，选文档不销毁原owner或重绑定在途动作。
 
 ### 5.6 独立组件
 
@@ -453,11 +457,11 @@ HTTP长期不返回时沿6.1在截止后离开单次等待：发送进入“结�
 | 输入项 | 类型或定义引用 | 必传、可空与默认规则 | 用途及外部变化后的同步 |
 | --- | --- | --- | --- |
 | open／submitting | boolean | 必传非null，父级事实 | 外部关闭按未提交保护 |
-| title／type／initialIdea | SHR-TEXT／RequirementType | 初值由创建表单定义 | 不再接收模板／初始化模式 |
+| title／type | SHR-TEXT／RequirementType | 初值由创建表单定义 | 不再接收模板／初始化模式 |
 
 | 输出事件 | 触发条件 | 输出结构 | 表达的事实 |
 | --- | --- | --- | --- |
-| submit | 字段合法且未处理中 | {title,requirement_type,initial_idea} | 用户创建意图，不表示成功 |
+| submit | 字段合法且未处理中 | {title,requirement_type} | 用户创建意图，不表示成功 |
 | close | 用户关闭／Esc | 无业务命令 | 关闭表单，不删除需求 |
 
 特殊交互：5.4工作台创建规则；焦点进入首字段，关闭返新建入口；失败保留草稿。
@@ -778,7 +782,7 @@ M15-HTTP-01在ApiClient统一规定每次HTTP交换30000毫秒截止（代码常
 
 各BND-*-API的完整参数／响应见后端设计第6章；本文件不重复字段定义。API客户端绑定如下：
 
-WalleApi继续通过ApiClient统一准备、提交和严格解码；后端第6章是唯一字段清单。新增createDocument、updateDocumentMetadata两个方法；其他方法修改入参／decoder，不另造聊天、授权、上下文或任务client。
+WalleApi继续经ApiClient统一准备、提交与严格解码；保留原方法及createDocument／updateDocumentMetadata，新增getMessage用于明确来源读取。forDocumentAssistant保存所属文档，消息／运行列表、详情进展和讨论命令均携带document_id；读取协调／缓存键含所属身份，decoder核对返回归属。原需求级字段保留，不另造助手服务族。
 
 当前getCurrentDocument／getManualDraft／listRevisions／listComments等增加显式document_id。相关decoder校验requirement_id和document_id，不仅校验“是CURRENT”。metadata_version、discussion_version和content_version分开使用，防止拿草稿版本当目标版本。
 
@@ -807,8 +811,8 @@ responses解码MODEL／PROGRAM判别联合，HTTP202／200与processing必须一
 
 | 技术操作 | 输入与作用范围 | 成功输出及保证 | 失败与完成范围 |
 | --- | --- | --- | --- |
-| 编辑恢复 | IndexedDB新1.5库／draft_snapshots；键req_id＋target_doc_id＋draft_id＋base_content_version | 按原事务存快照，只承诺本机暂存 | 损坏／过期或身份不符不覆盖正文；不可用保留内存输入并提示 |
-| 对话／卡片草稿 | sessionStorage；键namespace＋requirement_id＋message_id／composer | 同标签页恢复，成功接受后按对应消息清理 | 失败／UNKNOWN不清理；另一需求／卡片不串值 |
+| 编辑恢复 | IndexedDB库walle-v1.5-document-assistant／draft_snapshots；键req_id＋target_doc_id＋draft_id＋base_content_version | 按原事务存快照，只承诺本机暂存 | 损坏／过期或身份不符不覆盖正文；不可用保留内存输入并提示 |
+| 对话／卡片草稿 | sessionStorage；键namespace＋requirement_id＋document_id＋message_id／composer | 同标签页恢复，成功接受后按对应消息清理 | 失败／UNKNOWN不清理；另一需求／文档／卡片不串值 |
 | 布局偏好 | localStorage，独立schema版本的全局导航／详情偏好键 | 读取合法值；默认由SHR-UI给定 | 存储不可用仅本页可调整，不影响业务读取 |
 | 阅读位置 | 当前页／session键requirement_id＋document_id＋revision_id／current_version | 对应对象恢复滚动和选择 | 对象失效清理该项，不回落另一文档写入 |
 
@@ -816,7 +820,7 @@ responses解码MODEL／PROGRAM判别联合，HTTP202／200与processing必须一
 
 详情布局偏好沿用localStorage的walle:v1.5:preferences和schema_version=1；严格校验left_open、right_open、right_tab、right_width，right_tab允许AI／PROGRESS／SUGGESTIONS／COMMENTS／REVISIONS，已有页签值继续有效。REVISIONS继续作为更多菜单打开的记录视图保存，不再对应常驻页签；原REVISIONS偏好仍可直接恢复记录，返回默认AI。新增PROGRESS及SUGGESTIONS仅为本机视图选择，不恢复业务命令或生成权限，存储失败仍可本页操作。
 
-需求级当前阅读选择使用sessionStorage的walle:v1.5:reading:<requirement_id>，schema_version=1，身份必须匹配且文档仍可读；成功读取后才更新。零文档变为首份真实稿时选择该稿，不变AI绑定；原阅读对象失效按合法目录重新选择。卡片键walle:v1.5:cards:<requirement_id>:<message_id>使用schema_version=2；全局导航与路由补充分别采用walle:v1.5:navigation-collapsed、walle:v1.5:route-position，拒绝旧缓存。人工编辑恢复的manual_draft_id是本地身份名，HTTP保存／取消／完成仍发送后端正式draft_id字段。
+需求内阅读选择仍使用sessionStorage的walle:v1.5:reading:<requirement_id>，schema_version=1，成功核实合法文档后更新；选择改变只启用对应助手，不重绑原命令。输入键walle:v1.5:document-composer:<requirement_id>:<document_id>，schema_version=1且存储身份须匹配；卡片键walle:v1.5:document-cards:<requirement_id>:<document_id>:<message_id>，schema_version=2。旧需求级键不回读。全局导航／路由位置沿原键；manual_draft_id仍只为本地恢复身份，HTTP沿正式draft_id字段。
 
 新键空间实际字符串由原存储适配统一构造并在实现位置固定；逻辑组成不可省略，旧版本值拒绝且不迁移。显式关闭／离开按BND-DETAIL保存；不依赖退出事件一定执行，不把IndexedDB成功当服务端持久化。
 
@@ -849,6 +853,8 @@ M15-REQUEST-01须核对同参数／同屏障10消费者至多1个在途GET、独
 | 正式文案／用量 | 运行中、失败、取消、程序处理、未记录usage | 应用结果、Token实际／预检／缓存不混淆；不恢复重复概览 | 检查对应真实快照和页面，单一指标只在所属模块展示 |
 | 详情布局 | 本机Chrome／Edge、100%缩放；1024、1280、1440、1920宽及长标题／消息 | 按BND-DETAIL／SHR-UI宽度和滚动归属，操作可达、无外层冗余滚动 | 真实点击／键盘、调整导航／面板，引用前端同名场景，不逐控件留截图 |
 | AI主输入快捷键 | 空输入／合法文字／选区／IME／发送不可用／长按 | Enter单次发送且共享原门禁；Ctrl／⌘+Enter光标换行及选区替换；IME不拦截，空输入不误换行或提交 | 快捷键回归及隔离页面真实按键／保存原文；合成IME事件与真实系统输入法证据分开 |
+| 文档级助手隔离 | 同需求A／B、相同局部topic_ref、两份草稿、A在途／UNKNOWN时切B | 历史／进展／卡片／请求详情与输入各归本文件；回A可核实原请求且只清A；新文档助手为空；无文档不发送 | 离线owner／API及实际隔离浏览器；引用只读与晚到响应 |
+| 两字段创建 | 空表单、标题码点、类型、提交失败／UNKNOWN／取消及宽窄窗口 | 只显示并发送标题／类型，无初始想法校验；原请求与输入保留，不补写占位原话，不自动Chat | 现有创建专项、HTTP／SQLite及页面核对 |
 | 文档记录入口收纳 | 原记录偏好／四个主视图／无文档，菜单及返回 | 只在更多菜单提供记录入口；原版本／运行记录可达；返回前视图与焦点，输入保留，不产生业务写入 | 布局返回／偏好回归及实际隔离菜单、版本／运行分类、返回与草稿检查 |
 | 修改建议独立页签 | 活动批次／无批次，AI与建议往返，窄面板／键盘 | BND-SUGGESTIONS；独立顶层入口，对话无二级切换／建议列表；保留对话及建议草稿、各自滚动和原UNKNOWN动作，隐藏禁止新决定 | 布局偏好／可见性回归，隔离HTTP／真实页面，不代处理用户批次 |
 | 大纲与进展信息层级 | 多主线／长主题／空状态／下一步／来源／处置；360px面板及1024—1920px、短窗口 | BND-PROGRESS；当前重点可扫读、主线与主题可辨，记录类型不混淆；进展独占右侧内容区、对话不堆叠；页签切换保留输入／阅读位置，主题切换返焦点，隐藏不读，新版本在可见进展时刷新 | 只读投影与原owner专项；实际隔离HTTP／UI、键盘／reduce／输入保留，边界与未覆盖在verification |

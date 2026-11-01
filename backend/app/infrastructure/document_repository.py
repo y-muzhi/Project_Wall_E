@@ -109,6 +109,12 @@ class DocumentRepository:
                 canonical_input(origin),
             ),
         )
+        from backend.app.requirements.discussion import empty_discussion
+
+        self.connection.execute(
+            'UPDATE requirement_documents SET discussion_state_json=? WHERE id=?',
+            (canonical_input(empty_discussion()), identity),
+        )
         return self.get_current(requirement_id, identity)
 
     def update_metadata(self, current, changes: dict, at: str):

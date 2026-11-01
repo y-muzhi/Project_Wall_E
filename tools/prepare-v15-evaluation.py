@@ -130,14 +130,17 @@ def prepare_case(database, lock, catalog, domain, case):
     checked(create_requirement(executor, {'title': domain.title, 'requirement_type': 'NEW',
         'initial_idea': domain.idea, 'idempotency_key': str(uuid4())}, catalog=catalog), 'CREATED')
 
-    def version():
+    owner_document_id = None
+
+    def version(document_id=None):
         with database.transaction() as connection:
-            return connection.execute('SELECT discussion_version FROM requirements WHERE id=1').fetchone()[0]
+            return connection.execute('SELECT discussion_version FROM requirement_documents WHERE id=?',(document_id or owner_document_id,)).fetchone()[0]
 
     def accept(instruction, operation='DISCUSS', target=None, scope=None, refs=()):
-        return checked(create_guide_run(executor, {'requirement_id': 1, 'expected_discussion_version': version(),
+        document_id = target['document_id'] if target is not None and target['kind']=='EXISTING' else owner_document_id
+        return checked(create_guide_run(executor, {'requirement_id': 1, 'document_id':document_id, 'expected_discussion_version': version(document_id),
             'operation': operation, 'instruction': instruction, 'target': target, 'scope': scope,
-            'source_refs': list(refs), 'proposal_ref': None, 'acknowledge_source_changes': False,
+            'source_refs': [{'kind':'MESSAGE','message_id':1}, *refs], 'proposal_ref': None, 'acknowledge_source_changes': False,
             'idempotency_key': str(uuid4())}, catalog=catalog), 'GUIDE_ACCEPTED')['guide_run_id']
 
     def pending(instruction):
@@ -175,12 +178,14 @@ def prepare_case(database, lock, catalog, domain, case):
     def target(doc):
         return {'kind': 'EXISTING', 'document_id': doc['id'], 'expected_content_version': doc['content_version']}
 
+    owner_document_id = checked(create_document(executor, {'requirement_id':1,'name':domain.title+'工作文档','document_kind':'REQUIREMENT_BRIEF','template_ref':None,'idempotency_key':str(uuid4())},catalog=catalog),'CREATED')['document']['id']
+
     if case == 'discuss-long-preference':
         pending(domain.preference)
         for index in range(12):
             pending('补充历史事项'+str(index+1)+'：本条没有改变既定偏好及首版边界。')
     if case == 'discuss-decline':
-        checked(update_discussion(executor, {'requirement_id': 1, 'expected_discussion_version': version(),
+        checked(update_discussion(executor, {'requirement_id': 1, 'document_id':owner_document_id, 'expected_discussion_version': version(),
             'discussion_command': {'type': 'SET_DISPOSITION', 'subject_ref': 'p1', 'decision': 'DECLINE_DRAFT',
                 'description': '当前不生成文档，继续讨论推荐主流程；没有新依据不要重复建议出稿。'},
             'idempotency_key': str(uuid4())}, catalog=catalog), 'UPDATED')

@@ -7,7 +7,7 @@ import { snapshotObject } from '../src/api/client.ts';
 const at = '2026-10-05T09:00:00.000Z';
 const root=()=>({id:1,requirement_no:'REQ000001',title:'需求😀',requirement_type:'NEW',status:'PLANNING',metadata_version:1,initial_message_id:1,discussion_version:1,
  document_work_state:'IDLE',active_operation_type:null,active_operation_id:null,created_at:at,updated_at:at,completed_at:null,closed_at:null,state_started_at:null});
-const run=()=>({id:2,requirement_id:1,action_type:'ASK',function_type:'collaboration_v1',source_type:'USER_INSTRUCTION',source_id:null,
+const run=()=>({id:2,requirement_id:1,document_id:2,action_type:'ASK',function_type:'collaboration_v1',source_type:'USER_INSTRUCTION',source_id:null,
  scope:{scope_type:'DOCUMENT',scope_ref:null},status:'RUNNING',current_step:'PREPARING',final_result:null,suggestion_batch_id:null,latest_assistant_message_id:null,
  error_code:null,error_message:null,cancel_reason:null,retry_of_guide_run_id:null,created_at:at,started_at:at,waiting_user_at:null,ended_at:null,updated_at:at,
  operation:'DISCUSS',parent_guide_run_id:null,target:null,discussion_version_snapshot:1,material_summary:null,application_result:null,progress_result:null,progress_error:null,document_effect:null,returned_responses:[]});
@@ -80,7 +80,7 @@ test('formal responses retain explicit skip/custom null and reject duplicate key
     r => r.responses.push(structuredClone(r.responses[0])), r => r.responses[0].custom_answer = '', r => r.schema_version = 2]);
 });
 test('messages keep damaged structured-content fallback and server card-state; text cannot carry formal answers', () => {
-  const message = { id: 1, requirement_id: 1, guide_run_id: 2, sequence_no: 5, role: 'ASSISTANT', content: '回退正文', message_type: 'INTERACTION_CARDS',
+  const message = { id: 1, requirement_id: 1, document_id:2, guide_run_id: 2, sequence_no: 5, role: 'ASSISTANT', content: '回退正文', message_type: 'INTERACTION_CARDS',
     structured_content: null, reply_to_message_id: null, created_at:at,card_state:null,phase_ref:null,topic_refs:[],document_ids:[],program_receipt:null};
   assert.deepEqual(models.message(message), message);
   assert.equal(models.message({ ...message, structured_content: cards(), card_state: 'EXPIRED' }).card_state, 'EXPIRED');

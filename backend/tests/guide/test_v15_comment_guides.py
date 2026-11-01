@@ -164,7 +164,7 @@ def test_comment_acceptance_has_two_versions_actual_owner_and_frozen_original_so
         assert run['operation'] == 'PROPOSE_CHANGES' and run['source_type'] == 'COMMENT' and run['source_id'] == original['id']
         assert run['target_document_id'] == current['id'] != other['id']
         assert basis['comment_source'] == original and basis['request']['instruction'] == original['content']
-        assert RequirementRepository(connection).get(1)['status'] == 'CLOSED'
+        assert RequirementRepository(connection).get_for_document(1,1)['status'] == 'CLOSED'
     context = compiled(workspace)
     assert context.input['current_request']['operation'] == 'PROPOSE_CHANGES'
     assert context.input_json.count(original['content']) == 1
@@ -188,7 +188,7 @@ def test_comment_proposal_uses_existing_batch_without_writing_or_resolving_sourc
         batch = connection.execute('SELECT * FROM suggestion_batches').fetchone()
         assert batch['target_document_id'] == current['id'] and batch['source_type'] == 'COMMENT' and batch['source_id'] == original['id']
         assert connection.execute('SELECT status FROM comments WHERE id=?', (original['id'],)).fetchone()[0] == 'OPEN'
-        assert RequirementRepository(connection).get(1)['document_work_state'] == 'SUGGESTION_REVIEWING'
+        assert RequirementRepository(connection).get_for_document(1,1)['document_work_state'] == 'SUGGESTION_REVIEWING'
         assert all(row['content_version'] == 1 for row in connection.execute("SELECT content_version FROM requirement_documents WHERE document_type='CURRENT'"))
 
 
@@ -268,7 +268,7 @@ def test_saved_comment_evidence_can_be_reused_by_the_next_actual_http_command(wo
                 verify_source_refs(connection, owner, [invalid], resources=workspace[2].collaboration)
             with pytest.raises(Rejected, match='SOURCE_INVALID'):
                 capture_source(connection, owner, invalid, workspace[2].collaboration)
-        version = RequirementRepository(connection).get(1)['discussion_version']
+        version = RequirementRepository(connection).get_for_document(1,1)['discussion_version']
     if next_action == 'COMMENT':
         snapshot = json.loads(saved)
         for problem in ('missing_selection', 'ambiguous_selection', 'alias_mismatch', 'foreign_basis'):
@@ -300,7 +300,7 @@ def test_saved_comment_evidence_can_be_reused_by_the_next_actual_http_command(wo
             payload = {'expected_content_version': 1, 'expected_discussion_version': version}
         else:
             path = '/api/v1/requirements/1/guide-runs'
-            payload = {'expected_discussion_version': version, 'operation': 'DISCUSS', 'instruction': '继续讨论。',
+            payload = {'document_id':current['id'], 'expected_discussion_version': version, 'operation': 'DISCUSS', 'instruction': '继续讨论。',
                 'target': None, 'scope': None, 'source_refs': [], 'proposal_ref': None, 'acknowledge_source_changes': False}
         response = client.post(path, json=payload, headers={'Idempotency-Key': str(uuid4())})
         assert response.status_code == 202, response.text

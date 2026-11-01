@@ -5,7 +5,7 @@ import type { WalleApi } from '../api/walle.ts';
 export type SourceReading = Readonly<{ title: string; content: string }>;
 export type SourceReadApi = Pick<
   WalleApi,
-  'getRevision' | 'listMessages' | 'getGuideRun' | 'listModelCalls' | 'getModelCall'
+  'getRevision' | 'getMessage' | 'getGuideRun' | 'listModelCalls' | 'getModelCall'
 >;
 const json = (value: unknown) => JSON.stringify(value, null, 2);
 
@@ -24,23 +24,11 @@ export async function readSource(
   };
   alive();
   async function message(identity: number): Promise<Message> {
-    let cursor: number | null = null;
-    const seen = new Set<number>();
-    while (true) {
-      alive();
-      const page = await api.listMessages(requirement, cursor, signal);
-      alive();
-      if (page.data.items.some((item) => item.requirement_id !== requirement))
-        throw Error('来源不属于本需求');
-      const found = page.data.items.find((item) => item.id === identity);
-      if (found) return found;
-      const pagination = page.meta.pagination;
-      if (!pagination || !('has_more' in pagination)) throw Error('来源分页记录不完整');
-      if (!pagination.has_more || pagination.next_cursor === null) throw Error('来源消息不存在');
-      if (seen.has(pagination.next_cursor)) throw Error('来源分页无法继续');
-      seen.add(pagination.next_cursor);
-      cursor = pagination.next_cursor;
-    }
+    const actual = (await api.getMessage(requirement, identity, signal)).data;
+    alive();
+    if (actual.requirement_id !== requirement || actual.id !== identity)
+      throw Error('来源消息归属异常');
+    return actual;
   }
   if (source.kind === 'REVISION') {
     const revision = (await api.getRevision(id('revision_id'), signal)).data;

@@ -52,14 +52,21 @@ class ListRequirementsResponse:
 class GetRequirementRequest:
     requirement_id: int
     expand: str | None = None
+    document_id: int | None = None
 
     @classmethod
     def parse(cls, request: Request):
-        query = request_query(request, singles=('expand',))
+        query = request_query(request, singles=('expand', 'document_id'))
         expand = (
             strict_enum(query['expand'], 'expand', ('discussion',)) if 'expand' in query else None
         )
-        return cls(decimal_integer(request.path_params['requirement_id'], 'requirement_id'), expand)
+        return cls(
+            decimal_integer(request.path_params['requirement_id'], 'requirement_id'),
+            expand,
+            None
+            if 'document_id' not in query
+            else decimal_integer(query['document_id'], 'document_id'),
+        )
 
 
 class GetRequirementResponse:
@@ -81,6 +88,7 @@ class UpdateRequirementRequest(CommandRequest):
         'changes',
         'expected_discussion_version',
         'discussion_command',
+        'document_id',
     )
     mandatory = ()
 
@@ -166,7 +174,7 @@ class ReactivateRequirementResponse(UpdateRequirementResponse):
 
 class CreateRequirementRequest(CommandRequest):
     body_fields = ('title', 'requirement_type', 'initial_idea')
-    mandatory = body_fields
+    mandatory = ('title', 'requirement_type')
     uses_requirement_path = False
     validate = staticmethod(create_requirement_input)
     normalize = staticmethod(

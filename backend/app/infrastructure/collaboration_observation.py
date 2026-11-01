@@ -78,7 +78,12 @@ class CollaborationObservation:
         if (
             connection.execute('SELECT count(*) FROM requirements').fetchone()[0] != 1
             or connection.execute('SELECT count(*) FROM guide_runs').fetchone()[0] != 1
-            or connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0] != 0
+            or connection.execute('SELECT count(*) FROM requirement_documents').fetchone()[0] != 1
+            or connection.execute(
+                "SELECT 1 FROM requirement_documents WHERE id=? AND requirement_id=? AND document_type='CURRENT' AND content_version=1 AND markdown_content=''",
+                (run['document_id'], run['requirement_id']),
+            ).fetchone()
+            is None
         ):
             raise ConfigInvalid('Observation must use its isolated new workspace')
         return AdmissionEvidence(resources.release['admission'])
