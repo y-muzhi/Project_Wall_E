@@ -8,6 +8,8 @@
 | H01—H12是什么、用户如何决定 | [全面审查报告及逐项处理决定](项目全面审查报告_V_1.5_2026-10-28.md) |
 | 如何运行当前版本 | [运行说明](../../operations/v1.5/运行说明_V_1.5.md) |
 | 产品应当怎样工作 | [正式前后端设计](../../design/v1.5/README.md) |
+| 最近交互规则及正式合入位置 | [近期交互合并记录](../../archive/merges/v1.5/合并记录-2026-10-31-近期交互归并.md)；[待合并入口](../../iterations/pending/v1.5/README.md) |
+| 核对近期代码是否都有文档 | [本次文档覆盖检查](../../verification/v1.5/recent-change-documentation-audit-2026-10-30.md) |
 | 查实际检查与失败 | [验证记录索引](../../verification/v1.5/README.md) |
 | 查旧断点、旧计划、旧调用申请 | [H03整理前历史](../../archive/project/v1.5/h03-2026-10-28/README.md) |
 

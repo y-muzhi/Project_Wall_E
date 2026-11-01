@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Message } from '../api/models.ts';
 import { conversationTime } from '../shared/time.ts';
 import { Icon } from '../shared/icon.tsx';
+import { EmptyState } from '../shared/empty-state.tsx';
 import type { RequirementMessages } from './read.ts';
 import { MessageContent } from './content.tsx';
 import { ModelReturnContent } from './model-return.tsx';
@@ -177,7 +178,13 @@ export function MessageTimeline({
     return () => element.removeEventListener('scroll', capture);
   }, [scrollPort, state.loading]);
   return (
-    <section className="message-thread" aria-label="对话消息">
+    <section
+      className={
+        'message-thread' +
+        (state.items?.length === 0 && !state.loading && !state.error ? ' is-empty' : '')
+      }
+      aria-label="对话消息"
+    >
       <header>
         <div className="read-section-heading">
           <span className="sr-only">对话消息</span>
@@ -263,7 +270,9 @@ export function MessageTimeline({
         aria-busy={state.loading}
       >
         <div ref={content}>
-          {state.items?.length === 0 && <p>暂无消息</p>}
+          {state.items?.length === 0 && !state.loading && !state.error && (
+            <EmptyState icon="robot" message="我们要构建什么？" fill />
+          )}
           {state.items?.map((message) => (
             <article
               key={message.id}
@@ -283,7 +292,7 @@ export function MessageTimeline({
                 <span className="sr-only">用户消息</span>
               ) : (
                 <header>
-                  <span className="ai-message-avatar" role="img" aria-label="AI 助手">
+                  <span className="ai-message-avatar" role="img" aria-label="Ai助手">
                     <Icon name="robot" />
                   </span>
                 </header>

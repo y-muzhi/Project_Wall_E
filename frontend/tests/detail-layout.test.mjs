@@ -111,3 +111,19 @@ test('records opened from More return to prior primary panel and preserve old st
  layout.viewport(1023);layout.returnFromRecords();assert.equal(layout.getSnapshot().right_tab,'REVISIONS');
  layout.viewport(1600);layout.returnFromRecords();assert.equal(layout.getSnapshot().right_tab,'COMMENTS');
 });
+
+
+test('document creation reveals the assistant only when hidden and preserves its selected panel and width',()=>{
+ const storage=store(),layout=new DetailLayout('PLANNING',1600,storage);layout.resizeRight(500);
+ const before=layout.getSnapshot(),writes=storage.writes.length;let notifications=0;layout.subscribe(()=>notifications++);
+ layout.ensureAssistantVisible();assert.equal(layout.getSnapshot(),before);assert.equal(storage.writes.length,writes);assert.equal(notifications,0);
+ for(const tab of ['COMMENTS','PROGRESS','SUGGESTIONS','REVISIONS','AI']){
+  layout.openTab(tab);const visible=layout.getSnapshot(),count=storage.writes.length;
+  layout.ensureAssistantVisible();assert.equal(layout.getSnapshot(),visible);assert.equal(storage.writes.length,count);
+  layout.toggleRight();assert(!layout.getSnapshot().right_open);layout.ensureAssistantVisible();assert(layout.getSnapshot().right_open);assert.equal(layout.getSnapshot().right_tab,tab);assert.equal(layout.getSnapshot().preferences.right_width,500);
+ }
+ layout.viewport(1100,980);layout.showDocument();assert(!layout.getSnapshot().right_open);assert(layout.getSnapshot().preferences.right_open);
+ layout.ensureAssistantVisible();assert(layout.getSnapshot().right_open&&!layout.getSnapshot().document_open);assert.equal(layout.getSnapshot().preferences.right_width,500);
+ const opened=layout.getSnapshot(),count=storage.writes.length;layout.ensureAssistantVisible();assert.equal(layout.getSnapshot(),opened);assert.equal(storage.writes.length,count);
+ layout.viewport(900,800);const blocked=layout.getSnapshot();layout.ensureAssistantVisible();assert.equal(layout.getSnapshot(),blocked);
+});

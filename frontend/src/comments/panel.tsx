@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Icon } from '../shared/icon.tsx';
+import { EmptyState } from '../shared/empty-state.tsx';
 import { createPortal } from 'react-dom';
 import type { CommentItem } from '../api/models.ts';
 import type {
@@ -11,7 +12,10 @@ import { CommentList, CommentMarkerLayer } from './components.tsx';
 import { CommentCommandControl } from './command-control.tsx';
 import { commentTarget } from './target.ts';
 import { locateComment } from './locate.ts';
-import { selectionToolbarPosition } from '../documents/selection-toolbar-position.ts';
+import {
+  documentSelectionToolbarPosition,
+  observeDocumentSelection,
+} from '../documents/selection-surface.ts';
 import type { RequirementCommentPanel, CommentSlot } from './panel-owner.ts';
 
 function Operation({
@@ -106,12 +110,28 @@ function Operation({
 function CardActions({
   panel,
   comment,
-}: Readonly<{ panel: RequirementCommentPanel; comment: CommentItem }>) {
-  const [open, setOpen] = useState(false),
-    id = useId(),
-    trigger = useRef<HTMLButtonElement>(null),
-    operation = useRef<HTMLDivElement>(null),
-    hadSlot = useRef(false);
+  toolsHost,
+}: Readonly<{
+  panel: RequirementCommentPanel;
+  comment: CommentItem;
+  toolsHost: HTMLElement | null;
+}>) {
+  type Action = 'EDIT' | 'MODIFY' | 'DELETE' | 'RESOLVE' | 'REOPEN';
+  const operation = useRef<HTMLDivElement>(null),
+    hadSlot = useRef(false),
+    lastAction = useRef<Action>('EDIT');
+  const statusTrigger = useRef<HTMLButtonElement>(null),
+    editTrigger = useRef<HTMLButtonElement>(null),
+    deleteTrigger = useRef<HTMLButtonElement>(null),
+    modifyTrigger = useRef<HTMLButtonElement>(null);
+  const triggers = {
+    EDIT: editTrigger,
+    DELETE: deleteTrigger,
+    MODIFY: modifyTrigger,
+    RESOLVE: statusTrigger,
+    REOPEN: statusTrigger,
+  };
+  const disabledHelp = useId();
   const slot = panel.slot(comment.id);
   useLayoutEffect(() => {
     if (slot?.open && slot.flow.intent.kind === 'EDIT')
@@ -122,11 +142,20 @@ function CardActions({
       operation.current
         ?.querySelector<HTMLButtonElement>('[role=combobox]:not(:disabled)')
         ?.focus({ preventScroll: true });
-    if (!slot && hadSlot.current) trigger.current?.focus({ preventScroll: true });
+    if (!slot && hadSlot.current)
+      triggers[lastAction.current].current?.focus({ preventScroll: true });
     hadSlot.current = slot !== null;
   }, [slot?.key, slot?.open]);
-  // The command/editor is outside the disclosure. Collapsing secondary actions
-  // never retires a request, input, confirmation or recovery owner.
+  const beginOperation = (kind: 'EDIT' | 'MODIFY' | 'DELETE') => {
+    lastAction.current = kind;
+    panel.begin(comment.id, kind);
+  };
+  const execute = (kind: 'RESOLVE' | 'REOPEN') => {
+    lastAction.current = kind;
+    const flow = panel.begin(comment.id, kind);
+    if (flow) void panel.submit(flow);
+  };
+  // Retained requests and inputs stay visible until the owner adopts actual results.
   if (slot)
     return (
       <div className="comment-operation" ref={operation}>
@@ -135,85 +164,82 @@ function CardActions({
     );
   const allowed = panel.writeReady,
     orphan = comment.anchor_status === 'ORPHANED' || comment.location.status === 'ORPHANED';
-  const execute = (kind: 'RESOLVE' | 'REOPEN') => {
-    const flow = panel.begin(comment.id, kind);
-    if (flow) void panel.submit(flow);
-  };
+  const statusLabel = comment.status === 'OPEN' ? '解决评论并隐藏' : '重新打开评论';
+  const disabledReason = allowed
+    ? null
+    : (panel.writeUnavailableReason ?? '评论暂不可修改，请重新读取评论与正文。');
   return (
-    <div
-      className="comment-action-group"
-      onKeyDown={(event) => {
-        if (
-          event.key === 'Escape' &&
-          open &&
-          !event.defaultPrevented &&
-          !(event.target instanceof Element && event.target.closest('dialog'))
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          setOpen(false);
-          trigger.current?.focus();
-        }
-      }}
-    >
-      <button
-        className="ui-button"
-        type="button"
-        disabled={!allowed}
-        onClick={() => execute(comment.status === 'OPEN' ? 'RESOLVE' : 'REOPEN')}
-      >
-        {comment.status === 'OPEN' ? '解决评论' : '重新打开评论'}
-      </button>
-      <button
-        className="ui-button"
-        type="button"
-        ref={trigger}
-        disabled={panel.blocked}
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Icon name="more" />
-        更多
-      </button>
-      <div
-        id={id}
-        className="comment-more-actions motion-disclosure"
-        hidden={!open}
-        inert={!open}
-        aria-hidden={!open}
-      >
-        {comment.status === 'OPEN' && (
-          <>
-            <button
-              className="ui-button"
-              type="button"
-              disabled={!allowed}
-              onClick={() => panel.begin(comment.id, 'EDIT')}
-            >
-              编辑评论
-            </button>
-            {!orphan && (
-              <button
-                className="ui-button"
-                type="button"
-                disabled={!allowed}
-                onClick={() => panel.begin(comment.id, 'MODIFY')}
-              >
-                根据评论提出修改建议
-              </button>
+    <div className="comment-action-group">
+      {toolsHost &&
+        createPortal(
+          <div className="comment-card-tools" role="group" aria-label="评论操作">
+            {disabledReason && (
+              <span id={disabledHelp} className="sr-only">
+                {disabledReason}
+              </span>
             )}
-          </>
+            <span className="comment-tool-slot" title={disabledReason ?? statusLabel}>
+              <button
+                ref={statusTrigger}
+                className="ui-button icon-button comment-tool-button"
+                type="button"
+                aria-label={statusLabel}
+                title={disabledReason ?? statusLabel}
+                disabled={!allowed}
+                aria-describedby={disabledReason ? disabledHelp : undefined}
+                onClick={() => execute(comment.status === 'OPEN' ? 'RESOLVE' : 'REOPEN')}
+              >
+                <Icon name={comment.status === 'OPEN' ? 'check' : 'reopen'} />
+              </button>
+            </span>
+            {comment.status === 'OPEN' && (
+              <span className="comment-tool-slot" title={disabledReason ?? '编辑评论'}>
+                <button
+                  ref={editTrigger}
+                  className="ui-button icon-button comment-tool-button"
+                  type="button"
+                  aria-label="编辑评论"
+                  title={disabledReason ?? '编辑评论'}
+                  disabled={!allowed}
+                  aria-describedby={disabledReason ? disabledHelp : undefined}
+                  onClick={() => beginOperation('EDIT')}
+                >
+                  <Icon name="edit" />
+                </button>
+              </span>
+            )}
+            <span className="comment-tool-slot" title={disabledReason ?? '删除评论'}>
+              <button
+                ref={deleteTrigger}
+                className="ui-button icon-button comment-tool-button comment-destructive"
+                type="button"
+                aria-label="删除评论"
+                title={disabledReason ?? '删除评论'}
+                disabled={!allowed}
+                aria-describedby={disabledReason ? disabledHelp : undefined}
+                onClick={() => beginOperation('DELETE')}
+              >
+                <Icon name="trash" />
+              </button>
+            </span>
+          </div>,
+          toolsHost,
         )}
+      {comment.status === 'OPEN' && !orphan && (
         <button
-          className="ui-button"
+          ref={modifyTrigger}
+          className="ui-button comment-action"
           type="button"
+          aria-label="根据评论提出修改建议"
+          title={disabledReason ?? '根据评论提出修改建议'}
+          aria-describedby={disabledReason ? disabledHelp : undefined}
           disabled={!allowed}
-          onClick={() => panel.begin(comment.id, 'DELETE')}
+          onClick={() => beginOperation('MODIFY')}
         >
-          删除评论
+          <Icon name="robot" />
+          提出修改建议
         </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -228,14 +254,29 @@ export function CommentPanel({
     read = useSyncExternalStore(panel.comments.subscribe, panel.comments.getSnapshot);
   const documentState = useSyncExternalStore(documents.subscribe, documents.getSnapshot),
     binding = documents.currentBinding;
-  if (state.view === 'HISTORY' || documentState.mode === 'HISTORY') return null;
+  if (state.view === 'HISTORY' || documentState.mode === 'HISTORY')
+    return <EmptyState icon="history" message="历史版本不显示评论" fill />;
+  if (
+    documentState.mode === 'EMPTY' &&
+    state.slots.length === 0 &&
+    !state.error &&
+    !read.error &&
+    !read.loading &&
+    !state.refreshing
+  )
+    return <EmptyState icon="comment" message="请先选择文档" fill />;
   const visible = new Set(read.confirmed?.items.map((row) => row.id) ?? []),
     offPage = state.slots.filter((slot) => slot.identity !== null && !visible.has(slot.identity)),
     creation = panel.slot(null);
   return (
     <section aria-label="需求评论" className="requirement-comments">
       <header className="read-section-heading">
-        <strong>评论</strong>
+        <strong>
+          评论
+          {read.confirmed && (
+            <span className="comment-count">{read.confirmed.index.total_count}</span>
+          )}
+        </strong>
         <span className="read-status" role="status">
           {state.refreshing || read.loading ? '正在读取评论…' : ''}
         </span>
@@ -263,7 +304,11 @@ export function CommentPanel({
         </button>
       )}
       {creation && (
-        <section aria-label="新建评论">
+        <section aria-label="新建评论" className="comment-composer-card">
+          <header className="comment-composer-heading">
+            <Icon name="comment" />
+            <strong>添加评论</strong>
+          </header>
           <Operation panel={panel} slot={creation} />
         </section>
       )}
@@ -281,13 +326,16 @@ export function CommentPanel({
         comments={panel.comments}
         blocked={panel.blocked || state.refreshing}
         locateReady={binding !== null}
+        keepVisible={(identity) => panel.slot(identity) !== null}
         locate={(identity) =>
           binding !== null &&
           locateComment(panel.comments, binding.editor, binding.navigation, identity)
         }
         changePage={(page) => void panel.page(page)}
         retry={() => void panel.refresh().catch(() => undefined)}
-        actions={(comment) => <CardActions panel={panel} comment={comment} />}
+        actions={(comment, toolsHost) => (
+          <CardActions panel={panel} comment={comment} toolsHost={toolsHost} />
+        )}
       />
     </section>
   );
@@ -315,43 +363,29 @@ function CreationEntries({
       null,
     ),
     [dismissedSelection, setDismissedSelection] = useState<typeof selection>(null);
+  const selectionSurface = useRef<ReturnType<typeof observeDocumentSelection> | null>(null),
+    repositionSelection = useRef<() => void>(() => {});
+  repositionSelection.current = () => {
+    if (!selection || selection === dismissedSelection || selectionSurface.current?.selecting) {
+      setSelectionPosition(null);
+      return;
+    }
+    const next = documentSelectionToolbarPosition(binding.root, 116, 40);
+    setSelectionPosition((previous) =>
+      previous?.left === next?.left && previous?.top === next?.top ? previous : next,
+    );
+  };
   useLayoutEffect(() => {
-    const position = () => {
-      const actual = window.getSelection();
-      if (
-        !selection ||
-        selection === dismissedSelection ||
-        !actual?.rangeCount ||
-        actual.isCollapsed ||
-        !binding.root.contains(actual.getRangeAt(0).commonAncestorContainer)
-      ) {
-        setSelectionPosition(null);
-        return;
-      }
-      const range = actual.getRangeAt(0).getBoundingClientRect(),
-        port = binding.root.getBoundingClientRect();
-      setSelectionPosition(
-        selectionToolbarPosition(
-          range,
-          {
-            left: Math.max(8, port.left),
-            right: Math.min(window.innerWidth - 8, port.right),
-            top: Math.max(8, port.top),
-            bottom: Math.min(window.innerHeight - 8, port.bottom),
-          },
-          116,
-          40,
-        ),
-      );
-    };
-    position();
-    window.addEventListener('scroll', position, true);
-    window.addEventListener('resize', position);
+    const editorDOM = binding.root.querySelector<HTMLElement>('.ProseMirror');
+    if (!editorDOM) return;
+    const surface = observeDocumentSelection(editorDOM, () => repositionSelection.current());
+    selectionSurface.current = surface;
     return () => {
-      window.removeEventListener('scroll', position, true);
-      window.removeEventListener('resize', position);
+      surface.destroy();
+      selectionSurface.current = null;
     };
-  }, [binding, selection, dismissedSelection]);
+  }, [binding]);
+  useLayoutEffect(() => repositionSelection.current(), [binding, selection, dismissedSelection]);
   const reason = panel.writeUnavailableReason,
     blockReason = reason ?? (navigation.selected_block === null ? '请先选择正文区块。' : null),
     selectionReason =
@@ -375,7 +409,7 @@ function CreationEntries({
           <>
             <span title={blockReason ?? '评论当前区块'}>
               <button
-                className="ui-button"
+                className="ui-button comment-entry"
                 role="menuitem"
                 type="button"
                 title={blockReason ?? undefined}
@@ -412,7 +446,7 @@ function CreationEntries({
             }}
           >
             <button
-              className="ui-button"
+              className="ui-button comment-entry"
               type="button"
               title={selectionReason ?? undefined}
               aria-describedby={selectionReason ? id + '-selection' : undefined}
@@ -446,6 +480,9 @@ export function CommentDocumentTools({
   const state = useSyncExternalStore(panel.subscribe, panel.getSnapshot);
   useSyncExternalStore(documents.subscribe, documents.getSnapshot);
   const binding = documents.currentBinding;
+  const creation = panel.slot(null),
+    creationIntent = creation?.flow.intent;
+  const draft = creationIntent?.kind === 'CREATE' ? creationIntent.target : null;
   if (panel.blocked || state.view !== 'CURRENT' || binding === null) return null;
   return (
     <>
@@ -458,8 +495,10 @@ export function CommentDocumentTools({
       {createPortal(
         <CommentMarkerLayer
           comments={panel.comments}
+          draft={draft}
           editor={binding.editor}
           documentRoot={binding.root}
+          navigation={binding.navigation}
           blocked={state.refreshing}
           select={(identity) => {
             openPanel?.();

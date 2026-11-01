@@ -3,6 +3,7 @@ import { SourceReference } from '../requirements/source-reference.tsx';
 import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Suggestion } from '../api/models.ts';
 import { Confirmation } from '../shared/confirmation.tsx';
+import { EmptyState } from '../shared/empty-state.tsx';
 import type { RequirementSuggestionBatch } from './batch-owner.ts';
 import { tableRowCells, replaceRowCell } from './row-edit.ts';
 import { visibleSuggestions, nextPendingSuggestion } from './display.ts';
@@ -439,12 +440,8 @@ export function SuggestionPanel({
         </div>
       )}
       <div className="suggestion-list" ref={listRoot} role="region" aria-label="建议列表">
-        {pendingOnly && visible.length === 0 && (
-          <p className="panel-empty">
-            {metadata?.status === 'PENDING'
-              ? '没有待处理建议；已有决定尚须完成本批修改后才会应用。'
-              : '没有待处理建议；本批已结束，可切换全部查看已保存的决定。'}
-          </p>
+        {visible.length === 0 && !state.loading && !state.error && (
+          <EmptyState icon="suggestion" message={pendingOnly ? '暂无待处理建议' : '暂无修改建议'} />
         )}
         {items.map((item) => {
           const content = state.drafts[item.id] ?? proposed(item),

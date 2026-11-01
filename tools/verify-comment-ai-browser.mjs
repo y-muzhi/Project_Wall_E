@@ -70,7 +70,7 @@ try{
   if(w.length!==1||w[0].status!==409||!w[0].delivered||w[0].response.error?.code!=='${kind==='busy'?'WORK_STATE_CONFLICT':'STATE_CONFLICT'}')throw Error('I34 native refusal/inline error failed');
   externalComment=${['resolved','deleted'].includes(kind)}?wire.external.response.data:null;const finalComment=(await(await page.request.get('${url}/api/v1/comments/${comment.id}')).json()).data;
   if(JSON.stringify(finalComment)!==JSON.stringify(externalComment??${JSON.stringify(comment)}))throw Error('Rejected I34 changed comment');
-  if(await page.getByRole('tab',{name:'AI 对话',exact:true}).getAttribute('aria-selected')==='true')throw Error('Refusal declared accepted AI');
+  if(await page.getByRole('tab',{name:'Ai对话',exact:true}).getAttribute('aria-selected')==='true')throw Error('Refusal declared accepted AI');
   await page.getByRole('button',{name:'取消编辑',exact:true}).click();if(await page.evaluate(()=>window.detailWire.requests.filter(r=>r.method!=='GET').length)!==1)throw Error('Refusal cancellation sent another I34');return {passed:true,wire,finalComment,refusal_cancelled:true,external_busy:${kind==='busy'},external_complete:${kind==='completed'},external_comment:externalComment};
  }
  if('${kind}'==='inflight'){

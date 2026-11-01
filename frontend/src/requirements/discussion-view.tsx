@@ -6,6 +6,7 @@ import { Confirmation } from '../shared/confirmation.tsx';
 import { phaseKinds } from '../api/models.ts';
 import type { DiscussionState } from '../api/models.ts';
 import { Icon } from '../shared/icon.tsx';
+import { EmptyState } from '../shared/empty-state.tsx';
 import { activeModal } from '../shared/modal.ts';
 import {
   progressPresentation,
@@ -146,7 +147,7 @@ function TopicDetails({
           {records.current.length ? (
             <EvidenceRecords items={records.current} owner={owner} />
           ) : (
-            <p className="progress-empty">暂无已保存的内容依据。</p>
+            <EmptyState icon="info" message="暂无内容依据" compact />
           )}
         </section>
         <section className="progress-outcomes">
@@ -345,13 +346,13 @@ export function DiscussionProgress({
                 <h3>{view.focus.title}</h3>
                 <p>{view.focus.purpose}</p>
               </section>
-            ) : (
-              <p className="progress-empty">
-                {view.topics.length
-                  ? '尚未选定当前主题。可展开下方主题，选择“讨论此主题”。'
-                  : '暂无讨论主题。讨论后可在这里查看已保存的主题、依据和待明确问题。'}
+            ) : view.topics.length ? (
+              <p className="progress-notice">
+                尚未选定当前主题。可展开下方主题，选择“讨论此主题”。
               </p>
-            )}
+            ) : !state.loading && !state.error ? (
+              <EmptyState icon="progress" message="暂无讨论主题" />
+            ) : null}
             {view.next && (
               <section className="progress-next-step" aria-label="下一步建议">
                 <span className="progress-eyebrow">下一步建议</span>
@@ -413,7 +414,7 @@ export function DiscussionProgress({
                           />
                         ))
                       ) : (
-                        <p className="progress-empty">本主线尚未形成讨论主题。</p>
+                        <EmptyState icon="progress" message="本主线暂无主题" compact />
                       )}
                     </div>
                   </details>

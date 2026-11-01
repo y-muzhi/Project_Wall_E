@@ -9,6 +9,7 @@ export function RequirementLifecycleControl(
     flow: RequirementLifecycle;
     blocked: boolean;
     writeReady?: boolean;
+    caption?: string;
     changed(outcome: LifecycleOutcome): void | Promise<void>;
   }>,
 ) {
@@ -30,21 +31,24 @@ export function RequirementLifecycleControl(
   };
   return (
     <div className="requirement-lifecycle-control">
-      <SingleSelect
-        label="需求状态"
-        value={state.actual.status}
-        options={requirementStatuses.map((value) => ({
-          value,
-          label: REQUIREMENT_STATUS_LABELS[value],
-        }))}
-        disabled={
-          props.blocked ||
-          props.writeReady === false ||
-          busy ||
-          ['UNKNOWN', 'CONFIRMED'].includes(state.phase)
-        }
-        change={(value) => void select(value)}
-      />
+      <div className="requirement-lifecycle-field">
+        {props.caption && <span>{props.caption}</span>}
+        <SingleSelect
+          label="需求状态"
+          value={state.actual.status}
+          options={requirementStatuses.map((value) => ({
+            value,
+            label: REQUIREMENT_STATUS_LABELS[value],
+          }))}
+          disabled={
+            props.blocked ||
+            props.writeReady === false ||
+            busy ||
+            ['UNKNOWN', 'CONFIRMED'].includes(state.phase)
+          }
+          change={(value) => void select(value)}
+        />
+      </div>
       {busy && <span role="status">正在保存状态…</span>}
       {state.phase === 'UNKNOWN' && (
         <button

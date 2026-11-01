@@ -11,25 +11,25 @@ const document=id=>({id,requirement_id:1,name:'文档'+id,document_kind:'DESIGN'
 const detail=(changes={})=>({requirement:{id:1,status:'CLOSED',document_work_state:'IDLE'},documents:[document(1)],selected_document_id:1,current:null,...changes});
 
 test('unknown creation preserves its original action and does not steal a newer reading selection',async()=>{
- let prepared=0,sent=0;const selected=[],bodies=[];
- const flow=new DocumentDirectoryCommands(detail(),{prepareCreateDocument(_req,body){prepared++;bodies.push(body);return {async submit(){sent++;if(sent===1)throw new ApiUnknown(true);return {data:{document:document(2),revision_id:2}};}};}},async()=>detail({selected_document_id:3,documents:[document(1),document(2),document(3)]}),async identity=>selected.push(identity));
+ let prepared=0,sent=0,created=0;const selected=[],bodies=[];
+ const flow=new DocumentDirectoryCommands(detail(),{prepareCreateDocument(_req,body){prepared++;bodies.push(body);return {async submit(){sent++;if(sent===1)throw new ApiUnknown(true);return {data:{document:document(2),revision_id:2}};}};}},async()=>detail({selected_document_id:3,documents:[document(1),document(2),document(3)]}),async identity=>selected.push(identity),()=>created++);
  const body={name:' 新设计 ',document_kind:'DESIGN',template_ref:null};
- assert.equal(await flow.create(body),false);body.name='外部修改';assert.equal(flow.getSnapshot().phase,'UNKNOWN');
+ assert.equal(await flow.create(body),false);assert.equal(created,0);body.name='外部修改';assert.equal(flow.getSnapshot().phase,'UNKNOWN');
  assert.equal(await flow.create(body),false);assert.equal(await flow.retryUnknown(),true);
- assert.equal(prepared,1);assert.equal(sent,2);assert.equal(bodies[0].name,'新设计');assert.deepEqual(selected,[]);flow.dispose();
+ assert.equal(prepared,1);assert.equal(sent,2);assert.equal(bodies[0].name,'新设计');assert.deepEqual(selected,[]);assert.equal(created,1);assert.equal(await flow.finish(),false);assert.equal(created,1);flow.dispose();
 });
 
 test('known creation followed by failed refresh reuses only reads and selects its actual new document once',async()=>{
- let writes=0,reads=0;const selected=[];
- const flow=new DocumentDirectoryCommands(detail(),{prepareCreateDocument(){return {async submit(){writes++;return {data:{document:document(2),revision_id:2}};}};}},async()=>{if(++reads===1)throw Error('lost GET');return detail({documents:[document(1),document(2)]});},async identity=>selected.push(identity));
+ let writes=0,reads=0,created=0;const selected=[];
+ const flow=new DocumentDirectoryCommands(detail(),{prepareCreateDocument(){return {async submit(){writes++;return {data:{document:document(2),revision_id:2}};}};}},async()=>{if(++reads===1)throw Error('lost GET');return detail({documents:[document(1),document(2)]});},async identity=>selected.push(identity),()=>created++);
  assert.equal(await flow.create({name:'设计',document_kind:'DESIGN',template_ref:null}),false);
- assert.equal(flow.getSnapshot().phase,'CONFIRMED');const first=flow.finish(),second=flow.finish();assert.equal(first,second);assert.equal(await first,true);
- assert.equal(writes,1);assert.equal(reads,2);assert.deepEqual(selected,[2]);flow.dispose();
+ assert.equal(flow.getSnapshot().phase,'CONFIRMED');assert.equal(created,0);const first=flow.finish(),second=flow.finish();assert.equal(first,second);assert.equal(await first,true);
+ assert.equal(writes,1);assert.equal(reads,2);assert.deepEqual(selected,[2]);assert.equal(created,1);assert.equal(await flow.finish(),false);assert.equal(created,1);flow.dispose();
 });
 
 test('metadata targets its captured document and version while another document is read',async()=>{
  const bodies=[];
- const flow=new DocumentDirectoryCommands(detail({documents:[document(1),document(2)],selected_document_id:2}),{prepareUpdateDocument(identity,body){bodies.push({identity,body});return {async submit(){return {data:{document:{...document(1),metadata_version:2,name:'新名称'},event_id:7}};}};}},async()=>detail(),async()=>{throw Error('Metadata must not change reading selection');});
+ const flow=new DocumentDirectoryCommands(detail({documents:[document(1),document(2)],selected_document_id:2}),{prepareUpdateDocument(identity,body){bodies.push({identity,body});return {async submit(){return {data:{document:{...document(1),metadata_version:2,name:'新名称'},event_id:7}};}};}},async()=>detail(),async()=>{throw Error('Metadata must not change reading selection');},()=>{throw Error('Metadata must not reveal AI');});
  assert.equal(await flow.metadata(document(1),{type:'RENAME',name:' 新名称 '}),true);
  assert.deepEqual(bodies,[{identity:1,body:{expected_metadata_version:1,change:{type:'RENAME',name:'新名称'}}}]);
  flow.adopt(detail({documents:[{...document(1),metadata_version:2}]}));assert.throws(()=>flow.metadata(document(1),{type:'ARCHIVE'}));flow.dispose();
@@ -49,4 +49,16 @@ test('the editor projection preserves the original body/version without taking o
  const value={...document(1),created_at:at,template_ref:null,markdown_content:'',block_state_json:{schema_version:1,next_block_id:1,blocks:[]}};
  const core=editorReadModel(value);assert.deepEqual(Object.keys(core).sort(),['block_state_json','content_version','created_at','document_type','id','markdown_content','requirement_id','updated_at']);
  assert.equal(core.block_state_json,value.block_state_json);assert.equal(value.name,'文档1');assert.equal(core.name,undefined);
+});
+
+
+test('rejected and retired creation never reveals the assistant',async()=>{
+ let complete;let created=0;
+ const reply=new Promise(resolve=>{complete=resolve;});
+ const flow=new DocumentDirectoryCommands(detail(),{prepareCreateDocument(){return {submit:()=>reply};}},async()=>detail(),async()=>{},()=>created++);
+ const pending=flow.create({name:'设计',document_kind:'DESIGN',template_ref:null});
+ await new Promise(resolve=>setImmediate(resolve));flow.dispose();complete({data:{document:document(2),revision_id:2}});
+ assert.equal(await pending,false);assert.equal(created,0);
+ const failed=new DocumentDirectoryCommands(detail(),{prepareCreateDocument(){return {async submit(){throw Error('offline');}};}},async()=>detail(),async()=>{},()=>created++);
+ assert.equal(await failed.create({name:'设计',document_kind:'DESIGN',template_ref:null}),false);assert.equal(created,0);failed.dispose();
 });

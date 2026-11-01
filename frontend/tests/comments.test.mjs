@@ -47,3 +47,14 @@ test('navigation rejects manual/history/cross-version; original selection offset
  assert(locateComment(reader,editor,nav,1));assert.equal(located.selected_text,' 😀 ');assert.equal(located.start_offset,1);assert.equal(block,7);
  editor.loadedDocument={...current,document_type:'MANUAL_DRAFT'};assert(!locateComment(reader,editor,nav,1));editor.loadedDocument={...current,content_version:4};assert(!locateComment(reader,editor,nav,1));editor.loadedDocument=current;nav.getSnapshot=()=>({content:{kind:'REVISION'}});assert(!locateComment(reader,editor,nav,1));reader.dispose();
 });
+
+
+test('resolved dismissal changes presentation only, preserves the real page/index and does not hide an OPEN row', async()=>{
+ const rows=[item(1),{...item(2),status:'RESOLVED',resolved_at:at}],reader=new RequirementComments(current,port(rows));
+ assert(await reader.refresh());reader.markLocated(2);const bundle=reader.getSnapshot().confirmed;
+ assert(!reader.hideResolved(1));assert.equal(reader.getSnapshot().resolved_revision,0);
+ assert(reader.hideResolved(2));assert.equal(reader.getSnapshot().selected,null);assert.equal(reader.getSnapshot().resolved_revision,1);
+ assert.equal(reader.getSnapshot().confirmed,bundle);assert.deepEqual(bundle.items.map(row=>row.id),[1,2]);assert.equal(bundle.pagination.total,2);
+ reader.markLocated(1);reader.hideResolved(2);assert.equal(reader.getSnapshot().selected,1);
+ reader.setCurrent({...current,content_version:4});assert(!reader.hideResolved(2));reader.dispose();assert(!reader.hideResolved(2));
+});

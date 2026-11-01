@@ -17,6 +17,7 @@ export type CommentReadState = Readonly<{
   page: number;
   selected: number | null;
   selection_revision: number;
+  resolved_revision: number;
   loading: boolean;
   active: boolean;
   error: string | null;
@@ -38,6 +39,7 @@ export class RequirementComments {
     page: 1,
     selected: null,
     selection_revision: 0,
+    resolved_revision: 0,
     loading: false,
     active: true,
     error: null,
@@ -116,6 +118,7 @@ export class RequirementComments {
       loading: false,
       error: next === null ? null : '当前正文已更新，请刷新评论',
       selected: null,
+      resolved_revision: this.value.resolved_revision + 1,
     });
   }
   refresh(page = this.value.page, force = false): Promise<boolean> {
@@ -277,6 +280,26 @@ export class RequirementComments {
   /** Select an already confirmed visible comment without reordering or HTTP. */
   markLocated(identity: number): void {
     if (this.located(identity)) this.publish({ selected: identity });
+  }
+  /** Presentation signal only: keep the authoritative page, index and totals.
+   * Callers may dismiss only a resolved row in the same confirmed CURRENT. */
+  hideResolved(identity: number): boolean {
+    const confirmed = this.value.confirmed;
+    if (
+      this.closed ||
+      !confirmed ||
+      !same(this.current, confirmed.current) ||
+      !confirmed.index.comments.some((row) => row.id === identity && row.status === 'RESOLVED')
+    )
+      return false;
+    const selectedResolved = confirmed.index.comments.some(
+      (row) => row.id === this.value.selected && row.status === 'RESOLVED',
+    );
+    this.publish({
+      selected: selectedResolved ? null : this.value.selected,
+      resolved_revision: this.value.resolved_revision + 1,
+    });
+    return true;
   }
   pause(): void {
     if (this.closed) return;

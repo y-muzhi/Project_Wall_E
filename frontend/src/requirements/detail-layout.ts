@@ -178,6 +178,10 @@ export class DetailLayout {
     this.singleView = 'PANEL';
     this.store({ right_open: true, right_tab: tab(value) });
   }
+  ensureAssistantVisible(): void {
+    if (this.value.right_open) return;
+    this.toggleRight();
+  }
   returnFromRecords(): void {
     if (this.value.right_tab === 'REVISIONS') this.openTab(this.recordsReturnTab);
   }

@@ -38,6 +38,9 @@ export class RequirementEditor {
   private accepted: EditorState;
   private readonly root: HTMLElement;
   private readonly removeListeners: (() => void)[] = [];
+  private readonly transactionGuards = new Set<
+    (state: EditorState, transaction: Transaction) => boolean
+  >();
   private formatToolbar: ReturnType<typeof installFormatToolbar> | null = null;
   private readonlyMode: boolean;
   private closed = false;
@@ -183,6 +186,10 @@ export class RequirementEditor {
     if (this.closed) throw new Error('Editor is closed');
     return this.crepe.editor.action(callback);
   }
+  guardTransactions(guard: (state: EditorState, transaction: Transaction) => boolean): () => void {
+    this.transactionGuards.add(guard);
+    return () => this.transactionGuards.delete(guard);
+  }
   setReadonly(readonly: boolean): void {
     if (this.closed) return;
     if (!readonly && !this.session) throw new TypeError('Current document is read only');
@@ -266,6 +273,11 @@ export class RequirementEditor {
     if (this.closed || (transaction.docChanged && this.readonlyMode)) return;
     const view = ctx.get(editorViewCtx);
     try {
+      for (const guard of this.transactionGuards)
+        if (!guard(view.state, transaction)) {
+          view.updateState(view.state);
+          return;
+        }
       const state = view.state.applyTransaction(transaction).state;
       if (!state.doc.eq(view.state.doc) && this.templateLock) {
         try {
@@ -335,6 +347,7 @@ export class RequirementEditor {
   async destroy(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.transactionGuards.clear();
     for (const remove of this.removeListeners) remove();
     this.formatToolbar?.destroy();
     this.session?.dispose();

@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { RequirementHeaderCommands } from './header-commands.ts';
+import type { LifecycleOutcome } from './lifecycle.ts';
 import type { DetailSnapshot } from './detail-read.ts';
 import { RequirementLifecycleControl } from './lifecycle-control.tsx';
 import { ManualStartControl } from '../documents/manual-controls.tsx';
-import { RequirementPropertyControl } from './property-control.tsx';
 import { Icon } from '../shared/icon.tsx';
 import { activeModal } from '../shared/modal.ts';
 import type { ConfirmedNotice } from '../shared/toast-store.ts';
@@ -57,10 +57,9 @@ export function RequirementHeader(
     toolsId = useId(),
     toolsHost = useRef<HTMLDivElement>(null),
     toolsToggle = useRef<HTMLButtonElement>(null);
-  const editingTitle = props.commands.title.getSnapshot().phase !== 'VIEW',
-    expanded = toolsOpen || editingTitle;
+  const expanded = toolsOpen;
   useEffect(() => {
-    if (!toolsOpen || editingTitle) return;
+    if (!toolsOpen) return;
     const outside = (event: Event) => {
       if (
         !activeModal() &&
@@ -75,51 +74,29 @@ export function RequirementHeader(
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('focusin', outside);
     };
-  }, [toolsOpen, editingTitle]);
+  }, [toolsOpen]);
   const closeTools = () => {
     setToolsOpen(false);
     toolsToggle.current?.focus({ preventScroll: true });
+  };
+  const requirementStatusChanged = async (outcome: LifecycleOutcome) => {
+    props.notifyConfirmed?.(outcome, '需求状态已保存');
+    await refresh();
+    closeTools();
+  };
+  const manualEditingStarted = async () => {
+    await refresh();
+    closeTools();
   };
   return (
     <section className="requirement-header" aria-label="需求属性和操作">
       <div className="requirement-operations">
         {props.documentActions}
-        <div className="requirement-action-group" aria-label="生命周期与人工编辑">
-          {life && (
-            <RequirementLifecycleControl
-              key={'lifecycle-' + state.lifecycle_generation}
-              flow={life}
-              blocked={props.blocked || props.commands.blockedFor('LIFECYCLE')}
-              writeReady={ready}
-              changed={async (outcome) => {
-                props.notifyConfirmed?.(outcome, '需求状态已保存');
-                await refresh();
-              }}
-            />
-          )}
-          {manual && (!props.history || manual.getSnapshot().phase !== 'READY') && (
-            <ManualStartControl
-              key={'manual-' + state.manual_generation}
-              flow={manual}
-              disabled={external || props.commands.blockedFor('MANUAL')}
-              writeReady={ready}
-              started={async () => {
-                await refresh();
-              }}
-            />
-          )}
-        </div>
         <div
           className="requirement-tools"
           ref={toolsHost}
           onKeyDown={(event) => {
-            if (
-              event.key === 'Escape' &&
-              !event.defaultPrevented &&
-              !activeModal() &&
-              !editingTitle &&
-              expanded
-            ) {
+            if (event.key === 'Escape' && !event.defaultPrevented && !activeModal() && expanded) {
               event.preventDefault();
               event.stopPropagation();
               closeTools();
@@ -131,10 +108,9 @@ export function RequirementHeader(
             className="ui-button icon-button"
             type="button"
             aria-label="更多操作"
-            title={editingTitle ? '请先完成或取消标题编辑' : '更多操作'}
+            title="更多操作"
             aria-expanded={expanded}
             aria-controls={toolsId}
-            disabled={editingTitle}
             onClick={() => setToolsOpen((value) => !value)}
           >
             <Icon name="more" />
@@ -148,14 +124,28 @@ export function RequirementHeader(
             inert={!expanded}
             aria-hidden={!expanded}
           >
-            <p className="requirement-tools-caption">需求属性与工具</p>
-            <RequirementPropertyControl
-              flow={props.commands.title}
-              showValue={false}
-              blocked={external || props.commands.blockedFor('TITLE')}
-              writeReady={ready}
-              refresh={refresh}
-            />
+            <p className="requirement-tools-caption">详情工具</p>
+            <div className="requirement-menu-actions" role="group" aria-label="需求操作">
+              {life && (
+                <RequirementLifecycleControl
+                  key={'lifecycle-' + state.lifecycle_generation}
+                  caption="修改需求状态"
+                  flow={life}
+                  blocked={props.blocked || props.commands.blockedFor('LIFECYCLE')}
+                  writeReady={ready}
+                  changed={requirementStatusChanged}
+                />
+              )}
+              {manual && (!props.history || manual.getSnapshot().phase !== 'READY') && (
+                <ManualStartControl
+                  key={'manual-' + state.manual_generation}
+                  flow={manual}
+                  disabled={external || props.commands.blockedFor('MANUAL')}
+                  writeReady={ready}
+                  started={manualEditingStarted}
+                />
+              )}
+            </div>
             {props.tools && (
               <div
                 className="requirement-tool-actions"

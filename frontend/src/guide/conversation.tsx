@@ -9,6 +9,7 @@ import { CardMessage } from './card-message.tsx';
 import { SuggestionPanel } from '../suggestions/panel.tsx';
 import { SuggestionTargetLocator } from '../suggestions/targets.ts';
 import { ModelCallsProvider } from './model-call-view.tsx';
+import { EmptyState } from '../shared/empty-state.tsx';
 
 function BatchView({
   owner,
@@ -57,10 +58,7 @@ export function ConversationSuggestions({
       {batch ? (
         <BatchView key={batch.batchId} owner={batch} documents={documents} toasts={toasts} />
       ) : (
-        <section className="suggestions-empty">
-          <h2>暂无修改建议</h2>
-          <p>提出修改建议后，可在这里审阅并处理。</p>
-        </section>
+        <EmptyState icon="suggestion" message="暂无修改建议" fill />
       )}
     </div>
   );

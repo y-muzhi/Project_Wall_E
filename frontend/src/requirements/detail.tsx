@@ -4,6 +4,7 @@ import type { WalleApi } from '../api/walle.ts';
 import { RequirementDetailOwner } from './detail-owner.ts';
 import { DetailFrame } from './detail-frame.tsx';
 import { RequirementHeader } from './header.tsx';
+import { RequirementPropertyControl } from './property-control.tsx';
 import { OwnedDocumentControls } from './document-controls.tsx';
 import {
   DocumentCreationProvider,
@@ -20,14 +21,24 @@ import { localTime } from '../shared/time.ts';
 import { DocumentRecords } from './document-records.tsx';
 import { DiscussionProgress } from './discussion-view.tsx';
 import { activeModal } from '../shared/modal.ts';
+import { EmptyState } from '../shared/empty-state.tsx';
+import type { EmptyStateContent } from '../shared/empty-state.tsx';
 
-function DocumentMount({ host }: Readonly<{ host: HTMLElement }>) {
+function DocumentMount({
+  host,
+  empty,
+}: Readonly<{ host: HTMLElement; empty: EmptyStateContent | null }>) {
   const container = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     container.current!.append(host);
     return () => host.remove();
   }, [host]);
-  return <div className="detail-document-host" ref={container} />;
+  return (
+    <div className="detail-document-host">
+      <div className="detail-editor-mount" ref={container} hidden={empty !== null} />
+      {empty && <EmptyState {...empty} fill />}
+    </div>
+  );
 }
 function SaveStatus({ owner }: Readonly<{ owner: RequirementDetailOwner }>) {
   const state = useSyncExternalStore(owner.documents.subscribe, owner.documents.getSnapshot);
@@ -104,6 +115,14 @@ function LoadedDetail({
     document = useSyncExternalStore(owner.documents.subscribe, owner.documents.getSnapshot),
     departure = useSyncExternalStore(owner.departure.subscribe, owner.departure.getSnapshot),
     regions = owner.regions!;
+  const readingDocument =
+    document.mode === 'CURRENT'
+      ? document.detail?.current
+      : document.mode === 'HISTORY'
+        ? document.revision
+        : null;
+  const emptyDocument =
+    document.mode === 'EMPTY' || readingDocument?.markdown_content.trim() === '';
   const geometry = useSyncExternalStore(regions.layout.subscribe, regions.layout.getSnapshot),
     viewport = useSyncExternalStore(regions.viewport.subscribe, regions.viewport.getSnapshot),
     historical = owner.documents.historical;
@@ -163,6 +182,14 @@ function LoadedDetail({
           layout={regions.layout}
           viewport={regions.viewport}
           title={actual.requirement.title}
+          titleEditor={
+            <RequirementPropertyControl
+              flow={regions.header.title}
+              blocked={blocked || document.busy || historical || regions.header.blockedFor('TITLE')}
+              writeReady={state.ready}
+              refresh={owner.refresh}
+            />
+          }
           status={
             <div className="requirement-metadata">
               <span>{actual.requirement.requirement_no}</span>
@@ -214,7 +241,7 @@ function LoadedDetail({
           outlineActions={<NewDocumentButton owner={owner} iconOnly />}
           document={(navigation) => (
             <>
-              <DocumentMetadataBar owner={owner} navigation={actual.current ? navigation : null} />
+              <DocumentMetadataBar owner={owner} navigation={navigation} />
               <OwnedDocumentControls
                 actionHost={documentActionHost}
                 showSaveStatus={false}
@@ -233,33 +260,24 @@ function LoadedDetail({
                   {state.error}
                 </p>
               )}
-              {document.mode === 'EMPTY' && (
-                <section className="document-empty-workspace">
-                  <h2>
-                    {actual.documents.length ? '选择一份文档开始阅读' : '先梳理需求，再形成文档'}
-                  </h2>
-                  <p>
-                    {actual.documents.length
-                      ? '从文档导航选择已有文档，也可以新建空白或框架文档。'
-                      : '初始想法已保存在对话中。可以先讨论目标与范围，也可以直接手动创建文档。'}
-                  </p>
-                  <div className="document-empty-actions">
-                    {!actual.current && navigation}
-                    {!actual.documents.length && (
-                      <button
-                        className="ui-button primary"
-                        type="button"
-                        disabled={blocked}
-                        onClick={discuss}
-                      >
-                        前往讨论
-                      </button>
-                    )}
-                    <NewDocumentButton owner={owner} label="手动新建文档" />
-                  </div>
-                </section>
-              )}
-              <DocumentMount host={host} />
+              <DocumentMount
+                host={host}
+                empty={
+                  emptyDocument && !state.error && !document.error
+                    ? {
+                        icon: document.mode === 'HISTORY' ? 'history' : 'document',
+                        message:
+                          document.mode === 'EMPTY'
+                            ? actual.documents.length
+                              ? '请选择文档'
+                              : '暂无文档'
+                            : document.mode === 'HISTORY'
+                              ? '此版本暂无内容'
+                              : '文档暂无内容',
+                      }
+                    : null
+                }
+              />
             </>
           )}
           ai={<GuideConversation owner={regions.conversation} documents={owner.documents} />}
@@ -300,11 +318,15 @@ function LoadedDetail({
                       saved={(receipt) => owner.savedRevision(receipt)}
                     />
                   )}
-                  <RevisionList
-                    flow={owner.documents.revisions}
-                    blocked={blocked || document.busy}
-                    open={(summary) => void owner.openHistory(summary).catch(() => undefined)}
-                  />
+                  {actual.current ? (
+                    <RevisionList
+                      flow={owner.documents.revisions}
+                      blocked={blocked || document.busy}
+                      open={(summary) => void owner.openHistory(summary).catch(() => undefined)}
+                    />
+                  ) : (
+                    <EmptyState icon="versions" message="请先选择文档" fill />
+                  )}
                 </>
               }
             />
@@ -388,7 +410,7 @@ export function RequirementDetail({
   ) : (
     <main aria-busy="true">
       <p role="status">正在读取需求与正文…</p>
-      <DocumentMount host={host} />
+      <DocumentMount host={host} empty={null} />
     </main>
   );
 }
@@ -428,7 +450,7 @@ function DetailSurface({
         <p role="status">正在展示正式正文…</p>
       )}
       <div hidden inert>
-        <DocumentMount host={host} />
+        <DocumentMount host={host} empty={null} />
       </div>
     </main>
   );

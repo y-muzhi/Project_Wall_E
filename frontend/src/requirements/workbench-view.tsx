@@ -19,6 +19,7 @@ import { Pagination } from '../shared/pagination.tsx';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { localTime } from '../shared/time.ts';
 import { PageHeader } from '../application/header.tsx';
+import { EmptyState } from '../shared/empty-state.tsx';
 
 const statusOptions = requirementStatuses.map((value) => ({
   value,
@@ -289,23 +290,17 @@ export function WorkbenchView({
               </tbody>
             </table>
           </div>
-          {!state.result.items.length && (
-            <div className="workbench-empty">
-              <p>
-                {phase === 'EMPTY'
-                  ? '暂无需求'
-                  : phase === 'NO_MATCH'
-                    ? '没有符合条件的需求'
-                    : phase === 'OUT_OF_RANGE'
-                      ? '当前页无记录'
-                      : '上次成功查询没有记录'}
-              </p>
-              {phase === 'EMPTY' && (
-                <button className="ui-button" type="button" onClick={() => setDrawer(true)}>
-                  新建需求
-                </button>
-              )}
-            </div>
+          {!state.result.items.length && !state.loading && !state.error && (
+            <EmptyState
+              icon={phase === 'NO_MATCH' ? 'search' : 'workbench'}
+              message={
+                phase === 'NO_MATCH'
+                  ? '没有符合条件的需求'
+                  : phase === 'OUT_OF_RANGE'
+                    ? '当前页暂无需求'
+                    : '暂无需求'
+              }
+            />
           )}
           <Pagination
             value={state.result.pagination}

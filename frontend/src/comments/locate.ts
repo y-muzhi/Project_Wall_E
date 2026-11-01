@@ -42,7 +42,8 @@ export function locateComment(
         ...comment.anchor_ref,
       });
     }
-    return navigation.locate(comment.block_id, true);
+    // The comment layer owns the warm range emphasis; navigation unfolds and scrolls.
+    return navigation.locate(comment.block_id);
   } catch {
     return false;
   }

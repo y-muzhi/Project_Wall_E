@@ -125,12 +125,19 @@ export class RequirementCommentPanel {
     );
   }
   get writeUnavailableReason(): string | null {
-    if (this.value.detail.current === null) return '请先选择文档。';
-    if (this.closed || this.value.suspended) return '当前评论操作已暂停。';
-    if (this.value.view !== 'CURRENT') return '新增评论须回到正式正文，人工草稿和历史版本不支持。';
+    const current = this.value.detail.current;
+    if (current === null) return '请先选择文档。';
+    if (this.closed || this.value.suspended) return '评论操作已暂停，请恢复后再操作。';
+    if (this.value.view === 'HISTORY') return '历史版本仅供查看，无法修改评论。';
+    if (current.archived_at) return '文档已归档，评论暂不可修改。';
+    if (
+      this.value.view === 'MANUAL' ||
+      this.value.detail.requirement.document_work_state === 'MANUAL_EDITING'
+    )
+      return '人工编辑期间暂不能新增、编辑、解决或删除评论，请先完成或取消编辑并返回正式正文。';
     if (this.value.detail.requirement.document_work_state !== 'IDLE')
-      return '文档正在编辑或处理 AI 任务；恢复空闲后可新增评论。';
-    if (!this.writeReady) return '评论数据尚未就绪，请等待加载完成或刷新评论。';
+      return '文档正在处理AI任务或修改批次，评论暂不可修改，请等待处理结束。';
+    if (!this.writeReady) return '评论数据尚未就绪，请等待加载完成或重新读取评论。';
     return null;
   }
   writable(flow: CommentCommand): boolean {
@@ -389,6 +396,12 @@ export class RequirementCommentPanel {
       await this.readAndAdopt();
       if (this.closed || this.owners.get(identity) !== owner)
         throw Error('Retired comment outcome');
+      if (
+        flow.intent.kind === 'RESOLVE' &&
+        outcome.kind === 'COMMENT' &&
+        outcome.comment.status === 'RESOLVED'
+      )
+        this.comments.hideResolved(outcome.comment.id);
       owner.release();
       flow.dispose();
       this.owners.delete(identity);

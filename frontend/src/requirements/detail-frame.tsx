@@ -14,6 +14,7 @@ export interface DetailFrameProps {
   layout: DetailLayout;
   viewport: DetailViewportGuard;
   title: ReactNode;
+  titleEditor?: ReactNode;
   status: ReactNode;
   actions: ReactNode;
   outline: ReactNode;
@@ -30,7 +31,7 @@ export interface DetailFrameProps {
   readPanel(tab: DetailTab, signal: AbortSignal): Promise<void>;
 }
 const tabs = [
-  { value: 'AI', label: 'AI 对话' },
+  { value: 'AI', label: 'Ai对话' },
   { value: 'PROGRESS', label: '进展' },
   { value: 'SUGGESTIONS', label: '修改建议' },
   { value: 'COMMENTS', label: '评论' },
@@ -213,16 +214,18 @@ export function DetailFrame(props: DetailFrameProps) {
                       aria-pressed={state.right_open}
                       onClick={() => transition(() => props.layout.openTab('AI'))}
                     >
-                      AI 对话
+                      Ai对话
                     </button>
                   </div>
                 )}
               </div>
             </div>
             <div className="detail-heading">
-              <h1 title={typeof props.title === 'string' ? props.title : undefined}>
-                {props.title}
-              </h1>
+              {props.titleEditor ?? (
+                <h1 title={typeof props.title === 'string' ? props.title : undefined}>
+                  {props.title}
+                </h1>
+              )}
               <div className="detail-subtitle">
                 <div className="detail-context">{props.status}</div>
                 <div className="detail-identity">{props.saveStatus}</div>
@@ -235,14 +238,14 @@ export function DetailFrame(props: DetailFrameProps) {
                   className="ui-button detail-ai-launcher"
                   type="button"
                   disabled={!supported}
-                  aria-label="AI 助手"
-                  title="打开 AI 对话"
+                  aria-label="Ai助手"
+                  title="Ai助手"
                   aria-expanded={state.right_open && state.right_tab === 'AI'}
                   aria-controls="detail-panel-AI"
                   onClick={() => transition(() => props.layout.openTab('AI'))}
                 >
-                  <Icon name="panel" />
-                  AI 助手
+                  <Icon name="robot" />
+                  Ai助手
                 </button>
                 <div className="detail-header-business-actions">
                   {props.properties}

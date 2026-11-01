@@ -4,10 +4,15 @@ import { createPortal } from 'react-dom';
 import { DocumentNavigation } from './navigation.ts';
 import { localTime } from '../shared/time.ts';
 import type { Actor, SourceType } from './contracts.ts';
-import type { ReactNode } from 'react';
+import type {
+  PointerEvent as ReactPointerEvent,
+  FocusEvent as ReactFocusEvent,
+  ReactNode,
+} from 'react';
 import { activeModal } from '../shared/modal.ts';
 import { visibleOutline } from './outline-display.ts';
 import { useMotionPresence } from '../shared/motion-react.ts';
+import { EmptyState } from '../shared/empty-state.tsx';
 
 const actors: Record<Actor, string> = { SYSTEM: '系统', AI: 'AI', USER: '用户' };
 const sources: Record<SourceType, string> = {
@@ -26,11 +31,12 @@ export function DocumentOutline({
   heading?: boolean;
 }) {
   const state = useSyncExternalStore(navigation.subscribe, navigation.getSnapshot);
-  const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set()),
+  const collapsed = new Set(state.collapsed_headings),
     prefix = useId();
   if (state.error) return <p role="status">{state.error}</p>;
   if (!state.content) return <p role="status">正在读取文档大纲…</p>;
-  if (!state.content.outline.length) return <p>本文档没有标题</p>;
+  if (!state.content.outline.length)
+    return <EmptyState icon="outline" message="本文档暂无标题" compact />;
   const outline = state.content.outline,
     visible = visibleOutline(outline, collapsed);
   return (
@@ -53,7 +59,7 @@ export function DocumentOutline({
       )}
       <ol>
         {outline.map((item, index) => {
-          const children = (outline[index + 1]?.depth ?? 0) > item.depth,
+          const children = state.foldable_headings.includes(item.block_id),
             folded = collapsed.has(item.block_id);
           return (
             <li
@@ -69,18 +75,11 @@ export function DocumentOutline({
                 <button
                   className="ui-button icon-button outline-fold"
                   type="button"
-                  aria-label={(folded ? '展开' : '收起') + '子章节：' + item.text}
+                  aria-label={(folded ? '展开' : '收起') + '章节：' + item.text}
                   aria-expanded={!folded}
-                  onClick={() =>
-                    setCollapsed((previous) => {
-                      const next = new Set(previous);
-                      if (folded) next.delete(item.block_id);
-                      else next.add(item.block_id);
-                      return next;
-                    })
-                  }
+                  onClick={() => navigation.toggleHeading(item.block_id)}
                 >
-                  <Icon name={folded ? 'right' : 'down'} />
+                  <Icon name="right" />
                 </button>
               ) : (
                 <span className="outline-fold-placeholder" />
@@ -116,6 +115,9 @@ export function BlockAuxiliary({
     popover = useRef<HTMLDivElement>(null),
     handle = useRef<HTMLButtonElement>(null),
     menu = useRef<HTMLDivElement>(null),
+    menuLeave = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
+    menuFocus = useRef<number | undefined>(undefined),
+    menuInput = useRef<'POINTER' | 'KEYBOARD'>('POINTER'),
     menuId = useId();
   const [menuBlock, setMenuBlock] = useState<number | null>(null),
     open =
@@ -128,6 +130,53 @@ export function BlockAuxiliary({
     lastBlock = useRef(block);
   if (block) lastBlock.current = block;
   const shown = block ?? lastBlock.current;
+  function cancelMenuLeave() {
+    if (menuLeave.current !== undefined) clearTimeout(menuLeave.current);
+    menuLeave.current = undefined;
+  }
+  function closeMenu() {
+    clearMenuWork();
+    setMenuBlock(null);
+  }
+  function clearMenuWork() {
+    cancelMenuLeave();
+    if (menuFocus.current !== undefined) cancelAnimationFrame(menuFocus.current);
+    menuFocus.current = undefined;
+  }
+  function inMenuRegion(target: EventTarget | null) {
+    return (
+      target instanceof Node && (handle.current?.contains(target) || menu.current?.contains(target))
+    );
+  }
+  function openMenu(input: 'POINTER' | 'KEYBOARD') {
+    clearMenuWork();
+    menuInput.current = input;
+    setMenuBlock(state.selected_block);
+  }
+  function leaveMenu(event: ReactPointerEvent<HTMLElement>) {
+    if (event.pointerType === 'touch' || inMenuRegion(event.relatedTarget)) return;
+    if (menuInput.current === 'KEYBOARD' && inMenuRegion(document.activeElement)) return;
+    cancelMenuLeave();
+    menuLeave.current = setTimeout(closeMenu, 120);
+  }
+  function enterMenu(event: ReactPointerEvent<HTMLElement>) {
+    cancelMenuLeave();
+    if (event.pointerType !== 'touch') menuInput.current = 'POINTER';
+  }
+  function blurMenu(event: ReactFocusEvent<HTMLElement>) {
+    if (menuInput.current === 'KEYBOARD' && !inMenuRegion(event.relatedTarget)) closeMenu();
+  }
+  function focusMenu() {
+    openMenu('KEYBOARD');
+    menuFocus.current = requestAnimationFrame(() => {
+      menuFocus.current = undefined;
+      menu.current
+        ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+        ?.focus({ preventScroll: true });
+    });
+  }
+  useEffect(() => clearMenuWork, []);
+  useEffect(() => closeMenu(), [state.selected_block]);
   useEffect(() => {
     if (!block) return;
     const previous = document.activeElement,
@@ -155,23 +204,24 @@ export function BlockAuxiliary({
     return () => {
       document.removeEventListener('keydown', escape);
       document.removeEventListener('pointerdown', outside);
-      const focused = document.activeElement;
+      const focused = document.activeElement,
+        destination =
+          previous instanceof HTMLElement && previous.isConnected ? previous : handle.current;
       // Closing a non-modal source view must not undo a new outside focus or
       // move focus behind a confirmation dialog that has just opened.
       if (
         restoreFocus &&
         !activeModal() &&
         (focused === document.body || focused === null || element?.contains(focused)) &&
-        previous instanceof HTMLElement &&
-        previous.isConnected &&
-        !previous.closest('[inert],[hidden]') &&
-        !previous.matches(':disabled')
+        destination instanceof HTMLElement &&
+        !destination.closest('[inert],[hidden]') &&
+        !destination.matches(':disabled')
       )
-        previous.focus({ preventScroll: true });
+        destination.focus({ preventScroll: true });
     };
   }, [navigation, block?.block_id]);
   useEffect(() => {
-    if (state.toolbar === null) setMenuBlock(null);
+    if (state.toolbar === null) closeMenu();
   }, [state.toolbar]);
   useEffect(() => {
     if (!open) return;
@@ -182,14 +232,14 @@ export function BlockAuxiliary({
         popover.current?.contains(event.target as Node)
       )
         return;
-      setMenuBlock(null);
+      closeMenu();
       if (!block) navigation.dismissAuxiliary();
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || block || activeModal()) return;
       event.preventDefault();
       event.stopPropagation();
-      setMenuBlock(null);
+      closeMenu();
       handle.current?.focus({ preventScroll: true });
     };
     document.addEventListener('pointerdown', outside);
@@ -222,6 +272,34 @@ export function BlockAuxiliary({
     : undefined;
   return createPortal(
     <>
+      {state.heading_controls.map((control) => {
+        const heading = state.content?.outline.find((item) => item.block_id === control.block_id),
+          collapsed = state.collapsed_headings.includes(control.block_id),
+          label = (collapsed ? '展开' : '收起') + '正文章节：' + (heading?.text || '空标题');
+        function toggleSection() {
+          closeMenu();
+          navigation.toggleHeading(control.block_id);
+        }
+        return (
+          <button
+            key={control.block_id}
+            type="button"
+            className="ui-button icon-button document-heading-toggle"
+            style={{ left: control.left, top: control.top }}
+            aria-label={label}
+            title={collapsed ? '展开章节' : '收起章节'}
+            aria-expanded={!collapsed}
+            data-collapsed={collapsed}
+            data-active={state.selected_block === control.block_id}
+            onMouseDown={(event) => event.preventDefault()}
+            onPointerEnter={() => navigation.hoverHeading(control.block_id)}
+            onFocus={() => navigation.hoverHeading(control.block_id)}
+            onClick={toggleSection}
+          >
+            <Icon name="right" />
+          </button>
+        );
+      })}
       {anchor && state.selected_block !== null && !state.error && (
         <button
           ref={handle}
@@ -234,19 +312,22 @@ export function BlockAuxiliary({
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           onMouseDown={(event) => event.preventDefault()}
-          onPointerEnter={() => setMenuBlock(state.selected_block)}
-          onClick={() => setMenuBlock(state.selected_block)}
+          onPointerEnter={(event) => {
+            if (event.pointerType !== 'touch') openMenu('POINTER');
+          }}
+          onPointerLeave={leaveMenu}
+          onBlur={blurMenu}
+          onClick={(event) => {
+            if (event.detail === 0 || window.matchMedia('(hover: none)').matches) focusMenu();
+          }}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') {
               event.preventDefault();
-              setMenuBlock(state.selected_block);
-              requestAnimationFrame(() =>
-                menu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(),
-              );
+              focusMenu();
             }
           }}
         >
-          <Icon name="more" />
+          <Icon name="blockActions" />
         </button>
       )}
       {open && (
@@ -257,6 +338,9 @@ export function BlockAuxiliary({
           role="menu"
           aria-label="区块操作栏"
           style={menuPosition}
+          onPointerEnter={enterMenu}
+          onPointerLeave={leaveMenu}
+          onBlur={blurMenu}
           onKeyDown={(event) => {
             if (
               event.key !== 'ArrowDown' &&

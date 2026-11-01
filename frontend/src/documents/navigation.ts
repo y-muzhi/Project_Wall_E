@@ -6,6 +6,16 @@ import type { EditedSnapshot } from './edited-snapshot.ts';
 import { bindIdentityDocument } from './identity.ts';
 import type { RequirementEditor } from './editor.ts';
 import type { RevisionViewer } from '../revisions/viewer.ts';
+import { DocumentBlockHighlight } from './block-highlight.ts';
+import { TextSelection } from '@milkdown/kit/prose/state';
+import {
+  DocumentSectionVisibility,
+  foldedBlockIds,
+  foldedTransactionEffect,
+  headingSections,
+  selectionTouchesBlocks,
+} from './section-folding.ts';
+import type { HeadingSection } from './section-folding.ts';
 
 export type OutlineEntry = Readonly<{
   block_id: number;
@@ -24,11 +34,33 @@ export type NavigationState = Readonly<{
   selected_block: number | null;
   source_block: number | null;
   toolbar: Readonly<{ left: number; top: number }> | null;
+  collapsed_headings: readonly number[];
+  foldable_headings: readonly number[];
+  hidden_blocks: readonly number[];
+  heading_controls: readonly Readonly<{ block_id: number; left: number; top: number }>[];
   error: string | null;
 }>;
 interface NavigationPort {
   read(): NavigationContent;
   element(blockId: number): HTMLElement | null;
+  prepareCollapse?(heading: number, hidden: ReadonlySet<number>): void;
+}
+
+/** Align 24×28 controls to the first line; reserve the 8px fold gap only when needed. */
+export function blockControlPositions(
+  block: Readonly<{ left: number; top: number }>,
+  bounds: Readonly<{ left: number; right: number; top: number; bottom: number }>,
+  lineHeight: number,
+  hasFoldControl: boolean,
+  paddingTop = 0,
+) {
+  const top = Math.max(
+      bounds.top + 4,
+      Math.min(bounds.bottom - 32, block.top + paddingTop + (lineHeight - 28) / 2),
+    ),
+    foldOffset = hasFoldControl ? 32 : 0,
+    foldLeft = Math.max(bounds.left + 4 + foldOffset, Math.min(bounds.right - 44, block.left - 44));
+  return { actions: { left: foldLeft - foldOffset, top }, fold: { left: foldLeft, top } };
 }
 
 /** Heading depth follows the real preceding hierarchy, including skipped levels
@@ -113,9 +145,10 @@ export class DocumentNavigation {
   private closed = false;
   private visible = true;
   private interacting = false;
-  private hovered: HTMLElement | null = null;
+  private readonly highlight: DocumentBlockHighlight;
+  private readonly folding: DocumentSectionVisibility;
+  private sections: readonly HeadingSection[] = [];
   private leaveTimer: ReturnType<typeof setTimeout> | undefined;
-  private highlighted: HTMLElement | null = null;
   private highlightTimer: ReturnType<typeof setTimeout> | undefined;
   private value: NavigationState = Object.freeze({
     content: null,
@@ -123,12 +156,18 @@ export class DocumentNavigation {
     selected_block: null,
     source_block: null,
     toolbar: null,
+    collapsed_headings: Object.freeze([]),
+    foldable_headings: Object.freeze([]),
+    hidden_blocks: Object.freeze([]),
+    heading_controls: Object.freeze([]),
     error: null,
   });
   private constructor(root: HTMLElement, port: NavigationPort, scrollport: HTMLElement | null) {
     this.root = root;
     this.port = port;
     this.scrollport = scrollport;
+    this.highlight = new DocumentBlockHighlight(root);
+    this.folding = new DocumentSectionVisibility(root, () => this.schedule(false));
     const listen = (
       target: EventTarget,
       name: string,
@@ -148,7 +187,7 @@ export class DocumentNavigation {
     const inAuxiliary = (target: EventTarget | null) =>
       target instanceof Element &&
       !!target.closest(
-        '.block-operation-trigger,.block-auxiliary,.block-source-popover,.block-selection-comment',
+        '.block-operation-trigger,.document-heading-toggle,.block-auxiliary,.block-source-popover,.block-selection-comment',
       );
     const leave = () => {
       this.cancelLeave();
@@ -202,7 +241,7 @@ export class DocumentNavigation {
     editor: RequirementEditor,
     scrollport: HTMLElement | null = null,
   ): DocumentNavigation {
-    return new DocumentNavigation(
+    const navigation = new DocumentNavigation(
       root,
       {
         read: () => {
@@ -213,9 +252,39 @@ export class DocumentNavigation {
           );
         },
         element: (id) => editor.action((ctx) => blockElement(ctx, id)),
+        prepareCollapse: (heading, hidden) =>
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx),
+              selection = view.state.selection;
+            if (
+              !selectionTouchesBlocks(view.state.doc, selection.from, selection.to, hidden).length
+            )
+              return;
+            view.state.doc.forEach((node, position) => {
+              if (node.attrs.walle_block_id !== heading) return;
+              view.dispatch(
+                view.state.tr.setSelection(
+                  TextSelection.create(view.state.doc, position + node.nodeSize - 1),
+                ),
+              );
+            });
+          }),
       },
       scrollport,
     );
+    navigation.removers.push(
+      editor.guardTransactions((state, transaction) => {
+        if (navigation.value.error || !navigation.value.hidden_blocks.length) return true;
+        const effect = foldedTransactionEffect(
+          state,
+          transaction,
+          new Set(navigation.value.hidden_blocks),
+        );
+        if (effect.reveal.length) navigation.revealBlocks(effect.reveal);
+        return !effect.reject;
+      }),
+    );
+    return navigation;
   }
   static forRevision(
     root: HTMLElement,
@@ -244,6 +313,18 @@ export class DocumentNavigation {
       next.active_heading === this.value.active_heading &&
       next.selected_block === this.value.selected_block &&
       next.source_block === this.value.source_block &&
+      next.collapsed_headings === this.value.collapsed_headings &&
+      next.foldable_headings === this.value.foldable_headings &&
+      next.hidden_blocks === this.value.hidden_blocks &&
+      next.heading_controls.length === this.value.heading_controls.length &&
+      next.heading_controls.every((control, index) => {
+        const previous = this.value.heading_controls[index]!;
+        return (
+          control.block_id === previous.block_id &&
+          control.left === previous.left &&
+          control.top === previous.top
+        );
+      }) &&
       next.error === this.value.error &&
       next.toolbar?.left === this.value.toolbar?.left &&
       next.toolbar?.top === this.value.toolbar?.top
@@ -275,8 +356,25 @@ export class DocumentNavigation {
     try {
       const content = this.port.read(),
         ids = new Set(content.blocks.map((block) => block.block_id));
+      this.sections = headingSections(
+        content.blocks.map((block) => block.block_id),
+        content.outline,
+      );
+      const foldable = this.sections
+          .filter((section) => section.to > section.from + 1)
+          .map((section) => section.block_id),
+        collapsed = this.value.collapsed_headings.filter((id) => foldable.includes(id)),
+        hidden = foldedBlockIds(
+          content.blocks.map((block) => block.block_id),
+          this.sections,
+          new Set(collapsed),
+        );
+      this.folding.hide(hidden);
       this.publish({
         content,
+        foldable_headings: Object.freeze(foldable),
+        collapsed_headings: Object.freeze(collapsed),
+        hidden_blocks: hidden,
         error: null,
         selected_block:
           this.value.selected_block !== null && ids.has(this.value.selected_block)
@@ -289,40 +387,73 @@ export class DocumentNavigation {
       });
       this.measure();
     } catch {
-      this.hover(null);
+      this.highlight.hover(null);
+      this.folding.hide([]);
       this.publish({
         error: '当前输入尚未形成完整文档，大纲和区块来源暂不可操作。',
         toolbar: null,
         source_block: null,
+        heading_controls: Object.freeze([]),
       });
     }
   }
   private bounds(): { left: number; right: number; top: number; bottom: number } {
-    const box = this.scrollport?.getBoundingClientRect();
+    const box = this.scrollport?.getBoundingClientRect(),
+      toolbar = this.root.querySelector('.editor-format-toolbar')?.getBoundingClientRect();
     return {
       left: Math.max(0, box?.left ?? 0),
       right: Math.min(window.innerWidth, box?.right ?? window.innerWidth),
-      top: Math.max(0, box?.top ?? 0),
+      top: Math.max(0, box?.top ?? 0, toolbar?.bottom ?? 0),
       bottom: Math.min(window.innerHeight, box?.bottom ?? window.innerHeight),
     };
+  }
+  private controls(
+    element: HTMLElement,
+    bounds: ReturnType<DocumentNavigation['bounds']>,
+    hasFoldControl: boolean,
+  ) {
+    const box = element.getBoundingClientRect(),
+      browser = element.ownerDocument?.defaultView ?? this.root.ownerDocument.defaultView,
+      style = browser?.getComputedStyle?.(element),
+      lineHeight = Number.parseFloat(style?.lineHeight ?? ''),
+      paddingTop = Number.parseFloat(style?.paddingTop ?? '');
+    return blockControlPositions(
+      box,
+      bounds,
+      Number.isFinite(lineHeight) ? lineHeight : Math.min(box.bottom - box.top, 28),
+      hasFoldControl,
+      Number.isFinite(paddingTop) ? paddingTop : 0,
+    );
   }
   private measure(): void {
     if (this.closed || !this.visible || this.value.error || !this.value.content) return;
     const bounds = this.bounds();
+    const headingControls: { block_id: number; left: number; top: number }[] = [];
     let heading: number | null = null,
       first: number | null = null;
     const scrolling = this.scrollport ?? document.scrollingElement,
       atEnd =
         scrolling !== null &&
+        scrolling.scrollHeight > scrolling.clientHeight + 1 &&
         scrolling.scrollHeight - scrolling.clientHeight - scrolling.scrollTop <= 1;
     if (this.root.getClientRects().length) {
       for (const entry of this.value.content.outline) {
+        if (this.value.hidden_blocks.includes(entry.block_id)) continue;
         const element = this.port.element(entry.block_id);
         if (!element?.getClientRects().length) continue;
-        const top = element.getBoundingClientRect().top;
+        const box = element.getBoundingClientRect(),
+          top = box.top;
+        if (
+          this.value.foldable_headings.includes(entry.block_id) &&
+          box.bottom > bounds.top &&
+          box.top < bounds.bottom
+        )
+          headingControls.push({
+            block_id: entry.block_id,
+            ...this.controls(element, bounds, true).fold,
+          });
         first ??= entry.block_id;
         if (top <= (atEnd ? bounds.bottom - 1 : bounds.top + 24)) heading = entry.block_id;
-        else break;
       }
     }
     heading ??= first;
@@ -331,20 +462,25 @@ export class DocumentNavigation {
       box = element?.getBoundingClientRect();
     const visible =
       (this.interacting || this.value.source_block !== null) &&
+      !this.value.hidden_blocks.includes(this.value.selected_block ?? -1) &&
       element?.getClientRects().length &&
       box &&
       box.bottom > bounds.top &&
       box.top < bounds.bottom;
-    this.hover(visible ? element : null);
+    this.highlight.hover(visible ? this.value.selected_block : null);
     // The document reserves a left gutter. Controls stay outside its text and
     // inside the visible document viewport, even for a partly scrolled block.
     this.publish({
       active_heading: heading,
+      heading_controls: Object.freeze(headingControls.map((control) => Object.freeze(control))),
       toolbar: visible
-        ? Object.freeze({
-            left: Math.max(bounds.left + 4, Math.min(bounds.right - 36, box.left - 36)),
-            top: Math.max(bounds.top + 4, Math.min(bounds.bottom - 36, box.top)),
-          })
+        ? Object.freeze(
+            this.controls(
+              element,
+              bounds,
+              this.value.foldable_headings.includes(this.value.selected_block!),
+            ).actions,
+          )
         : null,
     });
   }
@@ -366,24 +502,85 @@ export class DocumentNavigation {
     if (this.leaveTimer !== undefined) clearTimeout(this.leaveTimer);
     this.leaveTimer = undefined;
   }
-  private hover(element: HTMLElement | null): void {
-    if (this.hovered === element) return;
-    this.hovered?.classList.remove('block-hover-highlight');
-    this.hovered = element;
-    this.hovered?.classList.add('block-hover-highlight');
+  hoverHeading(blockId: number): void {
+    if (
+      !this.visible ||
+      this.value.error ||
+      this.value.source_block !== null ||
+      !this.value.foldable_headings.includes(blockId)
+    )
+      return;
+    this.cancelLeave();
+    this.interacting = true;
+    this.publish({ selected_block: blockId });
+    this.measure();
+  }
+  private applyCollapsed(collapsed: readonly number[]): void {
+    const content = this.value.content;
+    if (!content) return;
+    const hidden = foldedBlockIds(
+      content.blocks.map((block) => block.block_id),
+      this.sections,
+      new Set(collapsed),
+    );
+    this.folding.hide(hidden);
+    this.publish({
+      collapsed_headings: Object.freeze([...collapsed]),
+      hidden_blocks: hidden,
+      source_block:
+        this.value.source_block !== null && hidden.includes(this.value.source_block)
+          ? null
+          : this.value.source_block,
+    });
+    this.measure();
+  }
+  toggleHeading(blockId: number): boolean {
+    if (
+      this.closed ||
+      !this.visible ||
+      this.value.error ||
+      !this.value.foldable_headings.includes(blockId)
+    )
+      return false;
+    if (this.value.source_block !== null) this.source(null);
+    const collapsed = new Set(this.value.collapsed_headings);
+    if (collapsed.has(blockId)) collapsed.delete(blockId);
+    else {
+      const section = this.sections.find((entry) => entry.block_id === blockId)!,
+        hidden = this.value
+          .content!.blocks.slice(section.from + 1, section.to)
+          .map((block) => block.block_id);
+      this.port.prepareCollapse?.(blockId, new Set(hidden));
+      collapsed.add(blockId);
+    }
+    this.applyCollapsed([...collapsed]);
+    this.hoverHeading(blockId);
+    return true;
+  }
+  private revealBlocks(blockIds: readonly number[]): void {
+    const blocks = this.value.content?.blocks.map((block) => block.block_id) ?? [],
+      positions = blockIds.map((id) => blocks.indexOf(id)),
+      ancestors = new Set(
+        this.sections
+          .filter((section) =>
+            positions.some((index) => index > section.from && index < section.to),
+          )
+          .map((section) => section.block_id),
+      ),
+      collapsed = this.value.collapsed_headings.filter((id) => !ancestors.has(id));
+    if (collapsed.length !== this.value.collapsed_headings.length) this.applyCollapsed(collapsed);
   }
   dismissAuxiliary(): void {
     if (this.closed) return;
     this.cancelLeave();
     this.interacting = false;
-    this.hover(null);
+    this.highlight.hover(null);
     this.publish({ toolbar: null, source_block: null });
   }
   private clearHighlight(): void {
     if (this.highlightTimer !== undefined) clearTimeout(this.highlightTimer);
     this.highlightTimer = undefined;
-    this.highlighted?.classList.remove('comment-target-highlight');
-    this.highlighted = null;
+    this.highlight.locate(null);
   }
   locate(blockId: number, highlight = false): boolean {
     if (
@@ -393,6 +590,7 @@ export class DocumentNavigation {
       !this.value.content?.blocks.some((block) => block.block_id === blockId)
     )
       return false;
+    this.revealBlocks([blockId]);
     const element = this.port.element(blockId);
     if (!element?.getClientRects().length) return false;
     if (this.scrollport) {
@@ -407,8 +605,7 @@ export class DocumentNavigation {
     this.measure();
     if (highlight) {
       this.clearHighlight();
-      this.highlighted = element;
-      element.classList.add('comment-target-highlight');
+      this.highlight.locate(blockId);
       this.highlightTimer = setTimeout(() => this.clearHighlight(), 2000);
     }
     return true;
@@ -431,17 +628,23 @@ export class DocumentNavigation {
     if (visible) this.refresh();
     else {
       this.cancelLeave();
-      this.hover(null);
+      this.highlight.hover(null);
       this.clearHighlight();
-      this.publish({ toolbar: null, source_block: null, active_heading: null });
+      this.publish({
+        toolbar: null,
+        source_block: null,
+        active_heading: null,
+        heading_controls: Object.freeze([]),
+      });
     }
   }
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
     this.cancelLeave();
-    this.hover(null);
     this.clearHighlight();
+    this.highlight.destroy();
+    this.folding.destroy();
     for (const remove of this.removers) remove();
     this.observer.disconnect();
     this.resize.disconnect();

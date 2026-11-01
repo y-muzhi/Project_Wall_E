@@ -1,13 +1,13 @@
 import { useRef, useState, useSyncExternalStore } from 'react';
 import type { DetailSnapshot } from './detail-read.ts';
 import type { RequirementPropertyEdit } from './property-edit.ts';
+import { NameEditor } from '../shared/name-editor.tsx';
 
 /** Full reads belong to the page owner. Never reconstruct an activity/draft
  * from PATCH or replace the editor merely because a title changed. */
 export function RequirementPropertyControl(
   props: Readonly<{
     flow: RequirementPropertyEdit;
-    showValue?: boolean;
     blocked: boolean;
     writeReady?: boolean;
     refresh(): Promise<DetailSnapshot>;
@@ -17,8 +17,7 @@ export function RequirementPropertyControl(
     [busy, setBusy] = useState(false),
     [readError, setReadError] = useState<string | null>(null),
     pending = useRef(false);
-  const label = '需求标题',
-    locked = props.blocked || busy || state.phase === 'SUBMITTING' || state.phase === 'READING';
+  const locked = props.blocked || busy || state.phase === 'SUBMITTING' || state.phase === 'READING';
   const read = async () => {
     const detail = await props.refresh();
     props.flow.adoptDetail(detail);
@@ -50,58 +49,37 @@ export function RequirementPropertyControl(
   };
   const unresolved = ['UNKNOWN', 'READING', 'OBSERVED', 'CONFIRMED'].includes(state.phase);
   return (
-    <section className="requirement-property-control" data-phase={state.phase} aria-label={label}>
-      {props.showValue !== false && (
-        <p>
-          {label}：<strong>{state.actual.title}</strong>
-        </p>
-      )}
-      {state.phase === 'VIEW' ? (
-        <button
-          className="ui-button"
-          type="button"
-          disabled={locked || !props.flow.allowed || props.writeReady === false}
-          onClick={() => props.flow.begin()}
-        >
-          修改{label}
-        </button>
-      ) : (
+    <NameEditor
+      label="需求名称"
+      heading="h1"
+      value={state.actual.title}
+      draft={state.draft}
+      editing={state.phase !== 'VIEW'}
+      disabled={locked || !props.flow.allowed || props.writeReady === false}
+      inputDisabled={locked || !props.flow.allowed || props.writeReady === false}
+      readOnly={unresolved}
+      saveDisabled={
+        state.phase !== 'EDITING' ||
+        locked ||
+        !props.flow.allowed ||
+        !!readError ||
+        props.writeReady === false
+      }
+      cancelDisabled={
+        locked ||
+        !['EDITING', 'OBSERVED'].includes(state.phase) ||
+        (state.phase === 'OBSERVED' && !!readError)
+      }
+      begin={() => props.flow.begin()}
+      change={(value) => props.flow.change(value)}
+      save={() => void execute('SAVE')}
+      cancel={() => {
+        if (props.flow.cancel()) setReadError(null);
+      }}
+      feedback={
         <>
-          <label>
-            待保存标题
-            <input
-              className="ui-input"
-              aria-label="待保存标题"
-              value={state.draft}
-              disabled={locked || !props.flow.allowed || props.writeReady === false}
-              readOnly={unresolved}
-              onChange={(event) => props.flow.change(event.target.value)}
-            />
-          </label>
           {state.phase === 'SUBMITTING' && <p role="status">保存中…</p>}
           {state.phase === 'READING' && <p role="status">正在核实原请求…</p>}
-          {state.phase === 'EDITING' && (
-            <>
-              <button
-                className="ui-button"
-                type="button"
-                disabled={
-                  locked || !props.flow.allowed || readError !== null || props.writeReady === false
-                }
-                onClick={() => void execute('SAVE')}
-              >
-                保存
-              </button>
-              <button
-                className="ui-button"
-                type="button"
-                disabled={locked}
-                onClick={() => props.flow.cancel()}
-              >
-                取消
-              </button>
-            </>
-          )}
           {state.phase === 'UNKNOWN' && (
             <button
               className="ui-button"
@@ -127,14 +105,6 @@ export function RequirementPropertyControl(
               >
                 继续编辑
               </button>
-              <button
-                className="ui-button"
-                type="button"
-                disabled={locked || !!readError || props.writeReady === false}
-                onClick={() => props.flow.cancel()}
-              >
-                取消
-              </button>
             </>
           )}
           {state.phase === 'CONFIRMED' && (
@@ -142,30 +112,30 @@ export function RequirementPropertyControl(
               属性保存已确认，{readError ? '详情尚未重新读取。' : '正在读取实际详情。'}
             </p>
           )}
+          {state.error && (
+            <p role="alert" className="inline-error">
+              {state.error}
+            </p>
+          )}
+          {readError && (
+            <p role="alert" className="inline-error">
+              {readError}
+            </p>
+          )}
+          {(readError ||
+            state.error_code === 'STATE_CONFLICT' ||
+            state.error_code === 'WORK_STATE_CONFLICT') && (
+            <button
+              className="ui-button"
+              type="button"
+              disabled={locked}
+              onClick={() => void execute('REFRESH')}
+            >
+              重新读取属性
+            </button>
+          )}
         </>
-      )}
-      {state.error && (
-        <p role="alert" className="inline-error">
-          {state.error}
-        </p>
-      )}
-      {readError && (
-        <p role="alert" className="inline-error">
-          {readError}
-        </p>
-      )}
-      {(readError ||
-        state.error_code === 'STATE_CONFLICT' ||
-        state.error_code === 'WORK_STATE_CONFLICT') && (
-        <button
-          className="ui-button"
-          type="button"
-          disabled={locked}
-          onClick={() => void execute('REFRESH')}
-        >
-          重新读取属性
-        </button>
-      )}
-    </section>
+      }
+    />
   );
 }

@@ -81,3 +81,27 @@ test('comment settings retain independent scope on collapse/page/hide; cancel re
  const second=panel.begin(2,'MODIFY');assert.equal(second.getSnapshot().scope_mode,'COMMENT');assert(panel.close(first));assert.equal(panel.begin(1,'MODIFY').getSnapshot().scope_mode,'COMMENT');
  assert.equal(prepares,0);panel.dispose();
 });
+
+
+test('resolve hides only after original confirmation and successful actual adoption; UNKNOWN and failed reads retain the operation',async()=>{
+ const f=fixture(1);let sends=0;f.api.prepareResolveComment=()=>({submit:async()=>{sends++;f.facts.rows[0]={...item(1),status:'RESOLVED',resolved_at:at};if(sends===1)throw new ApiUnknown(true);return {data:f.facts.rows[0]};}});
+ const panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async()=>{});await panel.refresh();panel.comments.markLocated(1);
+ const flow=panel.begin(1,'RESOLVE');assert(!await flow.submit());assert.equal(flow.getSnapshot().phase,'UNKNOWN');await panel.refresh();assert.equal(panel.comments.getSnapshot().resolved_revision,0);assert.equal(panel.slot(1).flow,flow);
+ assert(await flow.retryUnknown(panel.observe));f.facts.drop=true;await assert.rejects(panel.finish(flow,flow.getSnapshot().outcome));assert.equal(panel.comments.getSnapshot().resolved_revision,0);assert.equal(panel.slot(1).flow,flow);
+ await panel.finish(flow,flow.getSnapshot().outcome);assert.equal(panel.comments.getSnapshot().resolved_revision,1);assert.equal(panel.comments.getSnapshot().selected,null);assert.equal(panel.slot(1),null);assert.equal(sends,2);assert.equal(panel.comments.getSnapshot().confirmed.items[0].status,'RESOLVED');panel.dispose();
+});
+
+test('a resolve receipt does not hide a comment already reopened in the latest actual index',async()=>{
+ const f=fixture(1);f.api.prepareResolveComment=()=>({submit:async()=>({data:{...item(1),status:'RESOLVED',resolved_at:at}})});
+ const panel=new RequirementCommentPanel(detail,f.api,f.read,f.adopt,async()=>{});await panel.refresh();const flow=panel.begin(1,'RESOLVE');assert(await flow.submit());await panel.finish(flow,flow.getSnapshot().outcome);
+ assert.equal(panel.comments.getSnapshot().resolved_revision,0);assert.equal(panel.comments.getSnapshot().confirmed.items[0].status,'OPEN');assert.equal(panel.slot(1),null);panel.dispose();
+});
+
+
+test('manual editing explains all blocked comment maintenance and only a confirmed idle view enables actions',async()=>{
+ const f=fixture(1),manual={...detail,requirement:{...detail.requirement,document_work_state:'MANUAL_EDITING'},activity:{kind:'MANUAL'}};
+ const panel=new RequirementCommentPanel(manual,f.api,async()=>manual,async()=>{},async()=>{});await panel.refresh();
+ assert(!panel.writeReady);assert.match(panel.writeUnavailableReason,/人工编辑/);assert.match(panel.writeUnavailableReason,/新增、编辑、解决或删除/);
+ for(const kind of ['EDIT','RESOLVE','DELETE','MODIFY'])assert.equal(panel.begin(1,kind),null);
+ panel.adopt(detail);panel.setView('CURRENT');assert(panel.writeReady);assert.equal(panel.writeUnavailableReason,null);assert(panel.begin(1,'EDIT'));panel.dispose();
+});

@@ -171,8 +171,12 @@ export class RequirementDetailOwner {
       conversation.receive,
       this.notifyConfirmed,
     );
-    const directory = new DocumentDirectoryCommands(actual, this.api, this.refresh, (identity) =>
-      this.selectDocument(identity),
+    const directory = new DocumentDirectoryCommands(
+      actual,
+      this.api,
+      this.refresh,
+      (identity) => this.selectDocument(identity),
+      () => layout.ensureAssistantVisible(),
     );
     const discussion = new RequirementDiscussion(actual, this.api, this.refresh);
     this.bindings = Object.freeze({

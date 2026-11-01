@@ -295,8 +295,7 @@
   color: var(--muted);
   margin-left: 4px;
 }
-.progress-topic-purpose,
-.progress-empty {
+.progress-topic-purpose {
   color: var(--muted);
   font-size: 12px;
 }

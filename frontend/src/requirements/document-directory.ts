@@ -28,6 +28,7 @@ export class DocumentDirectoryCommands {
   private readonly api: Pick<WalleApi, 'prepareCreateDocument' | 'prepareUpdateDocument'>;
   private readonly read: () => Promise<DetailSnapshot>;
   private readonly select: (identity: number) => Promise<void>;
+  private readonly created: () => void;
   private detail: DetailSnapshot;
   private action: ApiAction<CreateResult> | ApiAction<MetadataResult> | undefined;
   private value: DirectoryState = Object.freeze({
@@ -45,11 +46,13 @@ export class DocumentDirectoryCommands {
     api: Pick<WalleApi, 'prepareCreateDocument' | 'prepareUpdateDocument'>,
     read: () => Promise<DetailSnapshot>,
     select: (identity: number) => Promise<void>,
+    created: () => void,
   ) {
     this.detail = capture(detail);
     this.api = api;
     this.read = read;
     this.select = select;
+    this.created = created;
   }
   getSnapshot = (): DirectoryState => this.value;
   subscribe = (listener: () => void): (() => void) => {
@@ -172,6 +175,7 @@ export class DocumentDirectoryCommands {
           await this.select(result.document.id);
         if (this.closed) return false;
         this.publish({ phase: 'READY', intent: null, result: null, error: null });
+        if (intent?.kind === 'CREATE' && !this.closed) this.created();
         return true;
       })
       .finally(() => {

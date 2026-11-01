@@ -102,7 +102,7 @@ function RunRecordDetail({
               </dd>
             </dl>
             <ReturnedResponses run={run} />
-            <p className="field-help">这里查看运行过程；任务操作与回复在 AI 对话中处理。</p>
+            <p className="field-help">这里查看运行过程；任务操作与回复在 Ai对话中处理。</p>
           </>
         )}
         <RequestCallRecord runId={identity} />

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { Icon } from './icon.tsx';
+import { EmptyState } from './empty-state.tsx';
+import type { EmptyStateContent } from './empty-state.tsx';
 
 export type RecordListItem = Readonly<{
   id: number;
@@ -32,7 +34,7 @@ export function RecordList({
   retry(): void;
   retryDisabled: boolean;
   items: readonly RecordListItem[];
-  empty: ReactNode;
+  empty: EmptyStateContent;
   filters?: ReactNode;
   footer?: ReactNode;
 }>) {
@@ -84,7 +86,7 @@ export function RecordList({
           ))}
         </ol>
       ) : (
-        total !== null && !loading && !error && <div className="record-list-empty">{empty}</div>
+        total !== null && !loading && !error && <EmptyState {...empty} />
       )}
       {footer && <footer className="record-list-footer">{footer}</footer>}
     </section>

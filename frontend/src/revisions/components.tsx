@@ -149,14 +149,15 @@ export function RevisionList(
   return (
     <RecordList
       title="版本记录"
+      empty={{
+        icon: 'versions',
+        message: list?.pagination.total ? '当前页暂无版本记录' : '暂无版本记录',
+      }}
       total={list?.pagination.total ?? null}
       loading={state.loading}
       error={state.error}
       retry={() => void props.flow.refresh()}
       retryDisabled={state.loading || props.blocked}
-      empty={
-        list?.pagination.total ? '当前页暂无版本记录' : '暂无版本记录。文档正式提交后形成内容快照。'
-      }
       items={(list?.items ?? []).map((row) => ({
         id: row.id,
         title: (

@@ -17,8 +17,10 @@ import { SingleSelect } from '../shared/single-select.tsx';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { activeModal, registerModal, trapModalTab } from '../shared/modal.ts';
 import { Icon } from '../shared/icon.tsx';
+import { NameEditor } from '../shared/name-editor.tsx';
 import { ordinaryInput } from '../shared/text.ts';
 import { useMotionPresence } from '../shared/motion-react.ts';
+import { EmptyState } from '../shared/empty-state.tsx';
 
 type CreationDefaults = Readonly<{
   name?: string;
@@ -126,7 +128,7 @@ function CreateDocumentDialog({
           previous.focus();
         else
           surface
-            .querySelector<HTMLElement>('.document-metadata-bar > strong')
+            .querySelector<HTMLElement>('.document-metadata-bar .name-editor-value')
             ?.focus({ preventScroll: true });
       });
     };
@@ -370,13 +372,15 @@ export function DocumentDirectory({ owner }: { owner: RequirementDetailOwner }) 
       )}
       {tab === 'OUTLINE' ? (
         actual.current === null ? (
-          <p>请先选择文档。</p>
+          <EmptyState icon="outline" message="请先选择文档" compact />
         ) : (
           <OwnedDocumentOutline owner={owner.documents} heading={false} />
         )
       ) : (
         <>
-          {actual.documents.length === 0 && <p>尚无文档</p>}
+          {actual.documents.length === 0 && (
+            <EmptyState icon="document" message="暂无文档" compact />
+          )}
           <ul>{rows(actual.documents.filter((document) => document.archived_at === null))}</ul>
           {actual.documents.some((document) => document.archived_at !== null) && (
             <details>
@@ -435,23 +439,13 @@ export function DocumentMetadataBar({
     [name, setName] = useState(''),
     [archive, setArchive] = useState<DocumentSummary | null>(null),
     [error, setError] = useState<string | null>(null),
+    [busy, setBusy] = useState(false),
     pending = useRef(false);
-  const renameInput = useRef<HTMLInputElement>(null),
-    composing = useRef(false);
-  useLayoutEffect(() => {
-    if (!renaming) return;
-    const previous = globalThis.document.activeElement;
-    renameInput.current?.focus();
-    renameInput.current?.select();
-    return () => {
-      if (previous instanceof HTMLElement && previous.isConnected && !previous.closest('[inert]'))
-        previous.focus();
-    };
-  }, [renaming]);
   const current = detail?.current;
   const execute = async (work: () => Promise<boolean>, message?: string) => {
     if (pending.current) return;
     pending.current = true;
+    setBusy(true);
     setError(null);
     try {
       if (await work()) {
@@ -463,27 +457,79 @@ export function DocumentMetadataBar({
       setError(error instanceof Error ? error.message : '文档操作暂时无法完成');
     } finally {
       pending.current = false;
+      setBusy(false);
     }
   };
+  function beginRename() {
+    if (!current || !flow.allowed || busy) return;
+    setRenaming(current);
+    setName(current.name);
+    setError(null);
+  }
+  function saveName() {
+    if (!renaming || renaming.id !== current?.id) return;
+    void execute(() => flow.metadata(renaming, { type: 'RENAME', name }), '文档名称已保存');
+  }
+  function cancelRename() {
+    setRenaming(null);
+    setName('');
+    setError(null);
+  }
+  const unresolved = ['SUBMITTING', 'UNKNOWN', 'CONFIRMED'].includes(state.phase);
+  const renamingCurrent = renaming !== null && renaming.id === current?.id;
+  const operationFeedback = (
+    <>
+      {(error || state.error) && (
+        <p className="inline-error" role="alert">
+          {error ?? state.error}
+        </p>
+      )}
+      {state.phase === 'UNKNOWN' && state.intent?.kind === 'METADATA' && (
+        <button className="ui-button" onClick={() => void execute(() => flow.retryUnknown())}>
+          核实文档操作
+        </button>
+      )}
+      {state.phase === 'CONFIRMED' && (
+        <button className="ui-button" onClick={() => void execute(() => flow.finish())}>
+          重新读取已保存结果
+        </button>
+      )}
+    </>
+  );
   return (
     <section className="document-metadata-bar" aria-label="当前阅读文档">
       {current ? (
-        <strong tabIndex={-1}>{current.name}</strong>
-      ) : detail?.documents.length ? (
-        <p>尚未选择文档</p>
+        <NameEditor
+          key={current.id}
+          label="文档名称"
+          value={current.name}
+          draft={name}
+          editing={renamingCurrent}
+          canRename={!editing && current.archived_at === null}
+          disabled={!flow.allowed || busy}
+          readOnly={unresolved}
+          cancelDisabled={busy || unresolved}
+          begin={beginRename}
+          change={setName}
+          save={saveName}
+          cancel={cancelRename}
+          feedback={renamingCurrent ? operationFeedback : null}
+        />
       ) : null}
-      {(current || detail?.activity.kind === 'MANUAL') && (
+      {(current || navigation || detail?.activity.kind === 'MANUAL') && (
         <div className="document-metadata-row">
-          {current && (
+          {(current || navigation) && (
             <div className="document-metadata-summary">
               {navigation}
-              <span>
-                {documentKindLabels[current.document_kind]} · V{current.content_version} ·{' '}
-                {current.confirmed_revision_id === current.current_revision_id
-                  ? '已确认'
-                  : '未确认'}
-                {current.archived_at !== null ? ' · 已归档' : ''}
-              </span>
+              {current && (
+                <span>
+                  {documentKindLabels[current.document_kind]} · V{current.content_version} ·{' '}
+                  {current.confirmed_revision_id === current.current_revision_id
+                    ? '已确认'
+                    : '未确认'}
+                  {current.archived_at !== null ? ' · 已归档' : ''}
+                </span>
+              )}
             </div>
           )}
           {detail?.activity.kind === 'MANUAL' && (
@@ -495,16 +541,6 @@ export function DocumentMetadataBar({
             <span className="document-metadata-actions">
               {current.archived_at === null ? (
                 <>
-                  <button
-                    className="ui-button"
-                    disabled={!flow.allowed}
-                    onClick={() => {
-                      setRenaming(current);
-                      setName(current.name);
-                    }}
-                  >
-                    改名
-                  </button>
                   <button
                     className="ui-button"
                     disabled={
@@ -547,68 +583,7 @@ export function DocumentMetadataBar({
           )}
         </div>
       )}
-      {renaming && (
-        <form
-          className="document-rename-form"
-          onCompositionStart={() => {
-            composing.current = true;
-          }}
-          onCompositionEnd={() => {
-            composing.current = false;
-          }}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!composing.current)
-              void execute(
-                () => flow.metadata(renaming, { type: 'RENAME', name }),
-                '文档名称已保存',
-              );
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape' && !event.nativeEvent.isComposing && flow.allowed) {
-              event.preventDefault();
-              setRenaming(null);
-            }
-          }}
-        >
-          <label>
-            新名称
-            <input
-              ref={renameInput}
-              className="ui-input"
-              value={name}
-              disabled={!flow.allowed}
-              onChange={(event) => setName(event.currentTarget.value)}
-            />
-          </label>
-          <button className="ui-button primary" disabled={!flow.allowed}>
-            保存名称
-          </button>
-          <button
-            className="ui-button"
-            type="button"
-            disabled={!flow.allowed}
-            onClick={() => setRenaming(null)}
-          >
-            取消
-          </button>
-        </form>
-      )}
-      {(error || state.error) && (
-        <p className="inline-error" role="alert">
-          {error ?? state.error}
-        </p>
-      )}
-      {state.phase === 'UNKNOWN' && state.intent?.kind === 'METADATA' && (
-        <button className="ui-button" onClick={() => void execute(() => flow.retryUnknown())}>
-          核实文档操作
-        </button>
-      )}
-      {state.phase === 'CONFIRMED' && (
-        <button className="ui-button" onClick={() => void execute(() => flow.finish())}>
-          重新读取已保存结果
-        </button>
-      )}
+      {!renamingCurrent && operationFeedback}
       <Confirmation
         open={archive !== null}
         title="归档文档？"

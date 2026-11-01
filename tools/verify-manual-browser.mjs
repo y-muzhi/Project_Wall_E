@@ -75,7 +75,7 @@ try{
  const auxiliary=page.getByRole('button',{name:/^辅助面板/});if(await auxiliary.getAttribute('aria-expanded')!=='true')await auxiliary.click();
  await page.getByRole('tab',{name:'评论',exact:true}).click();const card=page.locator('[data-comment-id="${comment.id}"]');await card.getByText('当前可定位',{exact:true}).waitFor();
  if(await card.locator('.comment-quote').innerText()!=='部门经理'||await card.getByRole('button',{name:'解决评论',exact:true}).isEnabled()||await card.getByRole('button',{name:'让 AI 修改',exact:true}).isEnabled())throw Error('Manual comments do not preserve CURRENT permissions');
- await page.getByRole('tab',{name:'AI 对话',exact:true}).click();const composer=page.getByRole('region',{name:'AI 消息输入',exact:true});await composer.waitFor();
+ await page.getByRole('tab',{name:'Ai对话',exact:true}).click();const composer=page.getByRole('region',{name:'AI 消息输入',exact:true});await composer.waitFor();
  if(await composer.getByRole('button',{name:'发送消息',exact:true}).isEnabled()||await composer.getByRole('button',{name:'采用当前范围',exact:true}).isEnabled())throw Error('Manual AI permissions used draft');
  await ${editor}.locator('p').last().click({clickCount:3});await page.waitForTimeout(100);await page.keyboard.insertText('草稿只写临时内容😀');${saved}
  const current=(await(await page.request.get('${url}/api/v1/requirements/${id}/current-document')).json()).data,actual=(await(await page.request.get('${url}/api/v1/requirements/${id}/manual-draft')).json()).data,index=(await(await page.request.get('${url}/api/v1/requirements/${id}/comment-index')).json()).data,original=(await(await page.request.get('${url}/api/v1/comments/${comment.id}')).json()).data;

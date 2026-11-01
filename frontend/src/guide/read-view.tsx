@@ -66,6 +66,10 @@ export function RunHistory({
   return (
     <RecordList
       title="运行记录"
+      empty={{
+        icon: 'history',
+        message: state.confirmed?.pagination.total ? '当前页暂无运行记录' : '暂无运行记录',
+      }}
       total={state.confirmed?.pagination.total ?? null}
       loading={state.loading}
       error={state.error}
@@ -114,7 +118,6 @@ export function RunHistory({
         label: `查看运行 #${run.id} · ${operationNames[run.operation]} · ${statuses[run.status]}`,
         open: () => open(run),
       }))}
-      empty={state.confirmed?.pagination.total ? '当前页暂无运行' : '暂无符合条件的运行'}
       footer={
         state.confirmed &&
         (state.confirmed.pagination.total_pages > 1 || state.confirmed.pagination.page > 1) && (
@@ -224,7 +227,7 @@ export function AiReadPanel({
     run = state.run;
   const messages = useSyncExternalStore(owner.messages.subscribe, owner.messages.getSnapshot);
   return (
-    <section className="ai-read-panel" aria-label="AI 对话">
+    <section className="ai-read-panel" aria-label="Ai对话">
       <header className="read-section-heading conversation-read-status">
         <span className="sr-only">会话状态</span>
         <span className="read-status" role="status">

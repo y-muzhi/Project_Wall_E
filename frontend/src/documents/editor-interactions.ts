@@ -11,7 +11,7 @@ import {
   validLink,
 } from './format-commands.ts';
 import type { FormatAction, SlashMatch } from './format-commands.ts';
-import { selectionToolbarPosition } from './selection-toolbar-position.ts';
+import { documentSelectionToolbarPosition, observeDocumentSelection } from './selection-surface.ts';
 import { createSingleSelect } from '../shared/single-select.ts';
 import { setMotionOpen } from '../shared/motion.ts';
 
@@ -92,6 +92,7 @@ export function installEditorInteractions(
   let pendingLink: { match: SlashMatch | null; doc: unknown } | null = null;
   let dismissedSelection: { from: number; to: number; doc: unknown } | null = null;
   let bubblePointerFocus = false;
+  let selectionSurface: ReturnType<typeof observeDocumentSelection> | null = null;
   const buttons: { element: HTMLButtonElement; action: FormatAction; mark?: string }[] = [];
   const view = () => owner.action((ctx) => ctx.get(editorViewCtx));
   const signature = (match: SlashMatch | null) =>
@@ -236,28 +237,7 @@ export function installEditorInteractions(
       const width = element.offsetWidth,
         height = element.offsetHeight;
       if (element === bubble) {
-        const { selection } = editor.state,
-          from = editor.domAtPos(selection.from),
-          to = editor.domAtPos(selection.to),
-          range = document.createRange();
-        range.setStart(from.node, from.offset);
-        range.setEnd(to.node, to.offset);
-        const bounds = range.getBoundingClientRect(),
-          bodyTop = Math.max(
-            top,
-            root.querySelector('.editor-format-toolbar')?.getBoundingClientRect().bottom ?? top,
-          ),
-          position = selectionToolbarPosition(
-            bounds,
-            {
-              left: Math.max(8, rect.left),
-              right: Math.min(browser.innerWidth - 8, rect.right),
-              top: bodyTop,
-              bottom,
-            },
-            width,
-            height,
-          );
+        const position = documentSelectionToolbarPosition(root, width, height);
         if (!position) {
           setMotionOpen(element, false);
           return;
@@ -383,7 +363,8 @@ export function installEditorInteractions(
         dismissedSelection = null;
       setMotionOpen(
         bubble,
-        !dismissedSelection &&
+        !selectionSurface?.selecting &&
+          !dismissedSelection &&
           !!(
             selection instanceof TextSelection &&
             !selection.empty &&
@@ -491,51 +472,24 @@ export function installEditorInteractions(
     if (!bubble.contains(target) && !root.contains(target)) setMotionOpen(bubble, false);
   };
   const focus = () => {
-      bubblePointerFocus = false;
-      update();
-    },
-    reposition = () => {
-      position(slash);
-      if (
-        !pendingLink &&
-        !dismissedSelection &&
-        owner.formattingReady &&
-        !root.closest('[hidden],[inert]')
-      ) {
-        const editor = view(),
-          selection = editor.state.selection;
-        setMotionOpen(
-          bubble,
-          !!(
-            selection instanceof TextSelection &&
-            !selection.empty &&
-            (editor.hasFocus() ||
-              bubblePointerFocus ||
-              (!!document.activeElement && bubble.contains(document.activeElement))) &&
-            editor.state.doc.textBetween(selection.from, selection.to).trim()
-          ),
-        );
-        position(bubble);
-      } else setMotionOpen(bubble, false);
-      position(link);
-    };
+    bubblePointerFocus = false;
+    update();
+  };
+  selectionSurface = observeDocumentSelection(editorDOM, update);
   root.addEventListener('keydown', keydown, true);
   document.addEventListener('pointerdown', outside);
   document.addEventListener('focusin', focus);
-  document.addEventListener('scroll', reposition, true);
-  browser.addEventListener('resize', reposition);
   return {
     update,
     contains: (target: Node | null) =>
       !!target && (bubble.contains(target) || slash.contains(target) || link.contains(target)),
     destroy: () => {
       style.destroy();
+      selectionSurface?.destroy();
       hideSlash();
       root.removeEventListener('keydown', keydown, true);
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('focusin', focus);
-      document.removeEventListener('scroll', reposition, true);
-      browser.removeEventListener('resize', reposition);
       slash.remove();
       bubble.remove();
       link.remove();

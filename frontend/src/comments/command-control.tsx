@@ -7,7 +7,7 @@ import { Confirmation } from '../shared/confirmation.tsx';
 const labels = {
   CREATE: '添加评论',
   EDIT: '保存评论',
-  RESOLVE: '解决评论',
+  RESOLVE: '解决评论并隐藏',
   REOPEN: '重新打开评论',
   DELETE: '删除评论',
   MODIFY: '生成修改建议',
@@ -83,7 +83,7 @@ export function CommentCommandControl(
         ? intent.comment.anchor_ref.selected_text
         : intent.comment.anchor_ref.block_markdown_snapshot;
   return (
-    <div className="comment-command" aria-busy={active}>
+    <div className="comment-command" aria-busy={active} data-intent={intent.kind}>
       {intent.kind === 'MODIFY' && (
         <div className="comment-ai-settings">
           <p className="comment-ai-target">
@@ -181,44 +181,51 @@ export function CommentCommandControl(
         </p>
       )}
       {state.observed && unknown && <p role="status">已读取实际状态，仍需确认原请求结果。</p>}
-      {state.phase === 'CONFIRMED' ? (
-        <>
-          <p role="status">
-            {intent.kind === 'MODIFY' ? '修改任务已接受，评论保持未解决。' : '评论操作已确认。'}
-          </p>
+      <div className="comment-command-actions">
+        {props.cancel && state.phase !== 'CONFIRMED' && (
           <button
-            className="ui-button"
+            className="ui-button comment-cancel"
             type="button"
-            disabled={props.blocked || active}
-            onClick={() => void execute(true)}
+            disabled={active}
+            onClick={props.cancel}
           >
-            重新读取评论与详情
+            {unknown ? '保留请求并关闭编辑区' : intent.kind === 'EDIT' ? '取消编辑' : '取消'}
           </button>
-        </>
-      ) : (
-        <button
-          className={'ui-button' + (intent.kind === 'MODIFY' ? ' primary' : '')}
-          type="button"
-          disabled={
-            props.blocked ||
-            active ||
-            (!unknown &&
-              (!props.writeReady ||
-                !props.flow.allowed ||
-                (intent.kind === 'MODIFY' &&
-                  (state.scope_review ||
-                    (state.scope_mode === 'SECTION' && !props.flow.sectionAvailable)))))
-          }
-          onClick={() => (intent.kind === 'DELETE' ? setOpen(true) : void execute())}
-        >
-          {unknown ? '重新确认评论操作结果' : labels[intent.kind]}
-        </button>
-      )}
-      {props.cancel && state.phase !== 'CONFIRMED' && (
-        <button className="ui-button" type="button" disabled={active} onClick={props.cancel}>
-          {unknown ? '保留请求并关闭编辑区' : intent.kind === 'MODIFY' ? '取消' : '取消编辑'}
-        </button>
-      )}
+        )}
+        {state.phase === 'CONFIRMED' ? (
+          <>
+            <p role="status">
+              {intent.kind === 'MODIFY' ? '修改任务已接受，评论保持未解决。' : '评论操作已确认。'}
+            </p>
+            <button
+              className="ui-button"
+              type="button"
+              disabled={props.blocked || active}
+              onClick={() => void execute(true)}
+            >
+              重新读取评论与详情
+            </button>
+          </>
+        ) : (
+          <button
+            className={'ui-button' + (intent.kind === 'DELETE' ? ' danger' : ' primary')}
+            type="button"
+            disabled={
+              props.blocked ||
+              active ||
+              (!unknown &&
+                (!props.writeReady ||
+                  !props.flow.allowed ||
+                  (intent.kind === 'MODIFY' &&
+                    (state.scope_review ||
+                      (state.scope_mode === 'SECTION' && !props.flow.sectionAvailable)))))
+            }
+            onClick={() => (intent.kind === 'DELETE' ? setOpen(true) : void execute())}
+          >
+            {unknown ? '重新确认评论操作结果' : labels[intent.kind]}
+          </button>
+        )}
+      </div>
       <Confirmation
         open={open}
         dangerous
