@@ -328,7 +328,7 @@ function submitLabel(state: CardsState): string {
   if (selected === 'defer') return '确认暂缓';
   if (state.cards.purpose === 'DOCUMENT_ACTION')
     return state.cards.action_payload?.operation === 'GENERATE' ? '生成工作稿' : '更新工作稿';
-  return state.cards.purpose === 'PHASE_CHANGE' ? '确认切换阶段' : '确认并写入';
+  return '确认并写入';
 }
 function CardActionDetails({
   state,
@@ -498,7 +498,7 @@ function CardActionDetails({
           )}
           {selectable.includes('source_refs') && (
             <fieldset disabled={disabled}>
-              <legend>参考文档</legend>
+              <legend>关联文档</legend>
               {state.detail.documents.map((document) => (
                 <label key={document.id}>
                   <input
@@ -553,10 +553,11 @@ function CardActionDetails({
         <>
           <p>
             <strong>
-              建议进入：{phaseNames[String(payload.phase_kind)] ?? String(payload.phase_kind)}
+              历史阶段：{phaseNames[String(payload.phase_kind)] ?? String(payload.phase_kind)}
             </strong>
           </p>
           <p>{String(payload.closure_summary)}</p>
+          <p className="field-help">该历史阶段操作已停用，仅供查阅。</p>
         </>
       )}
       {purpose === 'FACT_CONFIRMATION' && (

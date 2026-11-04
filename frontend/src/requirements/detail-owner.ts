@@ -99,7 +99,12 @@ export class RequirementDetailOwner {
       conversation.receive,
       this.notifyConfirmed,
     );
-    const discussion = new RequirementDiscussion(actual, api, read);
+    const refreshDiscussion = async () => {
+      const next = await read();
+      await adopt(next);
+      return next;
+    };
+    const discussion = new RequirementDiscussion(actual, api, refreshDiscussion);
     const regions = { conversation, comments, discussion };
     this.assistants.set(documentId, regions);
     return regions;

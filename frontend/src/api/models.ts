@@ -6,7 +6,8 @@ import { validateBlockState, validateDocumentReadModel } from '../documents/cont
 import { exact, snapshotObject } from './client.ts';
 import type { JsonObject } from './client.ts';
 import type { DocumentReadModel } from '../documents/contracts.ts';
-import collaboration from '../../../backend/resources/v9/schemas/collaboration-contract.v1.json' with { type: 'json' };
+import collaboration from '../../../backend/resources/v17/schemas/collaboration-contract.v5.json' with { type: 'json' };
+import historicalCollaboration from '../../../backend/resources/v9/schemas/collaboration-contract.v1.json' with { type: 'json' };
 import {
   id,
   count,
@@ -135,14 +136,24 @@ export const nullableId = nullable(id);
 export const collaborationValue =
   (name: string) =>
   (value: unknown): Readonly<JsonObject> => {
-    validateDefinition(name, value, collaboration.$defs);
+    const historicalWire =
+      name === 'Wire' &&
+      value !== null &&
+      typeof value === 'object' &&
+      'project_position' in value &&
+      value.project_position !== null &&
+      typeof value.project_position === 'object' &&
+      'phase_kind' in value.project_position;
+    validateDefinition(
+      name,
+      value,
+      historicalWire ? historicalCollaboration.$defs : collaboration.$defs,
+    );
     return snapshotObject(value);
   };
 export const sourceRef = collaborationValue('SourceRef');
-export const phaseKinds = ['DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW'] as const;
 const topicState = shape({
   topic_ref: nonempty,
-  phase_ref: nonempty,
   mainline_ref: nonempty,
   title: nonempty,
   purpose: nonempty,
@@ -160,15 +171,7 @@ const topicState = shape({
 export const discussionState = (value: unknown) => {
   collaborationValue('Discussion')(value);
   return shape({
-    schema_version: choices([1]),
-    phase: shape({
-      phase_ref: nonempty,
-      kind: choices(phaseKinds),
-      guide_ref: collaborationValue('ResourceRef'),
-      closure: nullable(
-        shape({ message_id: id, summary: nonempty, unresolved_refs: array(nonempty, 1000) }),
-      ),
-    }),
+    schema_version: choices([2]),
     focus_topic_ref: nullable(nonempty),
     topics: array(topicState, 200),
     evidence: array(
@@ -203,7 +206,7 @@ export const discussionState = (value: unknown) => {
       100000,
     ),
     last_step: nullable(shape({ message_id: id, value: collaborationValue('NextStep') })),
-    counters: shape({ phase: id, topic: id, evidence: id }),
+    counters: shape({ topic: id, evidence: id }),
   })(value);
 };
 export type DiscussionState = ReturnType<typeof discussionState>;
@@ -241,8 +244,6 @@ export type ManualDraft = DocumentReadModel &
 export const discussionSummary = checked(
   shape({
     discussion_version: id,
-    phase_ref: nonempty,
-    phase_kind: choices(['DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW']),
     focus_topic_ref: nullable(nonempty),
     focus_title: nullable(nonempty),
     next_step: nullable(collaborationValue('NextStep')),
@@ -651,7 +652,9 @@ export const cards = checked(
     }),
   }),
   (row) => {
-    collaborationValue('StoredCardGroup')(row);
+    if (row.purpose === 'PHASE_CHANGE')
+      validateDefinition('StoredCardGroup', row, historicalCollaboration.$defs);
+    else collaborationValue('StoredCardGroup')(row);
     distinct(row.cards.map((item) => item.card_key));
     for (const item of row.cards) {
       const keys = item.options.map((entry) => entry.option_key);

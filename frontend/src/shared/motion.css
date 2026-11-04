@@ -5,17 +5,6 @@
   --motion-overlay: 160ms;
   --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.application-navigation-toggle-wrap {
-  margin-left: auto;
-}
-.application-brand-zone.is-collapsed {
-  padding: 8px 12px;
-  justify-content: flex-start;
-}
-.application-navigation.is-collapsed .application-navigation-item {
-  justify-content: flex-start;
-  padding-inline: 12px;
-}
 .detail-columns > .detail-outline {
   grid-column: 1;
   grid-row: 1;
@@ -170,7 +159,6 @@
   }
 }
 dialog.create-drawer,
-dialog.application-navigation-drawer,
 dialog.confirmation {
   transition:
     opacity var(--motion-overlay) var(--motion-ease),
@@ -180,16 +168,12 @@ dialog.confirmation {
     overlay var(--motion-overlay) allow-discrete;
 }
 dialog:not([open]).create-drawer,
-dialog:not([open]).application-navigation-drawer,
 dialog:not([open]).confirmation {
   opacity: 0;
   pointer-events: none;
 }
 dialog:not([open]).create-drawer {
   translate: 16px 0;
-}
-dialog:not([open]).application-navigation-drawer {
-  translate: -16px 0;
 }
 dialog:not([open]).confirmation {
   scale: 0.98;
@@ -208,10 +192,6 @@ dialog:not([open])::backdrop {
   dialog[open].create-drawer {
     opacity: 0;
     translate: 16px 0;
-  }
-  dialog[open].application-navigation-drawer {
-    opacity: 0;
-    translate: -16px 0;
   }
   dialog[open].confirmation {
     opacity: 0;

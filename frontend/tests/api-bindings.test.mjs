@@ -8,7 +8,7 @@ const KEY = '00000000-0000-4000-8000-000000000001', REQUEST = '00000000-0000-400
 const at = '2026-10-05T09:00:00.000Z';
 const root = () => ({id:1,requirement_no:'REQ000001',requirement_type:'NEW',title:'标题😀',status:'PLANNING',metadata_version:1,initial_message_id:1,discussion_version:1,
  document_work_state:'IDLE',active_operation_type:null,active_operation_id:null,created_at:at,updated_at:at,completed_at:null,closed_at:null,state_started_at:null});
-const detail=(requirement=root())=>({requirement,documents:[],discussion_summary:{discussion_version:1,phase_ref:'p1',phase_kind:'DISCOVERY',focus_topic_ref:null,focus_title:null,next_step:null,pending_count:0},discussion:null,active_operation:null});
+const detail=(requirement=root())=>({requirement,documents:[],discussion_summary:{discussion_version:1,focus_topic_ref:null,focus_title:null,next_step:null,pending_count:0},discussion:null,active_operation:null});
 const created=()=>({requirement:root(),initial_message_id:1,documents:[]});
 const create = () => ({title:'标题😀',requirement_type:'NEW'});
 const emptyState = { schema_version: 1, next_block_id: 1, blocks: [] };

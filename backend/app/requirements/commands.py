@@ -52,8 +52,8 @@ def update_discussion(executor, payload, *, catalog=None, clock=None):
             remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
         )
         message_id = entity_id(connection, EntityKind.MESSAGE)
-        state, closed_phase = apply_user_command(
-            connection, root, request.discussion_command, message_id, catalog or ResourceCatalog()
+        state = apply_user_command(
+            connection, root, request.discussion_command, catalog or ResourceCatalog()
         )
         if state == root['discussion_state_json']:
             return Success(
@@ -66,8 +66,6 @@ def update_discussion(executor, payload, *, catalog=None, clock=None):
         labels = {
             'SET_BINDING': '调整讨论目标与参考来源',
             'SET_FOCUS': '切换讨论主题',
-            'CHANGE_PHASE': '确认切换讨论阶段',
-            'SET_DISPOSITION': '记录讨论处置',
         }
         from backend.app.infrastructure.idempotency import canonical_input
 
@@ -85,13 +83,12 @@ def update_discussion(executor, payload, *, catalog=None, clock=None):
             request.idempotency_key,
             at,
             document_id=request.document_id,
-            phase_ref=root['discussion_state_json']['phase']['phase_ref'],
             topic_refs=() if state['focus_topic_ref'] is None else (state['focus_topic_ref'],),
             document_ids=() if target is None else (target,),
         )
         updated = repository.update_discussion(root, state, at)
         AuditRepository(connection).record_discussion_update(
-            root, updated, command, message_id, closed_phase, request.idempotency_key, at
+            root, updated, command, message_id, request.idempotency_key, at
         )
         return Success(
             {'code': 'UPDATED', 'data': discussion_command_result(updated), 'details': None}, 200

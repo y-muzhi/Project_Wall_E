@@ -87,7 +87,7 @@ def test_create_is_one_initial_message_zero_documents_runs_and_calls(setup):
     assert detail['code'] == 'READ_OK'
     assert detail['data']['discussion'] is None
     expanded = get_requirement(db, root['id'], expand='discussion')['data']
-    assert expanded['discussion']['phase']['kind'] == 'DISCOVERY'
+    assert expanded['discussion']['schema_version'] == 2 and 'phase' not in expanded['discussion']
     assert expanded['discussion']['topics'] == []
     assert counts(db) == before
 
@@ -216,7 +216,7 @@ def test_http_new_contracts_replay_errors_and_removed_initialization(setup):
                 headers={'Idempotency-Key': str(uuid4())})
             assert invalid.status_code == 422
         assert client.get('/api/v1/requirements/1').json()['data']['documents'] == []
-        assert client.get('/api/v1/requirements/1?expand=discussion').json()['data']['discussion']['phase']['kind'] == 'DISCOVERY'
+        assert client.get('/api/v1/requirements/1?expand=discussion').json()['data']['discussion']['schema_version'] == 2
         assert client.get('/api/v1/requirements?status=PLANNING').json()['meta']['pagination']['total'] == 1
         assert client.get('/api/v1/requirements?status=ACTIVE').status_code == 422
         assert client.post('/api/v1/requirements', json={**body, 'initialization_mode': 'IDEATION'}, headers={'Idempotency-Key': str(uuid4())}).status_code == 422

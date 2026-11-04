@@ -181,7 +181,8 @@ export class InteractionCards {
       this.closed ||
       !this.value.available ||
       this.value.needs_refresh ||
-      this.value.message.card_state !== 'AVAILABLE'
+      this.value.message.card_state !== 'AVAILABLE' ||
+      this.value.cards.purpose === 'PHASE_CHANGE'
     )
       return false;
     const { detail, source } = this.value,

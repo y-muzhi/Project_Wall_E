@@ -30,7 +30,7 @@
 }
 .suggestion-review .review-batch-status[data-state='PENDING'] {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .suggestion-review .review-target {
   display: flex;
@@ -70,7 +70,7 @@
   font-weight: 600;
 }
 .suggestion-review .review-counts [data-state='pending'] {
-  color: var(--accent);
+  color: var(--text-accent);
   background: var(--accent-soft);
 }
 .suggestion-review .review-context {
@@ -133,7 +133,7 @@
   font-size: 12px;
 }
 .suggestion-review .review-bulk-button {
-  color: var(--accent);
+  color: var(--text-accent);
   background: var(--accent-soft);
   border: 1px solid transparent;
 }
@@ -191,7 +191,7 @@
 }
 .suggestion-review .review-decision-status[data-state='PENDING'] {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .suggestion-review .review-decision-status[data-state='ACCEPTED'],
 .suggestion-review .review-decision-status[data-state='EDITED'] {
@@ -283,7 +283,7 @@
 }
 .suggestion-review .review-accept:not(:disabled) {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .suggestion-panel.suggestion-review > .review-batch-actions {
   padding: 12px 16px;

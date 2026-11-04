@@ -90,18 +90,17 @@ def test_independent_history_pending_versions_and_wire(workspace):
     assert get_requirement(database,1)['data']['requirement']['discussion_version'] == 1
 
 
-def test_local_phase_changes_never_change_sibling_document(workspace):
+def test_local_binding_changes_never_change_sibling_document(workspace):
     _, executor, _, _ = workspace
     result = update_discussion(executor, {
         'requirement_id': 1, 'document_id': 1, 'expected_discussion_version': 1,
-        'discussion_command': {'type': 'CHANGE_PHASE', 'phase_kind': 'SOLUTION',
-            'closure_message': 'A only', 'unresolved_refs': []},
+        'discussion_command': {'type': 'SET_BINDING', 'target_document_id': 1, 'scope': None, 'source_refs': []},
         'idempotency_key': str(uuid4()),
     }, catalog=workspace[2])
     assert result['code'] == 'UPDATED', result
-    assert get_requirement(workspace[0],1,expand='discussion',document_id=1)['data']['discussion']['phase']['kind'] == 'SOLUTION'
+    assert get_requirement(workspace[0],1,expand='discussion',document_id=1)['data']['discussion']['binding']['target_document_id'] == 1
     sibling=get_requirement(workspace[0],1,expand='discussion',document_id=2)['data']
-    assert sibling['discussion']['phase']['phase_ref'] == 'p1'
+    assert sibling['discussion']['binding']['target_document_id'] is None
     assert sibling['requirement']['discussion_version'] == 1
     assert not sibling['discussion']['dispositions']
 
@@ -167,29 +166,30 @@ def test_actual_offline_completion_and_program_card_update_only_owner(workspace,
     offline_gate(monkeypatch)
     assert accept(workspace,1)['code']=='GUIDE_ACCEPTED'
     def returned(context):
-        payload={'phase_kind':'SOLUTION','closure_summary':'A phase','unresolved_refs':[],
+        payload={'operation':'GENERATE','target':{'kind':'NEW','name':'建议稿','document_kind':'brief','template_ref':None},
+                 'scope':None,'source_refs':[],'selectable_fields':[],'unresolved_impacts':[],
                  'basis_discussion_version':context.input['current_request']['basis_ref']['discussion_version']}
-        return output(context,progress_delta=delta(context),cards=group('PHASE_CHANGE',payload))
+        return output(context,progress_delta=delta(context),cards=group('DOCUMENT_ACTION',payload))
     result=execute(workspace[:3],Gateway(returned))
     assert result['code']=='AI_FINISHED',result
     rows=messages(workspace,1)
     assert rows['code']=='READ_OK',rows
     card=rows['data']['items'][-1]
     assert card['document_id']==1 and card['card_state']=='AVAILABLE',card
-    request=body(card,'accept')
+    request=body(card,'defer')
     request['expected_discussion_version']=3
     result=submit_card_responses(workspace[1],request,catalog=workspace[2])
     assert result['code']=='PROGRAM_PROCESSED',result
     first=get_requirement(workspace[0],1,document_id=1,expand='discussion')['data']
     second=get_requirement(workspace[0],1,document_id=2,expand='discussion')['data']
-    assert first['discussion']['phase']['kind']=='SOLUTION'
+    assert first['discussion']['dispositions'][-1]['kind']=='REJECT_DRAFT'
     assert first['discussion']['pending_user_message_ids']==[]
-    assert second['discussion']['phase']['kind']=='DISCOVERY'
+    assert second['discussion']['dispositions']==[]
     assert second['discussion']['topics']==[] and second['discussion']['evidence']==[]
     formal=messages(workspace,1)['data']['items'][-1]
     assert formal['document_id']==1 and formal['program_receipt'] is not None
     with workspace[0].transaction() as connection:
-        assert connection.execute("SELECT document_id FROM document_change_audits WHERE event_type='PHASE_CHANGED'").fetchone()[0]==1
+        assert connection.execute("SELECT document_id FROM document_change_audits WHERE event_type='DISCUSSION_UPDATED'").fetchone()[0]==1
         assert connection.execute('SELECT count(*) FROM llm_uses').fetchone()[0]==1
 
 

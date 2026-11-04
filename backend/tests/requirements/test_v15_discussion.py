@@ -42,17 +42,13 @@ def binding(target=None, refs=None, scope=None):
     return {'type': 'SET_BINDING', 'target_document_id': target, 'source_refs': refs or [], 'scope': scope}
 
 
-def phase(kind='SOLUTION', unresolved=None):
-    return {'type': 'CHANGE_PHASE', 'phase_kind': kind, 'closure_message': '保留未决问题，进入下一阶段', 'unresolved_refs': unresolved or []}
-
-
 def topic_fixture(workspace):
     db = workspace[0]
     with db.transaction(write=True) as connection:
         repo = RequirementRepository(connection)
         root = repo.get_for_document(1,1)
         state = deepcopy(root['discussion_state_json'])
-        state['topics'] = [{'topic_ref': 't1', 'phase_ref': 'p1', 'mainline_ref': 'value', 'title': '目标', 'purpose': '明确价值',
+        state['topics'] = [{'topic_ref': 't1', 'mainline_ref': 'value', 'title': '目标', 'purpose': '明确价值',
             'expected_outcomes': [{'outcome_ref': 'o1', 'text': '目标已描述', 'criterion': '有用户依据'}],
             'assessment': 'DISCUSSING', 'evidence_refs': [], 'dependencies': [], 'unresolved_impacts': [],
             'updated_by_message_id': root['initial_message_id']}]
@@ -76,7 +72,7 @@ def test_binding_empty_no_change_then_actual_message_and_idempotent_receipt(work
     assert command(workspace, value, version=2)['code'] == 'NO_CHANGE'
     with db.transaction() as connection:
         messages = connection.execute('SELECT * FROM conversation_messages ORDER BY id').fetchall()
-        assert len(messages) == 2 and messages[-1]['guide_run_id'] is None and messages[-1]['phase_ref'] == 'p1'
+        assert len(messages) == 2 and messages[-1]['guide_run_id'] is None and messages[-1]['phase_ref'] is None
         event = connection.execute('SELECT * FROM document_change_audits').fetchone()
         assert event['source_id'] == messages[-1]['id']
     assert counts(db)['guide_runs'] == counts(db)['llm_uses'] == 0 and counts(db)['requirement_documents'] == 1
@@ -102,40 +98,28 @@ def test_source_ownership_actual_revision_block_subset_and_scope(workspace):
     assert local(binding(target['id']), 2)['code'] == 'STATE_CONFLICT'
 
 
-def test_focus_disposition_and_user_phase_closure_keep_history_and_business_status(workspace):
-    db, executor, _ = workspace
+def test_document_focus_and_removed_commands_preserve_business_status(workspace):
     topic_fixture(workspace)
-    assert update(executor, 1, {'status': 'CLOSED'})['code'] == 'UPDATED'
+    assert update(workspace[1], 1, {'status': 'CLOSED'})['code'] == 'UPDATED'
     assert command(workspace, {'type': 'SET_FOCUS', 'topic_ref': 't1'}, 2)['code'] == 'UPDATED'
-    disposition = {'type': 'SET_DISPOSITION', 'subject_ref': 't1', 'decision': 'DECLINE_DRAFT', 'description': '先继续讨论'}
-    result = command(workspace, disposition, 3)
-    assert result['code'] == 'UPDATED', result
-    user_decision = result['data']['discussion']['dispositions'][-1]
-    assert user_decision['kind'] == 'REJECT_DRAFT'
-    assert command(workspace, phase(unresolved=['t1']), 4)['code'] == 'UPDATED'
-    detail = get_requirement(db, 1, expand='discussion', document_id=1)['data']
-    state = detail['discussion']
-    assert state['phase']['phase_ref'] == 'p2' and state['phase']['kind'] == 'SOLUTION' and state['phase']['closure'] is None
-    assert state['topics'][0]['phase_ref'] == 'p1' and state['focus_topic_ref'] is None
-    assert state['counters'] == {'phase': 3, 'topic': 2, 'evidence': 1}
-    assert detail['requirement']['status'] == 'CLOSED' and detail['requirement']['metadata_version'] == 2
-    with db.transaction() as connection:
-        event = connection.execute("SELECT payload_json FROM document_change_audits WHERE event_type='PHASE_CHANGED'").fetchone()
-        history = json.loads(event['payload_json'])
-        assert history['phase_before']['phase_ref'] == 'p1'
-        closure = history['phase_before']['closure']
-        assert closure['unresolved_refs'] == ['t1']
-        assert connection.execute('SELECT role FROM conversation_messages WHERE id=?', (closure['message_id'],)).fetchone()[0] == 'USER'
-        assert connection.execute('SELECT role FROM conversation_messages WHERE id=?', (user_decision['message_id'],)).fetchone()[0] == 'USER'
-    assert command(workspace, {'type': 'SET_FOCUS', 'topic_ref': 't1'}, 5)['code'] == 'SOURCE_INVALID'
-    assert counts(db)['guide_runs'] == counts(db)['llm_uses'] == 0 and counts(db)['requirement_documents'] == 1
+    before = counts(workspace[0])
+    for removed in (
+        {'type': 'CHANGE_PHASE', 'phase_kind': 'SOLUTION', 'closure_message': None, 'unresolved_refs': []},
+        {'type': 'SET_DISPOSITION', 'subject_ref': 't1', 'decision': 'DEFER', 'description': '先讨论'},
+    ):
+        assert command(workspace, removed, 3)['code'] == 'INVALID_INPUT'
+    detail = get_requirement(workspace[0], 1, expand='discussion', document_id=1)['data']
+    assert detail['discussion']['focus_topic_ref'] == 't1'
+    assert 'phase' not in detail['discussion']
+    assert detail['requirement']['status'] == 'CLOSED'
+    assert counts(workspace[0]) == before
 
 
 def test_occupancy_blocks_discussion_but_same_closed_status_is_independent(workspace):
     document(workspace)
     assert start(workspace)['code'] == 'DRAFT_STARTED'
     before = counts(workspace[0])
-    assert command(workspace, phase())['code'] == 'WORK_STATE_CONFLICT'
+    assert command(workspace, binding(1))['code'] == 'WORK_STATE_CONFLICT'
     assert counts(workspace[0]) == before
     assert update(workspace[1], 1, {'status': 'CLOSED'})['code'] == 'UPDATED'
 
@@ -149,14 +133,14 @@ def test_failed_event_rolls_back_message_state_version_and_replay_can_later_succ
     key = str(uuid4())
     with monkeypatch.context() as patch:
         patch.setattr(AuditRepository, 'record_discussion_update', fail)
-        assert command(workspace, phase(), key=key)['code'] == 'STORAGE_UNAVAILABLE'
+        assert command(workspace, binding(1), key=key)['code'] == 'STORAGE_UNAVAILABLE'
     assert get_requirement(db, 1, expand='discussion', document_id=1) == before and counts(db) == totals
-    assert command(workspace, phase(), key=key)['code'] == 'UPDATED'
+    assert command(workspace, binding(1), key=key)['code'] == 'UPDATED'
 
 
 def test_same_discussion_version_race_commits_one_action(workspace):
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(lambda kind: command(workspace, phase(kind)), ['SOLUTION', 'REVIEW']))
+        results = list(pool.map(lambda value: command(workspace, value), [binding(1), binding(refs=[{'kind': 'MESSAGE', 'message_id': 1}])]))
     assert sorted(result['code'] for result in results) == ['DISCUSSION_VERSION_CONFLICT', 'UPDATED']
     assert counts(workspace[0])['conversation_messages'] == 2
 
@@ -166,14 +150,14 @@ def test_patch_dispatches_exact_union_and_keeps_safe_version_details(workspace):
     app.state.walle_runtime = HttpRuntime(workspace[0], workspace[2], workspace[1])
     with TestClient(app) as client:
         key = {'Idempotency-Key': str(uuid4())}
-        body = {'document_id':1, 'expected_discussion_version': 1, 'discussion_command': phase()}
+        body = {'document_id':1, 'expected_discussion_version': 1, 'discussion_command': binding(1)}
         response = client.patch('/api/v1/requirements/1', json=body, headers=key)
         assert response.status_code == 200, response.text
         assert response.json()['data']['discussion_version'] == 2
         assert client.patch('/api/v1/requirements/1', json=body, headers=key).json()['data'] == response.json()['data']
         stale = client.patch('/api/v1/requirements/1', json=body, headers={'Idempotency-Key': str(uuid4())})
         assert stale.status_code == 409 and stale.json()['error']['code'] == 'DISCUSSION_VERSION_CONFLICT'
-        for bad in [{**body, 'changes': {'title': 'mixed'}}, {**body, 'discussion_command': {**phase(), 'status': 'CLOSED'}},
+        for bad in [{**body, 'changes': {'title': 'mixed'}}, {**body, 'discussion_command': {**binding(1), 'status': 'CLOSED'}},
             {'expected_discussion_version': 2, 'discussion_state_json': {}},
             {'expected_discussion_version': 2, 'discussion_command': {'type': 'SET_FOCUS', 'topic_ref': None}}]:
             assert client.patch('/api/v1/requirements/1', json=bad, headers={'Idempotency-Key': str(uuid4())}).status_code == 422
@@ -181,7 +165,7 @@ def test_patch_dispatches_exact_union_and_keeps_safe_version_details(workspace):
 
 def test_discussion_counters_cannot_reuse_an_allocated_reference(workspace):
     state = get_requirement(workspace[0], 1, expand='discussion', document_id=1)['data']['discussion']
-    state['counters']['phase'] = 1
+    state['counters']['topic'] = 0
     with pytest.raises(ValueError):
         validate_discussion(state)
 

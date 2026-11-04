@@ -1,13 +1,7 @@
 import { ApiRejected, snapshotObject } from '../api/client.ts';
 import type { ApiAction, CreateGuide, WalleApi } from '../api/walle.ts';
 import type { GuideRun, Message, RunReceipt } from '../api/models.ts';
-import {
-  operations,
-  sourceRef,
-  wireScope,
-  runReceipt,
-  scope as decodeScope,
-} from '../api/models.ts';
+import { operations, sourceRef, runReceipt, scope as decodeScope } from '../api/models.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import { ordinaryInput } from '../shared/text.ts';
 import { ComposerDrafts } from './composer-drafts.ts';
@@ -18,10 +12,7 @@ type Submitted = Readonly<
   | { kind: 'CREATE'; body: CreateGuide; raw: string }
   | { kind: 'CONTINUE'; parent: GuideRun; instruction: string; version: number; raw: string }
 >;
-type Settings = Pick<
-  ComposerState,
-  'action' | 'target' | 'new_target' | 'source_refs' | 'review' | 'parent' | 'binding_loaded'
->;
+type Settings = Pick<ComposerState, 'action' | 'target' | 'new_target' | 'review' | 'parent'>;
 export type ComposerState = Readonly<{
   detail: DetailSnapshot;
   action: Operation;
@@ -203,7 +194,21 @@ export class RequirementGuideComposer {
   adopt(detail: DetailSnapshot): void {
     if (detail.requirement.id !== this.value.detail.requirement.id)
       throw TypeError('Owned actual detail required');
-    this.publish({ detail: capture(detail) });
+    const changed =
+      detail.requirement.discussion_version !== this.value.detail.requirement.discussion_version;
+    this.publish({ detail: capture(detail), ...(changed ? { binding_loaded: false } : {}) });
+  }
+  private sourcesWithAssociations(refs: CreateGuide['source_refs']): CreateGuide['source_refs'] {
+    const documentId = this.value.detail.selected_document_id ?? this.value.detail.current?.id;
+    const sources = [
+      ...this.value.source_refs.filter((ref) => ref.kind !== 'REVISION'),
+      ...refs.filter((ref) => ref.kind !== 'REVISION' || ref.document_id !== documentId),
+    ];
+    return [...new Map(sources.map((ref) => [JSON.stringify(ref), sourceRef(ref)])).values()];
+  }
+  syncAssociatedSources(refs: CreateGuide['source_refs']): void {
+    if (!this.editable) return;
+    this.publish({ source_refs: this.sourcesWithAssociations(refs), binding_loaded: true });
   }
   setAvailable(available: boolean): void {
     if (this.closed || available === this.value.available) return;
@@ -222,9 +227,9 @@ export class RequirementGuideComposer {
   }
   beginSettings(): void {
     if (!this.editable || this.settings) return;
-    const { action, target, new_target, source_refs, review, parent, binding_loaded } = this.value;
+    const { action, target, new_target, review, parent } = this.value;
     this.settings = {
-      value: capture({ action, target, new_target, source_refs, review, parent, binding_loaded }),
+      value: capture({ action, target, new_target, review, parent }),
       configured: this.configured,
     };
   }
@@ -257,32 +262,10 @@ export class RequirementGuideComposer {
       });
     }
   }
-  chooseReferences(identities: readonly number[]): void {
+
+  selectDocument(identity: number): void {
     if (!this.editable) return;
     this.configured = true;
-    const refs = identities.map((identity) => {
-      const document = this.value.detail.documents.find((item) => item.id === identity);
-      if (!document) throw TypeError('Actual source document required');
-      return sourceRef({
-        kind: 'REVISION',
-        document_id: identity,
-        revision_id: document.current_revision_id,
-        block_ids: null,
-      });
-    });
-    this.publish({
-      source_refs: [...this.value.source_refs.filter((ref) => ref.kind !== 'REVISION'), ...refs],
-      error: null,
-      error_code: null,
-    });
-  }
-  selectDocument(identity: number | null): void {
-    if (!this.editable) return;
-    this.configured = true;
-    if (identity === null) {
-      this.publish({ target: null });
-      return;
-    }
     const owner = this.value.detail.selected_document_id ?? this.value.detail.current?.id;
     if (identity !== owner) throw TypeError('请先切换到目标文档，再使用该文档的AI助手');
     const document = this.value.detail.documents.find((item) => item.id === identity);
@@ -361,7 +344,15 @@ export class RequirementGuideComposer {
     this.publish({ parent: run ? capture(run) : null, action: 'DISCUSS' });
   }
   async loadBinding(): Promise<boolean> {
-    if (!this.editable || this.configured || this.value.binding_loaded) return false;
+    if (
+      this.closed ||
+      !(
+        ['READY', 'ERROR'].includes(this.value.phase) ||
+        (this.work === 'SEND' && this.value.phase === 'READING')
+      ) ||
+      this.value.binding_loaded
+    )
+      return false;
     const controller = new AbortController();
     this.controller = controller;
     const epoch = this.epoch;
@@ -373,25 +364,20 @@ export class RequirementGuideComposer {
           true,
         )
       ).data;
-      if (this.closed || epoch !== this.epoch || this.configured) return false;
+      if (this.closed || epoch !== this.epoch) return false;
       if (
         actual.requirement.discussion_version !==
           this.value.detail.requirement.discussion_version ||
         actual.discussion === null
       )
         throw Error('Discussion changed');
-      const binding = snapshotObject(actual.discussion.binding),
-        targetId = binding.target_document_id;
-      if (targetId !== null) {
-        if (typeof targetId !== 'number') throw Error('Invalid target');
-        this.selectDocument(targetId);
-        if (binding.scope !== null && this.value.target) {
-          this.publish({ target: { ...this.value.target, scope: wireScope(binding.scope) } });
-        }
-      }
+      const binding = snapshotObject(actual.discussion.binding);
       const refs = binding.source_refs;
       if (!Array.isArray(refs)) throw Error('Invalid sources');
-      this.publish({ source_refs: refs.map(sourceRef), binding_loaded: true });
+      this.publish({
+        source_refs: this.sourcesWithAssociations(refs.map(sourceRef)),
+        binding_loaded: true,
+      });
       return true;
     } catch {
       if (!this.closed && epoch === this.epoch)
@@ -422,6 +408,16 @@ export class RequirementGuideComposer {
   submit(): Promise<boolean> {
     if (!['READY', 'ERROR'].includes(this.value.phase)) return Promise.resolve(false);
     return this.enqueue('SEND', async () => {
+      if (!this.value.parent && !this.value.binding_loaded) {
+        if (!this.allowed) return false;
+        this.publish({ phase: 'READING', error: null });
+        const loaded = await this.loadBinding();
+        if (!loaded) {
+          this.publish({ phase: 'ERROR' });
+          return false;
+        }
+        this.publish({ phase: 'READY' });
+      }
       if (!this.allowed) {
         this.publish({ phase: 'ERROR', error: '请核对讨论版本、工作占用及明确目标。' });
         return false;

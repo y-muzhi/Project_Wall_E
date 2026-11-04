@@ -1,5 +1,7 @@
 """Same-snapshot immutable messages and D-004 card availability facts."""
 
+import json
+
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.message_repository import MessageRepository
 from backend.app.infrastructure.resources import ResourceCatalog, ProtocolInvalid
@@ -25,6 +27,14 @@ def _same_run_root(repository, row, requirement_id):
             raise ValueError('Message run belongs to another requirement')
 
 
+def reading_protocol(raw, protocol):
+    if raw and json.loads(raw).get('purpose') == 'PHASE_CHANGE':
+        from backend.app.infrastructure.collaboration_resources import CollaborationResources, ROOT
+
+        return CollaborationResources.load(ROOT.parent / 'v15')
+    return protocol
+
+
 def card_state(repository, root, row, protocol, catalog=None):
     replies = repository.formal_responses(row['id'])
     if len(replies) > 1 or any(
@@ -39,6 +49,8 @@ def card_state(repository, root, row, protocol, catalog=None):
         _same_run_root(repository, reply, root['id'])
     if replies:
         return 'ANSWERED'
+    if json.loads(row['structured_content_json']).get('purpose') == 'PHASE_CHANGE':
+        return 'EXPIRED'
     if (
         repository.latest_card_id(root['id'], row['document_id']) != row['id']
         or repository.newer_input_exists(row)
@@ -56,7 +68,9 @@ def card_state(repository, root, row, protocol, catalog=None):
         root['id'], source['id'], row['document_id']
     ):
         return 'EXPIRED'
-    cards = decode_cards(row['structured_content_json'], protocol)
+    cards = decode_cards(
+        row['structured_content_json'], reading_protocol(row['structured_content_json'], protocol)
+    )
     binding = cards['program_binding']
     if root['discussion_version'] != binding['discussion_version']:
         return 'EXPIRED'
@@ -114,7 +128,10 @@ def project_message(repository, root, row, protocol, catalog=None):
     )
     if row['message_type'] == 'INTERACTION_CARDS':
         try:
-            data['structured_content'] = decode_cards(row['structured_content_json'], protocol)
+            data['structured_content'] = decode_cards(
+                row['structured_content_json'],
+                reading_protocol(row['structured_content_json'], protocol),
+            )
         except (CardsInvalid, InvalidInput, ProtocolInvalid):
             pass
         if data['structured_content'] is not None:
@@ -133,7 +150,10 @@ def project_message(repository, root, row, protocol, catalog=None):
         try:
             data['structured_content'] = decode_responses(
                 row['structured_content_json'],
-                decode_cards(original['structured_content_json'], protocol),
+                decode_cards(
+                    original['structured_content_json'],
+                    reading_protocol(original['structured_content_json'], protocol),
+                ),
                 protocol,
             )
         except (CardsInvalid, InvalidInput, ProtocolInvalid):

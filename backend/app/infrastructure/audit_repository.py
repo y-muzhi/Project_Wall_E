@@ -356,7 +356,7 @@ class AuditRepository:
         )
         return self.get(fields['id'])
 
-    def record_discussion_update(self, before, after, command, message_id, closed_phase, key, at):
+    def record_discussion_update(self, before, after, command, message_id, key, at):
         require_write_transaction(self.connection)
         if (
             before['id'] != after['id']
@@ -371,15 +371,13 @@ class AuditRepository:
             or message['guide_run_id'] is not None
         ):
             raise ValueError('Discussion event requires its real user action message')
-        event = 'PHASE_CHANGED' if closed_phase is not None else 'DISCUSSION_UPDATED'
+        event = 'DISCUSSION_UPDATED'
         payload = {
             'command': command,
             'message_id': message_id,
             'idempotency_key': key,
             'discussion_version_before': before['discussion_version'],
             'discussion_version_after': after['discussion_version'],
-            'phase_before': closed_phase or before['discussion_state_json']['phase'],
-            'phase_after': after['discussion_state_json']['phase'],
         }
         self.connection.execute(
             "INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,?,'USER_ACTION',?,?,NULL,NULL,?,?,NULL,NULL,?)",

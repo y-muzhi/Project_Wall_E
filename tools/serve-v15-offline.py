@@ -102,25 +102,23 @@ def main():
                 'proposed_markdown': '首版仅推荐尚未观看的电影。\n', 'proposed_data_json': None}
             return output(context, cards=group('FACT_CONFIRMATION', {'confirmed_fact_patches': [{'patch': patch,
                 'evidence': [{'message_id': request['message_id'], 'quoted_text': '仅推荐尚未观看的电影'}]}]}))
-        if '[phase]' in (request['content'] or ''):
-            return output(context, cards=group('PHASE_CHANGE', {'phase_kind': 'SOLUTION', 'closure_summary': '用户确认后进入方案',
-                'unresolved_refs': [], 'basis_discussion_version': request['basis_ref']['discussion_version']}))
+        guide = catalog.collaboration.guide(request['basis_ref']['document_kind'])
         if '[progress-layout]' in (request['content'] or ''):
             # Rich presentation fixture travels through the ordinary C07 path.
             # It cannot be selected in the product or reach a real provider.
             progress = delta(context)
             progress['topic_changes'] = [
-                topic('new_t1', title='电影推荐的核心目标', purpose='明确准确推荐与探索新片的关系', assessment='SUPPORTED',
+                topic('new_t1', mainline_ref=guide['mainlines'][0]['ref'], title='电影推荐的核心目标', purpose='明确准确推荐与探索新片的关系', assessment='SUPPORTED',
                     expected_outcomes=[{'outcome_ref': 'new_o1', 'text': '形成推荐目标', 'criterion': '区分用户喜欢与探索未知的结果。'}]),
-                topic('new_t2', mainline_ref='actors', title='主要使用者与首次使用场景', purpose='梳理新用户进入与已有偏好用户的使用入口',
+                topic('new_t2', mainline_ref=guide['mainlines'][1]['ref'], title='主要使用者与首次使用场景', purpose='梳理新用户进入与已有偏好用户的使用入口',
                     evidence_refs=['new_e2'], unresolved_impacts=['首次使用时是否允许跳过偏好录入？']),
-                topic('new_t3', mainline_ref='core_flow', title='推荐结果的反馈闭环与跨设备观看历史如何共同影响下一轮推荐',
+                topic('new_t3', mainline_ref=guide['mainlines'][2]['ref'], title='推荐结果的反馈闭环与跨设备观看历史如何共同影响下一轮推荐',
                     purpose='先明确从打开小程序、看到推荐到反馈结果的一条主路径', assessment='REVIEW_REQUIRED',
                     evidence_refs=['new_e3'], dependencies=['new_t1'],
                     unresolved_impacts=['反馈入口是否同时包含喜欢、不喜欢和已看过？', '跨设备观看历史尚未确认同步方式。'],
                     expected_outcomes=[{'outcome_ref': 'new_o1', 'text': '明确主流程', 'criterion': '描述触发、主要操作、结果与反馈。'},
                                        {'outcome_ref': 'new_o2', 'text': '确定异常处理边界', 'criterion': '标出无结果与反馈失败时的处理范围。'}]),
-                topic('new_t4', mainline_ref='scope', title='首版范围', purpose='整理版本包含和暂不包含的内容',
+                topic('new_t4', mainline_ref=guide['mainlines'][3]['ref'], title='首版范围', purpose='整理版本包含和暂不包含的内容',
                     assessment='NOT_STARTED', evidence_refs=[]),
             ]
             progress['evidence_changes'] = [
@@ -134,7 +132,6 @@ def main():
             progress['next_step'] = {'action': 'ASK_DECISION', 'topic_ref': 'new_t3',
                 'reason': '先确定反馈入口的三种动作，再核对观看历史的同步边界。', 'unresolved_impacts': []}
             return output(context, progress_delta=progress)
-        guide = catalog.collaboration.guide(context.input['project_position']['phase_kind'])
         progress = delta(context)
         progress['topic_changes'] = [topic('new_t1', mainline_ref=guide['mainlines'][0]['ref'])]
         progress['evidence_changes'] = [evidence(source_refs=[request['message_ref']])]

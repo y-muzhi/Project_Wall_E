@@ -40,7 +40,7 @@ def ensure_assistant_document(workspace):
             snapshot = create_snapshot('', Provenance('SYSTEM','TEMPLATE',None), at, lambda _: True)
             current = DocumentRepository(connection).create_current(
                 entity_id(connection,EntityKind.DOCUMENT),1,snapshot,at,name='assistant owner',
-                document_kind='DESIGN',template_ref=None,origin={'kind':'MESSAGE','message_id':1})
+                document_kind='REQUIREMENT_BRIEF',template_ref=None,origin={'kind':'MESSAGE','message_id':1})
             RevisionRepository(connection).insert_content(entity_id(connection,EntityKind.REVISION),
                 current,[{'kind':'MESSAGE','message_id':1}],'test document',at)
 
@@ -116,7 +116,7 @@ def test_version_and_input_rejections_cannot_leave_user_messages_or_occupancy(wo
     before = counts(workspace[0])
     for changes, code in [({'expected_discussion_version': 2}, 'DISCUSSION_VERSION_CONFLICT'),
             ({'operation': 'GENERATE'}, 'INVALID_INPUT'), ({'operation': 'REVIEW'}, 'INVALID_INPUT'),
-            ({'target': {'kind': 'EXISTING', 'document_id': 999, 'expected_content_version': 1}}, 'SOURCE_INVALID'),
+            ({'document_id': 1, 'target': {'kind': 'EXISTING', 'document_id': 999, 'expected_content_version': 1}}, 'SOURCE_INVALID'),
             ({'scope': {'scope_type': 'DOCUMENT', 'scope_ref': None}}, 'INVALID_INPUT'),
             ({'source_refs': [{'kind': 'MESSAGE', 'message_id': 999}]}, 'SOURCE_INVALID')]:
         result = accept(workspace, **changes)

@@ -36,7 +36,7 @@ def test_temporary_refs_outcomes_focus_and_next_step_remap_together_and_input_va
     assert result['topics'][0]['evidence_refs'] == ['e1'] and result['evidence'][0]['topic_refs'] == ['t1']
     assert result['focus_topic_ref'] == result['last_step']['value']['topic_ref'] == 't1'
     assert result['pending_user_message_ids'] == []
-    assert result['counters'] == {'phase': 2, 'topic': 2, 'evidence': 2}
+    assert result['counters'] == {'topic': 2, 'evidence': 2}
 
 
 @pytest.mark.parametrize('change', [

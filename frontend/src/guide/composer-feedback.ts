@@ -35,13 +35,13 @@ export function composerFeedback(
     }
   }
   if (['REVISE', 'PROPOSE_CHANGES'].includes(state.action) && state.target === null)
-    return result('请先选择本次要修改的目标文档。', true);
+    return result('当前文档尚未就绪，请重新读取状态。', true);
   if (
     ['COMPARE', 'REVIEW'].includes(state.action) &&
     state.target === null &&
     state.source_refs.length === 0
   )
-    return result('请先选择工作目标或参考文档。', true);
+    return result('当前文档尚未就绪，请重新读取状态或选择关联文档。', true);
   if (!allowed) return result('目标或来源已变化，请核对操作设置后再发送。', true);
   return result(null);
 }

@@ -25,8 +25,8 @@ def resources():
 def test_resources_match_the_complete_design_source(resources):
     # Current design publishes the opt-in long-output batch. The default v15
     # stays frozen until a separate live admission and service switch.
-    historical = resources
-    resources = ResourceCatalog().for_collaboration_profile(LONG_OUTPUT_PROFILE).collaboration
+    historical = CollaborationResources.load(ROOT.parent / 'v15')
+    resources = CollaborationResources.load(ROOT.parent / 'v16')
     design = Path('docs/design/v1.5/WALL-E.后端设计文档_V_1.5.md').read_text(encoding='utf-8')
     blocks = [json.loads(text) for text in re.findall(r'```json\s*\n(.*?)\n```', design, re.S)]
     assert resources.bundle == next(value for value in blocks if isinstance(value, dict) and value.get('$id') == 'urn:walle:collaboration-contract:v1')
@@ -75,11 +75,11 @@ def test_all_named_schema_closures_are_local_complete_and_minimal(resources):
 
 
 def test_system_has_exactly_one_current_guide_and_operation_closure(resources):
-    for kind in ('DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW'):
+    for kind in ('brief', 'design', 'specification'):
         guide = resources.guide(kind)
         for operation in OUTPUTS:
             system = resources.system(kind, operation)
-            assert system == (resources.prompt + '\n\n阶段指引 ' + guide['key'] + '@v1\n'
+            assert system == (resources.prompt + '\n\n文档指引 ' + guide['key'] + '@v2\n'
                 + compact({key: guide[key] for key in GUIDE_FIELDS})
                 + '\n\n任务输出协议 ' + operation + '\n' + resources.output_schema(operation))
             schema = json.loads(resources.output_schema(operation))
@@ -92,7 +92,7 @@ def test_system_has_exactly_one_current_guide_and_operation_closure(resources):
 
 def test_outputs_are_operation_specific_nullable_and_strict(resources):
     base = {'schema_version': 1, 'response_type': 'ANALYSIS', 'message': '没有变化',
-        'basis_ref': {'discussion_version': 3, 'phase_ref': 'p1', 'guide_key': 'collaboration.discovery', 'guide_version': 'v1'},
+        'basis_ref': {'discussion_version': 3, 'document_kind': 'brief', 'guide_key': 'collaboration.brief', 'guide_version': 'v2'},
         'progress_delta': None, 'cards': None, 'document_result': None, 'suggestions': None,
         'analysis': {'conclusion': 'NO_CHANGE', 'summary': '原文未变', 'findings': [], 'covered_refs': [], 'unresolved': []}}
     resources.validate('OutputRevise', base)
@@ -111,7 +111,7 @@ def test_outputs_are_operation_specific_nullable_and_strict(resources):
 
 def test_serialization_uses_declared_order_and_preserves_unicode_and_arrays(resources):
     # Deliberately reverse all nested object key order.
-    original = resources.guide('DISCOVERY')
+    original = resources.guide('brief')
 
     def reverse(value):
         if isinstance(value, dict):
@@ -134,10 +134,10 @@ def test_serialization_uses_declared_order_and_preserves_unicode_and_arrays(reso
 
 
 def test_resource_reads_are_detached_and_digest_bound(resources):
-    guide = resources.guide('DISCOVERY')
+    guide = resources.guide('brief')
     guide['mainlines'].clear()
-    assert resources.guide('DISCOVERY')['mainlines']
-    reference = resources.reference('collaboration.discovery')
+    assert resources.guide('brief')['mainlines']
+    reference = resources.reference('collaboration.brief')
     assert hashlib.sha256(resources.content(reference).encode('utf-8')).hexdigest() == reference['digest']
     with pytest.raises(ConfigInvalid):
         resources.content({**reference, 'digest': '0' * 64})
@@ -156,7 +156,7 @@ def test_offline_ready_never_grants_live_dispatch(resources):
         resources.require_live({**profile, 'max_tokens': 16384})
 
 
-@pytest.mark.parametrize('target', ['manifest.json', 'collaboration.output.generate', 'collaboration.discovery'])
+@pytest.mark.parametrize('target', ['manifest.json', 'collaboration.output.generate', 'collaboration.brief'])
 def test_corrupt_resource_fails_closed_and_temporary_output_is_removed(target):
     with TemporaryDirectory(prefix='walle-v15-resource-') as directory:
         copy = Path(directory) / 'v9'

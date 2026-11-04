@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { RequirementDetailOwner } from './detail-owner.ts';
 import { SourceReference } from './source-reference.tsx';
-import { SingleSelect } from '../shared/single-select.tsx';
-import { Confirmation } from '../shared/confirmation.tsx';
-import { phaseKinds } from '../api/models.ts';
 import type { DiscussionState } from '../api/models.ts';
 import { Icon } from '../shared/icon.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
@@ -11,7 +8,6 @@ import { activeModal } from '../shared/modal.ts';
 import {
   progressPresentation,
   topicRecords,
-  phaseLabels,
   assessments,
   evidenceOrigins,
   evidenceStates,
@@ -19,16 +15,10 @@ import {
 } from './discussion-presentation.ts';
 import type { ProgressTopic } from './discussion-presentation.ts';
 import type { DiscussionCommand } from '../api/walle.ts';
-import discovery from '../../../backend/resources/v9/guides/collaboration.discovery.v1.json' with { type: 'json' };
-import solution from '../../../backend/resources/v9/guides/collaboration.solution.v1.json' with { type: 'json' };
-import specification from '../../../backend/resources/v9/guides/collaboration.specification.v1.json' with { type: 'json' };
-import review from '../../../backend/resources/v9/guides/collaboration.review.v1.json' with { type: 'json' };
-const guides = {
-  DISCOVERY: discovery,
-  SOLUTION: solution,
-  SPECIFICATION: specification,
-  REVIEW: review,
-};
+import brief from '../../../backend/resources/v17/guides/collaboration.brief.v2.json' with { type: 'json' };
+import design from '../../../backend/resources/v17/guides/collaboration.design.v2.json' with { type: 'json' };
+import specification from '../../../backend/resources/v17/guides/collaboration.specification.v2.json' with { type: 'json' };
+const guides = { REQUIREMENT_BRIEF: brief, DESIGN: design, SPECIFICATION: specification };
 const natures = { FACT: '事实', CONSTRAINT: '约束', PROPOSAL: '建议' };
 type Evidence = DiscussionState['evidence'][number];
 function EvidenceRecords({
@@ -163,7 +153,7 @@ function TopicDetails({
         </section>
         {records.dispositions.length > 0 && (
           <section>
-            <h4>用户处置</h4>
+            <h4>讨论记录</h4>
             <Dispositions items={records.dispositions} />
           </section>
         )}
@@ -212,68 +202,28 @@ export function DiscussionProgress({
     discussion = state.discussion;
   const panel = useRef<HTMLElement>(null),
     focusCard = useRef<HTMLElement>(null);
-  const [target, setTarget] = useState<number | null | undefined>(),
-    [references, setReferences] = useState<readonly number[] | null>(null);
-  const [phase, setPhase] = useState<(typeof phaseKinds)[number] | null>(null),
-    [closure, setClosure] = useState(''),
-    [confirm, setConfirm] = useState(false),
-    [error, setError] = useState<string | null>(null);
-  const [subject, setSubject] = useState<string | null>(null),
-    [decision, setDecision] = useState<'DEFER' | 'NOT_APPLICABLE' | 'DECLINE_DRAFT'>('DEFER'),
-    [description, setDescription] = useState('');
-  const locked = blocked || !flow.allowed,
-    selectedTarget =
-      target === undefined ? (discussion?.binding.target_document_id ?? null) : target;
-  const selectedSources =
-    references ??
-    discussion?.binding.source_refs
-      .filter((ref) => ref.kind === 'REVISION')
-      .map((ref) => Number(ref.document_id)) ??
-    [];
+  const [error, setError] = useState<string | null>(null);
+  const currentDocumentId = owner.getSnapshot().detail?.selected_document_id ?? null;
+  const currentDocument = actual.documents.find((item) => item.id === currentDocumentId);
+  const locked = blocked || !flow.allowed || currentDocumentId === null;
   const send = async (command: DiscussionCommand) => {
     setError(null);
     try {
-      const done = await flow.submit(command);
-      if (done) {
-        setTarget(undefined);
-        setReferences(null);
-        setSubject(null);
-        setDescription('');
-        setPhase(null);
-        setClosure('');
-        setConfirm(false);
-        owner.toasts.push(
-          'success',
-          command.type === 'SET_FOCUS'
-            ? '当前讨论主题已更新'
-            : command.type === 'SET_BINDING'
-              ? '讨论目标与来源已保存'
-              : command.type === 'CHANGE_PHASE'
-                ? '讨论阶段已切换'
-                : '用户处置已保存',
-        );
-        if (command.type === 'SET_FOCUS')
-          requestAnimationFrame(() => {
-            if (!panel.current || panel.current.closest('[hidden],[inert]') || activeModal())
-              return;
-            focusCard.current?.focus({ preventScroll: true });
-            panel.current.scrollTop = 0;
-          });
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '讨论调整失败');
+      if (!(await flow.submit(command))) return;
+      owner.toasts.push('success', '当前讨论主题已更新');
+      requestAnimationFrame(() => {
+        if (!panel.current || panel.current.closest('[hidden],[inert]') || activeModal()) return;
+        focusCard.current?.focus({ preventScroll: true });
+        panel.current.scrollTop = 0;
+      });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '讨论调整失败');
     }
   };
-  const unresolved =
-    discussion?.topics
-      .filter(
-        (topic) =>
-          topic.phase_ref === discussion.phase.phase_ref && topic.assessment !== 'SUPPORTED',
-      )
-      .map((topic) => topic.topic_ref) ?? [];
-  const view = discussion
-    ? progressPresentation(discussion, guides[discussion.phase.kind].mainlines)
-    : null;
+  const view =
+    discussion && currentDocument
+      ? progressPresentation(discussion, guides[currentDocument.document_kind].mainlines)
+      : null;
   const stale = discussion !== null && state.version !== actual.requirement.discussion_version;
   // Observe acknowledged versions only in the visible progress tab; this is not a poller or
   // model request. A failed read stays visible until the user explicitly retries.
@@ -282,8 +232,10 @@ export function DiscussionProgress({
     const current = flow.getSnapshot();
     if (!current.discussion || (current.version ?? -1) < actual.requirement.discussion_version)
       void flow.load();
-    return () => flow.pauseRead();
   }, [active, actual.requirement.discussion_version, flow]);
+  useEffect(() => {
+    if (active) return () => flow.pauseRead();
+  }, [active, flow]);
   const reread = () =>
     void owner
       .refresh()
@@ -301,9 +253,6 @@ export function DiscussionProgress({
       <header className="progress-panel-heading">
         <div>
           <h2>大纲与进展</h2>
-          <span className="progress-phase-label">
-            {phaseLabels[actual.discussion_summary.phase_kind]}
-          </span>
         </div>
         <button type="button" className="ui-button" onClick={discuss}>
           返回对话
@@ -370,246 +319,57 @@ export function DiscussionProgress({
                 )}
               </section>
             )}
-            <div className="progress-route-heading">
-              <h3>讨论主线</h3>
-              <span>
-                {view.topics.length} 个主题
-                {view.reviewCount > 0 && ` · ${view.reviewCount} 个需复核`}
-              </span>
-            </div>
-            <ol className="progress-mainlines">
-              {view.groups.map((mainline, index) => (
-                <li key={mainline.ref}>
-                  <details
-                    className="progress-mainline"
-                    open={mainline.topics.some(
-                      (topic) => topic.topic_ref === discussion.focus_topic_ref,
-                    )}
-                  >
-                    <summary>
-                      <span className="progress-mainline-number">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <strong>{mainline.title}</strong>
-                      <span className="progress-mainline-count">
-                        {mainline.topics.length ? `${mainline.topics.length} 个主题` : '尚无主题'}
-                      </span>
-                      <span className="progress-chevron">
-                        <Icon name="right" />
-                      </span>
-                    </summary>
-                    <div className="progress-mainline-body">
-                      <p className="progress-mainline-purpose">{mainline.purpose}</p>
-                      {mainline.topics.length ? (
-                        mainline.topics.map((topic) => (
-                          <TopicDetails
-                            key={topic.topic_ref}
-                            topic={topic}
-                            discussion={discussion}
-                            owner={owner}
-                            locked={locked}
-                            focus={() =>
-                              void send({ type: 'SET_FOCUS', topic_ref: topic.topic_ref })
-                            }
-                          />
-                        ))
-                      ) : (
-                        <EmptyState icon="progress" message="本主线暂无主题" compact />
-                      )}
-                    </div>
-                  </details>
-                </li>
-              ))}
-            </ol>
-            {view.phaseDispositions.length > 0 && (
-              <section className="progress-phase-decisions">
-                <h3>本阶段用户处置</h3>
-                <Dispositions items={view.phaseDispositions} />
-              </section>
+            {view.groups.length > 0 && (
+              <>
+                <div className="progress-route-heading">
+                  <h3>讨论主线</h3>
+                  <span>
+                    {view.topics.length} 个主题
+                    {view.reviewCount > 0 && ` · ${view.reviewCount} 个需复核`}
+                  </span>
+                </div>
+                <ol className="progress-mainlines">
+                  {view.groups.map((mainline, index) => (
+                    <li key={mainline.ref}>
+                      <details
+                        className="progress-mainline"
+                        open={mainline.topics.some(
+                          (topic) => topic.topic_ref === discussion.focus_topic_ref,
+                        )}
+                      >
+                        <summary>
+                          <span className="progress-mainline-number">
+                            {String(index + 1).padStart(2, '0')}
+                          </span>
+                          <strong>{mainline.title}</strong>
+                          <span className="progress-mainline-count">
+                            {mainline.topics.length} 个主题
+                          </span>
+                          <span className="progress-chevron">
+                            <Icon name="right" />
+                          </span>
+                        </summary>
+                        <div className="progress-mainline-body">
+                          <p className="progress-mainline-purpose">{mainline.purpose}</p>
+                          {mainline.topics.map((topic) => (
+                            <TopicDetails
+                              key={topic.topic_ref}
+                              topic={topic}
+                              discussion={discussion}
+                              owner={owner}
+                              locked={locked}
+                              focus={() =>
+                                void send({ type: 'SET_FOCUS', topic_ref: topic.topic_ref })
+                              }
+                            />
+                          ))}
+                        </div>
+                      </details>
+                    </li>
+                  ))}
+                </ol>
+              </>
             )}
-            <details className="progress-settings">
-              <summary>
-                <Icon name="settings" />
-                <strong>讨论设置</strong>
-                <span>目标、阶段与用户处置</span>
-              </summary>
-              <div className="progress-settings-body">
-                <details className="progress-setting-section">
-                  <summary>讨论目标与来源</summary>
-                  <p className="field-help">指定后续讨论的工作目标与参考文档，不生成或修改正文。</p>
-                  <label>
-                    工作目标
-                    <SingleSelect
-                      label="工作目标"
-                      disabled={locked}
-                      value={selectedTarget === null ? 'NONE' : String(selectedTarget)}
-                      options={[
-                        { value: 'NONE', label: '不绑定文档' },
-                        ...actual.documents
-                          .filter(
-                            (document) =>
-                              document.id === owner.getSnapshot().detail?.selected_document_id,
-                          )
-                          .map((document) => ({
-                            value: String(document.id),
-                            label:
-                              document.name + (document.archived_at === null ? '' : '（已归档）'),
-                          })),
-                      ]}
-                      change={(value) => setTarget(value === 'NONE' ? null : Number(value))}
-                    />
-                  </label>
-                  <fieldset disabled={locked}>
-                    <legend>参考文档</legend>
-                    {actual.documents.map((document) => (
-                      <label key={document.id}>
-                        <input
-                          type="checkbox"
-                          checked={selectedSources.includes(document.id)}
-                          onChange={(event) =>
-                            setReferences(
-                              event.currentTarget.checked
-                                ? [...selectedSources, document.id]
-                                : selectedSources.filter((id) => id !== document.id),
-                            )
-                          }
-                        />
-                        {document.name} · v{document.content_version}
-                      </label>
-                    ))}
-                  </fieldset>
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={locked}
-                    onClick={() =>
-                      void send({
-                        type: 'SET_BINDING',
-                        target_document_id: selectedTarget,
-                        scope:
-                          selectedTarget === discussion.binding.target_document_id
-                            ? discussion.binding.scope
-                            : selectedTarget === null
-                              ? null
-                              : { scope_type: 'DOCUMENT', scope_ref: null },
-                        source_refs: [
-                          ...discussion.binding.source_refs.filter(
-                            (ref) => ref.kind !== 'REVISION',
-                          ),
-                          ...selectedSources.map((identity) => {
-                            const document = actual.documents.find((item) => item.id === identity)!;
-                            return {
-                              kind: 'REVISION',
-                              document_id: identity,
-                              revision_id: document.current_revision_id,
-                              block_ids: null,
-                            };
-                          }),
-                        ],
-                      })
-                    }
-                  >
-                    保存讨论绑定
-                  </button>
-                </details>
-                <details className="progress-setting-section">
-                  <summary>阶段与用户处置</summary>
-                  <p className="field-help">
-                    阶段切换和用户处置独立于需求业务状态，保留原有主题与历史记录。
-                  </p>
-                  <label>
-                    下一阶段
-                    <SingleSelect
-                      label="下一阶段"
-                      disabled={locked}
-                      value={phase ?? discussion.phase.kind}
-                      options={phaseKinds.map((value) => ({ value, label: phaseLabels[value] }))}
-                      change={(value) => setPhase(value as (typeof phaseKinds)[number])}
-                    />
-                  </label>
-                  <label>
-                    收束说明
-                    <textarea
-                      className="ui-input"
-                      disabled={locked}
-                      value={closure}
-                      onChange={(event) => setClosure(event.currentTarget.value)}
-                    />
-                  </label>
-                  <p>
-                    本阶段尚待讨论或复核的主题：
-                    {unresolved.length
-                      ? discussion.topics
-                          .filter((topic) => unresolved.includes(topic.topic_ref))
-                          .map((topic) => topic.title)
-                          .join('、')
-                      : '无'}
-                    。切换时保留这些未决项。
-                  </p>
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={locked || phase === null || phase === discussion.phase.kind}
-                    onClick={() => setConfirm(true)}
-                  >
-                    切换阶段
-                  </button>
-                  <label>
-                    处置范围
-                    <SingleSelect
-                      label="处置范围"
-                      disabled={locked}
-                      value={subject ?? discussion.phase.phase_ref}
-                      options={[
-                        { value: discussion.phase.phase_ref, label: '当前阶段' },
-                        ...discussion.topics
-                          .filter((topic) => topic.phase_ref === discussion.phase.phase_ref)
-                          .map((topic) => ({ value: topic.topic_ref, label: topic.title })),
-                      ]}
-                      change={setSubject}
-                    />
-                  </label>
-                  <label>
-                    用户决定
-                    <SingleSelect
-                      label="用户决定"
-                      disabled={locked}
-                      value={decision}
-                      options={[
-                        { value: 'DEFER', label: '暂缓' },
-                        { value: 'NOT_APPLICABLE', label: '不适用' },
-                        { value: 'DECLINE_DRAFT', label: '暂不出稿' },
-                      ]}
-                      change={(value) => setDecision(value as typeof decision)}
-                    />
-                  </label>
-                  <label>
-                    处置说明
-                    <textarea
-                      className="ui-input"
-                      disabled={locked}
-                      value={description}
-                      onChange={(event) => setDescription(event.currentTarget.value)}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={locked || !description.trim()}
-                    onClick={() =>
-                      void send({
-                        type: 'SET_DISPOSITION',
-                        subject_ref: subject ?? discussion.phase.phase_ref,
-                        decision,
-                        description,
-                      })
-                    }
-                  >
-                    保存用户处置
-                  </button>
-                </details>
-              </div>
-            </details>
           </>
         )}
         {(state.error || error) && (
@@ -651,26 +411,6 @@ export function DiscussionProgress({
           </button>
         )}
       </div>
-      <Confirmation
-        open={confirm}
-        title="切换讨论阶段"
-        description="当前主题和未决项将保留在历史中。此操作保存用户决定，不生成文档。"
-        busy={state.phase === 'SUBMITTING'}
-        confirmDisabled={locked || phase === null}
-        error={state.error ?? error}
-        confirm={() => {
-          if (phase)
-            void send({
-              type: 'CHANGE_PHASE',
-              phase_kind: phase,
-              closure_message: closure.trim() ? closure : null,
-              unresolved_refs: unresolved,
-            });
-        }}
-        cancel={() => {
-          if (state.phase !== 'SUBMITTING') setConfirm(false);
-        }}
-      />
     </section>
   );
 }

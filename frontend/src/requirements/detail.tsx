@@ -20,6 +20,7 @@ import { ToastViewport } from '../shared/toast.tsx';
 import { localTime } from '../shared/time.ts';
 import { DocumentRecords } from './document-records.tsx';
 import { DiscussionProgress } from './discussion-view.tsx';
+import { DocumentAssociations } from './document-associations.tsx';
 import { activeModal } from '../shared/modal.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 import type { EmptyStateContent } from '../shared/empty-state.tsx';
@@ -286,6 +287,13 @@ function LoadedDetail({
                 key={actual.current.id}
                 owner={regions.conversation}
                 documents={owner.documents}
+                associations={
+                  <DocumentAssociations
+                    owner={owner}
+                    blocked={blocked || document.busy}
+                    active={supported && geometry.right_open && geometry.right_tab === 'AI'}
+                  />
+                }
               />
             ) : (
               <EmptyState icon="robot" message="请先创建或选择文档" fill />

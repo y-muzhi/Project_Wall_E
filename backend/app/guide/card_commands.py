@@ -20,7 +20,6 @@ from backend.app.messages.cards import (
 )
 from backend.app.messages.queries import card_state
 from backend.app.messages.contracts import program_receipt
-from backend.app.requirements.discussion import apply_user_command
 from backend.app.shared.command_execution import Rejected, execute_idempotent, operation_time
 from backend.app.shared.validation import InvalidInput, reject
 from .contracts import submit_card_responses_input, create_guide_run_input
@@ -74,6 +73,9 @@ def submit(executor, payload, *, catalog=None, clock=None):
             root,
             remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
         )
+        raw_cards = json.loads(original['structured_content_json'])
+        if raw_cards.get('purpose') == 'PHASE_CHANGE':
+            raise Rejected('CARD_EXPIRED')
         cards = decode_cards(original['structured_content_json'], resources.collaboration)
         if card_state(messages, root, original, resources.collaboration, resources) != 'AVAILABLE':
             raise Rejected('CARD_EXPIRED')
@@ -165,7 +167,6 @@ def submit(executor, payload, *, catalog=None, clock=None):
             request.idempotency_key,
             at,
             document_id=original['document_id'],
-            phase_ref=root['discussion_state_json']['phase']['phase_ref'],
             topic_refs=()
             if root['discussion_state_json']['focus_topic_ref'] is None
             else (root['discussion_state_json']['focus_topic_ref'],),
@@ -173,21 +174,8 @@ def submit(executor, payload, *, catalog=None, clock=None):
         state = deepcopy(root['discussion_state_json'])
         result = 'DEFERRED'
         effect = None
-        closed_phase = None
         action = answers['responses'][0]['selected_option_keys']
-        if purpose == 'PHASE_CHANGE' and action == ['accept']:
-            payload = cards['action_payload']
-            command = {
-                'type': 'CHANGE_PHASE',
-                'phase_kind': payload['phase_kind'],
-                'closure_message': payload['closure_summary'],
-                'unresolved_refs': payload['unresolved_refs'],
-            }
-            state, closed_phase = apply_user_command(
-                connection, root, command, response_id, resources
-            )
-            result = 'APPLIED' if state != root['discussion_state_json'] else 'NO_CHANGE'
-        elif purpose == 'FACT_CONFIRMATION' and action == ['confirm']:
+        if purpose == 'FACT_CONFIRMATION' and action == ['confirm']:
             from .fact_confirmation import apply_confirmed_action
 
             effect = apply_confirmed_action(
@@ -233,11 +221,9 @@ def submit(executor, payload, *, catalog=None, clock=None):
             'program_receipt': receipt,
             'discussion_version_before': before['discussion_version'],
             'discussion_version_after': root['discussion_version'],
-            'phase_before': closed_phase or before['discussion_state_json']['phase'],
-            'phase_after': root['discussion_state_json']['phase'],
             'idempotency_key': request.idempotency_key,
         }
-        event = 'PHASE_CHANGED' if closed_phase is not None else 'DISCUSSION_UPDATED'
+        event = 'DISCUSSION_UPDATED'
         connection.execute(
             "INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,?,'USER_ACTION',?,'CARD_PROGRAM_ACTION',NULL,NULL,?,?,NULL,NULL,?)",
             (

@@ -11,8 +11,8 @@ test('feedback distinguishes discussion, saved revisions and reviewable suggesti
 });
 test('missing configuration has an actionable reason while a stale owner denial remains denied',()=>{
  assert.equal(composerFeedback(state({action:'GENERATE'}),true,false).configure,true);
- assert.match(composerFeedback(state({action:'REVISE'}),true,false).blocked,/目标文档/);
- assert.match(composerFeedback(state({action:'REVIEW'}),true,false).blocked,/工作目标或参考文档/);
+ assert.match(composerFeedback(state({action:'REVISE'}),true,false).blocked,/当前文档尚未就绪/);
+ assert.match(composerFeedback(state({action:'REVIEW'}),true,false).blocked,/当前文档尚未就绪.*关联文档/);
  assert.match(composerFeedback(state({target:{document_id:2}}),true,false).blocked,/已变化/);
 });
 test('unknown results and real work occupancy take precedence over new configuration suggestions',()=>{

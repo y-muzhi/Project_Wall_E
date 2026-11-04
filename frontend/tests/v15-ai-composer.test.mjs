@@ -35,7 +35,7 @@ function fixture(actual=detail(),overrides={}){
  const drafts=new ComposerDrafts(()=>({getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)}),2);
  const api={prepareCreateGuide(id,body){counts.prepares++;bodies.push(body);return {async submit(){counts.sends++;return {data:receipt};}};},
   async getGuideRun(){counts.reads++;return {data:{id:41,requirement_id:1,operation:bodies[0]?.operation??'DISCUSS',parent_guide_run_id:null}};},
-  async listMessages(){return {data:{items:[]}};},...overrides};
+  async listMessages(){return {data:{items:[]}};},async getRequirementDetail(){return {data:{...actual,discussion:{binding:{target_document_id:actual.selected_document_id,scope:null,source_refs:[]}}}};},...overrides};
  const owner=new RequirementGuideComposer(actual,api,async()=>actual,async()=>{},async()=>{counts.receives++;},async()=>{},drafts);
  owner.setAvailable(true);return {owner,counts,bodies,values,api};
 }
@@ -50,8 +50,8 @@ test('reading selection cannot silently change the configured write target or it
  assert.deepEqual(bodies[0].target,{kind:'EXISTING',document_id:2,expected_content_version:3});owner.dispose();
 });
 test('generation has a concrete new target and canonical SECTION scope uses heading_block_id',async()=>{
- const first=fixture();first.owner.choose('GENERATE');first.owner.configureNew('新方案','solution',true);first.owner.change('生成');assert.equal(await first.owner.submit(),true);
- assert.deepEqual(first.bodies[0].target,{kind:'NEW',name:'新方案',document_kind:'solution',template_ref:{key:'structure.solution',version:'v1'}});assert.equal(first.bodies[0].scope,null);first.owner.dispose();
+ const first=fixture();first.owner.choose('GENERATE');first.owner.configureNew('新方案','design',true);first.owner.change('生成');assert.equal(await first.owner.submit(),true);
+ assert.deepEqual(first.bodies[0].target,{kind:'NEW',name:'新方案',document_kind:'design',template_ref:{key:'structure.design',version:'v1'}});assert.equal(first.bodies[0].scope,null);first.owner.dispose();
  const actual={...detail([doc(2)]),current:doc(2)},second=fixture(actual);second.owner.choose('REVISE');assert.equal(second.owner.select({document_id:2,content_version:3,label:'章节',selection:null,scope:{scope_type:'SECTION',scope_ref:{block_id:8}}}),true);
  second.owner.change('改章节');assert.equal(await second.owner.submit(),true);assert.deepEqual(second.bodies[0].scope,{scope_type:'SECTION',scope_ref:{heading_block_id:8}});second.owner.dispose();
 });
@@ -65,10 +65,10 @@ test('accepted receipt followed by failed GET retries reads and never resubmits 
  const {owner,counts,api}=fixture();api.getGuideRun=async()=>{if(++counts.reads===1)throw new ApiUnknown(false);return {data:{id:41,requirement_id:1,operation:'DISCUSS'}};};
  owner.change('继续讨论');assert.equal(await owner.submit(),false);assert.equal(owner.getSnapshot().phase,'CONFIRMED');assert.equal(await owner.finish(),true);assert.equal(counts.sends,1);assert.equal(counts.prepares,1);assert.equal(counts.reads,2);owner.dispose();
 });
-test('a late binding read cannot replace an explicit target selected while GET was in flight',async()=>{
+test('a binding read synchronizes sources without replacing an explicit target',async()=>{
  const pending=deferred(),{owner}=fixture(detail([doc(2),doc(3)]),{getRequirementDetail:()=>pending.promise});
  const read=owner.loadBinding();owner.selectDocument(2);pending.resolve({data:{requirement:root,discussion:{binding:{target_document_id:3,scope:null,source_refs:[]}}}});
- assert.equal(await read,false);assert.equal(owner.getSnapshot().target.document_id,2);owner.dispose();
+ assert.equal(await read,true);assert.equal(owner.getSnapshot().target.document_id,2);owner.dispose();
 });
 test('the existing guide route transports a strict receipt and a frozen body/key on unknown replay',async()=>{
  const requests=[],key='00000000-0000-4000-8000-000000000001';let lost=true;
@@ -80,10 +80,10 @@ test('the existing guide route transports a strict receipt and a frozen body/key
 
 test('Escape restores the opening configuration without discarding text or changing actual reading',()=>{
  const actual={...detail([doc(2),doc(3)]),current:doc(3)}, {owner,counts}=fixture(actual);
- owner.selectDocument(2);owner.choose('REVISE');owner.chooseReferences([3]);owner.change('保留输入');
- owner.beginSettings();owner.choose('GENERATE');owner.configureNew('未提交新稿','brief',false);owner.chooseReferences([]);owner.change('仍需保留的最新输入');
+ owner.selectDocument(2);owner.choose('REVISE');owner.syncAssociatedSources([{kind:'REVISION',document_id:3,revision_id:23,block_ids:null}]);owner.change('保留输入');
+ owner.beginSettings();owner.choose('GENERATE');owner.configureNew('未提交新稿','brief',false);owner.syncAssociatedSources([{kind:'REVISION',document_id:3,revision_id:33,block_ids:null}]);owner.change('仍需保留的最新输入');
  owner.endSettings(true);const state=owner.getSnapshot();assert.equal(state.action,'REVISE');assert.equal(state.target.document_id,2);
- assert.equal(state.source_refs[0].document_id,3);assert.equal(state.instruction,'仍需保留的最新输入');assert.equal(state.detail.current.id,3);
+ assert.equal(state.source_refs[0].document_id,3);assert.equal(state.source_refs[0].revision_id,33);assert.equal(state.instruction,'仍需保留的最新输入');assert.equal(state.detail.current.id,3);
  assert.equal(counts.prepares,0);assert.equal(counts.sends,0);owner.dispose();
 });
 

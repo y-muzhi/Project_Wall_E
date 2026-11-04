@@ -117,7 +117,7 @@ def specification_instruction(domain):
 def prepare_case(database, lock, catalog, domain, case):
     """Return a real accepted run and fixed source facts, without dispatching it."""
     from backend.app.infrastructure.idempotency import Idempotency
-    from backend.app.requirements.commands import create_requirement, update_discussion
+    from backend.app.requirements.commands import create_requirement
     from backend.app.guide.commands import create_guide_run, cancel_guide_run
     from backend.app.documents.commands import (create_document, start_manual_draft,
         save_manual_draft, complete_manual_draft)
@@ -185,10 +185,7 @@ def prepare_case(database, lock, catalog, domain, case):
         for index in range(12):
             pending('补充历史事项'+str(index+1)+'：本条没有改变既定偏好及首版边界。')
     if case == 'discuss-decline':
-        checked(update_discussion(executor, {'requirement_id': 1, 'document_id':owner_document_id, 'expected_discussion_version': version(),
-            'discussion_command': {'type': 'SET_DISPOSITION', 'subject_ref': 'p1', 'decision': 'DECLINE_DRAFT',
-                'description': '当前不生成文档，继续讨论推荐主流程；没有新依据不要重复建议出稿。'},
-            'idempotency_key': str(uuid4())}, catalog=catalog), 'UPDATED')
+        pending('本轮暂不生成文档，继续讨论推荐主流程；没有新依据不要重复建议出稿。')
 
     instruction = '请先给出首版目标和推荐主流程，再说明关键取舍，只讨论，不生成文档。'
     operation, destination, scope, refs = 'DISCUSS', None, None, []
@@ -258,7 +255,7 @@ def prepare_case(database, lock, catalog, domain, case):
         assert context.input_json.count(domain.preference) == 1
         assert len(canonical['discussion']['pending_user_message_ids']) > 10
     if case == 'discuss-decline':
-        assert context.input['project_position']['dispositions']
+        assert '本轮暂不生成文档，继续讨论推荐主流程；没有新依据不要重复建议出稿。' in context.input_json
     return identity, context, facts
 
 

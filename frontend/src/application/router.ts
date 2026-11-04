@@ -65,7 +65,6 @@ export class ApplicationRouter {
   private position = 0;
   private currentPath: string;
   private currentState: unknown;
-  private detailEntry: DetailEntry | null = null;
   private departure: DetailDeparture | null = null;
   private blocked = false;
   private closed = false;
@@ -93,7 +92,7 @@ export class ApplicationRouter {
     this.history = new WorkbenchHistory(browser.history, storage, identify);
     this.currentPath = browser.pathname();
     this.currentState = browser.history.state;
-    this.position = this.readPosition(this.currentState) ?? 0;
+    this.position = this.readPosition(this.currentState, this.currentPath) ?? 0;
     this.apply(this.currentPath, true);
     this.release = browser.listen(this.pop);
   }
@@ -110,7 +109,12 @@ export class ApplicationRouter {
     this.value = Object.freeze({ ...this.value, ...changes });
     for (const listener of this.listeners) listener();
   }
-  private readPosition(state: unknown): number | null {
+  private readPosition(state: unknown, path: string): number | null {
+    const route = pageRoute(path);
+    if (route.kind === 'DETAIL') {
+      const detail = this.decodeDetail(state, route.id);
+      if (detail) return detail.position;
+    }
     const identity = entryId(state);
     if (!identity) return null;
     const known = this.positions.get(identity);
@@ -183,7 +187,6 @@ export class ApplicationRouter {
     let workbench: RequirementWorkbench | null = null,
       creation: CreateRequirementFlow | null = null,
       entry: WorkbenchEntry | null = null;
-    this.detailEntry = null;
     if (route.kind === 'WORKBENCH') {
       if (path === '/') {
         this.browser.history.replaceState(this.browser.history.state, '', '/requirements');
@@ -195,7 +198,7 @@ export class ApplicationRouter {
       creation = new CreateRequirementFlow(this.api);
       this.remember(entry, this.position);
     } else if (route.kind === 'DETAIL') {
-      this.detailEntry =
+      const detailEntry =
         this.decodeDetail(this.browser.history.state, route.id) ??
         Object.freeze({
           schema_version: 2,
@@ -205,8 +208,12 @@ export class ApplicationRouter {
           position: this.position,
           from: null,
         });
-      this.browser.history.replaceState(this.detailEntry, '', path);
-      this.remember(this.detailEntry, this.position);
+      this.browser.history.replaceState(detailEntry, '', path);
+      if (detailEntry.from) {
+        const { entry, position } = detailEntry.from;
+        this.positions.set(entry.entry_id, position);
+      }
+      this.remember(detailEntry, this.position);
     }
     this.currentPath = path;
     this.currentState = this.browser.history.state;
@@ -289,22 +296,16 @@ export class ApplicationRouter {
   };
   /** Called by the detail component only after its own departure succeeded. */
   backToWorkbench = (): void => {
-    const from = this.detailEntry?.from;
-    if (from) {
-      this.approved = { path: '/requirements', state: from.entry, position: from.position };
-      this.browser.history.go(from.position - this.position);
-    } else {
-      this.browser.history.pushState(null, '', '/requirements');
-      this.position++;
-      this.apply('/requirements', false);
-    }
+    if (this.closed) return;
+    this.browser.history.replaceState(null, '', '/requirements');
+    this.apply('/requirements', false);
   };
   private pop = (): void => {
     if (this.closed) return;
     const target: Destination = {
       path: this.browser.pathname(),
       state: this.browser.history.state,
-      position: this.readPosition(this.browser.history.state),
+      position: this.readPosition(this.browser.history.state, this.browser.pathname()),
     };
     if (this.restoration) {
       const pending = this.restoration;
@@ -325,13 +326,14 @@ export class ApplicationRouter {
     if (this.approved) {
       const approved = this.approved;
       this.approved = null;
-      if (
-        target.path === approved.path &&
-        (approved.position === null || target.position === approved.position)
-      ) {
+      const approvedIdentity = entryId(approved.state);
+      const matchesEntry = approvedIdentity
+        ? entryId(target.state) === approvedIdentity
+        : approved.position === null || target.position === approved.position;
+      if (target.path === approved.path && matchesEntry) {
         if (approved.state && pageRoute(target.path).kind === 'WORKBENCH')
           this.browser.history.replaceState(approved.state, '', target.path);
-        this.position = target.position ?? this.position;
+        this.position = approved.position ?? target.position ?? this.position;
         this.apply(target.path, true);
         return;
       }

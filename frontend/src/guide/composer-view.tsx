@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { GuideRun } from '../api/models.ts';
 import { operations } from '../api/models.ts';
@@ -30,11 +31,13 @@ const quietSubscribe = () => () => {},
 export function GuideComposer({
   owner,
   documents,
+  associations,
   review = null,
   viewingHistory = null,
 }: {
   owner: RequirementGuideComposer;
   documents: RequirementDocumentOwner;
+  associations?: ReactNode;
   review?: GuideRun | null;
   viewingHistory?: number | null;
 }) {
@@ -79,7 +82,7 @@ export function GuideComposer({
     settings.current.open = true;
     requestAnimationFrame(() => {
       const selector =
-        state.action === 'GENERATE' ? 'input:not([type=checkbox])' : '[aria-label="AI 工作目标"]';
+        state.action === 'GENERATE' ? 'input:not([type=checkbox])' : '[aria-label="操作范围"]';
       (
         settings.current?.querySelector<HTMLElement>(selector) ??
         settings.current?.querySelector<HTMLElement>('[role=combobox]')
@@ -92,7 +95,7 @@ export function GuideComposer({
         const kind = key as keyof typeof scopeNames;
         try {
           if (!binding || nav?.error || binding.editor.loadedDocument.id !== target?.document_id)
-            throw Error('请先阅读工作目标文档');
+            throw Error('请先读取当前文档');
           return {
             kind,
             target: guideTarget(
@@ -115,9 +118,6 @@ export function GuideComposer({
       target?.document_id,
     ],
   );
-  const selectedSources = state.source_refs
-    .filter((ref) => ref.kind === 'REVISION')
-    .map((ref) => Number(ref.document_id));
   const chapters = useMemo(() => {
     try {
       return binding && document.mode === 'CURRENT' && !nav?.error
@@ -150,6 +150,7 @@ export function GuideComposer({
       aria-busy={state.refreshing || state.phase === 'SUBMITTING' || state.phase === 'READING'}
     >
       <div className="guide-composer-body">
+        {associations}
         {viewingHistory !== null && (
           <p className="field-help">
             正在查看运行 #{viewingHistory}。输入仅发送当前明确选择的操作。
@@ -300,34 +301,6 @@ export function GuideComposer({
             </>
           ) : (
             <>
-              <label>
-                工作目标
-                <SingleSelect
-                  label="AI 工作目标"
-                  disabled={disabled || state.parent !== null}
-                  value={target === null ? 'NONE' : String(target.document_id)}
-                  options={[
-                    { value: 'NONE', label: '不指定文档' },
-                    ...state.detail.documents
-                      .filter((item) => item.id === state.detail.selected_document_id)
-                      .map((item) => ({
-                        value: String(item.id),
-                        label: item.name + (item.archived_at === null ? '' : '（已归档）'),
-                      })),
-                  ]}
-                  change={(value) => owner.selectDocument(value === 'NONE' ? null : Number(value))}
-                />
-              </label>
-              {document.detail?.current && (
-                <button
-                  type="button"
-                  className="ui-button"
-                  disabled={disabled || state.parent !== null}
-                  onClick={() => owner.selectDocument(document.detail!.current!.id)}
-                >
-                  采用当前阅读文档作为目标
-                </button>
-              )}
               {target && (
                 <>
                   <label>
@@ -361,29 +334,6 @@ export function GuideComposer({
               )}
             </>
           )}
-          <fieldset disabled={disabled || state.parent !== null}>
-            <legend>参考文档</legend>
-            {state.detail.documents.length === 0 ? (
-              <p className="field-help">暂无可选文档</p>
-            ) : (
-              state.detail.documents.map((item) => (
-                <label key={item.id}>
-                  <input
-                    type="checkbox"
-                    checked={selectedSources.includes(item.id)}
-                    onChange={(event) =>
-                      owner.chooseReferences(
-                        event.currentTarget.checked
-                          ? [...selectedSources, item.id]
-                          : selectedSources.filter((id) => id !== item.id),
-                      )
-                    }
-                  />
-                  {item.name} · v{item.content_version}
-                </label>
-              ))
-            )}
-          </fieldset>
           {review && review.status !== 'RUNNING' && (
             <button
               className="ui-button"
@@ -495,14 +445,6 @@ export function GuideComposer({
           </div>
         )}
         <p className="guide-action-effect">{guidance.effect}</p>
-        {target &&
-          state.action !== 'GENERATE' &&
-          document.detail?.current &&
-          document.detail.current.id !== target.document_id && (
-            <p className="guide-target-notice">
-              当前阅读与工作目标不同；本次操作仍以“{targetName}”为准。
-            </p>
-          )}
         <label className="guide-message-field">
           <span className="sr-only">给 AI 的消息</span>
           <textarea

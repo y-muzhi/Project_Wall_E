@@ -48,18 +48,6 @@ export type DiscussionCommand = Readonly<
       scope: Readonly<JsonObject> | null;
     }
   | { type: 'SET_FOCUS'; topic_ref: string }
-  | {
-      type: 'CHANGE_PHASE';
-      phase_kind: (typeof models.phaseKinds)[number];
-      closure_message: string | null;
-      unresolved_refs: readonly string[];
-    }
-  | {
-      type: 'SET_DISPOSITION';
-      subject_ref: string;
-      decision: 'DEFER' | 'NOT_APPLICABLE' | 'DECLINE_DRAFT';
-      description: string;
-    }
 >;
 export type CreateDocument = Readonly<{
   name: string;
@@ -523,8 +511,6 @@ export class WalleApi {
             const command = original!.discussion_command as JsonObject;
             if (command.type === 'SET_FOCUS')
               require(value.discussion.focus_topic_ref === command.topic_ref);
-            if (command.type === 'CHANGE_PHASE')
-              require(value.discussion.phase.kind === command.phase_kind);
             if (command.type === 'SET_BINDING')
               require(
                 value.discussion.binding.target_document_id === command.target_document_id &&

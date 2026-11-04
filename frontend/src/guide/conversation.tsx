@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { RequirementConversation } from './conversation-owner.ts';
 import type { RequirementDocumentOwner } from '../requirements/document-owner.ts';
@@ -68,7 +69,12 @@ export function ConversationSuggestions({
 export function GuideConversation({
   owner,
   documents,
-}: Readonly<{ owner: RequirementConversation; documents: RequirementDocumentOwner }>) {
+  associations,
+}: Readonly<{
+  owner: RequirementConversation;
+  documents: RequirementDocumentOwner;
+  associations?: ReactNode;
+}>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     read = useSyncExternalStore(owner.read.subscribe, owner.read.getSnapshot),
     document = useSyncExternalStore(documents.subscribe, documents.getSnapshot);
@@ -120,6 +126,7 @@ export function GuideConversation({
           <GuideComposer
             owner={owner.composer}
             documents={documents}
+            associations={associations}
             review={read.run}
             viewingHistory={read.selection === 'HISTORY' ? read.selected : null}
           />

@@ -12,15 +12,8 @@ def discussion_resources():
 
 
 def empty_discussion(resources=None):
-    resources = resources if resources is not None else discussion_resources()
-    return {
-        'schema_version': 1,
-        'phase': {
-            'phase_ref': 'p1',
-            'kind': 'DISCOVERY',
-            'guide_ref': resources.reference('collaboration.discovery'),
-            'closure': None,
-        },
+    state = {
+        'schema_version': 2,
         'focus_topic_ref': None,
         'topics': [],
         'evidence': [],
@@ -33,17 +26,28 @@ def empty_discussion(resources=None):
         },
         'dispositions': [],
         'last_step': None,
-        'counters': {'phase': 2, 'topic': 1, 'evidence': 1},
+        'counters': {'topic': 1, 'evidence': 1},
     }
+    return resources.validate('Discussion', state) if resources is not None else state
 
 
 def validate_discussion(value, resources=None):
     resources = resources if resources is not None else discussion_resources()
+    if value.get('schema_version') == 1 and resources.document_driven:
+        from copy import deepcopy
+        from backend.app.infrastructure.collaboration_resources import ROOT
+
+        # Read-only projection of stored V1 data. No migration or phase command.
+        historical = CollaborationResources.load(ROOT.parent / 'v15')
+        value = deepcopy(historical.validate('Discussion', value))
+        value['schema_version'] = 2
+        value.pop('phase')
+        value['counters'].pop('phase')
+        for topic in value['topics']:
+            topic.pop('phase_ref')
+        if value['last_step'] and value['last_step']['value']['action'] == 'PROPOSE_PHASE_CHANGE':
+            value['last_step'] = None
     state = resources.validate('Discussion', value)
-    phase = state['phase']
-    guide = resources.guide(phase['kind'])
-    if phase['guide_ref'] != resources.reference(guide['key'], guide['version']):
-        raise ValueError('Discussion phase resource identity differs')
     topics = {topic['topic_ref']: topic for topic in state['topics']}
     evidence = {item['evidence_ref']: item for item in state['evidence']}
     if len(topics) != len(state['topics']) or len(evidence) != len(state['evidence']):
@@ -55,20 +59,16 @@ def validate_discussion(value, resources=None):
         if re.fullmatch(prefix + r'[1-9][0-9]*', ref) is None:
             raise ValueError('Invalid local discussion identity')
         value = int(ref[1:])
-        if value >= state['counters'][{'p': 'phase', 't': 'topic', 'e': 'evidence'}[prefix]]:
+        if value >= state['counters'][{'t': 'topic', 'e': 'evidence'}[prefix]]:
             raise ValueError('Discussion counter must exceed all allocated references')
 
-    local(phase['phase_ref'], 'p')
     for topic in state['topics']:
         local(topic['topic_ref'], 't')
-        local(topic['phase_ref'], 'p')
     for item in state['evidence']:
         local(item['evidence_ref'], 'e')
     focus = state['focus_topic_ref']
-    if focus is not None and (
-        focus not in topics or topics[focus]['phase_ref'] != phase['phase_ref']
-    ):
-        raise ValueError('Focus must belong to the current phase')
+    if focus is not None and focus not in topics:
+        raise ValueError('Focus must name an actual document topic')
     visited, active = set(), set()
 
     def visit(ref):
@@ -101,40 +101,13 @@ def validate_discussion(value, resources=None):
     return state
 
 
-def discussion_references(connection, requirement_id, state, document_id):
-    """Stable references established by state or real user phase events."""
-    import json
-
-    known = {
-        state['phase']['phase_ref'],
-        *(topic['topic_ref'] for topic in state['topics']),
-        *(item['evidence_ref'] for item in state['evidence']),
-        *(
-            outcome['outcome_ref']
-            for topic in state['topics']
-            for outcome in topic['expected_outcomes']
-        ),
-    }
-    for row in connection.execute(
-        "SELECT payload_json FROM document_change_audits WHERE requirement_id=? AND document_id=? AND event_type='PHASE_CHANGED'",
-        (requirement_id, document_id),
-    ):
-        event = json.loads(row['payload_json'])
-        for field in ('phase_before', 'phase_after'):
-            phase = event.get(field)
-            if isinstance(phase, dict) and isinstance(phase.get('phase_ref'), str):
-                known.add(phase['phase_ref'])
-    return known
-
-
-def apply_user_command(connection, root, command, message_id, catalog):
+def apply_user_command(connection, root, command, catalog):
     """Build a complete new value before writing any message or index."""
     from copy import deepcopy
     from backend.app.documents.scopes import resolve_scope, ScopeInvalid
     from backend.app.documents.snapshot import validate_snapshot
     from backend.app.documents.sources import DocumentSources
     from backend.app.infrastructure.document_repository import DocumentRepository
-    from backend.app.infrastructure.identifiers import increment
     from backend.app.shared.command_execution import Rejected
     from backend.app.shared.validation import strict_json_object
     from .source_refs import verify_source_refs
@@ -142,8 +115,6 @@ def apply_user_command(connection, root, command, message_id, catalog):
     resources = catalog.collaboration
     state = deepcopy(root['discussion_state_json'])
     kind = command['type']
-    known = discussion_references(connection, root['id'], state, root['assistant_document_id'])
-    closed_phase = None
     if kind == 'SET_BINDING':
         verify_source_refs(connection, root['id'], command['source_refs'], resources=resources)
         target = command['target_document_id']
@@ -187,64 +158,15 @@ def apply_user_command(connection, root, command, message_id, catalog):
             'document_kind': document_kind,
         }
         if state['binding'] == binding:
-            return state, None
+            return state
         state['binding'] = binding
-        state['dispositions'].append(
-            {
-                'kind': 'REDIRECT',
-                'scope_refs': [state['phase']['phase_ref']],
-                'message_id': message_id,
-                'summary': '用户调整讨论目标与参考来源',
-            }
-        )
     elif kind == 'SET_FOCUS':
-        if not any(
-            topic['topic_ref'] == command['topic_ref']
-            and topic['phase_ref'] == state['phase']['phase_ref']
-            for topic in state['topics']
-        ):
+        if not any(topic['topic_ref'] == command['topic_ref'] for topic in state['topics']):
             raise Rejected('SOURCE_INVALID')
         if state['focus_topic_ref'] == command['topic_ref']:
-            return state, None
+            return state
         state['focus_topic_ref'] = command['topic_ref']
-    elif kind == 'CHANGE_PHASE':
-        if not set(command['unresolved_refs']) <= known:
-            raise Rejected('SOURCE_INVALID')
-        if state['phase']['kind'] == command['phase_kind']:
-            return state, None
-        closed_phase = deepcopy(state['phase'])
-        closed_phase['closure'] = {
-            'message_id': message_id,
-            'summary': command['closure_message'] or '用户确认阶段收束',
-            'unresolved_refs': command['unresolved_refs'],
-        }
-        guide = resources.guide(command['phase_kind'])
-        state['phase'] = {
-            'phase_ref': 'p' + str(state['counters']['phase']),
-            'kind': command['phase_kind'],
-            'guide_ref': resources.reference(guide['key'], guide['version']),
-            'closure': None,
-        }
-        state['counters']['phase'] = increment(state['counters']['phase'])
-        state['focus_topic_ref'] = None
     else:
-        if command['subject_ref'] not in known:
-            raise Rejected('SOURCE_INVALID')
-        decision = {
-            'kind': {
-                'DEFER': 'DEFER',
-                'NOT_APPLICABLE': 'NOT_APPLICABLE',
-                'DECLINE_DRAFT': 'REJECT_DRAFT',
-            }[command['decision']],
-            'scope_refs': [command['subject_ref']],
-            'message_id': message_id,
-            'summary': command['description'],
-        }
-        if any(
-            all(item[key] == decision[key] for key in ('kind', 'scope_refs', 'summary'))
-            for item in state['dispositions']
-        ):
-            return state, None
-        state['dispositions'].append(decision)
+        raise ValueError('Unsupported discussion command')
     state['last_step'] = None
-    return validate_discussion(state, resources), closed_phase
+    return validate_discussion(state, resources)

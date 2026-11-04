@@ -253,6 +253,7 @@ def capture_inputs(connection, root, request, catalog):
         if item['state'] in ('ACTIVE', 'DISPUTED')
         and (
             item['evidence_ref'] in evidence_refs
+            or item['origin'] in ('USER_STATEMENT', 'USER_DECISION')
             or item['applies_to'] == 'GLOBAL'
             or isinstance(item['applies_to'], list)
             and relevant.intersection(item['applies_to'])
@@ -260,7 +261,6 @@ def capture_inputs(connection, root, request, catalog):
     ]
     refs = [
         *request.source_refs,
-        *discussion['binding']['source_refs'],
         *(
             {'kind': 'MESSAGE', 'message_id': identity}
             for identity in discussion['pending_user_message_ids']
@@ -300,6 +300,19 @@ def capture_inputs(connection, root, request, catalog):
         if canonical_input(source) not in unique:
             refs.append(source)
             unique[canonical_input(source)] = source
+    owner = DocumentRepository(connection).get_current(root['id'], request.document_id)
+    if owner is None:
+        raise Rejected('SOURCE_INVALID')
+    guidance_kind = (
+        target['document_kind']
+        if target is not None and target['kind'] == 'NEW'
+        else {
+            'REQUIREMENT_BRIEF': 'brief',
+            'DESIGN': 'design',
+            'SPECIFICATION': 'specification',
+        }[owner['document_kind']]
+    )
+    guide = resources.guide(guidance_kind)
     return {
         'target_document': document,
         'authorization': authorization,
@@ -311,7 +324,7 @@ def capture_inputs(connection, root, request, catalog):
         'relevant_evidence_refs': [item['evidence_ref'] for item in evidence],
         'resources': {
             'release': resources.reference('collaboration.release'),
-            'guide': discussion['phase']['guide_ref'],
+            'guide': resources.reference(guide['key'], guide['version']),
             'prompt': resources.release['prompt'],
             'output_schema': resources.reference(
                 'collaboration.output.' + request.operation.lower()

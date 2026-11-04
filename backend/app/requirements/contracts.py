@@ -208,7 +208,6 @@ class DiscussionCommandInput:
 
 def discussion_command_input(payload):
     from backend.app.infrastructure.idempotency import request_key, canonical_input
-    from backend.app.shared.validation import ordinary_text
     from .discussion import discussion_resources
 
     fields = (
@@ -228,34 +227,22 @@ def discussion_command_input(payload):
             'source_refs',
             'scope',
             'topic_ref',
-            'phase_kind',
-            'closure_message',
-            'unresolved_refs',
-            'subject_ref',
-            'decision',
-            'description',
         ),
         ('type',),
     )
     kind = strict_enum(
         command['type'],
         'discussion_command.type',
-        ('SET_BINDING', 'SET_FOCUS', 'CHANGE_PHASE', 'SET_DISPOSITION'),
+        ('SET_BINDING', 'SET_FOCUS'),
     )
     fields = {
         'SET_BINDING': ('target_document_id', 'source_refs', 'scope'),
         'SET_FOCUS': ('topic_ref',),
-        'CHANGE_PHASE': ('phase_kind', 'closure_message', 'unresolved_refs'),
-        'SET_DISPOSITION': ('subject_ref', 'decision', 'description'),
     }[kind]
     command = object_fields(command, 'discussion_command', ('type', *fields), ('type', *fields))
     resources = discussion_resources()
 
     def named(name, value):
-        if name == 'PhaseKind':
-            return strict_enum(
-                value, 'phase_kind', ('DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW')
-            )
         if name == 'Ref':
             from backend.app.shared.validation import raw_text
 
@@ -276,22 +263,6 @@ def discussion_command_input(payload):
             named('legacy_scope', command['scope'])
     elif kind == 'SET_FOCUS':
         named('Ref', command['topic_ref'])
-    elif kind == 'CHANGE_PHASE':
-        named('PhaseKind', command['phase_kind'])
-        if command['closure_message'] is not None:
-            command['closure_message'] = ordinary_text(
-                command['closure_message'], 'closure_message', 1, 1000
-            )
-        if type(command['unresolved_refs']) is not list or len(command['unresolved_refs']) > 1000:
-            reject('unresolved_refs', 'INVALID_FORMAT', '未决引用必须是有界数组')
-        for ref in command['unresolved_refs']:
-            named('Ref', ref)
-        if len(set(command['unresolved_refs'])) != len(command['unresolved_refs']):
-            reject('unresolved_refs', 'INVALID_FORMAT', '未决引用不能重复')
-    else:
-        named('Ref', command['subject_ref'])
-        strict_enum(command['decision'], 'decision', ('DEFER', 'NOT_APPLICABLE', 'DECLINE_DRAFT'))
-        command['description'] = ordinary_text(command['description'], 'description', 1, 1000)
     request = DiscussionCommandInput(
         requirement_id_input(data['requirement_id']),
         strict_integer(data['document_id'], 'document_id'),

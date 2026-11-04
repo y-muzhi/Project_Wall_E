@@ -13,7 +13,7 @@ def bind_cards(connection, root, run, context, value, catalog, *, reference_map=
     cards = deepcopy(validate_cards(value, resources))
     purpose = cards['purpose']
     payload = cards['action_payload']
-    if purpose in ('DOCUMENT_ACTION', 'PHASE_CHANGE', 'FACT_CONFIRMATION'):
+    if purpose in ('DOCUMENT_ACTION', 'FACT_CONFIRMATION'):
         card = cards['cards'][0]
         keys = ['confirm', 'defer'] if purpose == 'FACT_CONFIRMATION' else ['accept', 'defer']
         if (
@@ -28,7 +28,7 @@ def bind_cards(connection, root, run, context, value, catalog, *, reference_map=
     target_version = None
     sources = []
     if (
-        purpose in ('DOCUMENT_ACTION', 'PHASE_CHANGE')
+        purpose == 'DOCUMENT_ACTION'
         and payload['basis_discussion_version']
         != context.input['current_request']['basis_ref']['discussion_version']
     ):
@@ -76,21 +76,6 @@ def bind_cards(connection, root, run, context, value, catalog, *, reference_map=
                 fixed = resources.reference('structure.' + target['document_kind'])
                 if target['template_ref'] != {key: fixed[key] for key in ('key', 'version')}:
                     raise CardsInvalid('Suggested structure differs from its actual document kind')
-    elif purpose == 'PHASE_CHANGE':
-        from backend.app.requirements.discussion import discussion_references
-
-        mapping = reference_map or {}
-        refs = [mapping.get(ref, ref) for ref in payload['unresolved_refs']]
-        if (
-            any(ref is None for ref in refs)
-            or len(set(refs)) != len(refs)
-            or not set(refs)
-            <= discussion_references(
-                connection, root['id'], root['discussion_state_json'], root['assistant_document_id']
-            )
-        ):
-            raise CardsInvalid('Phase suggestion refers to missing or ambiguous outcomes')
-        payload['unresolved_refs'] = refs
     elif purpose == 'FACT_CONFIRMATION':
         # Exact fact authority/evidence uses the existing patch proof; the
         # confirmation path must bind the same actual accepted target.

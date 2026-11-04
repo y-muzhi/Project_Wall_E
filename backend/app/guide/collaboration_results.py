@@ -241,7 +241,7 @@ def _persist_in_transaction(
         stored_cards,
         at,
         document_id=run['document_id'],
-        phase_ref=context.canonical['discussion']['phase']['phase_ref'],
+        phase_ref=None,
         topic_refs=()
         if root['discussion_state_json']['focus_topic_ref'] is None
         else (root['discussion_state_json']['focus_topic_ref'],),

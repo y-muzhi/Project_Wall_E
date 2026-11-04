@@ -12,7 +12,7 @@ const root=(changes={})=>({id:1,requirement_no:'REQ000001',title:'需求',requir
 const summary=id=>({id,requirement_id:1,name:'文档'+id,document_kind:'REQUIREMENT_BRIEF',document_type:'CURRENT',metadata_version:1,content_version:1,current_revision_id:id,
  confirmed_revision_id:null,archived_at:null,updated_at:at,source_status:'UNCHANGED'});
 const view=id=>({...summary(id),markdown_content:'',block_state_json:{schema_version:1,next_block_id:1,blocks:[]},template_ref:null,created_at:at});
-const detail=(changes={})=>({requirement:root(),documents:[],discussion_summary:{discussion_version:1,phase_ref:'p1',phase_kind:'DISCOVERY',focus_topic_ref:null,focus_title:null,next_step:null,pending_count:0},discussion:null,active_operation:null,...changes});
+const detail=(changes={})=>({requirement:root(),documents:[],discussion_summary:{discussion_version:1,focus_topic_ref:null,focus_title:null,next_step:null,pending_count:0},discussion:null,active_operation:null,...changes});
 const index=id=>({requirement_id:1,document_id:id,content_version:1,total_count:0,open_count:0,blocks:[],comments:[]});
 const result=data=>({data,meta:{request_id:key},status:200});
 const response=data=>new Response(JSON.stringify({success:true,data,error:null,meta:{request_id:key}}),{status:200,headers:{'Content-Type':'application/json'}});
@@ -33,9 +33,9 @@ test('v9 named definitions retain strict SourceRef and nested uppercase referenc
  assert.throws(()=>sourceRef({...ref,block_ids:[0]}));
  const manifest=JSON.parse(readFileSync(new URL('../../backend/resources/v9/manifest.json',import.meta.url),'utf8'));
  const guide=manifest.files.find(item=>item.resource_ref.key==='collaboration.discovery').resource_ref;
- const discussion={schema_version:1,phase:{phase_ref:'p1',kind:'DISCOVERY',guide_ref:guide,closure:null},focus_topic_ref:null,topics:[],evidence:[],pending_user_message_ids:[],binding:{target_document_id:null,source_refs:[],scope:null,document_kind:null},dispositions:[],last_step:null,counters:{phase:2,topic:1,evidence:1}};
+ const discussion={schema_version:2,focus_topic_ref:null,topics:[],evidence:[],pending_user_message_ids:[],binding:{target_document_id:null,source_refs:[],scope:null,document_kind:null},dispositions:[],last_step:null,counters:{topic:1,evidence:1}};
  assert.deepEqual(requirementDetail(detail({discussion})).discussion,discussion);
- assert.throws(()=>requirementDetail(detail({discussion:{...discussion,counters:{phase:0,topic:1,evidence:1}}})));
+ assert.throws(()=>requirementDetail(detail({discussion:{...discussion,counters:{topic:0,evidence:1}}})));
 });
 
 test('zero-document read performs only summary GETs and returns a legal empty workspace',async()=>{

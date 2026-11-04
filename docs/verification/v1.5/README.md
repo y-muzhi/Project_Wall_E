@@ -1,5 +1,23 @@
 # V1.5检查记录索引
 
+- [文档驱动讨论与设置精简实施检查](document-driven-discussion-2026-11-03.md)。
+
+- [文档驱动讨论与设置精简迭代静态核对](document-driven-discussion-plan-2026-11-03.md)。
+
+- [蓝色文字统一Apple Music截图色](text-blue-apple-music-2026-11-03.md)。
+
+- [最新前端启动与地址核对](frontend-start-2026-11-03.md)。
+
+- [主导航固定图标与悬停提示](navigation-icon-rail-2026-11-02.md)。
+
+- [工作台按钮直接导航（后续最终修正）](workbench-return-direct-2026-11-02.md)。
+
+- [工作台返回位置恢复](workbench-return-2026-11-02.md)。
+
+- [当前文档固定目标与关联文档](current-document-associations-2026-11-02.md)。
+
+- [交互文档归并接续静态核对](interaction-merge-audit-2026-11-01.md)。
+
 - [文档级助手与两字段创建归并／Git收口](document-assistant-closeout-2026-11-01.md)。
 
 - [新建需求移除初始想法](create-without-initial-idea-2026-11-01.md)。

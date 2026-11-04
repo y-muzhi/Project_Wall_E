@@ -162,7 +162,6 @@ def _accept_collaboration(
         message_id = entity_id(connection, EntityKind.MESSAGE)
         associations = {
             'document_id': request.document_id,
-            'phase_ref': discussion['phase']['phase_ref'],
             'topic_refs': ()
             if discussion['focus_topic_ref'] is None
             else (discussion['focus_topic_ref'],),

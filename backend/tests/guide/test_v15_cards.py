@@ -38,9 +38,6 @@ def seed_cards(workspace, monkeypatch, purpose='CLARIFICATION', *, progress=True
     assert accept(workspace, **(changes or {}))['code'] == 'GUIDE_ACCEPTED'
     def returned(context):
         payload = None
-        if purpose == 'PHASE_CHANGE':
-            payload = {'phase_kind': 'SOLUTION', 'closure_summary': '目标已明确，保留待验证项', 'unresolved_refs': [],
-                'basis_discussion_version': context.input['current_request']['basis_ref']['discussion_version']}
         if purpose == 'DOCUMENT_ACTION':
             payload = {'operation': 'GENERATE', 'target': {'kind': 'NEW', 'name': '建议新稿', 'document_kind': 'brief', 'template_ref': None},
                 'scope': None, 'source_refs': [context.input['current_request']['message_ref']],
@@ -82,45 +79,7 @@ def test_same_round_progress_binds_available_card_to_actual_final_version_then_a
     assert rows['data']['items'][-1]['guide_run_id'] == result['data']['guide_run_id']
 
 
-def test_phase_confirmation_is_program_only_with_immutable_answer_and_readable_program_receipt(workspace, monkeypatch):
-    message = seed_cards(workspace, monkeypatch, 'PHASE_CHANGE');before = counts(workspace[0]);request = body(message, 'accept')
-    result = submit(workspace, request)
-    assert result['code'] == 'PROGRAM_PROCESSED', result
-    assert result['data']['processing'] == 'PROGRAM' and result['data']['result'] == 'APPLIED'
-    assert counts(workspace[0])['guide_runs'] == before['guide_runs'] and counts(workspace[0])['llm_uses'] == before['llm_uses']
-    with workspace[0].transaction() as connection:
-        root = RequirementRepository(connection).get_for_document(1,1)
-        assert root['discussion_state_json']['phase']['kind'] == 'SOLUTION' and root['document_work_state'] == 'IDLE'
-    rows = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
-    formal = rows['data']['items'][-1]
-    assert formal['guide_run_id'] is None and formal['program_receipt'] == result['data']
-    assert submit(workspace, request) == result
-    duplicate = submit(workspace, body(message, 'accept'))
-    assert duplicate['code'] == 'CARD_ALREADY_ANSWERED' and duplicate['details']['response_message_id'] == formal['id']
-
-
-def test_phase_card_resolves_same_round_topic_evidence_and_outcome_before_program_confirmation(workspace, monkeypatch):
-    from backend.tests.guide.test_v15_progress import delta as progress_delta
-    offline_gate(monkeypatch);assert accept(workspace)['code'] == 'GUIDE_ACCEPTED'
-    def returned(context):
-        payload = {'phase_kind': 'SOLUTION', 'closure_summary': '保留本轮待验证依据',
-            'unresolved_refs': ['new_t1', 'new_e1', 'new_o1'],
-            'basis_discussion_version': context.input['current_request']['basis_ref']['discussion_version']}
-        return output(context, progress_delta=progress_delta(), cards=group('PHASE_CHANGE', payload))
-    result = execute(workspace, Gateway(returned));assert result['code'] == 'AI_FINISHED', result
-    rows = list_messages(workspace[0], {'requirement_id': 1, 'document_id': 1}, catalog=workspace[2]);assert rows['code'] == 'READ_OK', rows
-    message = rows['data']['items'][-1]
-    assert message['card_state'] == 'AVAILABLE'
-    assert message['structured_content']['action_payload']['unresolved_refs'] == ['t1', 'e1', 't1:o1']
-    result = submit(workspace, body(message, 'accept'));assert result['code'] == 'PROGRAM_PROCESSED', result
-    with workspace[0].transaction() as connection:
-        state = RequirementRepository(connection).get_for_document(1,1)['discussion_state_json']
-        audit = json.loads(connection.execute("SELECT payload_json FROM document_change_audits WHERE event_type='PHASE_CHANGED' ORDER BY id DESC LIMIT 1").fetchone()[0])
-        assert audit['phase_before']['closure']['unresolved_refs'] == ['t1', 'e1', 't1:o1']
-        assert state['phase']['kind'] == 'SOLUTION'
-
-
-@pytest.mark.parametrize('purpose', ['DOCUMENT_ACTION', 'PHASE_CHANGE'])
+@pytest.mark.parametrize('purpose', ['DOCUMENT_ACTION'])
 def test_defer_program_records_a_real_disposition_without_model_or_document_side_effect(workspace, monkeypatch, purpose):
     message = seed_cards(workspace, monkeypatch, purpose);before = counts(workspace[0])
     result = submit(workspace, body(message, 'defer'))
@@ -146,19 +105,19 @@ def test_document_action_accepts_one_fixed_new_target_and_does_not_rewrite_it_or
     assert counts(workspace[0])['requirement_documents'] == 1
 
 
-@pytest.mark.parametrize('purpose', ['PHASE_CHANGE', 'CLARIFICATION'])
+@pytest.mark.parametrize('purpose', ['DOCUMENT_ACTION', 'CLARIFICATION'])
 def test_http_uses_200_program_receipt_and_202_new_model_receipt_on_the_same_route(workspace, monkeypatch, purpose):
     message = seed_cards(workspace, monkeypatch, purpose)
     app = FastAPI();app.state.walle_runtime = HttpRuntime(workspace[0], workspace[2], workspace[1]);app.include_router(message_router)
-    request = body(message, 'accept' if purpose == 'PHASE_CHANGE' else 'a');key = request.pop('idempotency_key');request.pop('message_id')
+    request = body(message, 'defer' if purpose == 'DOCUMENT_ACTION' else 'a');key = request.pop('idempotency_key');request.pop('message_id')
     with TestClient(app) as client:
         response = client.post('/api/v1/conversation-messages/'+str(message['id'])+'/responses', json=request, headers={'Idempotency-Key': key})
-        assert response.status_code == (200 if purpose == 'PHASE_CHANGE' else 202), response.text
-        assert response.json()['data']['processing'] == ('PROGRAM' if purpose == 'PHASE_CHANGE' else 'MODEL')
+        assert response.status_code == (200 if purpose == 'DOCUMENT_ACTION' else 202), response.text
+        assert response.json()['data']['processing'] == ('PROGRAM' if purpose == 'DOCUMENT_ACTION' else 'MODEL')
         messages = client.get('/api/v1/requirements/1/messages?document_id=1')
         assert messages.status_code == 200, messages.text
         formal = messages.json()['data']['items'][-1]
-        if purpose == 'PHASE_CHANGE':
+        if purpose == 'DOCUMENT_ACTION':
             assert formal['program_receipt'] == response.json()['data']
         else:
             assert formal['guide_run_id'] == response.json()['data']['guide_run_id'] and formal['program_receipt'] is None

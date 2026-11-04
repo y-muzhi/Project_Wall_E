@@ -16,9 +16,11 @@ from .resources import ConfigInvalid, _validate
 from .schema_transport import compact, named_schema, declared_json
 from backend.app.shared.validation import strict_json_object
 
-ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v15'
+ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v17'
 MANIFEST_SHA256 = 'a8c5087236d8e4b4b40d62a92643832fe37cc2b5e426725f1ddde7d5670abc40'
 LONG_MANIFEST_SHA256 = '8a4a16de358eb66a6d057ffba4e54fd3b2e696d4673754cfe1435b0bb79ebc5e'
+DOCUMENT_MANIFEST_SHA256 = '91797e9b16c7d6849b2cc739d4f9267a3b11c34a2282aa771f7d8ec62ee461cd'
+DOCUMENT_LONG_MANIFEST_SHA256 = '931c7c1d5423a0863cdca3cbf295ed787c3ce688d5ece150bec21031a694178c'
 OUTPUTS = MappingProxyType(
     {
         'DISCUSS': 'OutputDiscuss',
@@ -58,7 +60,12 @@ class CollaborationResources:
             root = root.resolve(strict=True)
             manifest_bytes = (root / 'manifest.json').read_bytes()
             digest = hashlib.sha256(manifest_bytes).hexdigest()
-            if digest not in (MANIFEST_SHA256, LONG_MANIFEST_SHA256):
+            if digest not in (
+                MANIFEST_SHA256,
+                LONG_MANIFEST_SHA256,
+                DOCUMENT_MANIFEST_SHA256,
+                DOCUMENT_LONG_MANIFEST_SHA256,
+            ):
                 raise ValueError('Collaboration manifest identity changed')
             manifest = strict_json_object(manifest_bytes)
             texts, references = {}, {}
@@ -141,11 +148,16 @@ class CollaborationResources:
         except (KeyError, TypeError, ValueError):
             raise ConfigInvalid('Resource identity or digest does not match') from None
 
-    def guide(self, phase_kind: str) -> dict:
+    @property
+    def document_driven(self):
+        return 'document_kind' in self.release['guides'][0]
+
+    def guide(self, kind: str) -> dict:
+        field = 'document_kind' if self.document_driven else 'phase_kind'
         for item in self.release['guides']:
-            if item['phase_kind'] == phase_kind:
+            if item[field] == kind:
                 return strict_json_object(self.content(item['resource_ref']))
-        raise ConfigInvalid('Unknown collaboration phase')
+        raise ConfigInvalid('Unknown collaboration guide')
 
     def structure(self, document_kind: str) -> dict:
         ref = self.reference('structure.' + document_kind)
@@ -167,12 +179,12 @@ class CollaborationResources:
                 return self.content(item['schema_ref'])
         raise ConfigInvalid('Missing operation output schema')
 
-    def system(self, phase_kind: str, operation: str) -> str:
-        guide = self.guide(phase_kind)
+    def system(self, kind: str, operation: str) -> str:
+        guide = self.guide(kind)
         projection = {key: guide[key] for key in GUIDE_FIELDS}
         return (
             self.prompt
-            + '\n\n阶段指引 '
+            + ('\n\n文档指引 ' if self.document_driven else '\n\n阶段指引 ')
             + guide['key']
             + '@'
             + guide['version']
@@ -211,7 +223,8 @@ class CollaborationResources:
     def _check(self, manifest):
         bundle = self.bundle
         Draft202012Validator.check_schema(bundle)
-        if len(bundle['$defs']) != 89 or len(self._texts) != 21:
+        expected_files = 20 if self.document_driven else 21
+        if len(self._texts) != expected_files:
             raise ValueError('Incomplete collaboration release')
         release = self.validate('Release', self.release)
         # Validation returns a detached object sorted for identity checks; the
@@ -227,13 +240,18 @@ class CollaborationResources:
             raise ValueError('Admission profile is inconsistent')
         if release['admission']['state'] != 'OFFLINE_READY':
             raise ValueError('Initial resource batch cannot declare live evidence')
-        phase_kinds = ('DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW')
-        if [item['phase_kind'] for item in frozen['guides']] != list(phase_kinds):
-            raise ValueError('Each phase must be defined exactly once')
-        for kind in phase_kinds:
+        kinds = (
+            ('brief', 'design', 'specification')
+            if self.document_driven
+            else ('DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW')
+        )
+        field = 'document_kind' if self.document_driven else 'phase_kind'
+        if [item[field] for item in frozen['guides']] != list(kinds):
+            raise ValueError('Each guide must be defined exactly once')
+        for kind in kinds:
             guide = self.validate('GuideDefinition', self.guide(kind))
-            if guide['key'] != 'collaboration.' + kind.lower() or guide['phase_kind'] != kind:
-                raise ValueError('Phase resource mapping mismatch')
+            if guide['key'] != 'collaboration.' + kind.lower() or guide[field] != kind:
+                raise ValueError('Guide resource mapping mismatch')
             self.content(self.reference(guide['key'], guide['version']))
         for kind in ('brief', 'design', 'specification'):
             profile = self.validate('StructureProfile', self.structure(kind))

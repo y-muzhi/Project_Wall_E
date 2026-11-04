@@ -355,8 +355,17 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
         if resources.content(content['resource_ref']) != content['content_text']:
             raise Rejected('CONFIG_INVALID')
     discussion = canonical['discussion']
-    phase = discussion['phase']
-    guide = resources.guide(phase['kind'])
+    if resources.document_driven:
+        guide_content = next(
+            item
+            for item in canonical['resources']
+            if item['resource_ref']['key']
+            in ('collaboration.brief', 'collaboration.design', 'collaboration.specification')
+        )
+        guide = resources.validate('GuideDefinition', json.loads(guide_content['content_text']))
+    else:
+        # Only used to reproduce immutable historical request snapshots.
+        guide = resources.guide(discussion['phase']['kind'])
     messages = {
         row['message_id']: row for row in [*canonical['messages'], canonical['current_message']]
     }
@@ -411,9 +420,18 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
         original = messages.get(row['reply_to_message_id'])
         if original is None:
             raise Rejected('SOURCE_INVALID')
-        group = resources.validate(
-            'StoredCardGroup', json.loads(original['structured_content_json'])
-        )
+        raw_cards = json.loads(original['structured_content_json'])
+        if raw_cards.get('purpose') == 'PHASE_CHANGE':
+            from backend.app.infrastructure.collaboration_resources import (
+                CollaborationResources,
+                ROOT,
+            )
+
+            group = CollaborationResources.load(ROOT.parent / 'v15').validate(
+                'StoredCardGroup', raw_cards
+            )
+        else:
+            group = resources.validate('StoredCardGroup', raw_cards)
         cards = {card['card_key']: card for card in group['cards']}
         values = []
         for answer in stored['responses']:
@@ -640,6 +658,8 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
         if item['state'] in ('ACTIVE', 'DISPUTED')
         and (
             item['evidence_ref'] in evidence_refs
+            or resources.document_driven
+            and item['origin'] in ('USER_STATEMENT', 'USER_DECISION')
             or item['applies_to'] == 'GLOBAL'
             or isinstance(item['applies_to'], list)
             and relevant.intersection(item['applies_to'])
@@ -868,7 +888,10 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
         current_topics = [
             topic
             for topic in topics.values()
-            if topic['phase_ref'] == phase['phase_ref'] and topic['mainline_ref'] == line['ref']
+            if topic['mainline_ref'] == line['ref']
+            and (
+                resources.document_driven or topic['phase_ref'] == discussion['phase']['phase_ref']
+            )
         ]
         assessments = {topic['assessment'] for topic in current_topics}
         assessment = (
@@ -906,14 +929,22 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
         'structure': structure,
         'goal_and_decisions': goal,
         'project_position': {
-            'phase_kind': phase['kind'],
-            'phase_ref': phase['phase_ref'],
+            **(
+                {'document_kind': guide['document_kind']}
+                if resources.document_driven
+                else {
+                    'phase_kind': discussion['phase']['kind'],
+                    'phase_ref': discussion['phase']['phase_ref'],
+                }
+            ),
             'focus_topic_ref': discussion['focus_topic_ref'],
             'mainlines': mainlines,
             'dispositions': [
                 {key: item[key] for key in ('kind', 'scope_refs', 'summary')}
                 | {'message_ref': message_ref(item['message_id'])}
                 for item in discussion['dispositions']
+                if not resources.document_driven
+                or any(ref.startswith('m') for ref in item['scope_refs'])
             ],
         },
         'current_topic': topic,
@@ -932,7 +963,11 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
             ),
             'basis_ref': {
                 'discussion_version': canonical['requirement']['discussion_version'],
-                'phase_ref': phase['phase_ref'],
+                **(
+                    {'document_kind': guide['document_kind']}
+                    if resources.document_driven
+                    else {'phase_ref': discussion['phase']['phase_ref']}
+                ),
                 'guide_key': guide['key'],
                 'guide_version': guide['version'],
             },
@@ -943,7 +978,10 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
     # The actual transmitted selection belongs to ContextBasis.selected.
     canonical_text = resources.serialize('Canonical', canonical)
     wire_text = resources.serialize('Wire', wire)
-    system = resources.system(phase['kind'], canonical['operation'])
+    system = resources.system(
+        guide['document_kind'] if resources.document_driven else discussion['phase']['kind'],
+        canonical['operation'],
+    )
     basis = {
         'schema_version': 1,
         'canonical': canonical,

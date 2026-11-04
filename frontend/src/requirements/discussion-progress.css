@@ -58,14 +58,6 @@
   min-height: 32px;
   font-size: 12px;
 }
-.progress-phase-label {
-  flex: none;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  padding: 2px 6px;
-  color: var(--muted);
-  font-size: 11px;
-}
 .progress-chevron {
   display: inline-flex;
   flex: none;
@@ -236,7 +228,7 @@
 .progress-current-label {
   display: inline-block;
   margin-right: 5px;
-  color: var(--accent);
+  color: var(--text-accent);
   font-size: 11px;
   font-weight: 500;
 }
@@ -264,7 +256,7 @@
 }
 .progress-assessment[data-assessment='DISCUSSING'] {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .progress-assessment[data-assessment='SUPPORTED'] {
   background: #edf7f0;
@@ -352,7 +344,7 @@
   font-weight: 500;
 }
 .progress-record-meta > [data-origin='AI_PROPOSAL'] {
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .progress-sources {
   margin-top: 5px;
@@ -371,7 +363,7 @@
 }
 .progress-sources .source-reference > summary {
   padding: 4px 0;
-  color: var(--accent);
+  color: var(--text-accent);
 }
 .progress-sources pre {
   max-height: 240px;
@@ -399,71 +391,6 @@
   font-size: 11px;
   color: var(--muted);
   margin-bottom: 3px;
-}
-.progress-phase-decisions {
-  display: grid;
-  gap: 8px;
-}
-.progress-settings {
-  border-top: 1px solid var(--border-light);
-  padding-top: 9px;
-}
-.progress-settings > summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 7px;
-  min-height: 32px;
-}
-.progress-settings > summary > span {
-  font-size: 11px;
-  color: var(--muted);
-}
-.progress-settings-body {
-  padding-top: 6px;
-  display: grid;
-  gap: 8px;
-}
-.progress-setting-section {
-  padding: 8px 10px;
-  border: 1px solid var(--border-light);
-  border-radius: 7px;
-}
-.progress-setting-section > summary {
-  font-weight: 500;
-  padding: 2px 0;
-}
-.progress-setting-section label {
-  display: grid;
-  gap: 5px;
-  margin-block: 10px;
-}
-.progress-setting-section fieldset {
-  min-width: 0;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  padding: 8px;
-}
-.progress-setting-section fieldset label {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  overflow-wrap: anywhere;
-}
-.progress-setting-section fieldset input {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 3px 0 0;
-}
-.progress-setting-section textarea {
-  width: 100%;
-  min-height: 72px;
-  box-sizing: border-box;
-  resize: vertical;
-}
-.progress-setting-section > .field-help {
-  margin-top: 8px;
 }
 .progress-notice {
   padding: 8px 10px;

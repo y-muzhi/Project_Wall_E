@@ -108,22 +108,18 @@ def apply_progress(state, delta, context, assistant_id, resources, *, return_map
         for change in delta['topic_changes']:
             if change['change'] == 'ADD':
                 allocate(change['ref'], 't', 'topic')
-            elif (
-                change['ref'] not in topics
-                or topics[change['ref']]['phase_ref'] != state['phase']['phase_ref']
-                or change['ref'] in seen
-            ):
-                raise ProgressInvalid('UPDATE requires an existing current-phase topic')
+            elif change['ref'] not in topics or change['ref'] in seen:
+                raise ProgressInvalid('UPDATE requires an existing document topic')
             else:
                 seen.add(change['ref'])
         for change in delta['evidence_changes']:
             allocate(change['ref'], 'e', 'evidence')
         resolve = lambda ref: mapping.get(ref, ref)
-        guide = resources.guide(state['phase']['kind'])
+        guide = resources.guide(context.input['current_request']['basis_ref']['document_kind'])
         mainlines = {item['ref'] for item in guide['mainlines']}
         for change in delta['topic_changes']:
             if change['mainline_ref'] not in mainlines:
-                raise ProgressInvalid('Unknown phase mainline')
+                raise ProgressInvalid('Unknown document mainline')
             ref = resolve(change['ref'])
             outcomes = deepcopy(change['expected_outcomes'])
             known_outcomes = {
@@ -147,7 +143,6 @@ def apply_progress(state, delta, context, assistant_id, resources, *, return_map
                         outcome_mapping[old] = None
             topics[ref] = {
                 'topic_ref': ref,
-                'phase_ref': state['phase']['phase_ref'],
                 'mainline_ref': change['mainline_ref'],
                 **{
                     key: change[key]
@@ -198,19 +193,59 @@ def apply_progress(state, delta, context, assistant_id, resources, *, return_map
                 supersedes
             ) != len(set(supersedes)):
                 raise ProgressInvalid('Unknown superseded evidence')
+            if not set(supersedes) <= set(carried_aliases(context)):
+                raise ProgressInvalid('Superseded evidence must have been actually carried')
             if change['change'] == 'ADD' and supersedes:
                 raise ProgressInvalid('ADD does not supersede a decision')
             if change['change'] == 'PROPOSE_SUPERSEDE' and not supersedes:
                 raise ProgressInvalid('A dispute must name existing evidence')
+            replacement = change['change'] == 'USER_REPLACE'
+            if replacement:
+                if change['origin'] != 'USER_STATEMENT' or len(sources) != 1 or not supersedes:
+                    raise ProgressInvalid('Replacement requires one actual user statement')
+                source = sources[0]
+                row = raw_messages.get(source.get('message_id'))
+                if (
+                    source['kind'] != 'MESSAGE'
+                    or row is None
+                    or row['role'] != 'USER'
+                    or row['message_type'] != 'TEXT'
+                    or row['message_id'] not in state['pending_user_message_ids']
+                    or change['assertion'] != row['content']
+                ):
+                    raise ProgressInvalid(
+                        'Replacement must quote an actually carried pending user text verbatim'
+                    )
+                scope = change['applies_to']
+                normalized_scope = (
+                    scope if scope == 'GLOBAL' else sorted(resolve(ref) for ref in scope)
+                )
+                for prior in supersedes:
+                    previous = evidence[prior]
+                    previous_scope = previous['applies_to']
+                    if previous_scope != 'GLOBAL':
+                        previous_scope = sorted(previous_scope)
+                    if previous_scope != normalized_scope:
+                        raise ProgressInvalid(
+                            'A replacement cannot widen or narrow the original applicability'
+                        )
+                    for old in previous['source_refs']:
+                        if old['kind'] not in ('MESSAGE', 'CARD_ANSWER'):
+                            continue
+                        old_message = raw_messages.get(old['message_id'])
+                        if old_message is None or old_message['sequence_no'] >= row['sequence_no']:
+                            raise ProgressInvalid(
+                                'Replacement must follow its actual earlier sources'
+                            )
             for prior in supersedes:
-                evidence[prior]['state'] = 'DISPUTED'
+                evidence[prior]['state'] = 'SUPERSEDED' if replacement else 'DISPUTED'
             evidence[ref] = {key: change[key] for key in ('assertion', 'origin', 'nature')} | {
                 'evidence_ref': ref,
                 'applies_to': 'GLOBAL'
                 if change['applies_to'] == 'GLOBAL'
                 else [resolve(item) for item in change['applies_to']],
                 'source_refs': sources,
-                'state': 'DISPUTED' if supersedes else 'ACTIVE',
+                'state': 'DISPUTED' if supersedes and not replacement else 'ACTIVE',
                 'supersedes': supersedes,
                 'topic_refs': [resolve(item) for item in change['topic_refs']],
             }
@@ -222,10 +257,7 @@ def apply_progress(state, delta, context, assistant_id, resources, *, return_map
         if next_step is not None:
             if next_step['topic_ref'] is not None:
                 next_step['topic_ref'] = resolve(next_step['topic_ref'])
-                if (
-                    next_step['topic_ref'] not in topics
-                    or topics[next_step['topic_ref']]['phase_ref'] != state['phase']['phase_ref']
-                ):
+                if next_step['topic_ref'] not in topics:
                     raise ProgressInvalid('Next step names an unavailable topic')
             result['last_step'] = {'message_id': assistant_id, 'value': next_step}
         processed = delta['processed_user_message_ids']

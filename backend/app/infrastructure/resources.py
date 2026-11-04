@@ -280,7 +280,7 @@ class ResourceCatalog:
                 getattr(self, '_collaboration_profile', None) or ModelProfile.selected_profile()
             )
             self._collaboration_resources = CollaborationResources.load(
-                ROOT.parent / 'v16' if selected == LONG_OUTPUT_PROFILE else ROOT
+                ROOT.parent / 'v18' if selected == LONG_OUTPUT_PROFILE else ROOT
             )
         return self._collaboration_resources
 
@@ -291,7 +291,7 @@ class ResourceCatalog:
         from copy import copy
         from .collaboration_resources import CollaborationResources, ROOT
 
-        for batch in ('v15', 'v16'):
+        for batch in ('v15', 'v16', 'v17', 'v18'):
             resources = CollaborationResources.load(ROOT.parent / batch)
             if resources.reference('collaboration.release') == reference:
                 selected = copy(self)

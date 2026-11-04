@@ -117,8 +117,6 @@ def get_requirement(
             'documents': DocumentRepository(repository.connection).list_current_summaries(identity),
             'discussion_summary': {
                 'discussion_version': root['discussion_version'],
-                'phase_ref': discussion['phase']['phase_ref'],
-                'phase_kind': discussion['phase']['kind'],
                 'focus_topic_ref': discussion['focus_topic_ref'],
                 'focus_title': None if focus is None else focus['title'],
                 'next_step': None
@@ -137,7 +135,7 @@ def get_requirement(
 def project_detail(value, expand):
     """The same exact detail contract at the application and HTTP boundaries."""
     from backend.app.shared.http_projection import exact, requirement
-    from backend.app.shared.validation import strict_integer, strict_enum, raw_text
+    from backend.app.shared.validation import strict_integer, raw_text
     from backend.app.documents.contracts import document_summary
     from .discussion import validate_discussion
 
@@ -156,8 +154,6 @@ def project_detail(value, expand):
         data['discussion_summary'],
         (
             'discussion_version',
-            'phase_ref',
-            'phase_kind',
             'focus_topic_ref',
             'focus_title',
             'next_step',
@@ -167,10 +163,6 @@ def project_detail(value, expand):
     if summary['discussion_version'] != root['discussion_version']:
         raise ValueError('Discussion summary version differs')
     strict_integer(summary['pending_count'], 'pending_count', minimum=0)
-    raw_text(summary['phase_ref'], 'phase_ref', 1, 200)
-    strict_enum(
-        summary['phase_kind'], 'phase_kind', ('DISCOVERY', 'SOLUTION', 'SPECIFICATION', 'REVIEW')
-    )
     if (summary['focus_topic_ref'] is None) != (summary['focus_title'] is None):
         raise ValueError('Focus summary is incomplete')
     if summary['focus_topic_ref'] is not None:
