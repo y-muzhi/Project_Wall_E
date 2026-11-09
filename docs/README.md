@@ -19,3 +19,7 @@
 历史过程：[项目状态文档归档](archive/project/v1.5/h03-2026-10-28/README.md)、[合并记录](archive/merges/README.md)。旧检查、失败、批准来源和冻结资源保持原事实；用户删除的历史文件仅通过Git查询，不恢复。
 
 本页仅导航，不复制各轮测试数、资源准入状态、PID或执行申请。
+
+## V2.1规划入口
+
+[文档形成主线与阶段性写入](iterations/pending/v2.1/WALL-E.文档形成主线与阶段性写入_V_2.1.md)已按用户要求归入V2.1；当前仅设计。接续见[项目管理](project/v2.1/README.md)，状态见[需求映射](traceability/v2.1/需求实现映射_V_2.1.md)，静态证据见[验证记录](verification/v2.1/README.md)。V1.5设计保留为现有实现基线，尚无V2.1正式规格。
