@@ -28,4 +28,6 @@ jobs:
         working-directory: frontend
         run: npm ci
       - name: Run offline checks and write Markdown summary
+        env:
+          PYTHONIOENCODING: utf-8
         run: .\.venv\Scripts\python.exe -B tools/check-v15-offline.py
