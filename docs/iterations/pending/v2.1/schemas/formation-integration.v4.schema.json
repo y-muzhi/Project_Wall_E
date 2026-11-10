@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:walle:v2.1:formation-integration:v4",
   "title": "WALL-E V2.1 review R07: user-controlled step ending with outstanding work (design only)",
-  "$comment": "Design-only. Prefix F_ copies core 0.6 definitions; prefix L_ derives v16 source SHA256 72a619bcbbd20f538cd601dbdf27944a062b3f8397d7be3461cb30d296584c91. This file does not change or publish frozen resources. Named DTO validation and program guards are mandatory. Revision 0.8 adds result routing, branch closure, post-publication proposal basis and result component outcomes; v1 remains unchanged. Digest equality, reference coverage and atomic transitions remain program guards. R01: initialization focus is derived from the first step by the program. Switching changes focus only. The v3 formation_digest excludes root version/current_step_ref/active_branch_ref; task inputs freeze the chosen discussion_step_ref. Lifecycle and business guards remain program-owned. R07 permits empty submitted disposition lists. The program fills a complete truthful Closure snapshot with OUTSTANDING and KEEP_OPEN for unaddressed items, without requiring user waiver or automatic transfer. Missing deliverables are advisory; identity, actual evidence, versions, idempotency and transaction guards remain mandatory. v3 is unchanged.",
+  "$comment": "Design-only current integration contract. F_ definitions describe formation data; L_ definitions derive from v16 source SHA256 72a619bcbbd20f538cd601dbdf27944a062b3f8397d7be3461cb30d296584c91. This file does not publish frozen resources. Named DTO validation and program guards are mandatory. Initialization focus is derived from the first step; switching changes focus only. formation_card_binding_v3 excludes root version/current_step_ref/active_branch_ref from formation_digest; task inputs freeze discussion_step_ref. Result routing, truthful branch closure, immutable proposal basis and component outcomes remain program-owned. Empty submitted disposition lists are allowed; the program fills a complete truthful Closure with OUTSTANDING and KEEP_OPEN, without requiring user waiver or automatic transfer. Missing deliverables are advisory; identity, evidence, versions, idempotency and transaction guards remain mandatory. Selected focus-change events are represented in Canonical and Wire; NodeActivity summaries remain lifecycle/write slots. Historical schemas remain unchanged.",
   "oneOf": [
     {
       "$ref": "#/$defs/L_Canonical"
@@ -13924,7 +13924,8 @@
             "PROPOSAL_APPLIED",
             "PROPOSAL_NO_CHANGE",
             "PROPOSAL_ADJUSTMENT_REQUESTED",
-            "PROPOSAL_ADJUSTMENT_WITHDRAWN"
+            "PROPOSAL_ADJUSTMENT_WITHDRAWN",
+            "DISCUSSION_STEP_SELECTED"
           ]
         },
         "summary": {
@@ -14842,7 +14843,8 @@
         "source_refs",
         "revision_id"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "$comment": "NodeActivity lifecycle/write summary only; not the complete event history. Focus changes do not populate created, started, latest_written, completed or cancelled. Full history uses F_FormationEvent; selected model-context events use WireEvent."
     },
     "NodeActivity": {
       "type": "object",

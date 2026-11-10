@@ -1,5 +1,7 @@
 # V2.1验证记录
 
+- [当前设计清理与契约指向核对](document-formation-current-design-cleanup-2026-11-10.md)
+
 - [文档形成主线设计与版本归属静态核对](document-formation-design-2026-11-06.md)
 
 - [0.2操作与数据流契约静态核对](document-formation-contract-design-2026-11-07.md)

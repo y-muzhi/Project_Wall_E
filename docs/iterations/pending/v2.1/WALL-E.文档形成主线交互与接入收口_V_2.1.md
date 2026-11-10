@@ -1,12 +1,12 @@
 # WALL-E V2.1 文档形成主线交互与接入收口
 
-日期：2026-11-07；更新：2026-11-08（Asia/Hong_Kong）；任务M21-FORMATION-01；修订0.9／DRAFT，设计评审稿。本文与[主设计](WALL-E.文档形成主线与阶段性写入_V_2.1.md)、[0.6核心契约](WALL-E.文档形成主线实施契约与验收清单_V_2.1.md)同属待合并迭代；不自动升为正式规格。当前完整阅读入口为[设计总览](WALL-E.文档形成主线设计总览_V_2.1.md)。本次复核补足成果去向、完成支线及提案版本依据，进入实施前仍需真实V2.0基线核对。
+日期：2026-11-07；更新：2026-11-10（Asia/Hong_Kong）；任务M21-FORMATION-01；修订0.9／DRAFT，设计评审稿。本文与[主设计](WALL-E.文档形成主线与阶段性写入_V_2.1.md)、[实施契约与验收清单](WALL-E.文档形成主线实施契约与验收清单_V_2.1.md)同属待合并迭代；不自动升为正式规格。当前完整阅读入口为[设计总览](WALL-E.文档形成主线设计总览_V_2.1.md)。进入实施前仍需真实V2.0基线核对。
 
-当前R01—R07用户结论见[整体评审记录](WALL-E.文档形成主线整体评审记录_V_2.1.md)，已覆盖本文件旧版首步／焦点／摘要限制；未涉及的业务写入与收束规则继续适用。
+当前规则依据[整体评审R01—R08](WALL-E.文档形成主线整体评审记录_V_2.1.md)及[接入Schema v4](schemas/formation-integration.v4.schema.json)。Q03成果复核体验、Q04容量达限体验仍待评审；技术设计不等于逐字段产品批准或已实施。
 
 ## 1. 首版采用的设计默认值
 
-以下是本设计采用的默认方案，供完整评审；并非追记为用户已逐项确认。用户已明确的完成权限及认可的节点原型方向保持。
+以下为当前业务规则；具体接口字段、存储和容量仍须实施核对，Q03／Q04见第7节及评审记录。
 
 | 项目 | 首版规则 |
 | --- | --- |
@@ -57,7 +57,7 @@
 
 未决问题必须选择移到哪个有效步骤，或明确暂缓／不再处理。MOVE_ISSUE保持issue_ref和原始source_refs，事件记录归属前后值；DISPOSE_ISSUE记录用户处置和原因。不得只在UI隐藏问题后把旧节点放弃。
 
-支线保留不可变origin_step_ref和origin_event_ref；**return_step_ref表示当前处理／返回步骤**，可以经明确调整改到新节点。活动支线的return_step_ref必须等于当前讨论节点，current与节点生命周期独立；此处替代0.6要求“origin必须是当前步骤”的限制。来源步骤已放弃时仍显示“起于旧步骤，现返回新步骤”。当前处理步骤下显示同一支线的引用及“来自旧步骤”，点击可回溯最初节点；不复制一条新支线，也不因默认隐藏已放弃节点而隐藏当前待处理支线。新返回步骤可以在本批创建，提交时解析临时引用；回溯入口始终去真实来源。
+支线保留不可变origin_step_ref和origin_event_ref；**return_step_ref表示当前处理／返回步骤**，可以经明确调整改到新节点。活动支线的return_step_ref必须等于当前讨论节点，current与节点生命周期独立。来源步骤已放弃时仍显示“起于旧步骤，现返回新步骤”。当前处理步骤下显示同一支线的引用及“来自旧步骤”，点击可回溯最初节点；不复制一条新支线，也不因默认隐藏已放弃节点而隐藏当前待处理支线。新返回步骤可以在本批创建，提交时解析临时引用；回溯入口始终去真实来源。
 
 对仍OPEN的支线，放弃父步骤前必须重设有效返回点，或明确暂缓／放弃。DISPOSE_BRANCH与问题处置可放在同一调整批次中。暂缓支线可保留原历史返回点，恢复前先指定有效返回点；DROPPED不恢复原身份。若移动问题还关联支线，当问题和支线都仍OPEN时，目标步骤须与该支线的新返回点一致，否则整批拒绝；已收束支线只保留历史来源关系。
 
@@ -75,7 +75,7 @@
 
 原路线当前s2“推荐流程”，已有正文成果a4、未决问题i3及支线b2。用户拆为“主流程”和“冷启动”，将a4当前区块关联给新主流程，i3移到冷启动，b2保留origin=s2并把return改到冷启动；原后续s3的依赖改为新节点。旧s2将放弃，原待写提案w1不能直接换挂到新步骤。
 
-预览基准D40／F12／V7，无持久变化。保存后新节点实际分配s5／s6，s2=CANCELLED，新增成果关联，i3归s6，b2.origin仍s2、return=s6，w1用途失效，当前焦点为空；同事务D41／F13／V7。随后用户选择开始s5才有下一次状态变化。文档正文始终V7，完成历史与旧提案均保留。
+预览基准D40／F12／V7，无持久变化。保存后新节点实际分配s5／s6，s2=CANCELLED，新增成果关联，i3归s6，b2.origin仍s2、return=s6，w1用途失效，当前焦点为空；同事务D41／F13／V7。随后用户选择“在此讨论”s5仅改变焦点；实际发送讨论被接受时才将s5开始为IN_PROGRESS。文档正文始终V7，完成历史与旧提案均保留。
 
 ## 4. AI建议与操作卡片
 
@@ -98,18 +98,18 @@ STAGED_WRITE的暂缓／恢复仍沿原生提案命令，不耗正式回答。�
 
 ## 5. 接入契约与字段责任
 
-新增[当前接入设计Schema v4](schemas/formation-integration.v4.schema.json)，包含192个定义、13个根DTO；内部全部本地引用。F_为0.6核心定义的设计副本，L_从云端v16契约派生；0.6核心文件及冻结v16均保持原字节。**当前0.8以接入Schema v4的命名DTO及当前R01—R07为准**；[0.7 Schema v1](schemas/formation-integration.v1.schema.json)保留原字节作为前一设计依据，不能继续使用旧ADJUST_PATH简写请求或旧ProgramReceipt解码新操作。
+[当前接入设计Schema v4](schemas/formation-integration.v4.schema.json)包含192个定义、13个根DTO，内部全部本地引用；以其命名DTO和R01—R08为当前接入依据。F_定义承载形成业务，L_定义派生既有v16结构；新设计不修改冻结运行资源。历史核心及接入v1—v3仅作来源，不用于构造当前请求或解码新回执。
 
 ### 5.1 请求、预览和程序回执
 
 | 入口 | 当前设计契约 |
 | --- | --- |
-| 原PATCH requirements/{id} | NativeRequest；其余13种动作沿核心，ADJUST_PATH用PathEditCommand，新增expected_formation_version、expected_content_version、based_on_proposal（可空）、result_routes |
+| 原PATCH requirements/{id} | NativeRequest共14种动作，均按v4命名定义；ADJUST_PATH用PathEditCommand，包含expected_formation_version、expected_content_version、based_on_proposal（可空）、result_routes |
 | 新POST requirements/{id}/formation-preview | PathEditRequest，与真实调整同body；无Idempotency-Key要求；纯读取快照并返回PathPreview；不会消费卡片或保存草稿 |
 | 原POST conversation-messages/{id}/responses | 两种新purpose均沿单卡apply请求；内容与调整从不可变卡读取，不接受客户端替换 |
-| 原POST requirements/{id}/guide-runs | DISCUSS联合分支新增proposal_intent=ADJUST_WRITE／ADJUST_PATH或null，沿已有proposal_ref；非DISCUSS旧分支不因此增加必填字段 |
+| 原POST requirements/{id}/guide-runs | DISCUSS联合分支必传discussion_step_ref（可空），proposal_intent=ADJUST_WRITE／ADJUST_PATH或null，沿已有proposal_ref；非DISCUSS分支不因此增加必填字段 |
 
-PathChange共13种：原8种SET_GOAL／ADD_STEP／RENAME_STEP／MOVE_STEP／SET_DEPENDENCIES／UPDATE_RESULT／ADD_RESULT／CANCEL_STEP，加LINK_CONTENT／MOVE_ISSUE／SET_BRANCH_RETURN／DISPOSE_ISSUE／DISPOSE_BRANCH。后五项用于同一次调整完整处理原成果和支线／问题；都不写正文。取消还有未处置遗留的节点时，独立CANCEL_STEP应拒绝并引导完整路线编辑，不自动替用户处置。
+PathChange共13种：SET_GOAL／ADD_STEP／RENAME_STEP／MOVE_STEP／SET_DEPENDENCIES／UPDATE_RESULT／ADD_RESULT／CANCEL_STEP／LINK_CONTENT／MOVE_ISSUE／SET_BRANCH_RETURN／DISPOSE_ISSUE／DISPOSE_BRANCH，都不写正文。取消节点统一由完整ADJUST_PATH处理逐项成果、问题、支线及依赖去向，不提供独立原生CANCEL_STEP入口，不自动替用户处置。
 
 PathPreview包含result_routes、before_steps／after_steps（完整成果描述及临时身份）、content_links、issue_moves／issue_dispositions、branch_returns／branch_dispositions、invalidated_proposals、clears_current_focus、warnings、preview_digest。digest为规范化预览的摘要，供核对／诊断，不能当授权或绕过版本检查；保存重新验证相同输入。
 
@@ -133,7 +133,7 @@ STAGED_WRITE只因新的D／不相关规划F变化不自动失效，本次提交
 
 Summary固定所属document_id、exists、formation_version、当前步骤／支线及有效／放弃／待处理提案／未决问题计数。计数来自完整同快照查询，不从首屏或已加载页推算。formation_activity批量返回每节点的创建、开始、最近写入、完成、放弃事件摘要；引用原消息、角色、时间、Revision和原因，不为每节点单独GET。
 
-formation_assessments给is_current及明确stale_reasons，不修改AI原评估。正文改动后已完成节点保留COMPLETED，可显示“成果需复核”；不自动重开。历史入口仍沿formation-events分页返回真实事件及批次。
+formation_assessments给is_current及明确stale_reasons，不修改AI原评估。正文改动后已完成节点保留COMPLETED，可显示“成果需复核”；不自动重开。历史入口沿formation-events分页返回真实事件及批次。formation_activity中的EventSummary仅用于创建、开始、最近写入、完成、放弃五类节点摘要，不是全部事件列表；DISCUSSION_STEP_SELECTED不会覆盖这些槽位或冒充started。真实切换事件由F_HistoryData.items中的F_FormationEvent返回，按选材需要进入Canonical／Wire近期事件。
 
 当前提案页最多20条（上限100），详情可用formation_step_ref选择查看节点，不改变真实工作焦点。补只读GET documents/{id}/formation-proposals，参数step_ref或空、before_sequence_no、limit，返回ProposalPage；游标用原消息sequence_no、每卡真实message_id＋card_key。ProposalView含处置、needs_revision、can_apply和登记reasons；原精确全文仍取不可变消息详情，列表不复制全文。历史节点也能查原提案及为何失效。
 
@@ -143,7 +143,7 @@ formation_assessments给is_current及明确stale_reasons，不修改AI原评估�
 
 Canonical采用layout_version="formation_context_v1"，独立formation记录所属文档、冻结完整snapshot、included_step_refs、必要事件和关联提案。旧Discussion原结构保持；ContextBasis／选材来源／所有摘要随真实新Canonical重新计算，旧历史快照不重编译。
 
-Wire的project_position中，旧阶段维度改名stage_overview，新增formation；没有路径时为null。WireFormation含Goal／basis、当前步骤及支线、路径短总览、included_steps、branches、issues、artifacts、recent_events、omitted_step_refs及有界提案摘要。包含的步骤带实际定义／评估／建议；被省略的节点只提供总览，不能让模型更新未读定义。
+Wire的project_position中，旧阶段维度改名stage_overview，新增formation；没有路径时为null。WireFormation含Goal／basis、当前步骤及支线、路径短总览、included_steps、branches、issues、artifacts、recent_events、omitted_step_refs及有界提案摘要。包含的步骤带实际定义／评估／建议；被省略的节点只提供总览，不能让模型更新未读定义。选材可省略不重要的事件；已选入的真实DISCUSSION_STEP_SELECTED必须能从CanonicalFormation.events投影为WireFormation.recent_events中的WireEvent，不把它改写成STEP_STARTED。
 
 CanonicalFormation另有message_effects，Wire近期历史有effect_state；程序从真实运行结果／事件标记用户动作、讨论、已应用或结构被拒绝，旧记录无法核实为UNKNOWN，不能依模型文字推断。Wire不复制正文到各成果；成果只提供实际document_refs。源别名从真实MESSAGE／REVISION等材料映射，不把形成事件当新的任意SourceRef类型。current_request增加proposal_context，明确正在调整的原卡、意图及精确内容；canonical保存真实来源，Wire转为本轮别名。
 
@@ -157,7 +157,7 @@ R06已确认恢复体验：超时先核实原动作；已保存但显示失败�
 
 Native／两种卡片应用另核实WORK_STATE_CONFLICT、IDEMPOTENCY_CONFLICT、REQUEST_IN_PROGRESS；卡片入口另有CARD_ALREADY_ANSWERED／CARD_EXPIRED，正文应用还可有PATCH_INVALID／TARGET_STALE／SCOPE_INVALID／DOCUMENT_INVALID／TEMPLATE_INVALID／SOURCE_VERSION_CONFLICT／CAPACITY_EXHAUSTED。只读状态／提案／历史按各入口登记结构、归属、存储和配置错误，不返回虚构写冲突。已有WORK_STATE_INCONSISTENT按真实内部不一致分派。
 
-安全details沿0.6白名单；定义／目标／路线基准失配用STATE_CONFLICT.reason；本次接入Schema增加PATH_CHANGED／SOURCE_CHANGED／UNRESOLVED_DISPOSITION原因，实现时必须同步登记错误投影，不透传内部对象。版本冲突、校验拒绝没有半份业务写入；UNKNOWN先核实原key。Schema结构校验仍不能证明来源、处置覆盖、摘要等于原内容或版本算术正确。
+安全details按当前v4的F_FormationError及实施契约第5节；定义／目标／路线基准失配用STATE_CONFLICT.reason，包含PATH_CHANGED／SOURCE_CHANGED／UNRESOLVED_DISPOSITION原因，实现时必须同步登记错误投影，不透传内部对象。版本冲突、校验拒绝没有半份业务写入；UNKNOWN先核实原key。Schema结构校验仍不能证明来源、处置覆盖、摘要等于原内容或版本算术正确。
 
 ## 6. 存储、来源与资源发布设计
 
@@ -185,33 +185,35 @@ CHECK (document_type='CURRENT' OR formation_state_json IS NULL)
 
 设计Schema是输入依据，不是已发布资源。未来实现要提取所需类型、保持确定序列化／字段顺序、核对程序私有材料与Wire、重算原八项计数并完成新发布准入；计数上限沿现有模型配置，新布局不复用旧LIVE。旧运行／消息／回执按真实release恢复，不注入新字段，不补Chat。发布组装与供应方实测属于实施验收工作。
 
-## 7. 首版容量规则与到达上限后的行为
+## 7. 容量设计常量与待评审体验
 
-首版采用每文档总计200步骤（含已放弃身份）、1000支线、1000问题、2000成果关联；每步20项成果，状态JSON规范化UTF-8不超过1MiB。单次AI形成增量／路线调整最多20项，规范化UTF-8不超过64KiB。精确正文受原内容／补丁／消息容量及模型输出预算约束，不把全文塞入主线状态。
+当前Schema设计上限为每文档总计200步骤（含已放弃身份）、1000支线、1000问题、2000成果关联；每步20项成果，状态JSON规范化UTF-8不超过1MiB。单次AI形成增量／路线调整最多20项，规范化UTF-8不超过64KiB。精确正文受原内容／补丁／消息容量及模型输出预算约束，不把全文塞入主线状态。
 
-全部上限是本设计的首版常量，需实施时验证性能；不再留为未选择的方案。超出即明确拒绝，说明是哪一项超限，保留原状态／草稿；不截断后半批、不删除历史、不为了容量自动完成节点。20项限制按实际PathChange计数，拆分过大需用户分批编辑，但每批必须独立满足处置和依赖完整。
+这些数值是当前结构设计常量，性能与长期容量策略须验证，不能写成用户已接受的产品限制。技术边界仍要求超限时保留原状态／草稿、说明具体项目，不截断后半批、不删除历史、不自动完成节点。20项按实际PathChange计数；每批必须独立满足处置和依赖完整。
 
-总数到限仍允许不会增加实体且满足字节预算的已有操作，原正文阅读／编辑继续沿原规则；新增被拒绝。首版不提供隐藏归档或自动压缩，用户可保留当前文档并另建下一份文档，或等待显式提高容量的新版本；不自动转移成果。模型预算不足先裁可选材料，必需正文／约束仍不足则不Chat，提示缩小工作范围。
+Q04仍待评审：达到历史总量上限后如何保留历史并继续形成同一文档，不能预设强迫用户换文档或等待扩容。现有正文阅读／编辑不因主线容量耗尽自动停用；不自行删除历史或转移成果。模型预算不足先裁可选材料，必需正文／约束仍不足则不Chat，提示缩小工作范围。
 
-## 8. 设计完成清单与实施前置核对（含0.8补充）
+Q03仍待评审：人工修改正文后的“成果需复核”如何消除。当前程序只保证真实匹配状态与旧Closure保持，不把“下一次正常讨论自动完成复核”等体验建议写成已确认能力，也不偷偷增加模型调用。
+
+## 8. 设计状态与实施前置核对
 
 | 项目 | 当前设计结论 | 实施／核对要求 |
 | --- | --- | --- |
 | 主线、状态、文档成果基准 | 已定义 | 按用户确认规则实现；产品验收未执行 |
-| 首次建线、首步、写入与完成 | 本版默认已收口 | UI／API联调验证 |
+| 首次建线、首步、写入与结束 | R01—R07交互规则已确认 | UI／API联调验证 |
 | 拆分／合并／放弃／遗留去向 | 交互、原子操作及预览已定义 | 真实事务／并发及交互验证 |
 | AI卡片、binding、读写DTO及模型布局 | 接入Schema和程序守卫责任已定义 | 发布组装、调用链接入及新资源准入 |
-| 容量与超限 | 首版数值和操作行为已定义 | 边界／负载验证；不是已证实性能结论 |
+| 成果复核、容量与超限 | Q03／Q04体验待评审；Schema有设计常量 | 评审用户可见后果并做边界／负载验证，不能提前定案 |
 | 云端151的存储增量／来源／升级 | 方案及字段／索引／来源变更已定义 | 生成完整目标DDL与升级演练 |
 | 未同步本地V2.0 | **外部基线待核对**，不推断其差异 | 实施前取得实际代码提交／DDL／资源清单及活动工作情况 |
 
-本地核对的输入固定为：实际Git提交及未提交改动清单、SQLite版本／完整DDL及迁移摘要、资源release与消息协议版本、文档／运行／旧成功回执结构。若与云端基线兼容，按本方案生成适配与验证清单；若已有同名能力或冲突列／协议，先记录差异并修订接入映射，再编码。身份或原始快照无法无损保留时拒绝升级，不擅自清库。这是实施准入检查，不影响本轮完成业务／交互设计。
+本地核对的输入固定为：实际Git提交及未提交改动清单、SQLite版本／完整DDL及迁移摘要、资源release与消息协议版本、文档／运行／旧成功回执结构。若与云端基线兼容，按本方案生成适配与验证清单；若已有同名能力或冲突列／协议，先记录差异并修订接入映射，再编码。身份或原始快照无法无损保留时拒绝升级，不擅自清库。这是实施准入检查，不是已完成兼容验证。
 
-在0.6的A01—A30外补充以下未来验收，**全部未执行**：
+除[当前实施契约](WALL-E.文档形成主线实施契约与验收清单_V_2.1.md)的A01—A30外，以下为未来验收，**全部未执行**：
 
 | 编号 | 场景与预期 |
 | --- | --- |
-| A31 | 建线直接将首步IN_PROGRESS并设为当前讨论，其余PLANNED；无额外点击或Chat（R01替代） |
+| A31 | 建线直接将首步IN_PROGRESS并设为当前讨论，其余PLANNED；无额外点击或Chat |
 | A32 | 路线预览无写入／正式ID分配；版本变化阻止直接保存并保留草稿 |
 | A33 | 拆分／合并复用真实正文，原成果和历史保留；正文V不变 |
 | A34 | 移动问题及修改支线返回点，origin保持；没有明确去向时禁止取消旧节点 |
@@ -220,14 +222,14 @@ CHECK (document_type='CURRENT' OR formation_state_json IS NULL)
 | A37 | CARD_RESPONSE来源在区块、Revision、原卡及审计中一致，旧资源不会错误解码新来源 |
 | A38 | 提案分页、节点活动摘要、过期原因及完整计数同快照；查看不切换业务焦点 |
 | A39 | 新回执reference_map定位新节点，旧回执按原协议重放；200后GET失败仍为保存成功 |
-| A40 | 所有条数／字节边界明确拒绝且不截断；V2.0差异阻止猜测升级 |
+| A40 | 按评审后的容量方案核对条数／字节边界，不截断、不删除历史；Q04未定不标通过；V2.0差异阻止猜测升级 |
 
-本轮设计可作为整体评审输入，未开始产品实施，也未请求正式规格合并。实际结构检查见[0.8核对记录](../../../verification/v2.1/document-formation-design-consistency-2026-11-07.md)；所有实施／发布／迁移与真实调用仍按后续实际任务范围推进。
+设计未开始产品实施或正式规格合并；静态证据见[验证索引](../../../verification/v2.1/README.md)。实施、发布、迁移及真实调用按后续实际授权推进。
 
 
 ## 9. 原成果到新成果必须有逐项映射
 
-0.7只有步骤级replaces关系，无法证明某项旧成果被承接还是取消。本次在PathEditCommand、ModelPathProposal、StoredPathProposal和PathPreview增加必传result_routes；没有取消步骤时为[]，不能省略。
+PathEditCommand、ModelPathProposal、StoredPathProposal和PathPreview均必传result_routes；没有取消步骤时为[]。步骤级replaces关系不代替逐项成果映射。
 
 | disposition | 字段与含义 |
 | --- | --- |
@@ -238,7 +240,7 @@ CHECK (document_type='CURRENT' OR formation_state_json IS NULL)
 
 映射只描述要求去向，不意味着内容已落地。新CONTENT成果还需LINK_CONTENT关联真实已有正文，或后续确认写入。旧Artifact及旧版本不改挂；映射作为RESULT_ROUTE事件差异保存，after中全部使用真实result_ref，不能将new_result_N落入正式历史。相同事务可分多条事件保存，D／F统一一次变化。
 
-独立CANCEL_STEP没有逐项去向参数，而有效节点至少一项成果。因此**当前首版取消入口统一编译为完整ADJUST_PATH**，填写逐项去向；当前NativeRequest移除独立CANCEL_STEP，保留14种原生命令，13种PathChange内仍包含CANCEL_STEP变化。0.6／0.7尚未部署，不为旧设计保留一个永远拒绝的兼容动作。前端不显示第二套简化取消按钮，也不默默将所有成果设为NOT_REQUIRED。
+取消入口统一编译为完整ADJUST_PATH并填写逐项去向；NativeRequest共14种原生命令，13种PathChange中包含CANCEL_STEP变化。前端不显示第二套简化取消按钮，也不默默将所有成果设为NOT_REQUIRED。
 
 ## 10. 完成步骤时收束支线与问题
 
@@ -265,7 +267,7 @@ Step.issue_refs必须和Issue.step_ref双向一致更新；旧节点移除转交
 | ModelPathProposal／StoredPathProposal.basis | 本轮实际接受并发送给模型的来源快照，保持原始身份，不改成模型未见过的状态 |
 | NewBinding.formation_version | 保存卡片及相关形成事件后，本事务真实提交的F；由程序预计算并随状态一起提交 |
 | NewBinding.formation_digest | R01的v3摘要移除根version、current_step_ref、active_branch_ref；其余目标、顺序、步骤状态／定义、问题、支线、成果和评估保留 |
-| 最新PROPOSAL_BASIS事件（若有） | 用户明确撤回调整后，程序核实并记录的新执行F和相同formation_digest，不修改原卡或原binding |
+| 事件中最新PROPOSAL_BASIS差异（若有） | 用户明确撤回调整后，程序核实并记录的新执行F和相同formation_digest，不修改原卡或原binding |
 
 例如模型实际看到F12，发布路线卡后F13：payload.basis.F仍12，binding.F=13，用户在当前F13确认可以执行。不能把payload改成13伪装模型读过，也不能因13不等于12判卡刚生成就失效。D同样保留来源D与本次请求最新D的不同职责。
 
@@ -277,7 +279,7 @@ Step.issue_refs必须和Issue.step_ref双向一致更新；旧节点移除转交
 
 接受“继续调整”产生needs_revision及F变化；若模型失败，原卡保留。用户明确撤回时，重新核实原卡未应用／替代、V／Goal／定义／来源、当前v3去版本／焦点摘要与原formation_digest一致，且当前D／占用正常。只有与提案处置有关的版本递增不会改变该摘要；纯焦点不会改变该摘要，步骤状态／定义／评估等其他实际变化仍导致不一致，不能默默恢复旧方案。
 
-撤回成功同事务清needs_revision并新增PROPOSAL_ADJUSTMENT_WITHDRAWN及PROPOSAL_BASIS差异；before记原有效依据，after记撤回提交后的真实F，digest一致。原卡与binding不改写，读投影从真实事件取得新依据。例如撤回前F15，提交后F16，则新执行依据为16，不能再次绑定15让卡即时失效。
+撤回成功同事务清needs_revision并新增PROPOSAL_ADJUSTMENT_WITHDRAWN事件及其中的PROPOSAL_BASIS差异；before记原有效依据，after记撤回提交后的真实F，digest一致。原卡与binding不改写，读投影从真实事件取得新依据。例如撤回前F15，提交后F16，则新执行依据为16，不能再次绑定15让卡即时失效。
 
 摘要不一致时保持原状态，显示“路线已有其他变化，请重新预览”；允许在路线编辑器打开原内容，基于当前快照重新编辑／预览后明确保存，不隐藏重基，不增加补救Chat。正文提案不允许通过此途径换基准V应用旧补丁。
 
@@ -324,7 +326,7 @@ CanonicalFormation.message_effects及Wire.recent_history.effect_state从真实�
 | I05 | R07允许带遗留结束；程序补齐全部真实快照，保留OUTSTANDING／KEEP_OPEN；不假造完成或强迫转交，用户来源／身份／版本保持真实 |
 | I06 | 依赖存在且当前图无环；被放弃前置不能继续作为未完成节点的有效依赖 |
 | I07 | 正式事件无临时引用；前后快照和result映射／支线处置可核对；同批版本／序号一致 |
-| I08 | 新卡payload来源依据保持不变，执行F等于发布或明确续期后的真实F；摘要来自程序实际状态 |
+| I08 | 新卡payload来源依据保持不变，binding.F／PROPOSAL_BASIS.F保留发布或明确续期的历史依据；执行核实当前语义摘要及用途，按当前F提交，不要求纯焦点变化后F仍绝对相等 |
 | I09 | 真实正文提交维护所有受影响Artifact，CURRENT不能只靠旧摘要或模型宣称 |
 | I10 | D／F／V、组件结果、幂等回执与实际提交一致；读取和预览不产生写入 |
 
@@ -334,7 +336,7 @@ CanonicalFormation.message_effects及Wire.recent_history.effect_state从真实�
 | --- | --- |
 | A41 | 拆分／合并逐项旧成果映射，遗漏／重复／类型偷换均拒绝；映射不充当写入事实 |
 | A42 | 正式RESULT_ROUTE事件全部使用真实新成果身份，旧Artifact及原Revision保持 |
-| A43 | COMPLETE按return而非origin收束OPEN支线；遗漏／重复／伪RESOLVED不完成 |
+| A43 | COMPLETE按return而非origin补齐OPEN支线；未选择去向记KEEP_OPEN并允许结束；重复／非法显式处置或伪RESOLVED拒绝 |
 | A44 | 后续问题／支线转交双向引用一致；任何处置失败整个完成事务回滚 |
 | A45 | F12来源发布卡后F13，卡在F13可执行；不伪改模型basis为13 |
 | A46 | 调整失败后撤回在F16获得真实新依据；摘要不同则保持禁用、重新预览 |
@@ -344,8 +346,8 @@ CanonicalFormation.message_effects及Wire.recent_history.effect_state从真实�
 | A50 | 路线所有步骤结束仍不自动确认文档／需求；暂缓事项和复核提示继续可见 |
 
 
-## 13. R07：完整性提示与用户结束决定
+## 13. 完整性提示与用户结束决定
 
-当前[整体评审R07](WALL-E.文档形成主线整体评审记录_V_2.1.md)优先于旧完整性硬门槛。结束表示用户结束本步，不意味着全部成果已满足；请求允许空处置列表，程序补齐OUTSTANDING／KEEP_OPEN的真实Closure。没有明确选择不自动改目标、转交或暂缓，已结束节点仍能回看／讨论；后续适用提案可明确补写，保留原结束快照和新写入事件。
+结束表示用户结束本步，不意味着全部成果已满足；请求允许空处置列表，程序补齐OUTSTANDING／KEEP_OPEN的真实Closure。没有明确选择不自动改目标、转交或暂缓，已结束节点仍能回看／讨论；后续适用提案可明确补写，保留原结束快照和新写入事件。
 
-COMPLETE_STEP可处理当前选择的未结束且未放弃步骤，不要求先开始／恢复到IN_PROGRESS。旧单纯RESULT_NOT_WRITTEN／BRANCH_DISPOSITION_INCOMPLETE不作为结束拒绝理由。已结束重复请求按幂等／无变化处理，不造第二次完成；已放弃节点的历史与改变范围规则保留。版本、归属、真实证明、幂等与事务检查继续执行，正文写入仍需用户明确确认。
+COMPLETE_STEP可处理当前选择的未结束且未放弃步骤，不要求先开始／恢复到IN_PROGRESS。RESULT_NOT_WRITTEN／BRANCH_DISPOSITION_INCOMPLETE不能仅凭真实遗留作为结束拒绝理由。已结束重复请求按幂等／无变化处理，不造第二次完成；已放弃节点的历史与改变范围规则保留。版本、归属、真实证明、幂等与事务检查继续执行，正文写入仍需用户明确确认。
