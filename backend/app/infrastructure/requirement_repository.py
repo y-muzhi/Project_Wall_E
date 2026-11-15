@@ -104,7 +104,7 @@ class RequirementRepository:
         discussion: dict,
         at: str,
     ) -> dict:
-        from .idempotency import canonical_input
+        from backend.app.shared.json_canonical import canonical_input
 
         require_write_transaction(self.connection)
         self.connection.execute(
@@ -181,7 +181,7 @@ class RequirementRepository:
 
     def update_discussion(self, current, discussion, at):
         from .identifiers import increment
-        from .idempotency import canonical_input
+        from backend.app.shared.json_canonical import canonical_input
         from backend.app.requirements.discussion import validate_discussion
 
         require_write_transaction(self.connection)

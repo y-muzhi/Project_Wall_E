@@ -30,7 +30,7 @@ from backend.app.guide.counted_context import (
     FULL_PROJECTION_RELEASE_SHA256,
 )
 from backend.app.shared.validation import strict_json_object
-from .idempotency import canonical_input
+from backend.app.shared.json_canonical import canonical_input
 from .model_profile import ModelProfile
 from .resources import (
     ConfigInvalid,

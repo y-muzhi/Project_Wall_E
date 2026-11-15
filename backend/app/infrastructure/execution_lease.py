@@ -49,6 +49,11 @@ class LeasedDatabase(Database):
         self.path = database.path
         self.busy_timeout_ms = database.busy_timeout_ms
         self.migration, self.migrations = database.migration, database.migrations
+        self.schema_release = database.schema_release
+        self.read_only = database.read_only
+
+    def reversible(self, connection):
+        return self.database.reversible(connection)
 
     @contextmanager
     def transaction(self, *, write=False):

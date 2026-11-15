@@ -305,7 +305,15 @@ function CreateDocumentDialog({
   );
 }
 
-export function DocumentDirectory({ owner }: { owner: RequirementDetailOwner }) {
+export function DocumentDirectory({
+  owner,
+  codeTasks,
+  codeTasksBlocked = false,
+}: Readonly<{
+  owner: RequirementDetailOwner;
+  codeTasks?: ((documentId: number) => void) | undefined;
+  codeTasksBlocked?: boolean;
+}>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     flow = owner.regions!.directory;
   useSyncExternalStore(flow.subscribe, flow.getSnapshot);
@@ -345,6 +353,17 @@ export function DocumentDirectory({ owner }: { owner: RequirementDetailOwner }) 
                 : ''}
           </small>
         </button>
+        {codeTasks && (
+          <button
+            className="ui-button document-directory-code-action"
+            type="button"
+            aria-label={document.name + '的代码任务'}
+            disabled={codeTasksBlocked}
+            onClick={() => codeTasks(document.id)}
+          >
+            代码任务
+          </button>
+        )}
       </li>
     ));
   return (
@@ -378,6 +397,13 @@ export function DocumentDirectory({ owner }: { owner: RequirementDetailOwner }) 
         )
       ) : (
         <>
+          {codeTasks && actual.documents.length > 0 && (
+            <p className="field-help" role="status">
+              {codeTasksBlocked
+                ? '请在当前读取或编辑操作结束后打开代码任务'
+                : '请选择文档的代码任务'}
+            </p>
+          )}
           {actual.documents.length === 0 && (
             <EmptyState icon="document" message="暂无文档" compact />
           )}

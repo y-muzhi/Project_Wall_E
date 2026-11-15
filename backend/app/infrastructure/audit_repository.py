@@ -10,7 +10,7 @@ import json
 from .audit_data import audit_json
 from .guide_repository import GuideRepository
 from .identifiers import EntityKind, entity_id, increment, require_write_transaction
-from .idempotency import canonical_input
+from backend.app.shared.json_canonical import canonical_input
 from .message_repository import MessageRepository
 from .model_profile import ModelProfile
 from .requirement_repository import RequirementRepository
@@ -249,8 +249,32 @@ class AuditRepository:
             ),
         )
 
-    def get(self, identity):
-        return self.connection.execute('SELECT * FROM llm_uses WHERE id=?', (identity,)).fetchone()
+    def get(self, identity, *, owner_kind='DOCUMENT', owner_id=None):
+        """Read the existing LLMUse only within its real document/Coding/Testing owner."""
+        strict_integer(identity, 'llm_use_id')
+        if owner_id is not None:
+            strict_integer(owner_id, 'owner_id')
+        if owner_kind == 'DOCUMENT':
+            sql = 'SELECT * FROM llm_uses WHERE id=? AND guide_run_id IS NOT NULL'
+            parameters = (identity,)
+            if owner_id is not None:
+                sql += ' AND guide_run_id=?'
+                parameters += (owner_id,)
+        elif owner_kind == 'CODING' and owner_id is not None:
+            sql = (
+                'SELECT u.* FROM llm_uses u JOIN code_sessions s ON s.id=u.execution_session_id '
+                'WHERE u.id=? AND s.task_id=? AND u.guide_run_id IS NULL AND u.testing_task_id IS NULL'
+            )
+            parameters = (identity, owner_id)
+        elif owner_kind == 'TESTING' and owner_id is not None:
+            sql = (
+                'SELECT * FROM llm_uses WHERE id=? AND testing_task_id=? '
+                'AND guide_run_id IS NULL AND execution_session_id IS NULL'
+            )
+            parameters = (identity, owner_id)
+        else:
+            raise ValueError('A registered call owner and its actual identity are required')
+        return self.connection.execute(sql, parameters).fetchone()
 
     def prepare_collaboration(
         self, run_id, profile, context, at, *, catalog, admission=None, observation=None
@@ -792,6 +816,6 @@ class AuditRepository:
             .replace('+00:00', 'Z')
         )
         return self.connection.execute(
-            'UPDATE llm_uses SET raw_response_json=NULL,parsed_output_json=NULL WHERE ended_at IS NOT NULL AND ended_at<? AND (raw_response_json IS NOT NULL OR parsed_output_json IS NOT NULL)',
+            'UPDATE llm_uses SET raw_response_json=NULL,parsed_output_json=NULL WHERE guide_run_id IS NOT NULL AND ended_at IS NOT NULL AND ended_at<? AND (raw_response_json IS NOT NULL OR parsed_output_json IS NOT NULL)',
             (cutoff,),
         ).rowcount

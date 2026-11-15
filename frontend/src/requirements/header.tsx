@@ -15,6 +15,7 @@ export function RequirementHeader(
   props: Readonly<{
     tools?: ReactNode;
     documentActions?: ReactNode;
+    toolHint?: string | undefined;
     commands: RequirementHeaderCommands;
     ready: boolean;
     blocked: boolean;
@@ -160,6 +161,7 @@ export function RequirementHeader(
           </div>
         </div>
       </div>
+      {props.toolHint && <p className="read-status">{props.toolHint}</p>}
       {(life?.getSnapshot().phase === 'ERROR' ||
         manual?.getSnapshot().phase === 'ERROR' ||
         readError) && (

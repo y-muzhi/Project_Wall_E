@@ -1,0 +1,38 @@
+# 隔离驱动无网络运行兼容迭代V1（V2.0）
+
+2026-11-14香港12:08启动四小时工作量接续。依据BE7.6和现有运行包、精确令牌／Job／结果管道，不扩大LPAC网络能力、不关闭sandbox、不安装SYSTEM／WFP，不操作用户服务／正常数据、模型或Git目标。
+
+先在原受限令牌实际核对Winsock初始化与仅socket创建（绝不connect／bind／listen／发包），区分启动依赖与实际联网。然后评估固定SDK的纯管道运行路径：优先保持原Python根及权威比较／结果写端，复用固定SDK与原浏览器步骤、原控制转发；不得将浏览器stdout或任意子进程自报当权威结论。必要技术调整先追加本文，验证后仍不合并正式设计。
+
+保持原完整包／资源SHA、CREATE_SUSPENDED关联、即时取消与停止保护、原stdout控制及独立结果管道、只读依赖和新profile。按独立诊断、普通真实SDK／浏览器、真实LPAC／Job、真实前后端／修复报告交付分层保存证据。失败不自动重试付费请求，不制造ready；测试原始产物清理，仅留Markdown结果。
+
+12:15诊断：线程模拟socket允许，不能代表主进程；真实LPAC主进程的IPv4／IPv6未连接socket及_overlapped导入均10013，原固定Node24.13.0无网络能力可启动。下一步验证同包Node SDK导入；若可行，保持原Python根、比较算法和结果管道，只将SDK对象调用适配为固定Node子进程匿名管道，根处理受限数据命令与SDK事件，不转发子进程stdout为权威结果、不import候选模块、不引入网络能力。固定worker／版本／消息限额／枚举操作及停止清理必须纳入同包和实际检查；实现前此项为技术方案，不称已完成。
+
+12:25固定SDK同步匿名管道已完成普通真实浏览器的原用例及收尾检查；原Python execute_browser比较／结果帧不改。main切换至该适配，Node worker与原源快照／manifest一起固定，root只接受限额内带context generation的SDK观测，不将stdout当权威。写队列有deadline、stderr上限4KiB、读队列有界、拒绝旧context事件；SDK进程无result writer，固定Node参数保留已验证原路径。当前仍未取得真实LPAC浏览器通过，不合并设计或设置ready。
+
+12:30真实新路径越过异步导入后发现Windows重写AppContainer的TEMP为private LOCALAPPDATA/Packages/.../AC/Temp，该路径未物化；不创建未知虚拟profile路径。CHECK_DRIVER根改从已固定解释器runtime位置导出原scratch/temp并核对存在；SDK子进程从根私有管道适配注入的同一原temp启动，固定worker在加载SDK前恢复该明确路径，不给Node任意额外环境、路径或系统目录权限。原输入环境／目录版本仍由Guard核对，实际进程观察差异独立记录。
+
+12:42实际有界线程栈定位到TemporaryDirectory的mkdtemp重试：CPython3.13使用mkdir(mode=0700)，Windows为此生成的新DACL没有原LPAC包SID，既有私有scratch可写并不能使该显式创建成功。先在实际主LPAC比较0700与默认继承创建，再改每用例profile为随机新子目录、继承原scratch明确私有ACL，保留原低MIC／包SID及所有权，不改系统或祖先目录权限。创建失败立即未知，禁止TMP_MAX无界重试；Chrome结束后清理该原profile，仍由Guard停止原Job并删除整个scratch。此为已授权私有目录内创建策略，不对其他用户或所有AppContainer授权。
+
+12:56新增已定位依赖：固定Node24.13.0的libuv child_process.spawn创建全局命名stdio管道，真实原LPAC主进程在spawn内部阻塞，2.5秒JS timer也无法执行；异步mkdtemp对照成功。官方固定源码win/pipe.c的uv__pipe_server把ERROR_ACCESS_DENIED当名称冲突无限重试，名称为全局uv前缀；Microsoft要求AppContainer使用LOCAL管道命名空间。下一步先用主LPAC原生API核对命名空间，再由原Python根提供固定Chromium进程／匿名DevTools管道，SDK仅通过已有私有管道使用该原子进程及流。固定SDK源码／官方Node归档不修改，不注入或二进制打补丁，不把SDK移出LPAC；实际启动目标／profile／sandbox／参数与原Job继承、结果句柄不继承须由程序检查。原SDK进程生命周期通过限定适配接入同一受控浏览器，不另造浏览器定位或比较算法。未取得实际证据前仍进行中。
+
+13:10原根匿名DevTools代理已通过真实普通浏览器两用例；原native实际启动完整Chrome并通过原LPAC／同SID／同提升状态核对，随后crashpad_client_win.cc:323因全局CreateNamedPipe拒绝。固定145 Windows ChromeCrashReporterClient无disable-crashpad-for-testing分支（该开关在所读main的POSIX分支），不盲加开关或补全局权限。改采用同一Playwright1.58.0／Chromium1208／145.0.7632.6的官方chrome-headless-shell-win64归档，保留完整Chrome原归档及旧锁原字节；新独立当前头部资源锁采用同版本headless shell，复用同一准备／校验器和受控根，不构建第二套业务检查流程。新来源取得／SHA／固定PE／实际SDK功能／原LPAC均需分别验证，未验证时保持ready=false。
+
+13:56用户要求优先有界判断可行性。原headless实际初始化定位到BrokerServices::CreateAlternateDesktop(Desktop=2)返回12（SBOX_ERROR_CANNOT_CREATE_WINSTATION）。完全复刻固定源码的NULL名称／原DACL／0x80000008与0xA：普通进程成功，原主LPAC均5；对全新测试窗口站显式当前实际用户／包SID及低MIC仍均5。未改变用户桌面／窗口站权限，未实现或宣称私有GUI对象即可修复。此前宽权限具名普通对照失败的推断作废，以此精确对照为准。当前同LPAC完整Chromium路线受阻，ready=false；后续须重新评估符合原文件／网络／结果权限约束的宿主与隔离架构，并先登记独立方案，不能通过普通用户降级、关sandbox或放宽系统权限隐式改变设计。当前迭代仅部分实现，完整隔离浏览器未完成，正式设计未合并。
+
+
+14:45新任务：用户明确“重点解决”实际页面自动测试的隔离启动问题。先核对现有拒绝是否属于主LPAC未获必要非网络系统能力，而非直接假定所有LPAC宿主不可行。仅测试自有原进程／Job／profile，逐项对照固定lpacAppExperience、lpacSessionManagement、lpacWebPlatform、lpacCom；不添加网络能力、不给用户目录／桌面授权、不修改生产能力白名单或装系统功能。原主令牌与实际精确能力SID仍须核验；结果为诊断，不作为产品准入。若系统能力仍不能解决，再评估更强隔离宿主及受影响契约，禁止用普通账户浏览器或--no-sandbox替代。源原子保存、模型／计数／用户服务／正常数据／提交推送边界保持。
+
+
+14:54定位修正计划：CreateWindowStationW(NULL,CWF_CREATE_ONLY,...)实际183，说明自动命名对象已经存在。Microsoft规则是按登录会话生成名称，现有对象不采用新SECURITY_ATTRIBUTES；先前自定义SD拒绝不能证明全新对象也拒绝。下一步只在测试自有令牌中核对LOGON32_LOGON_NEW_CREDENTIALS／WINNT50产生的新AuthenticationId与相同本地非提升用户SID，随机虚构出站凭据不使用真实账号密码，不建立网络连接，所有令牌及其子进程结束后释放会话。若可消除窗口站名称冲突，仍使用原LPAC／Job／沙箱及私有结果管道；生产接入前必须固定新会话来源、与原控制者关联并核对实际主令牌，不能直接放松原AuthenticationId相等条件或共享当前用户窗口站。
+
+
+15:02可行路径已取得真实原主LPAC页面证据：独立临时登录会话消除自动窗口站冲突，新私有窗口站／桌面显式只授权当前用户及包SID，registryRead+lpacCom后固定SDK实际加载页面、输入“你好”、点击、比较真实文本成功；仅lpacAppExperience虽可回应Browser.getVersion，实际页面仍失败，不采用。未加网络能力、未关闭浏览器沙箱。
+
+生产单元输入／输出／不变量：仅CHECK_DRIVER从原已认证ControllerPrimaryToken受控派生独立登录会话，源保持同本地用户SID、同Windows Session、非提升、无新增组／特权，AuthenticationId须不同且绑定原控制者；随机虚构出站凭据不使用用户密码，不做网络连接，句柄不继承。派生操作在原控制者模拟线程内执行并恢复，不从Guard的SYSTEM主身份克隆。实际根仍以原CREATE_SUSPENDED／Job／LPAC能力／专属继承结果写端创建，主令牌改为对该活的原派生会话owner核验，不能接受调用者自报的logon值或放松普通TASK的相等规则。派生会话在原根／Job停止及原令牌释放后关闭，不设置用户服务或安装系统功能。
+
+CHECK_DRIVER根在启动固定SDK／浏览器前，以CWF_CREATE_ONLY创建新的自动命名窗口站及随机私有桌面；碰到已有对象即拒绝，不修改或打开现有用户对象。新对象只授当前实际用户／实际包SID，低MIC，进程／线程切换仅在该根内部，结束按原所有权恢复与关闭，失败保持未知并由原Guard停止原Job。固定runner能力政策仅新增精确组合(registryRead,lpacCom)，全局空能力TASK不变，不允许自由能力名或网络项。source snapshot／实际manifest包含新模块及政策；SYSTEM权限的真实安装／WFP仍需另行授权，不把测试角色或普通新会话替代正式部署证据。
+
+16:10本项核心实现已由实际原CHECK_DRIVER／LPAC／Job／固定SDK及应用页面验证，13:56“当前路线不可行”由新的会话冲突证据替代，历史拒绝事实仍保留。新会话严格不新增组／特权；仅允许NEW_CREDENTIALS实际移除固定LOCAL／NTLM认证SID及原属性，其他变化仍拒绝。COM组合实际文件／网络拒绝和自有scratch读写已核对，未赋予网络能力。
+
+实际生产源、包摘要、矩阵／取消／真实应用及明确测试角色见[本轮验证](../../../verification/v2.0/browser-private-logon-2026-11-14.md)。普通测试控制者用实际私有登录启动，以原令牌创建真实LPAC；测试来源选择不冒充SYSTEM将生产派生令牌赋值成功。正式OS证据和后续产品全链保留未完成。大资源传输另见[独立迭代](WALL-E.浏览器检查大资源传输迭代V1_V_2.0.md)。本项保持pending，不合并正式设计。

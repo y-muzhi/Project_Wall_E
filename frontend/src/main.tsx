@@ -54,6 +54,7 @@ async function start() {
       {
         history: window.history,
         pathname: () => location.pathname,
+        search: () => location.search,
         scroll: () => window.scrollY,
         scrollTop: () => window.scrollTo(0, 0),
         listen: (listener) => {

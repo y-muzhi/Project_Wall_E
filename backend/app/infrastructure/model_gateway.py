@@ -4,16 +4,17 @@ The caller must pass the Builder gate and commit its actual AuditRepository
 preparation before invoking this private adapter. No public endpoint calls it.
 """
 
-from dataclasses import dataclass, field
 import asyncio
 import json
+from dataclasses import dataclass, field
 from time import monotonic
 
 import httpx
 
-from .audit_data import audit_json, AuditCapacityExceeded, MAX_AUDIT_BYTES
-from .model_profile import ModelProfile, ENDPOINT
 from backend.app.shared.validation import MAX_SAFE_INTEGER, strict_json_object
+
+from .audit_data import MAX_AUDIT_BYTES, AuditCapacityExceeded, audit_json
+from .model_profile import ENDPOINT, ModelProfile
 
 # Exact inference codes from the official Ark error table. Unknown codes are
 # not matched by prefix or by a provider's free-text error message.
@@ -121,10 +122,16 @@ class ModelGateway:
     def __init__(self, *, transport_factory=None):
         self._transport_factory = transport_factory
 
-    async def send(self, profile, context):
+    async def send(self, profile, context, *, testing_limits=None):
         if type(profile) is not ModelProfile:
             raise ValueError('A frozen model profile is required')
-        body = profile.request(context)
+        if testing_limits is None:
+            body = profile.request(context)
+            timeouts = httpx.Timeout(connect=10, read=180, write=10, pool=10)
+        else:
+            output, query, send = testing_limits
+            body = profile.testing_request(context, output_cap=output)
+            timeouts = httpx.Timeout(connect=query, read=send, write=send, pool=query)
         started = monotonic()
         status = None
         raw = None
@@ -153,13 +160,14 @@ class ModelGateway:
             else self._transport_factory()
         )
         try:
-            async with httpx.AsyncClient(
-                transport=transport,
-                trust_env=False,
-                follow_redirects=False,
-                timeout=httpx.Timeout(connect=10, read=180, write=10, pool=10),
-            ) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(
+                    transport=transport,
+                    trust_env=False,
+                    follow_redirects=False,
+                    timeout=timeouts,
+                ) as client,
+                client.stream(
                     'POST',
                     ENDPOINT,
                     headers={
@@ -169,106 +177,106 @@ class ModelGateway:
                     content=json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode(
                         'utf-8'
                     ),
-                ) as response:
-                    status = response.status_code
-                    parts = []
-                    size = 0
-                    async for part in response.aiter_bytes():
-                        size += len(part)
-                        if size > MAX_AUDIT_BYTES:
-                            return result(False, 'RESPONSE_CAPACITY', False)
-                        parts.append(part)
-                    encoded = b''.join(parts)
-                    try:
-                        original = strict_json_object(encoded.decode('utf-8'))
-                    except (ValueError, UnicodeError, RecursionError):
-                        # Non-object/non-JSON wire data is not repaired into a
-                        # valid provider envelope. Store complete safe text only.
-                        try:
-                            raw = audit_json(
-                                {'http_status': status, 'unparsed_body': encoded.decode('utf-8')},
-                                credentials=(profile.api_key,),
-                            )
-                        except (ValueError, UnicodeError, RecursionError):
-                            raw = None
-                        if 200 <= status < 300:
-                            return result(False, 'RESPONSE_PROTOCOL', True)
-                        category, retryable = classify_error(status, None)
-                        return result(False, category, retryable)
-                    try:
-                        raw = audit_json(original, credentials=(profile.api_key,))
-                    except AuditCapacityExceeded:
+                ) as response,
+            ):
+                status = response.status_code
+                parts = []
+                size = 0
+                async for part in response.aiter_bytes():
+                    size += len(part)
+                    if size > MAX_AUDIT_BYTES:
                         return result(False, 'RESPONSE_CAPACITY', False)
+                    parts.append(part)
+                encoded = b''.join(parts)
+                try:
+                    original = strict_json_object(encoded.decode('utf-8'))
+                except (ValueError, UnicodeError, RecursionError):
+                    # Non-object/non-JSON wire data is not repaired into a
+                    # valid provider envelope. Store complete safe text only.
+                    try:
+                        raw = audit_json(
+                            {'http_status': status, 'unparsed_body': encoded.decode('utf-8')},
+                            credentials=(profile.api_key,),
+                        )
                     except (ValueError, UnicodeError, RecursionError):
-                        return result(False, 'RESPONSE_PROTOCOL', False)
-                    sanitized = strict_json_object(raw)
-                    usage = original.get('usage')
-                    if type(usage) is dict:
-                        input_tokens = _count(usage.get('prompt_tokens'))
-                        output_tokens = _count(usage.get('completion_tokens'))
-                        if type(usage.get('prompt_tokens_details')) is dict:
-                            # Only actual supplied fields; do not estimate a
-                            # cache hit rate, total usage, currency or charge.
-                            details = sanitized.get('usage', {}).get('prompt_tokens_details')
-                            if type(details) is dict:
-                                cache = audit_json(details)
-                    candidate = sanitized.get('id')
+                        raw = None
+                    if 200 <= status < 300:
+                        return result(False, 'RESPONSE_PROTOCOL', True)
+                    category, retryable = classify_error(status, None)
+                    return result(False, category, retryable)
+                try:
+                    raw = audit_json(original, credentials=(profile.api_key,))
+                except AuditCapacityExceeded:
+                    return result(False, 'RESPONSE_CAPACITY', False)
+                except (ValueError, UnicodeError, RecursionError):
+                    return result(False, 'RESPONSE_PROTOCOL', False)
+                sanitized = strict_json_object(raw)
+                usage = original.get('usage')
+                if type(usage) is dict:
+                    input_tokens = _count(usage.get('prompt_tokens'))
+                    output_tokens = _count(usage.get('completion_tokens'))
+                    if type(usage.get('prompt_tokens_details')) is dict:
+                        # Only actual supplied fields; do not estimate a
+                        # cache hit rate, total usage, currency or charge.
+                        details = sanitized.get('usage', {}).get('prompt_tokens_details')
+                        if type(details) is dict:
+                            cache = audit_json(details)
+                candidate = sanitized.get('id')
+                if (
+                    type(candidate) is str
+                    and candidate
+                    and len(candidate) <= 1024
+                    and candidate == original.get('id')
+                ):
+                    trace = candidate
+                choices = original.get('choices')
+                if type(choices) is list and len(choices) == 1 and type(choices[0]) is dict:
+                    candidate = choices[0].get('finish_reason')
+                    if type(candidate) is str:
+                        finish = json.loads(
+                            audit_json({'value': candidate}, credentials=(profile.api_key,))
+                        )['value']
+                    message = choices[0].get('message')
+                    safe_choices = sanitized.get('choices')
                     if (
-                        type(candidate) is str
-                        and candidate
-                        and len(candidate) <= 1024
-                        and candidate == original.get('id')
+                        type(message) is dict
+                        and type(safe_choices) is list
+                        and len(safe_choices) == 1
+                        and message.get('content')
+                        != safe_choices[0].get('message', {}).get('content')
                     ):
-                        trace = candidate
-                    choices = original.get('choices')
-                    if type(choices) is list and len(choices) == 1 and type(choices[0]) is dict:
-                        candidate = choices[0].get('finish_reason')
-                        if type(candidate) is str:
-                            finish = json.loads(
-                                audit_json({'value': candidate}, credentials=(profile.api_key,))
-                            )['value']
-                        message = choices[0].get('message')
-                        safe_choices = sanitized.get('choices')
-                        if (
-                            type(message) is dict
-                            and type(safe_choices) is list
-                            and len(safe_choices) == 1
-                        ):
-                            if message.get('content') != safe_choices[0].get('message', {}).get(
-                                'content'
-                            ):
-                                # Credential redaction is for the private audit,
-                                # not permission to adopt a rewritten answer.
-                                return result(False, 'CREDENTIAL_ECHO', False)
-                    error = original.get('error')
-                    if type(error) is dict:
-                        candidate = error.get('code')
-                        if type(candidate) is str and candidate and len(candidate) <= 256:
-                            safe_code = sanitized.get('error', {}).get('code')
-                            if safe_code == candidate:
-                                code = candidate
-                        if 'code' in error and code is None:
-                            return result(False, 'UNKNOWN_PROVIDER_ERROR', False)
-                        category, retryable = classify_error(status, code)
-                        return result(False, category, retryable)
-                    if error is not None:
+                        # Credential redaction is for the private audit,
+                        # not permission to adopt a rewritten answer.
+                        return result(False, 'CREDENTIAL_ECHO', False)
+                error = original.get('error')
+                if type(error) is dict:
+                    candidate = error.get('code')
+                    if type(candidate) is str and candidate and len(candidate) <= 256:
+                        safe_code = sanitized.get('error', {}).get('code')
+                        if safe_code == candidate:
+                            code = candidate
+                    if 'code' in error and code is None:
                         return result(False, 'UNKNOWN_PROVIDER_ERROR', False)
-                    if not 200 <= status < 300:
-                        category, retryable = classify_error(status, None)
-                        return result(False, category, retryable)
-                    if type(choices) is list and len(choices) == 1 and type(choices[0]) is dict:
-                        message = choices[0].get('message')
-                        if (
-                            finish == 'content_filter'
-                            or type(message) is dict
-                            and message.get('refusal')
-                        ):
-                            return result(True, 'CONTENT_FILTER', False)
-                        if finish == 'length':
-                            return result(True, 'OUTPUT_TRUNCATED', True)
-                    # Only transport succeeded. Audit parse/Schema/business
-                    # gates still reject wrong model/finish/role/tool/content.
-                    return result(True, None, False)
+                    category, retryable = classify_error(status, code)
+                    return result(False, category, retryable)
+                if error is not None:
+                    return result(False, 'UNKNOWN_PROVIDER_ERROR', False)
+                if not 200 <= status < 300:
+                    category, retryable = classify_error(status, None)
+                    return result(False, category, retryable)
+                if type(choices) is list and len(choices) == 1 and type(choices[0]) is dict:
+                    message = choices[0].get('message')
+                    if (
+                        finish == 'content_filter'
+                        or type(message) is dict
+                        and message.get('refusal')
+                    ):
+                        return result(True, 'CONTENT_FILTER', False)
+                    if finish == 'length':
+                        return result(True, 'OUTPUT_TRUNCATED', True)
+                # Only transport succeeded. Audit parse/Schema/business
+                # gates still reject wrong model/finish/role/tool/content.
+                return result(True, None, False)
         except asyncio.CancelledError:
             raise
         except httpx.TimeoutException:

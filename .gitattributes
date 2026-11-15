@@ -32,3 +32,6 @@ docs/design/** -text
 docs/sources/**/*.json -text
 docs/sources/v1.5/prepare-v15-evaluation-v12-frozen.py -text
 docs/sources/v1.5/run-v15-evaluation-v14-frozen.py -text
+
+# Fixed third-party runtime manifests bind exact upstream file bytes.
+backend/runtime/** -text

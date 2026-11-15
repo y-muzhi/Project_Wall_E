@@ -41,7 +41,7 @@ class CommentRepository:
         ).fetchall()
 
     def create(self, identity: int, request, anchor: dict, at: str) -> sqlite3.Row:
-        from .idempotency import canonical_input
+        from backend.app.shared.json_canonical import canonical_input
 
         require_write_transaction(self.connection)
         self.connection.execute(

@@ -1,0 +1,93 @@
+# 受信本地部署组装与正常启动 V1（V2.0）
+
+2026-11-13香港14:25开始新两小时时段，实施前登记，保留pending，不自动合并正式设计。依据BE7.3／7.4.4、APP-CODE-SETUP／CONDITIONS及既有私有RegistrationInstallation／Guard构造器；FE继续已有能力未就绪显示，不新增浏览器部署路径输入。
+
+## 输入、输出和不变量
+
+正常backend.app启动接受明确成对的WALLE_CODE_DEPLOYMENT_MANIFEST与WALLE_CODE_DEPLOYMENT_SHA256。两项均无时沿原未部署启动，不能自动发现／猜路径；缺一、空值、非绝对本机路径、摘要／结构／身份错误在创建应用／打开业务库前失败，错误不回显正文、环境或秘密。源文件用既有LockedFileSource打开并持有，启动配置全生命周期固定，不热换当前实例。
+
+初版部署协议DEPLOY20-BACKEND-1、schema_version=1：registration为现有RegistrationInstallation的非秘密本地配置；task为null或完整受管任务资源组。字段必须严格、有界，整数不混入布尔／浮点，未知字段拒绝，列表去别名／重复检查，不接受ready=true等客户端证据。backend_sid绑定实际非提升非AppContainer的当前用户来源，Guard服务／程序／原controller验证继续既有调用链，不以配置声明替代。
+
+registration仅组装固定Guard引用／程序摘要、本机已存在私有根、登记读取限制。task须精确绑定固定OpenCode二进制／版本、离线runtime清单引用、原执行／网络计划、原配置摘要及具名agent；编译仍按业务profile／授权，不导入任意原生规则。实际资源／权限／模型准入保持原门槛，准备配置不自动执行任务、重启服务、安装SYSTEM／WFP或调用供应方。命令／检查／模型等后续部署组必须复用原严格类型和既有证明，不用任意JSON对象透传。
+
+Guard一侧仅接受本地受信配置，复用既有控制Host／持久journal／原runtime根／网络及部署证据，不另造调度或HTTP安装服务。源文件不含业务数据库或供应商秘密。具体Guard组装入口按完整原有根／程序／后台生命周期契约实施，不能以测试注入当正常启动。
+
+## 分批实现和完成条件
+
+1. 成对来源、严格registration解码、源文件持有及backend.app.__main__实际调用；无配置保持原行为，错误不触达应用／库。
+2. 完整task引用／实际资源校验与原TaskLaunchInstallation／OpenCodeBinarySource／OpenCodeRuntimeBundle组装，原生策略来自确定编译，不开放任意规则。
+3. 衔接Guard本地部署及原Host生命周期；不做实际系统安装，未知／关闭／恢复按原所有权处理。
+4. 已有模型、独立CHECK_DRIVER及检查资源部署按真实依赖推进；无法在本时段完成时列具体未实现入口，不记全产品已验收。
+
+每单元使用隔离配置／Schema200／NTFS或具名服务夹具做实际调用方验证，并区分静态、原生、浏览器及正式OS／供应方。源码严格原子保存，临时JSON等finally清理，仅Markdown保留验证结果；用户库、服务和其他任务改动保留。
+
+## 正常启动源码与Schema资源pin
+
+原Schema200发布清单包含backend/app/__main__.py的构造来源摘要。接入实际正常入口后，现行r44按既有规则正确拒绝源码漂移；本轮必须按既有原子发布器准备新的db20-r45，不修改校验器或降低旧pin。新旧业务SQL／物理Schema须逐字节一致，仅发布身份和入口来源摘要变化；不打开或迁移用户库，旧r44原字节保留。
+
+## task组的精确首批结构
+
+task非null固定为executor、runtime_bundle、execution、network、configuration_sha256、startup_timeout_ms、max_diagnostic_output_bytes、agent_ref。executor只提供archive／image／openapi绝对路径；binary_ref／版本从execution导出，runtime_bundle={manifest,root,reference}，全部交给既有固定类型及官方ZIP／SDK blob／离线闭包验证，不接受另一套自由字段。配置摘要是原运行时config/providers脱敏组的期望值，不是opencode.json文件摘要；实际启动仍按原driver读回比对。agent仅名字，初始安装对象使用deny-all，真实会话规则继续按本任务profile／grant编译。正常启动预核时限120秒，不执行源包。
+
+
+## 常驻Guard的实际连接发现
+
+原Host需要外部事先提供ObservedProcess，不能满足正常常驻服务的后端重连。新增路径只在原本机管道连接完成后，使用内核GetNamedPipeClientProcessId获取候选，立即持有ObservedProcess及原NamedPipePeerLease，原用户／非提升／非AppContainer／镜像／包／owner_epoch验证不变，再交原Server处理首帧。PID来自内核，不来自RPC或CLI猜测；PID本身不授予权限，原创建时间／程序／包和首帧epoch仍逐项核对。
+
+发现失败尚未读取任何帧时，仅关闭本次尚未准入的原连接；不能把该规则用于已处理或未知请求的旧会话。保留第一endpoint的创建所有权，当前连接原I/O未核清时不得强行复用；已注册控制方资源继续由原Server处理／回收，不因重连重新创建。
+
+
+## Guard服务停止的原资源收尾
+
+正常服务停止必须先封闭原控制方准入／nonce，按原所有权请求所有已知Job及TASK停止，核对原根退出与完整Job为空后才关闭原句柄。复用原registry／preparation及Task stop callbacks，不按新PID杀进程，不写业务SQLite，不伪造用户TERMINATE或CLEANUP成功。任何未知／无法释放仍返回原所有者及失败，SCM不能报告无错误停止；持久WFP／profile／业务目录等仍按原恢复／RELEASE，不以Guard进程结束删除正式资源。
+
+原Server.close保留“活动句柄未释放则拒绝”的保护；新增受控stop_owned入口专供本地服务生命周期，再由close释放。测试清理改用该实际入口，避免只有测试会清理而正式宿主无法正常退出。
+
+常驻宿主还须退役已经明确失效的原连接：仅原frames已poison且其所有pending I/O已核清时，关闭本次原I/O并断开自身端点，保留原Server／controller／操作日志和UNKNOWN事实；不是请求重试或未发送证明。只允许回收原连接自身的已关闭I/O retainer，若有任何业务／原生未知所有者则不继续接新连接，转原服务失败收尾。正常健康连接仍要求peer关闭，不擅自中断。
+
+
+## Guard与业务模块的实际依赖隔离
+
+新解释器检查发现既有纯算法经idempotency.canonical_input间接加载database，HTTP exact辅助还引入文档／Revision模块。将原JSON规范序列化的验证和实现原样提到shared/json_canonical.py，原幂等实现实际复用同一函数；基础设施的纯序列化调用方直接依赖该公共算法，不另建第二套字节规则。exact原样提到shared/strict_objects.py，HTTP投影和Guard／部署共同复用。Guard不导入业务DB或模型配置；其他业务调用关系按实际使用保留，不删除现有能力。
+
+序列化字节、safe integer／finite／Unicode边界及既有哈希应保持；因idempotency属于原Schema来源清单，必要时按原发布器准备新r46，业务SQL／对象清单须再次原字节一致，不降低来源校验或执行正常库维护。
+
+## SCM宿主生命周期补充（实施前）
+
+正常Guard入口为独立Windows OWN_PROCESS服务宿主；不提供普通用户控制台降级。显式CLI固定installation_ref、manifest绝对路径及SHA256，派生既有固定服务名；ServiceMain在同一所有者线程构造、服务和关闭原GuardDeploymentOwner，配置installation_ref必须与SCM注册名一致，资源完成前不报告RUNNING。STOP／SHUTDOWN处理器只设置取消事件，不在SCM控制线程操作原生资源；START／STOP_PENDING使用有界wait hint及递增checkpoint，INTERROGATE只重发当前状态，不触发业务。
+
+STOP与启动并发时从START_PENDING进入STOP_PENDING，构造结束也不再报告RUNNING。原Owner只关闭一次；未知关闭不得通过重试、抛弃owner或返回零退出掩盖。失败报告固定非秘密错误／非零service退出码，保留原owner及异常事实；若不能证实原生所有者释放，SCM dispatcher返回后入口仅终止自身Guard进程以触发其原Job的KILL_ON_JOB_CLOSE，而不宣称业务停止／持久资源释放已完成。不按PID终止其他进程、不清理用户库、WFP或正式目录。该失败退出由隔离注入检查证明分支，不实际结束当前工具或用户服务；SYSTEM注册／服务安装仍未授权及未验收。
+
+纯序列化抽取后内部幂等回调返回非Success对象使用TypeError表达内部类型契约错误；它仍回滚事务、不写成功回执、不成为产品HTTP契约变化。既有业务结果及JSON规范字节不变。其他模块原有Ruff lint告警与本轮新增规则分开记录，不为纯import调整扩大旧业务实现重构。
+
+## 停止时各原任务故障隔离
+
+核对共享原Task stop callback发现closing模式首个失败即退出，可能使其他已知任务尚未收到停止请求。服务收尾改为遍历所有未settled的原scope，每个仅调用一次原stop；记录所有失败后统一报告未知。共用deadline耗尽也仍交给原stop进行不等待的已知Job终止／只读观察，不提前跳过后续任务；不得因为预算耗尽报告成功。已settled的原scope不重复发送。故障、到期及成功均使用原scope／回调，不建立新PID或资源。
+
+## 独立检查部署组（V2，实施前）
+
+保留严格DEPLOY20-BACKEND-1／DEPLOY20-GUARD-1的schema1，不把新字段悄悄加入旧结构。schema2／DEPLOY20-BACKEND-2增加checks；DEPLOY20-GUARD-2增加checks及独立runtime根引用。checks使用原GuardProjectCheckDeployment／GuardBrowserDriverDeployment／RegisteredCheckRunner／RegisteredCasePack及后端原CodingProjectCheckAdmission／TestingCliAdmission／TestingBrowserAdmission，不创建第二套检查执行机制。列表有界、引用唯一、未知字段拒绝，SERVICE只属TESTING，浏览器必须关联两种明确原SERVICE，runner／command／fixture／case包摘要同源，不能传ready或任意权限。
+
+Guard的独立runtime={source_parent,runtime_base,runtime_root}使Testing CHECK_DRIVER不依赖Coding模型／OpenCode。V1 TASK中已有根仅投影成同一runtime类型；V2 TASK只含program／network并引用该根，不复制一组独立根。所有目录只open原身份和ACL，不创建／修复；CHECK_DRIVER及项目检查逐项执行原SYSTEM部署证据核对和原runner闭包，配置成立不制造证据。Guard未部署时继续拒绝执行。
+
+后端checks仅组装同源业务准入引用和数据CasePack；不读取Guard的SYSTEM私有部署证据或把路径写入浏览器。读取CasePack须按原完整固定manifest／范围／命令及端点校验；Guard所属runner与OS证据在Guard一侧验证。检查部署不自动提升delivery_runtime_admitted，也不触发任何命令、浏览器、模型或供应方。
+
+## Coding模型本地输入（V2可选明确字段，实施前）
+
+尚未发布的DEPLOY20-BACKEND-2 schema2声明可选models字段（省略／null均无模型，不读取模型环境）；其余未知字段仍拒绝。models={admissions:[...]}只承载原CodingModelAdmission所需的已审查引用、price_sha256、固定Profile引用／快照摘要、完整输入／上下文／输出上界、UsageContract及明确可选协议字段；不接受供应方URL、API key、任意秘密来源、价格文本或ready。固定累积语义PER_DIMENSION_NONDECREASING、Coding流式终值来源，复用原构造器及原请求契约，不创建另一套准入账。
+
+密钥仅由原ModelProfile.from_environment的既有WALLE_MODEL_API_KEY来源取得；已选固定Profile必须与部署引用及快照摘要相同，不切换／升级Profile。模型组依赖原TASK及Coding固定agent，独立Testing仍无Coding模型依赖。部署仅构造原CodingModelDeployment；实际每次发送仍须原目录ready、实际账户／价格行摘要、授权／窗口／来源／预算逐项核实，不因本地声明而发布模型、伪造上界／Usage证据或触发调用。正式模型数值／渠道与计费证据仍未取得，保留未就绪。
+
+本轮检查只用显式假环境、假模型凭据、隔离价格／协议夹具；不读取正常.env、不发真实API或计数。正常main组合使用具名官方ZIP／SDK测试来源端口，不能写作正式执行器或模型兼容通过。
+
+model_snapshot_sha256取原ModelProfile.snapshot经实际shared.canonical_input规范JSON、UTF-8编码、不加换行后的SHA256；它绑定原Profile快照，不能混用私有journal文件的带LF记录摘要。原snapshot参数不改，实际Coding流式请求仍由原CodingRequestContract按用途编译。元数据与schema1／schema2来源的字节区别在准备／校验工具中明确，不能用碰巧相同的展示文本代替摘要。
+
+## 常驻与未知清理复核
+
+已确认原后端进程EXITED时，Host将原帧标记poisoned并进入FAILED，再按既有原I/O退役流程回到同一首端点等待，不让正常后端退出导致Guard常驻服务退出。仅当前连接退役，原controller停止／日志由原watch及Server保留；进程观察未知不冒充EXITED。
+
+GuardDeploymentOwner收到构造器retained_owner时不得立即再次close该未知子owner；保留完整源／原子组及子owner，由服务报告失败并退出自身。Owner自身的失败close锁存，后续close拒绝重试未知原生释放；成功close仍幂等。不能为回收read-only外层源而盲目重试可能已执行的句柄关闭。测试只用明确无原生资源的故障端口，在断言拒绝后显式撤销该测试端口以清理本轮已知外层源。
+
+## 只读部署检查入口（实施前）
+
+新增操作者显式指定kind／manifest／sha256的inspect-code-deployment.py，复用实际正常解码器，不另维护Schema。backend模式运行原来源预核但不create_app／打开业务库／连接Guard／发模型；guard模式只固定并解码配置源，明确不核实SYSTEM／OS证据且不构造GuardDeploymentOwner，不打开journal／首管道。失败只输出固定代码，不打印源正文／环境／路径／密钥。检查成功与部署／就绪分开，操作者必须仍按原安装及准入流程取得证据。

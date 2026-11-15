@@ -35,6 +35,7 @@ function condition(query: WorkbenchQuery): string {
 export function WorkbenchView({
   workbench,
   creation,
+  choosingCodeDocument = false,
   restoreScroll = null,
   openRequirement,
   saveEntry,
@@ -42,6 +43,7 @@ export function WorkbenchView({
   navigationGuard,
 }: Readonly<{
   workbench: RequirementWorkbench;
+  choosingCodeDocument?: boolean;
   creation: CreateRequirementFlow;
   restoreScroll?: number | null;
   openRequirement(id: number): void;
@@ -169,6 +171,11 @@ export function WorkbenchView({
           <h1>需求工作台</h1>
         </header>
       </PageHeader>
+      {choosingCodeDocument && (
+        <p className="list-notice" role="status">
+          选择需求和文档以进入代码任务
+        </p>
+      )}
       <div className="workbench-controls">
         <div>
           <SearchInput

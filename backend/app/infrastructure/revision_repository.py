@@ -11,7 +11,7 @@ class RevisionRepository:
         self.connection = connection
 
     def insert_content(self, identity, document, source_refs, change_summary, at):
-        from .idempotency import canonical_input
+        from backend.app.shared.json_canonical import canonical_input
         from .schema_transport import compact
 
         require_write_transaction(self.connection)

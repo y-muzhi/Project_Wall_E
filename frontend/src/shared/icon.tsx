@@ -16,6 +16,7 @@ const shapes = {
       <path d="M2.5 6h11M6 6v7.5" />
     </>
   ),
+  code: <path d="m5 4-4 4 4 4m6-8 4 4-4 4m-2-9-2 10" />,
   outline: (
     <>
       <path d="M6 4h7M6 8h7M6 12h7" />

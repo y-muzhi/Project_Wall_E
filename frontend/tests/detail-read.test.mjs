@@ -81,3 +81,12 @@ test('updating another document cannot cause a read of A, but mutable metadata a
  p.input.root=root({document_work_state:'MANUAL_EDITING',active_operation_type:'MANUAL_DRAFT',active_operation_id:3,state_started_at:at});p.calls.length=0;
  assert(await reader.observe());assert(p.calls.some(row=>row.method==='getCurrentDocument'));assert(p.calls.some(row=>row.method==='getManualDraft'));reader.dispose();
 });
+
+test('an explicit original document never falls back to a different current document', async () => {
+ const p = port();
+ const reader = new RequirementDetailRead(1, p.api, undefined, 99);
+ assert.equal(await reader.refresh(), false);
+ assert.equal(reader.getSnapshot().confirmed, null);
+ assert.equal(p.calls.some((call) => call.method === 'getCurrentDocument'), false);
+ reader.dispose();
+});

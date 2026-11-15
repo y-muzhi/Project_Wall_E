@@ -172,3 +172,178 @@ test('direct workbench return still waits for a draft save and preserves the pag
  departure.dispose();
  router.dispose();
 });
+
+test('settings navigation uses the active detail departure and never guesses a document', async()=>{
+ const port=browser(),router=new ApplicationRouter(api,port,port.storage,port.identify);
+ router.openRequirement(4);
+ let complete;
+ const departure=new DetailDeparture({prepareLeave:()=>new Promise(resolve=>{complete=resolve;}),continueAfterFailedLeave:()=>true});
+ router.attachDeparture(departure);
+ router.openCodeSettings();
+ await port.idle();
+ assert.equal(router.getSnapshot().route.kind,'DETAIL');
+ complete({saved:true,local_protected:true});
+ await port.idle();
+ assert.equal(port.pathname(),'/settings/code');
+ assert.equal(router.getSnapshot().route.kind,'CODE_SETTINGS');
+ assert.equal(router.getSnapshot().workbench,null);
+ router.dispose();
+});
+
+
+test('code task entry awaits document departure and restores the original list and reading', async () => {
+ const port = browser('/requirements/1');
+ const router = new ApplicationRouter(api, port, port.storage, port.identify);
+ let mayLeave = false;
+ const departure = new DetailDeparture({
+  prepareLeave: async () => ({saved: mayLeave, local_protected: true}),
+  continueAfterFailedLeave: () => true,
+ });
+ router.attachDeparture(departure);
+ const reading = {documentId: 41, revisionId: 24, scroll: 117};
+ router.openCodeTaskList(2, reading);
+ assert.equal(departure.getSnapshot().phase, 'IDLE');
+ router.openCodeTaskList(1, reading);
+ await port.idle();
+ assert.equal(departure.getSnapshot().phase, 'WARNING');
+ assert.equal(port.pathname(), '/requirements/1');
+ assert.equal(departure.continueEditing(), true);
+ mayLeave = true;
+ router.openCodeTaskList(1, reading);
+ await port.idle();
+ assert.equal(port.pathname(), '/requirements/1/documents/41/code-tasks');
+ const query = {page: 2, statuses: ['PENDING'], revisionId: 24};
+ router.saveCodeTaskList(query, 10);
+ port.setScroll(160);
+ router.openCodeTask(31, 1, 99);
+ assert.equal(router.getSnapshot().route.kind, 'CODE_TASK_LIST');
+ router.openCodeTask(31, 1, 41);
+ assert.equal(port.pathname(), '/code-tasks/31');
+ router.returnToTaskList(1, 41);
+ await port.idle();
+ assert.deepEqual(router.getSnapshot().taskList.query, query);
+ assert.equal(router.getSnapshot().taskList.scroll, 160);
+ router.returnToCodeDocument(1, 41);
+ await port.idle();
+ assert.deepEqual(router.getSnapshot().documentReading, reading);
+ assert.equal(port.pathname(), '/requirements/1');
+ router.dispose();
+});
+
+test('code task route rejects noncanonical IDs and reload reconstructs the original document route', () => {
+ const invalid = browser('/requirements/1/documents/041/code-tasks');
+ const badRouter = new ApplicationRouter(api, invalid, invalid.storage, invalid.identify);
+ assert.equal(badRouter.getSnapshot().route.kind, 'CODE_PARAMETERS');
+ badRouter.dispose();
+ const port = browser('/requirements/1');
+ const initial = new ApplicationRouter(api, port, port.storage, port.identify);
+ initial.openCodeTaskList(1, {documentId: 41, revisionId: 24, scroll: 0});
+ initial.dispose();
+ port.history.go = () => { throw Error('Reloaded source cannot prove previous browser page'); };
+ const reload = new ApplicationRouter(api, port, port.storage, port.identify);
+ reload.returnToCodeDocument(1, 41);
+ assert.equal(port.pathname(), '/requirements/1');
+ assert.deepEqual(reload.getSnapshot().documentReading, {documentId: 41, revisionId: 24, scroll: 0});
+ reload.dispose();
+});
+
+test('global Coding opens an explicit document chooser and preserves its own history', async () => {
+  const port = browser();
+  const router = new ApplicationRouter(api, port, port.storage, port.identify);
+  router.openCodeDevelopment();
+  assert.equal(port.pathname(), '/requirements');
+  assert.equal(port.history.state.nav_intent, 'CHOOSE_CODE_DOCUMENT');
+  assert.equal(router.getSnapshot().navIntent, 'CHOOSE_CODE_DOCUMENT');
+
+  const query = {...defaultWorkbenchQuery, keyword: '当前筛选'};
+  await router.getSnapshot().workbench.query(query);
+  port.setScroll(70);
+  router.saveEntry(query, 70);
+  router.openRequirement(7);
+  assert.equal(router.getSnapshot().navIntent, 'CHOOSE_CODE_DOCUMENT');
+  router.openCodeTaskList(7, {documentId: 11, revisionId: null, scroll: 0}, {
+    documentId: 8,
+    revisionId: 23,
+    scroll: 52,
+  });
+  assert.equal(port.pathname(), '/requirements/7/documents/11/code-tasks');
+  assert.equal(router.getSnapshot().navIntent, null);
+
+  port.history.go(-1);
+  await port.idle();
+  assert.equal(router.getSnapshot().navIntent, 'CHOOSE_CODE_DOCUMENT');
+  assert.deepEqual(router.getSnapshot().documentReading, {
+    documentId: 8, revisionId: 23, scroll: 52,
+  });
+  port.history.go(-1);
+  await port.idle();
+  assert.equal(router.getSnapshot().entry.query.keyword, '当前筛选');
+  assert.equal(router.getSnapshot().restoreScroll, 70);
+  router.dispose();
+
+  const restored = new ApplicationRouter(api, port, port.storage, port.identify);
+  assert.equal(restored.getSnapshot().navIntent, 'CHOOSE_CODE_DOCUMENT');
+  restored.mainNavigation();
+  assert.equal(restored.getSnapshot().navIntent, null);
+  restored.dispose();
+});
+
+test('Coding workspace owns its file and page history without remounting the original task', async () => {
+ const port = browser('/requirements/1');
+ const rawPath = port.pathname;
+ port.pathname = () => rawPath().split('?')[0];
+ port.search = () => {
+  const query = rawPath().indexOf('?');
+  return query === -1 ? '' : rawPath().slice(query);
+ };
+ const router = new ApplicationRouter(api, port, port.storage, port.identify);
+ router.openCodeTaskList(1, {documentId: 41, revisionId: 24, scroll: 0});
+ port.setScroll(160);
+ router.openCodeTask(31, 1, 41);
+ const original = router.getSnapshot();
+ const file = {tab: 'code', candidateId: 201, filePath: 'src/原文件.txt', page: 3};
+ port.setScroll(370);
+ router.openCodeTaskWorkspace(file);
+ assert.deepEqual(router.getSnapshot().taskWorkspace, file);
+ assert.equal(router.getSnapshot().epoch, original.epoch);
+ const count = port.entries.length;
+ router.openCodeTaskWorkspace(file);
+ assert.equal(port.entries.length, count);
+ port.setScroll(480);
+ router.openCodeTaskWorkspace({tab: 'usage', page: 2});
+ port.history.go(-1);
+ await port.idle();
+ assert.deepEqual(router.getSnapshot().taskWorkspace, file);
+ assert.equal(router.getSnapshot().restoreScroll, 480);
+ assert.equal(router.getSnapshot().epoch, original.epoch);
+ port.history.go(1);
+ await port.idle();
+ assert.deepEqual(router.getSnapshot().taskWorkspace, {tab: 'usage', page: 2});
+ router.returnToTaskList(1, 41);
+ await port.idle();
+ assert.equal(port.pathname(), '/requirements/1/documents/41/code-tasks');
+ assert.equal(router.getSnapshot().taskList.scroll, 160);
+ router.dispose();
+});
+
+test('Coding pins a path-only route to its original verified owner without adding history', () => {
+ const port = browser('/code-tasks/31?tab=delivery&path=a.txt');
+ const rawPath = port.pathname;
+ port.pathname = () => rawPath().split('?')[0];
+ port.search = () => {
+  const query = rawPath().indexOf('?');
+  return query === -1 ? '' : rawPath().slice(query);
+ };
+ const router = new ApplicationRouter(api, port, port.storage, port.identify);
+ const original = router.getSnapshot().taskWorkspace;
+ router.pinCodeTaskFileScope({...original}, 41);
+ assert.equal(router.getSnapshot().taskWorkspace, original);
+ router.pinCodeTaskFileScope(original, 41);
+ const pinned = router.getSnapshot().taskWorkspace;
+ assert.deepEqual(pinned, {tab: 'delivery', filePath: 'a.txt', planId: 41});
+ assert.equal(port.entries.length, 1);
+ router.pinCodeTaskFileScope(original, 42);
+ assert.equal(router.getSnapshot().taskWorkspace, pinned);
+ assert.equal(new URLSearchParams(port.search()).get('plan_id'), '41');
+ router.dispose();
+});

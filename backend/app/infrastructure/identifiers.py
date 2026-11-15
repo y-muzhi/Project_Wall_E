@@ -1,7 +1,7 @@
 """D-003 allocations inside the caller's shared SQLite write transaction."""
 
-from enum import StrEnum
 import sqlite3
+from enum import StrEnum
 
 from backend.app.shared.validation import MAX_SAFE_INTEGER
 
@@ -20,10 +20,53 @@ class EntityKind(StrEnum):
     MESSAGE = 'ConversationMessage'
     GUIDE_RUN = 'GuideRun'
     LLM_USE = 'LLMUse'
+    MODEL_USAGE_EVIDENCE = 'ModelUsageEvidence'
     BATCH = 'SuggestionBatch'
     SUGGESTION = 'Suggestion'
     COMMENT = 'Comment'
     DOCUMENT_AUDIT = 'DocumentChangeAudit'
+    EXECUTION_PROFILE = 'ExecutionProfile'
+    CHECK_SET = 'CheckSet'
+    CHECK_SET_VERSION = 'CheckSetVersion'
+    EXECUTION_PROFILE_VERSION = 'ExecutionProfileVersion'
+    AUTHORIZATION_GRANT = 'AuthorizationGrant'
+    TASK_CONFIGURATION_APPLICATION = 'TaskConfigurationApplication'
+    REPOSITORY_OBSERVATION = 'RepositoryObservation'
+    REPOSITORY = 'CodeRepository'
+    CODE_SNAPSHOT = 'CodeSnapshot'
+    CODE_CANDIDATE = 'CodeCandidate'
+    CODE_DEFECT = 'CodeDefect'
+    CODE_REPAIR = 'CodeRepair'
+    DELIVERY_PLAN = 'DeliveryPlan'
+    ACCEPTANCE = 'Acceptance'
+    DELIVERY = 'Delivery'
+    DELIVERY_WINDOW = 'DeliveryWindow'
+    COMMAND_EXECUTION = 'CommandExecution'
+    EXECUTION_RECORD = 'ExecutionRecord'
+    VERIFICATION = 'Verification'
+    VERIFICATION_ITEM = 'VerificationItem'
+    ENVIRONMENT_RECORD = 'EnvironmentRecord'
+    CODE_TASK = 'CodeTask'
+    CODE_WORKSPACE = 'CodeWorkspace'
+    MANAGED_INSTANCE = 'ManagedInstance'
+    EXECUTION_SESSION = 'ExecutionSession'
+    CODE_TASK_RESERVATION = 'CodeTaskReservation'
+    WAITING_ITEM = 'WaitingItem'
+    NATIVE_QUESTION = 'NativeQuestion'
+    NATIVE_PERMISSION = 'NativePermission'
+    QUESTION_HANDOFF = 'QuestionHandoff'
+    QUESTION_HANDOFF_EVENT = 'QuestionHandoffEvent'
+    RUNTIME_OBSERVATION = 'RuntimeBoundaryObservation'
+    OPERATION_RECORD = 'OperationRecord'
+    TESTING_TASK = 'TestingTask'
+    TEST_PACK_VALIDATION = 'TestPackValidation'
+    TESTING_PROFILE_VERSION = 'TestingProfileVersion'
+    TESTING_AUTHORIZATION = 'TestingAuthorization'
+    TEST_PLAN = 'TestPlan'
+    TEST_PLAN_VERSION = 'TestPlanVersion'
+    TEST_PACK_VERSION = 'TestPackVersion'
+    TEST_REPORT = 'TestReport'
+    TESTING_FINDING = 'TestingFinding'
 
 
 def require_write_transaction(connection: sqlite3.Connection) -> None:
@@ -61,7 +104,7 @@ def _allocate(connection: sqlite3.Connection, kind: str, maximum: int) -> int:
 
 def entity_id(connection: sqlite3.Connection, kind: EntityKind) -> int:
     if not isinstance(kind, EntityKind):
-        raise ValueError('Entity identity must name a registered kind')
+        raise TypeError('Entity identity must name a registered kind')
     return _allocate(connection, kind.value, MAX_SAFE_INTEGER)
 
 

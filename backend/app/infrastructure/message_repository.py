@@ -3,7 +3,7 @@
 import sqlite3
 import json
 from .identifiers import message_sequence, require_write_transaction
-from .idempotency import canonical_input
+from backend.app.shared.json_canonical import canonical_input
 
 
 class MessageRepository:

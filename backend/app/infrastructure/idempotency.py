@@ -4,18 +4,23 @@ Only parsed/defaulted business input is accepted here. Endpoint adapters own
 normalization and success projection. No Provider call belongs in execute().
 """
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
-import math
 import re
 import sqlite3
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .command_receipts import Rejection
 from uuid import UUID
 
+from backend.app.shared.json_canonical import canonical_input
 from backend.app.shared.time import utc_milliseconds
-from backend.app.shared.validation import reject, MAX_SAFE_INTEGER
-from .database import Database, CommitOutcomeUnknown
+from backend.app.shared.validation import MAX_SAFE_INTEGER, reject
+
+from .database import CommitOutcomeUnknown, Database
 from .identifiers import require_write_transaction
 from .process_lock import ProcessLock
 
@@ -29,39 +34,6 @@ def request_key(value: object, field: str = 'Idempotency-Key') -> str:
     if parsed.version != 4:
         reject(field, 'INVALID_FORMAT', '必须为UUID v4')
     return str(parsed)
-
-
-def _json_value(value: object) -> None:
-    if value is None or type(value) is bool:
-        return
-    if type(value) is str:
-        value.encode('utf-8', errors='strict')
-        return
-    if type(value) is int:
-        if abs(value) > MAX_SAFE_INTEGER:
-            raise ValueError('JSON integer exceeds the shared exact range')
-        return
-    if type(value) is float and math.isfinite(value):
-        return
-    if type(value) is list:
-        for item in value:
-            _json_value(item)
-        return
-    if type(value) is dict and all(type(key) is str for key in value):
-        for key, item in value.items():
-            _json_value(key)
-            _json_value(item)
-        return
-    raise ValueError('Only complete finite JSON values are accepted')
-
-
-def canonical_input(value: dict) -> str:
-    if type(value) is not dict:
-        raise ValueError('Parsed business input must be an object')
-    _json_value(value)
-    return json.dumps(
-        value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(',', ':')
-    )
 
 
 class IdempotencyConflict(RuntimeError):
@@ -90,7 +62,13 @@ class Scope:
             raise ValueError('A complete registered command capability ID is required')
         if type(self.target_identity) is not str or not self.target_identity:
             raise ValueError('Complete target identity is required')
-        object.__setattr__(self, 'key', request_key(self.key))
+        normalized = request_key(self.key)
+        if (
+            self.capability_id.startswith(('APP-CODE-CMD-', 'APP-TEST-CMD-'))
+            and self.key != normalized
+        ):
+            raise ValueError('V2 command keys must be lowercase UUID v4')
+        object.__setattr__(self, 'key', normalized)
 
     @property
     def identity(self) -> tuple[str, str, str]:
@@ -146,7 +124,7 @@ class Idempotency:
         database: Database,
         process_lock: ProcessLock,
         *,
-        clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
         process_lock.assert_owned()
         if process_lock.path != ProcessLock.for_database(database.path).path:
@@ -166,6 +144,8 @@ class Idempotency:
 
     def claim(self, scope: Scope, business_input: dict) -> Claim | Replay:
         self._owned()
+        if scope.capability_id.startswith(('APP-CODE-CMD-', 'APP-TEST-CMD-')):
+            raise ValueError('V2 claims must be committed atomically with real acceptance')
         input_json = canonical_input(business_input)
         with self.database.transaction(write=True) as connection:
             row = connection.execute(
@@ -223,6 +203,8 @@ class Idempotency:
     def abandon(self, claim: Claim) -> None:
         """Only after a known rejection/rollback, never after an unknown commit."""
         self._owned()
+        if claim.scope.capability_id.startswith(('APP-CODE-CMD-', 'APP-TEST-CMD-')):
+            raise ValueError('V2 unknown claims must never be abandoned or expired')
         if claim.owner_epoch != self.owner_epoch:
             raise ClaimLost('Cannot abandon a different process claim')
         with self.database.transaction(write=True) as connection:
@@ -236,17 +218,32 @@ class Idempotency:
         self._owned()
         with self.database.transaction(write=True) as connection:
             cursor = connection.execute(
-                "DELETE FROM idempotency_records WHERE status='PROCESSING' AND owner_epoch<>?",
+                "DELETE FROM idempotency_records WHERE status='PROCESSING' AND owner_epoch<>? AND capability_id NOT LIKE 'APP-CODE-CMD-%' AND capability_id NOT LIKE 'APP-TEST-CMD-%'",
                 (self.owner_epoch,),
             )
             return cursor.rowcount
+
+    def close_command(self, scope: Scope) -> dict:
+        from .command_receipts import close_command
+
+        return close_command(self, scope)
+
+    def command_receipt(self, scope: Scope) -> dict:
+        from .command_receipts import lookup_receipt
+
+        self._owned()
+        return lookup_receipt(self.database, scope)
 
     def execute(
         self,
         scope: Scope,
         business_input: dict,
-        operation: Callable[[sqlite3.Connection], Success | CommentAnchorRejected],
-    ) -> Success | CommentAnchorRejected:
+        operation: Callable[[sqlite3.Connection], 'Success | CommentAnchorRejected | Rejection'],
+    ) -> 'Success | CommentAnchorRejected | Rejection':
+        if scope.capability_id.startswith(('APP-CODE-CMD-', 'APP-TEST-CMD-')):
+            from .command_receipts import execute_registered
+
+            return execute_registered(self, scope, business_input, operation)
         claimed = self.claim(scope, business_input)
         if isinstance(claimed, Replay):
             return claimed.success
@@ -280,12 +277,12 @@ class Idempotency:
                         raise ClaimLost(
                             'Correction must release its own processing claim atomically'
                         )
-                elif not isinstance(success, Success):
-                    raise ValueError(
+                elif isinstance(success, Success):
+                    self.succeed(connection, claimed, success)
+                else:
+                    raise TypeError(
                         'Operation must explicitly produce a successful application result'
                     )
-                else:
-                    self.succeed(connection, claimed, success)
         except CommitOutcomeUnknown:
             # A future call first observes SUCCEEDED/PROCESSING. Never run twice
             # merely because a commit acknowledgment was lost.

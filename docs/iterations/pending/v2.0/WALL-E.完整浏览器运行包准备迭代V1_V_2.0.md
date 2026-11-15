@@ -1,0 +1,21 @@
+# 完整浏览器运行包准备迭代V1（V2.0）
+
+2026-11-13香港22:52启动本轮一小时接续。依据BE0.17-draft-17第7.6及现有check_driver_browser.py，不重建浏览器业务，不合并正式设计。
+
+目标：专用CPython／Playwright及固定Chromium完整闭包、原应用执行器／bootstrap、原CHECK20严格manifest，明确来源及全量SHA，无覆盖原子发布本地准备包。复用原RegisteredBrowserDriver及精确LPAC策略；不借用户Chrome／profile，不关闭chromium_sandbox。先从官方固定版本元数据及可核对文件来源取得依赖，不使用latest或个人Codex工具作产品依赖。
+
+检查分层：来源／闭包／输入负例、实际解释器import及浏览器普通隔离进程、原LPAC／Job和结果管道。正式Guard／SYSTEM／WFP证据、候选前后端全链及供应方独立；资源准备不设置ready或伪造admission。网络下载是明确本地工具动作，无模型／计数调用、用户数据库／Git目标写入、用户服务启停或系统安装。输出采用正式资源目录，不保留临时报告／日志／截图。
+
+源码原子CAS保存；下载及解压只在独占临时目录、固定限额／路径／SHA校验，失败或取消清理本轮临时文件，已有资源不覆盖。准备产物无OS保护及正式准入时必须明确标记。必要依赖尚未取得不得建立假包或假证据。
+
+23:04真实原生场景在原90秒PREPARE时间窗内未完成，未到浏览器启动；实际包1532成员／546217752字节，其中504应用Python源。采用完整application.zip保存全部源原字节，原._pth读取zip，不裁剪业务依赖、不缓存已通过结论或放宽超时；重新构建及真实导入后复查原生准备阶段。正式来源摘要和原包SHA继续区分。
+
+23:09普通Job真实浏览器联通检查扩展：沿本轮独占新库与冻结后台EXE，逐GET核对原监听PID，将固定浏览器测试目标映射到该明确服务；仅导航需求→Testing→计划，零正文输入／写操作／模型调用。与两个正式SERVICE、SYSTEM／WFP和原生LPAC全链分开报告。
+
+23:18真实前端检查确认程序差异：原.synthetic .walle-check.invalid普通HTTP地址不具安全上下文，WALL-E控制台明确crypto.randomUUID is not a function。修复驱动内部受控origin映射为不同oN.localhost别名，保持HTTP／全量route拦截／原alias映射及WFP默认拒绝，不加浏览器安全豁免／标志，不改候选前端。新别名不会让driver获得实际localhost网络权限，原controller仍只转发固定目标；拒绝外部origin／cookie／WebSocket规则保持。重新打包driver并以原真实页面复查。
+
+23:20计时已定位：原生包全量扫描11.7秒，复制1000文件到38.4秒，之后完整来源与runtime扫描到66.7秒，再一次runtime扫描到91.3秒超过原窗口。原LockedFileSource构造已完成完整读取、前后身份／长度与拒写租约，__enter__又做一次同租约全读取。按前轮Git同类已验证规则，扫描器改为构造后直接在同一租约取snapshot并finally关闭；custody仍持有至原边界，后续完整复扫／consume_verified保留。驱动复制同理仅消除重复__enter__读取，不取消原完整源比对、实际复制hash、目录／ADS／全量前后复核。无通过缓存、mtime捷径、超时放宽或OS准入跳过。运行原字节篡改／并发写拒绝及原生回归。
+
+23:23单次扫描读取优化回归76项通过，但原生仍在最终launch_input哈希时被逐块全量journal检查拖过90秒。复用BrowserDriverProgram既有100ms持久开态检查规则，只在无副作用的浏览器运行包检查／启动输入散列阶段采用；每回调立即检查取消和deadline，实际文件／目录／全字节校验仍完整。准备提交仍在原journal gate内使用未节流checkpoint强核，不节流CREATE／RESUME／STOP或权限判定。新增专项覆盖即时取消、截止和持久状态变化，原生及原夹具回归后决定是否保留。
+
+23:29准备阶段已在原90秒内通过（80.36秒），CREATE_SUSPENDED在自身启动输入全扫阶段89.65秒超时，尚未执行CreateProcess。把同一有界检查仅扩展到创建之前的纯读散列／hold快照，CreateProcess、原journal dispatch、LPAC访问及回执仍用原即时checkpoint；不节流副作用。进一步静态核对发现完整驱动读租约每文件保留各级NTFS句柄，原通用4096预算无法容纳千成员完整浏览器。仅浏览器启动读取使用显式32768句柄上限，其余任务／候选保留4096，扫描仍逐项精确计数及失败收尾，不取消句柄持有或改权限；以实际原生验证决定结果。

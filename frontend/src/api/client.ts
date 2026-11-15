@@ -5,6 +5,16 @@ export type PagePagination = { page: number; page_size: 20; total: number; total
 export type CursorPagination = { page_size: 20; next_cursor: number | null; has_more: boolean };
 export type ApiMeta = { request_id: string; pagination?: PagePagination | CursorPagination };
 export type ApiSuccess<T> = { data: T; meta: ApiMeta; status: number };
+export type ApiErrorPolicy = Readonly<{
+  decode: (code: string, message: string, details: unknown, status: number) => JsonObject | null;
+  mutationUnknown: (code: string, status: number) => boolean;
+}>;
+function frozenErrorPolicy(policy: ApiErrorPolicy | undefined): ApiErrorPolicy | undefined {
+  if (policy === undefined) return undefined;
+  if (typeof policy.decode !== 'function' || typeof policy.mutationUnknown !== 'function')
+    throw new TypeError('Invalid native error policy');
+  return Object.freeze({ decode: policy.decode, mutationUnknown: policy.mutationUnknown });
+}
 type Decoder<T> = (value: unknown) => T;
 type CommandMethod = 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 /** Per HTTP exchange, including the response body; not an AI execution limit. */
@@ -146,6 +156,14 @@ function snapshot(value: unknown, seen = new Set<unknown>()): Json {
   return result;
 }
 /** Capture once before a business binding closes over response expectations. */
+export function stableJson(value: unknown): string | undefined {
+  return JSON.stringify(value, (_key, item: unknown) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return item;
+    const entries = Object.entries(item);
+    entries.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return Object.fromEntries(entries);
+  });
+}
 export function snapshotObject(value: unknown): JsonObject {
   object(value);
   const copied = snapshot(value) as JsonObject;
@@ -270,12 +288,25 @@ function meta(value: unknown): ApiMeta {
 
 /** Opaque command handle. Snapshot/string/key remain private and never mutate. */
 export type PreparedCommand = Readonly<{ kind: 'WALLE_COMMAND' }>;
+/** Serializable bytes only; native decoders/policies never come from storage. */
+export type FrozenRequest = Readonly<{
+  method: CommandMethod;
+  path: string;
+  body: string | null;
+  key: string | null;
+}>;
+export type CommandOptions = Readonly<{
+  idempotent: boolean;
+  error_policy?: ApiErrorPolicy;
+  success_status: 200 | 201 | 202 | readonly (200 | 201 | 202)[];
+}>;
 type FrozenCommand = {
   method: CommandMethod;
   path: string;
   body: string | null;
   key: string | null;
   success_status: readonly number[];
+  error_policy: ApiErrorPolicy | undefined;
 };
 
 export class ApiClient {
@@ -294,10 +325,56 @@ export class ApiClient {
     method: CommandMethod,
     target: string,
     body: JsonObject | null,
-    options: {
-      idempotent: boolean;
-      success_status: 200 | 201 | 202 | readonly (200 | 201 | 202)[];
-    },
+    options: CommandOptions,
+  ): PreparedCommand {
+    if (body !== null) object(body);
+    const frozenBody = body === null ? null : JSON.stringify(snapshot(body));
+    return this.remember(
+      method,
+      target,
+      frozenBody,
+      options.idempotent ? this.uuid() : null,
+      options,
+    );
+  }
+
+  exportPrepared(action: PreparedCommand): FrozenRequest {
+    const command = this.commands.get(action);
+    if (command === undefined) throw new TypeError('Command must belong to this client');
+    return Object.freeze({
+      method: command.method,
+      path: command.path,
+      body: command.body,
+      key: command.key,
+    });
+  }
+
+  /** Native caller must additionally verify origin, registration and input DTO.
+   * Restored bodies must be exactly bytes our own prepare could have emitted.
+   */
+  restorePrepared(value: FrozenRequest, options: CommandOptions): PreparedCommand {
+    const row = exact(value, ['method', 'path', 'body', 'key']);
+    if (
+      typeof row.method !== 'string' ||
+      typeof row.path !== 'string' ||
+      (row.key !== null && typeof row.key !== 'string') ||
+      (row.body !== null && typeof row.body !== 'string')
+    )
+      throw new TypeError('Invalid frozen request');
+    if (row.body !== null) {
+      const parsed: unknown = JSON.parse(row.body);
+      if (JSON.stringify(snapshotObject(parsed)) !== row.body)
+        throw new TypeError('Frozen body differs from original serialization');
+    }
+    return this.remember(row.method as CommandMethod, row.path, row.body, row.key, options);
+  }
+
+  private remember(
+    method: CommandMethod,
+    target: string,
+    body: string | null,
+    key: string | null,
+    options: CommandOptions,
   ): PreparedCommand {
     if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(method))
       throw new TypeError('Invalid command method');
@@ -308,22 +385,21 @@ export class ApiClient {
         : [...options.success_status];
     if (
       typeof options.idempotent !== 'boolean' ||
+      options.idempotent !== (key !== null) ||
       statuses.length === 0 ||
       new Set(statuses).size !== statuses.length ||
       statuses.some((status) => ![200, 201, 202].includes(status))
     )
       throw new TypeError('Invalid command policy');
-    if (body !== null) object(body);
-    const frozenBody = body === null ? null : JSON.stringify(snapshot(body));
-    const key = options.idempotent ? this.uuid() : null;
     if (key !== null && !UUID.test(key)) throw new TypeError('Invalid action key');
     const action = Object.freeze({ kind: 'WALLE_COMMAND' as const });
     this.commands.set(action, {
       method,
       path: location,
-      body: frozenBody,
+      body,
       key,
       success_status: Object.freeze(statuses),
+      error_policy: frozenErrorPolicy(options.error_policy),
     });
     return action;
   }
@@ -343,6 +419,7 @@ export class ApiClient {
       command.success_status,
       decode,
       signal,
+      command.error_policy,
     );
   }
   async read<T>(
@@ -350,6 +427,7 @@ export class ApiClient {
     decode: Decoder<T>,
     query: readonly (readonly [string, string])[] = [],
     signal?: AbortSignal,
+    errorPolicy?: ApiErrorPolicy,
   ): Promise<ApiSuccess<T>> {
     const parameters = new URLSearchParams();
     for (const [key, value] of query) parameters.append(key, value);
@@ -362,6 +440,7 @@ export class ApiClient {
       [200],
       decode,
       signal,
+      errorPolicy,
     );
   }
   private async request<T>(
@@ -372,8 +451,10 @@ export class ApiClient {
     successStatus: readonly number[],
     decode: Decoder<T>,
     signal?: AbortSignal,
+    errorPolicy?: ApiErrorPolicy,
   ): Promise<ApiSuccess<T>> {
     const mutation = method !== 'GET';
+    errorPolicy = frozenErrorPolicy(errorPolicy);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stop: (() => void) | undefined;
@@ -446,11 +527,21 @@ export class ApiClient {
         !error.message
       )
         throw new TypeError('Invalid API error');
-      if (!Object.hasOwn(ERROR_STATUS, error.code) || ERROR_STATUS[error.code] !== response.status)
-        throw new TypeError('Unregistered error');
-      if (mutation && (error.code === 'INTERNAL_ERROR' || error.code === 'STORAGE_UNAVAILABLE'))
-        throw new ApiUnknown(true);
-      const details = errorDetails(error.code, error.details);
+      let details: JsonObject | null;
+      if (errorPolicy !== undefined) {
+        details = errorPolicy.decode(error.code, error.message, error.details, response.status);
+        if (mutation && errorPolicy.mutationUnknown(error.code, response.status))
+          throw new ApiUnknown(true);
+      } else {
+        if (
+          !Object.hasOwn(ERROR_STATUS, error.code) ||
+          ERROR_STATUS[error.code] !== response.status
+        )
+          throw new TypeError('Unregistered error');
+        if (mutation && (error.code === 'INTERNAL_ERROR' || error.code === 'STORAGE_UNAVAILABLE'))
+          throw new ApiUnknown(true);
+        details = errorDetails(error.code, error.details);
+      }
       throw new ApiRejected(
         error.code,
         error.message,

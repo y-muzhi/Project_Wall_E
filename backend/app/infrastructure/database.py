@@ -12,10 +12,14 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-from typing import Iterator
+from typing import Iterator, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .schema_v20_release import SchemaRelease
 
 from backend.app.shared.time import utc_milliseconds
 from .process_lock import ProcessLock
+from .transaction_savepoint import TransactionControl
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MIGRATION = Path(__file__).with_name('schemas') / 'v1_5.sql'
@@ -55,7 +59,7 @@ def configured_path() -> Path:
     value = os.environ.get('WALLE_DATABASE_PATH')
     if not value or not Path(value).is_absolute():
         raise SchemaMismatch(
-            'V1.5 requires an explicit absolute WALLE_DATABASE_PATH; existing databases are never selected implicitly'
+            'An explicit absolute WALLE_DATABASE_PATH is required; databases are never selected implicitly'
         )
     return Path(value).expanduser().resolve()
 
@@ -76,22 +80,41 @@ def _statements(sql: str) -> Iterator[str]:
 
 class Database:
     def __init__(
-        self, path: Path | str, *, busy_timeout_ms: int = 5_000, migration: Migration | None = None
+        self,
+        path: Path | str,
+        *,
+        busy_timeout_ms: int = 5_000,
+        migration: Migration | None = None,
+        schema_release: 'SchemaRelease | None' = None,
+        read_only: bool = False,
     ):
         self.path = Path(path).resolve()
+        if type(read_only) is not bool:
+            raise ValueError('Read-only mode must be explicit')
+        self.read_only = read_only
         if type(busy_timeout_ms) is not int or busy_timeout_ms < 0:
             raise ValueError('Nonnegative integer lock timeout required')
         self.busy_timeout_ms = busy_timeout_ms
+        if schema_release is not None:
+            if migration is not None:
+                raise ValueError('Choose the frozen migration or a Schema200 release, never both')
+            from .sqlite_runtime import require_active
+
+            require_active()
+        self.schema_release = schema_release
+        self._transaction_controls: dict[sqlite3.Connection, TransactionControl] = {}
         self.migration = migration or Migration()
         self.migrations = (migration,) if migration is not None else MIGRATIONS
 
     def _connect(self, *, create: bool = False) -> sqlite3.Connection:
+        if create and self.read_only:
+            raise StorageUnavailable('A read-only evidence database cannot be initialized')
         if not create and not self.path.is_file():
             raise StorageUnavailable('Database has not been initialized')
         try:
             if create:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-            mode = 'rwc' if create else 'rw'
+            mode = 'ro' if self.read_only else 'rwc' if create else 'rw'
             connection = sqlite3.connect(
                 self.path.as_uri() + '?mode=' + mode,
                 uri=True,
@@ -110,6 +133,10 @@ class Database:
             raise StorageUnavailable('Cannot establish database access') from error
 
     def _check_schema(self, connection: sqlite3.Connection) -> int:
+        if self.schema_release is not None:
+            from .schema_v20_state import check_v20
+
+            return check_v20(connection, self.schema_release)
         try:
             rows = connection.execute(
                 'SELECT version, checksum FROM schema_migrations ORDER BY version'
@@ -128,7 +155,7 @@ class Database:
         actual = {
             row['name']: (row['type'], row['sql'])
             for row in connection.execute(
-                "SELECT name,type,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
+                "SELECT name,type,sql FROM sqlite_master WHERE sql IS NOT NULL AND lower(name) NOT GLOB 'sqlite_*'"
             )
         }
         expected_names = set()
@@ -159,10 +186,16 @@ class Database:
 
     def initialize(self) -> dict[str, object]:
         """Atomic empty DB setup; repeated calls verify, never drop existing objects."""
+        if self.read_only:
+            raise StorageUnavailable('Read-only evidence cannot be initialized or upgraded')
         with ProcessLock.for_database(self.path):
             return self._initialize_locked()
 
     def _initialize_locked(self) -> dict[str, object]:
+        if self.schema_release is not None:
+            from .schema_v20_state import initialize_v20
+
+            return initialize_v20(self)
         # Parse all migrations before making any persistent change.
         statements = [list(_statements(migration.sql)) for migration in self.migrations]
         checksum = self.migrations[-1].checksum
@@ -171,7 +204,7 @@ class Database:
             tables = {
                 row[0]
                 for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                    "SELECT name FROM sqlite_master WHERE type='table' AND lower(name) NOT GLOB 'sqlite_*'"
                 )
             }
             if tables:
@@ -232,11 +265,18 @@ class Database:
     @contextmanager
     def transaction(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
         """Connection shared by all repositories; reads/counts share one snapshot."""
+        if write and self.read_only:
+            raise StorageUnavailable('Read-only evidence cannot serve business writes')
         connection = self._connect()
         try:
-            self._check_schema(connection)
+            if self.schema_release is None and not self.read_only:
+                self._check_schema(connection)
             connection.execute('PRAGMA query_only=' + ('OFF' if write else 'ON'))
             connection.execute('BEGIN IMMEDIATE' if write else 'BEGIN')
+            if self.schema_release is not None or self.read_only:
+                self._check_schema(connection)
+
+            control = TransactionControl(connection)
 
             def authorize(
                 action: int,
@@ -245,12 +285,29 @@ class Database:
                 database: str | None,
                 trigger: str | None,
             ) -> int:
-                if action in (sqlite3.SQLITE_TRANSACTION, sqlite3.SQLITE_SAVEPOINT):
+                if action == sqlite3.SQLITE_TRANSACTION:
                     return sqlite3.SQLITE_DENY
+                if action == sqlite3.SQLITE_SAVEPOINT:
+                    return (
+                        sqlite3.SQLITE_OK
+                        if control.savepoint_permission == (first, second)
+                        else sqlite3.SQLITE_DENY
+                    )
                 if action == sqlite3.SQLITE_PRAGMA and second is not None:
-                    return sqlite3.SQLITE_DENY
+                    # These arguments select schema objects; they never set connection state.
+                    schema_reads = {
+                        'table_info',
+                        'table_xinfo',
+                        'index_list',
+                        'index_info',
+                        'index_xinfo',
+                        'foreign_key_list',
+                    }
+                    if first is None or first.lower() not in schema_reads:
+                        return sqlite3.SQLITE_DENY
                 return sqlite3.SQLITE_OK
 
+            self._transaction_controls[connection] = control
             connection.set_authorizer(authorize)
             yield connection
             connection.set_authorizer(None)
@@ -279,7 +336,15 @@ class Database:
                 raise StorageUnavailable('Database operation could not complete') from error
             raise
         finally:
+            self._transaction_controls.pop(connection, None)
             connection.close()
+
+    def reversible(self, connection: sqlite3.Connection):
+        """Rollback only known business work while retaining this transaction's original claim."""
+        control = self._transaction_controls.get(connection)
+        if control is None:
+            raise RuntimeError('Savepoint connection must belong to this Database transaction')
+        return control.reversible()
 
     def backup_to(self, destination: Path | str) -> Path:
         """SQLite backup API; preserve an existing backup rather than overwrite."""
@@ -289,8 +354,12 @@ class Database:
         source = self._connect()
         backup = None
         try:
+            source.execute('BEGIN')
             self._check_schema(source)
             target.parent.mkdir(parents=True, exist_ok=True)
+            # Claim a new destination exclusively; a racing file is never opened for overwrite.
+            with target.open('xb'):
+                pass
             backup = sqlite3.connect(target)
             source.backup(backup)
             return target

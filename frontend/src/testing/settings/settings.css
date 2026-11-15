@@ -1,0 +1,19 @@
+.testing-profile-limits {
+  display: grid;
+  gap: 12px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+.testing-profile-limits label {
+  display: grid;
+  gap: 6px;
+}
+.testing-profile-form > summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.testing-profile-form > .code-settings-create {
+  margin-top: 12px;
+}
+.testing-settings-nav {
+  margin-bottom: 20px;
+}

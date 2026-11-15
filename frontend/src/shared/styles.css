@@ -2145,11 +2145,11 @@ input[type='radio'] {
   flex: none;
   min-height: 0;
   max-height: 55%;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface-base);
-  padding: 12px;
+  padding: 8px;
   margin: 12px;
   box-shadow: var(--shadow-soft);
 }
@@ -2186,7 +2186,7 @@ input[type='radio'] {
 .guide-composer-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
@@ -2515,7 +2515,7 @@ input[type='radio'] {
   border: 0;
   background: transparent;
   padding: 6px 2px;
-  min-height: 80px;
+  min-height: 52px;
   color: var(--text);
 }
 .guide-composer .guide-message-field textarea:focus-visible {
@@ -4299,6 +4299,9 @@ input[type='radio'] {
   color: var(--muted);
   font-size: 12px;
   white-space: normal;
+}
+.document-directory-code-action {
+  margin-block-end: 6px;
 }
 .document-directory-item[aria-current='page'] {
   background: var(--accent-soft);

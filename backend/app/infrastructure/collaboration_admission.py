@@ -17,7 +17,7 @@ from backend.app.shared.validation import object_fields, strict_integer
 from .collaboration_resources import sha256
 from .counting_journal import CountingJournal
 from .database import Database, Migration, SchemaMismatch, StorageUnavailable
-from .idempotency import canonical_input
+from backend.app.shared.json_canonical import canonical_input
 from .model_profile import ModelProfile
 from .resources import ConfigInvalid
 from .schema_transport import compact
@@ -38,13 +38,18 @@ class AdmissionEvidence:
         return deepcopy(self._value)
 
 
-def evidence_database(path):
-    """Frozen provider evidence may predate business ownership; never migrate it."""
+def evidence_database(path, *, schema_release=None):
+    """Select an exact frozen 150/151 or released 200 read-only validator; never a writer."""
     import sqlite3
 
-    source = Path(path).resolve()
-    connection = sqlite3.connect(source.as_uri() + '?mode=ro', uri=True)
+    source = Path(path)
+    if not source.is_absolute():
+        raise SchemaMismatch('Evidence requires an explicit absolute original path')
+    source = source.resolve()
+    connection = sqlite3.connect(source.as_uri() + '?mode=ro', uri=True, isolation_level=None)
     try:
+        connection.execute('PRAGMA query_only=ON')
+        connection.execute('BEGIN')
         versions = connection.execute(
             'SELECT version FROM schema_migrations ORDER BY version'
         ).fetchall()
@@ -54,8 +59,15 @@ def evidence_database(path):
         connection.close()
     if versions == [(150,)]:
         schema = Path(__file__).with_name('schemas') / 'v1_5_evidence_150.sql'
-        return Database(source, migration=Migration(schema, 150))
-    return Database(source)
+        return Database(source, migration=Migration(schema, 150), read_only=True)
+    if versions == [(151,)]:
+        return Database(source, migration=Migration(), read_only=True)
+    if versions in ([(200,)], [(151,), (200,)]):
+        from .schema_v20_release import load_release
+
+        release = load_release() if schema_release is None else schema_release
+        return Database(source, schema_release=release, read_only=True)
+    raise SchemaMismatch('Unsupported frozen evidence history; preserve the original database')
 
 
 class CollaborationAdmission:
@@ -81,7 +93,9 @@ class CollaborationAdmission:
         if not source.is_absolute() or not source.is_file():
             raise ConfigInvalid('The original evidence database must remain available')
         with evidence_database(source).transaction() as connection:
-            row = connection.execute('SELECT * FROM llm_uses WHERE id=?', (identity,)).fetchone()
+            row = connection.execute(
+                'SELECT * FROM llm_uses WHERE id=? AND guide_run_id IS NOT NULL', (identity,)
+            ).fetchone()
             if row is None:
                 raise ConfigInvalid('The original admitted call is unavailable')
             return dict(row)
@@ -148,7 +162,7 @@ class CollaborationAdmission:
                 json_extract(raw_response_json,'$.object') AS actual_object,
                 json_extract(raw_response_json,'$.usage') AS actual_usage,
                 json_extract(request_snapshot_json,'$.counting.count_attempts[#-1].measurement.counts') AS counted
-                FROM llm_uses WHERE function_type='collaboration_v1' AND call_status='SUCCEEDED'
+                FROM llm_uses WHERE guide_run_id IS NOT NULL AND function_type='collaboration_v1' AND call_status='SUCCEEDED'
                 AND json_extract(request_snapshot_json,'$.protocol.release.digest')=?
                 AND json_extract(request_snapshot_json,'$.profile')=?""",
                 (reference['digest'], canonical_input(profile_snapshot)),

@@ -1,0 +1,39 @@
+.testing-plan-editor {
+  margin-top: 16px;
+}
+.testing-plan-editor summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.testing-plan-editor > summary {
+  font-weight: 600;
+}
+.testing-editor-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+}
+.testing-editor-panel fieldset {
+  min-width: 0;
+}
+.testing-editor-panel :is(h4, h5, p) {
+  margin: 0;
+}
+.testing-editor-panel > label {
+  display: grid;
+  gap: 4px;
+}
+.testing-editor-panel :is(input:not([type='checkbox']), select, textarea) {
+  max-width: 100%;
+  min-width: 0;
+  width: min(100%, 36rem);
+}
+.testing-editor-panel textarea {
+  resize: vertical;
+}
+.testing-editor-panel blockquote {
+  margin-inline: 0;
+  white-space: pre-wrap;
+}

@@ -1,0 +1,18 @@
+.testing-plans {
+  display: grid;
+  gap: 16px;
+}
+.testing-plans h2 {
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+.testing-plan-version {
+  overflow-wrap: anywhere;
+}
+.testing-plan-version details > summary {
+  cursor: pointer;
+}
+.testing-plan-version blockquote {
+  margin-inline: 0;
+  white-space: pre-wrap;
+}

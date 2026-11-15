@@ -453,7 +453,7 @@ export function GuideComposer({
             value={state.instruction}
             disabled={disabled}
             placeholder="说明本次希望讨论或完成的工作…"
-            rows={3}
+            rows={2}
             aria-invalid={!composing && state.instruction.length > 0 && !feedback.valid}
             aria-describedby={help}
             onChange={(event) => owner.change(event.currentTarget.value)}

@@ -1,6 +1,8 @@
 import { REQUIREMENT_STATUS_LABELS, saveStatusLabel } from '../shared/status-labels.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { WalleApi } from '../api/walle.ts';
+import { DocumentHandoff } from './document-handoff.tsx';
+import type { DocumentHandoffEntry, DocumentReading } from '../application/router.ts';
 import { RequirementDetailOwner } from './detail-owner.ts';
 import { DetailFrame } from './detail-frame.tsx';
 import { RequirementHeader } from './header.tsx';
@@ -24,6 +26,12 @@ import { DocumentAssociations } from './document-associations.tsx';
 import { activeModal } from '../shared/modal.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 import type { EmptyStateContent } from '../shared/empty-state.tsx';
+
+type OpenCodeTasks = (
+  requirementId: number,
+  reading: DocumentReading,
+  source?: DocumentReading | null,
+) => void;
 
 function DocumentMount({
   host,
@@ -106,9 +114,21 @@ function ManualSaveStatus({
 }
 function LoadedDetail({
   owner,
+  api,
   host,
   back,
-}: Readonly<{ owner: RequirementDetailOwner; host: HTMLElement; back(): void }>) {
+  openCodeTasks,
+  choosingCodeDocument,
+  handoff,
+}: Readonly<{
+  owner: RequirementDetailOwner;
+  api: WalleApi;
+  host: HTMLElement;
+  back(): void;
+  handoff: DocumentHandoffEntry;
+  openCodeTasks?: OpenCodeTasks | undefined;
+  choosingCodeDocument: boolean;
+}>) {
   const [documentActionHost, setDocumentActionHost] = useState<HTMLDivElement | null>(null);
   const product = useRef<HTMLDivElement>(null);
   const composerFocus = useRef(false);
@@ -151,6 +171,32 @@ function LoadedDetail({
     window.addEventListener('beforeunload', protect);
     return () => window.removeEventListener('beforeunload', protect);
   }, [owner]);
+  const selectedDocument = actual.selected_document_id;
+  useEffect(() => {
+    if (handoff && handoff !== 'INVALID' && supported) regions.layout.openTab('AI');
+  }, [handoff, regions.layout, supported]);
+  const codeTasksBlocked = blocked || document.busy || state.loading || !!state.error;
+  function readCodeDocument(documentId: number): DocumentReading {
+    return {
+      documentId,
+      revisionId:
+        document.mode === 'HISTORY' && document.revision?.document_id === documentId
+          ? document.revision.id
+          : null,
+      scroll: selectedDocument === documentId ? host.scrollTop : 0,
+    };
+  }
+  function visitDocumentCodeTasks(documentId: number) {
+    if (!openCodeTasks || codeTasksBlocked) return;
+    openCodeTasks(
+      actual.requirement.id,
+      readCodeDocument(documentId),
+      selectedDocument === null ? null : readCodeDocument(selectedDocument),
+    );
+  }
+  function visitSelectedCodeTasks() {
+    if (selectedDocument !== null) visitDocumentCodeTasks(selectedDocument);
+  }
   const discuss = () => {
     composerFocus.current = true;
     regions.layout.openTab('AI');
@@ -194,6 +240,7 @@ function LoadedDetail({
           status={
             <div className="requirement-metadata">
               <span>{actual.requirement.requirement_no}</span>
+              {handoff === 'INVALID' && <span role="alert">文档移交入口参数无效。</span>}
               <span>{actual.requirement.requirement_type === 'NEW' ? '需求新增' : '需求改造'}</span>
               <span className="requirement-state-badge" data-state={actual.requirement.status}>
                 {REQUIREMENT_STATUS_LABELS[actual.requirement.status]}
@@ -206,6 +253,7 @@ function LoadedDetail({
               documentActions={
                 <div className="requirement-document-actions" ref={setDocumentActionHost} />
               }
+              toolHint={openCodeTasks && selectedDocument === null ? '请先选择文档' : undefined}
               commands={regions.header}
               ready={state.ready}
               blocked={blocked || document.busy}
@@ -218,6 +266,16 @@ function LoadedDetail({
               notifyConfirmed={owner.notifyConfirmed}
               tools={
                 <>
+                  {openCodeTasks && (
+                    <button
+                      className="ui-button"
+                      type="button"
+                      disabled={selectedDocument === null || codeTasksBlocked}
+                      onClick={visitSelectedCodeTasks}
+                    >
+                      代码任务
+                    </button>
+                  )}
                   <button
                     className="ui-button"
                     type="button"
@@ -238,7 +296,13 @@ function LoadedDetail({
               }
             />
           }
-          outline={<DocumentDirectory owner={owner} />}
+          outline={
+            <DocumentDirectory
+              owner={owner}
+              codeTasks={choosingCodeDocument && openCodeTasks ? visitDocumentCodeTasks : undefined}
+              codeTasksBlocked={codeTasksBlocked}
+            />
+          }
           outlineActions={<NewDocumentButton owner={owner} iconOnly />}
           document={(navigation) => (
             <>
@@ -288,11 +352,22 @@ function LoadedDetail({
                 owner={regions.conversation}
                 documents={owner.documents}
                 associations={
-                  <DocumentAssociations
-                    owner={owner}
-                    blocked={blocked || document.busy}
-                    active={supported && geometry.right_open && geometry.right_tab === 'AI'}
-                  />
+                  <>
+                    {handoff && handoff !== 'INVALID' && (
+                      <DocumentHandoff
+                        api={api}
+                        owner={owner}
+                        link={handoff}
+                        active={supported && geometry.right_open && geometry.right_tab === 'AI'}
+                        blocked={blocked || document.busy || historical || !state.ready}
+                      />
+                    )}
+                    <DocumentAssociations
+                      owner={owner}
+                      blocked={blocked || document.busy}
+                      active={supported && geometry.right_open && geometry.right_tab === 'AI'}
+                    />
+                  </>
                 }
               />
             ) : (
@@ -411,11 +486,19 @@ export function RequirementDetail({
   api,
   back,
   ready,
+  reading,
+  openCodeTasks,
+  choosingCodeDocument = false,
+  handoff = null,
 }: Readonly<{
   identity: number;
   api: WalleApi;
   back(): void;
   ready?: (owner: RequirementDetailOwner) => void;
+  reading?: DocumentReading | null;
+  handoff?: DocumentHandoffEntry;
+  openCodeTasks?: OpenCodeTasks | undefined;
+  choosingCodeDocument?: boolean;
 }>) {
   const host = useMemo(() => {
     const element = document.createElement('div');
@@ -425,6 +508,7 @@ export function RequirementDetail({
   const [owner, setOwner] = useState<RequirementDetailOwner | null>(null),
     callbacks = useRef({ back, ready });
   callbacks.current = { back, ready };
+  const [restoreError, setRestoreError] = useState(false);
   useEffect(() => {
     let storage: Storage | null = null;
     try {
@@ -437,17 +521,60 @@ export function RequirementDetail({
       () => window.innerWidth,
       storage,
       host,
+      reading?.documentId,
     );
+    const controller = new AbortController();
+    setRestoreError(false);
     setOwner(owned);
     callbacks.current.ready?.(owned);
-    void owned.refresh().catch(() => undefined);
+    async function restoreReading() {
+      const actual = await owned.refresh();
+      if (
+        controller.signal.aborted ||
+        !reading ||
+        actual.selected_document_id !== reading.documentId
+      )
+        return;
+      if (reading.revisionId !== null) {
+        const revision = (await api.getRevision(reading.revisionId, controller.signal)).data;
+        if (controller.signal.aborted) return;
+        if (
+          revision.requirement_id !== identity ||
+          revision.document_id !== reading.documentId ||
+          owned.getSnapshot().detail?.selected_document_id !== reading.documentId
+        )
+          throw Error('History source differs from original document');
+        await owned.openHistory(revision);
+      }
+      if (!controller.signal.aborted) host.scrollTop = reading.scroll;
+    }
+    void restoreReading().catch(() => {
+      if (!controller.signal.aborted && reading?.revisionId !== null && reading)
+        setRestoreError(true);
+    });
     return () => {
+      controller.abort();
       void owned.retire().catch((error) => console.error('WALL-E detail retirement failed', error));
       host.remove();
     };
-  }, [identity, api, host]);
+  }, [identity, api, host, reading]);
   return owner ? (
-    <DetailSurface owner={owner} host={host} back={() => callbacks.current.back()} />
+    <>
+      {restoreError && (
+        <p role="alert" className="inline-error">
+          原阅读版本暂时无法恢复。
+        </p>
+      )}
+      <DetailSurface
+        owner={owner}
+        api={api}
+        handoff={handoff}
+        host={host}
+        back={() => callbacks.current.back()}
+        openCodeTasks={openCodeTasks}
+        choosingCodeDocument={choosingCodeDocument}
+      />
+    </>
   ) : (
     <main aria-busy="true">
       <p role="status">正在读取需求与正文…</p>
@@ -457,11 +584,34 @@ export function RequirementDetail({
 }
 function DetailSurface({
   owner,
+  api,
   host,
   back,
-}: Readonly<{ owner: RequirementDetailOwner; host: HTMLElement; back(): void }>) {
+  openCodeTasks,
+  choosingCodeDocument,
+  handoff,
+}: Readonly<{
+  owner: RequirementDetailOwner;
+  api: WalleApi;
+  host: HTMLElement;
+  back(): void;
+  handoff: DocumentHandoffEntry;
+  openCodeTasks?: OpenCodeTasks | undefined;
+  choosingCodeDocument: boolean;
+}>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot);
-  if (owner.regions) return <LoadedDetail owner={owner} host={host} back={back} />;
+  if (owner.regions)
+    return (
+      <LoadedDetail
+        owner={owner}
+        api={api}
+        handoff={handoff}
+        host={host}
+        back={back}
+        openCodeTasks={openCodeTasks}
+        choosingCodeDocument={choosingCodeDocument}
+      />
+    );
   return (
     <main className="detail-initial-state" aria-busy={state.loading}>
       <button

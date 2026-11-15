@@ -3,7 +3,8 @@
 import base64
 import json
 from urllib.parse import quote
-from .idempotency import canonical_input
+
+from backend.app.shared.json_canonical import canonical_input
 
 MAX_AUDIT_BYTES = 4 * 1024 * 1024
 OMITTED_KEYS = frozenset(

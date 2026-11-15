@@ -1,0 +1,15 @@
+{
+  "format_version": 1,
+  "bundle_ref": "sqlite-3.54.1-win-x64",
+  "version": "3.54.1",
+  "platform": "win-x64",
+  "source_url": "https://www.sqlite.org/2026/sqlite-dll-win-x64-3540100.zip",
+  "official_download_page": "https://www.sqlite.org/download.html",
+  "archive_sha3_256": "c2d09c8babb9399277055c057c97a53f1ffd7c5f11d0c1f2118ffdfa39f2daa4",
+  "archive_sha256": "f436f53ad8f965af43f3817b42c99c0689e6787f6b7ace208fe38dab7ffc4971",
+  "dll_sha256": "4b59d3cded9dc1608544160f3b4b10ac974c6ac0d6ffc23064e5f4c8dbd05aea",
+  "def_sha256": "4fd9c79ce52498bc69a2c588680888ece2dff33d47a949416da34148c660b6b5",
+  "source_id": "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76",
+  "minimum_sqlite_version": "3.51.3",
+  "purpose": "Project-owned V2 SQLite runtime; no user database or service update"
+}

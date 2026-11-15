@@ -333,7 +333,7 @@ class TokenCounts:
 
 def restore_measurement(value, texts, *, raw_required=True, expected_model=MODEL_ID):
     """Recheck persisted count ownership; summaries never assert raw retention."""
-    from .idempotency import canonical_input
+    from backend.app.shared.json_canonical import canonical_input
 
     try:
         strategy = strategy_for(expected_model)
@@ -455,7 +455,7 @@ def restore_measurement(value, texts, *, raw_required=True, expected_model=MODEL
 
 def measurement_summary(value):
     """Keep returned counts/identity; raw token arrays have separate retention."""
-    from .idempotency import canonical_input
+    from backend.app.shared.json_canonical import canonical_input
 
     return {key: child for key, child in value.items() if key != 'response'} | {
         'response_sha256': hashlib.sha256(
@@ -568,7 +568,7 @@ class TokenizationGateway:
                 # Arrays were fully validated above. Retain only bounded facts
                 # and a canonical response digest. This cannot approve Chat:
                 # callers require raw evidence for every accepted candidate.
-                from .idempotency import canonical_input
+                from backend.app.shared.json_canonical import canonical_input
 
                 sanitized = '{}'
                 response_digest = hashlib.sha256(canonical_input(raw).encode('utf-8')).hexdigest()

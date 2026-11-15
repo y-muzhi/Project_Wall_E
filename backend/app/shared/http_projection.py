@@ -11,20 +11,16 @@ from backend.app.documents.markdown import parse_markdown
 from backend.app.documents.snapshot import FIELDS, Provenance, _time
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.requirements.contracts import (
-    READ_FIELDS,
     LIST_FIELDS,
-    STATUSES,
+    READ_FIELDS,
     REQUIREMENT_TYPES,
+    STATUSES,
     requirement_read_model,
 )
 from backend.app.revisions.contracts import SUMMARY_FIELDS, revision_summary
-from .validation import strict_integer, strict_enum, title
 
-
-def exact(value: object, fields) -> dict:
-    if type(value) is not dict or set(value) != set(fields):
-        raise ValueError('Response fields differ from the registered schema')
-    return dict(value)
+from .strict_objects import exact
+from .validation import strict_enum, strict_integer, title
 
 
 def requirement(value: object) -> dict:
@@ -59,8 +55,8 @@ def snapshot_pair(markdown: object, value: object) -> dict:
         raise ValueError('Block state exceeds capacity')
     identities = set()
     blocks = []
-    for value, block in zip(state['blocks'], parsed.blocks):
-        metadata = exact(value, FIELDS)
+    for metadata_value, block in zip(state['blocks'], parsed.blocks):
+        metadata = exact(metadata_value, FIELDS)
         identity = strict_integer(metadata['block_id'], 'block_id')
         if identity >= next_id or identity in identities:
             raise ValueError('Invalid block identity')

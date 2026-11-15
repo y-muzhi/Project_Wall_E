@@ -13,7 +13,7 @@ import re
 from jsonschema import Draft202012Validator, FormatChecker, validators
 
 from backend.app.shared.validation import InvalidInput, strict_json_object
-from .idempotency import canonical_input
+from backend.app.shared.json_canonical import canonical_input
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v1'
 MANIFEST_SHA256 = '79b9435a8c410009ba93936354a6f15f90d911d6ae0f81194022322b25899bbc'
@@ -267,6 +267,12 @@ def _inspect_schema(node, root):
 
 
 class ResourceCatalog:
+    def code_configuration_options(self, kind):
+        """Read the pinned nonsecret catalogue; never probe or grant execution."""
+        from .code_configuration_catalog import load_code_catalogue
+
+        return load_code_catalogue().items(kind)
+
     @property
     def collaboration(self):
         """V1.5 uses this same catalog; loading does not grant Chat admission."""
@@ -321,7 +327,21 @@ class ResourceCatalog:
         heading_root: Path | str | None = None,
         promoted_heading_root: Path | str | None = None,
         projection_root: Path | str | None = None,
+        testing_assets=None,
+        testing_planning=None,
     ):
+        if testing_assets is not None:
+            from backend.app.testing.asset_installation import TestingAssetInstallation
+
+            if type(testing_assets) is not TestingAssetInstallation:
+                raise TypeError('Trusted Testing asset installation required')
+        if testing_planning is not None:
+            from backend.app.testing.planning_context import TestingPlanningInstallation
+
+            if type(testing_planning) is not TestingPlanningInstallation:
+                raise TypeError('Trusted Testing planning installation required')
+        self.testing_assets = testing_assets
+        self.testing_planning = testing_planning
         # Explicit v1 roots are useful for immutable historical deployments and
         # diagnostics. Installed defaults register historical releases before
         # selecting phase A v8/v9 for new ordinary/full-template runs.

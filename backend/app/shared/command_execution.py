@@ -1,12 +1,13 @@
 """Application rejection and persistent command execution, no HTTP delivery."""
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import sqlite3
 from typing import Callable, Protocol
 
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.idempotency import (
+    CommentAnchorRejected,
     Idempotency,
     IdempotencyConflict,
     RequestInProgress,
@@ -14,8 +15,8 @@ from backend.app.infrastructure.idempotency import (
     Success,
     request_key,
 )
-from backend.app.infrastructure.idempotency import CommentAnchorRejected
 from backend.app.infrastructure.identifiers import CapacityExhausted
+
 from .time import utc_milliseconds
 from .validation import strict_integer
 
@@ -25,6 +26,16 @@ class Rejected(RuntimeError):
         self.code = code
         self.details = details
         super().__init__(code)
+
+
+class ConfigurationNotReady(RuntimeError):
+    """Temporary rejection unwinds receipt acceptance and leaves the original key usable."""
+
+    code = 'CONFIG_NOT_READY'
+
+    def __init__(self, *capability_codes):
+        self.details = {'capability_codes': list(capability_codes)}
+        super().__init__(self.code)
 
 
 @dataclass(frozen=True)
@@ -114,7 +125,7 @@ def execute_idempotent(
         return executor.execute(
             scope, request.business_input() if business_input is None else business_input, operation
         ).result
-    except Rejected as error:
+    except (Rejected, ConfigurationNotReady) as error:
         code = error.code if error.code in allowed_failures else 'INTERNAL_ERROR'
         return {
             'code': code,

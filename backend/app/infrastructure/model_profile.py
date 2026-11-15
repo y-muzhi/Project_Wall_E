@@ -110,7 +110,7 @@ class ModelProfile:
         """Restore the complete exact historic profile, never the new default."""
         if type(snapshot) is not dict:
             raise ConfigInvalid('Persisted model profile must be an object')
-        from .idempotency import canonical_input
+        from backend.app.shared.json_canonical import canonical_input
 
         try:
             for name in PROFILES:
@@ -155,3 +155,11 @@ class ModelProfile:
             'stream': False,
             'thinking': {'type': 'disabled'},
         }
+
+    def testing_request(self, context, *, output_cap):
+        if type(output_cap) is not int or not 1 <= output_cap <= self.output_limit:
+            raise ConfigInvalid('Original Testing output bound differs')
+        body = self.request(context)
+        body['max_tokens'] = output_cap
+        body['response_format'] = {'type': 'json_object'}
+        return body

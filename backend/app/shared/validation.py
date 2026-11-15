@@ -4,11 +4,12 @@ Field errors describe requirements without echoing user input or credentials.
 Markdown and anchor fragments must use raw_text, never ordinary_text.
 """
 
-from dataclasses import dataclass
 import json
 import math
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any
 
 MAX_SAFE_INTEGER = 9_007_199_254_740_991
 MISSING = object()
@@ -205,8 +206,8 @@ def object_fields(
     return value
 
 
-def strict_json_object(payload: str | bytes, field: str = 'body') -> dict[str, Any]:
-    """Single JSON object, duplicate keys rejected at every depth; no fence repair."""
+def strict_json_loads(payload: str | bytes, field: str = 'body') -> Any:
+    """Decode one JSON value with duplicate keys and nonfinite numbers rejected."""
 
     def pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -236,6 +237,11 @@ def strict_json_object(payload: str | bytes, field: str = 'body') -> dict[str, A
         if isinstance(error, InvalidInput):
             raise
         reject(field, 'INVALID_FORMAT', '必须是一份完整合法的 JSON 对象')
+    return value
+
+
+def strict_json_object(payload: str | bytes, field: str = 'body') -> dict[str, Any]:
+    value = strict_json_loads(payload, field)
     if type(value) is not dict:
         reject(field, 'INVALID_TYPE', 'JSON 根必须是对象')
     return value

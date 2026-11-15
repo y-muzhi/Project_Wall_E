@@ -8,15 +8,31 @@ export function ApplicationNavigation({
   navigate,
   headerHost,
   headerHeight,
+  coding,
+  codingCurrent,
+  settings,
+  settingsCurrent,
+  testing,
+  testingCurrent,
 }: Readonly<{
   current: 'page' | 'location' | undefined;
   navigate(): void;
+  coding(): void;
+  codingCurrent: 'page' | 'location' | undefined;
+  settings(): void;
+  settingsCurrent: 'page' | undefined;
+  testing(): void;
+  testingCurrent: 'page' | undefined;
   headerHost?(element: HTMLDivElement | null): void;
   headerHeight?(height: number): void;
 }>) {
   const header = useRef<HTMLDivElement>(null);
   const hintId = useId();
+  const codingHintId = useId();
+  const settingsHintId = useId();
+  const testingHintId = useId();
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [settingsHintDismissed, setSettingsHintDismissed] = useState(false);
   useLayoutEffect(() => {
     const element = header.current;
     if (!element || !headerHeight) return;
@@ -28,11 +44,19 @@ export function ApplicationNavigation({
   }, [headerHeight]);
   const showHint = () => setHintDismissed(false);
   const dismissHint = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'Escape') setHintDismissed(true);
+    if (event.key === 'Escape') {
+      setHintDismissed(true);
+      setSettingsHintDismissed(true);
+    }
   };
   const visit = () => {
     setHintDismissed(true);
     navigate();
+  };
+  const showSettingsHint = () => setSettingsHintDismissed(false);
+  const visitSettings = () => {
+    setSettingsHintDismissed(true);
+    settings();
   };
   return (
     <>
@@ -69,6 +93,62 @@ export function ApplicationNavigation({
             hidden={hintDismissed}
           >
             需求工作台
+          </span>
+        </div>
+        <div className="application-navigation-entry">
+          <button
+            type="button"
+            className="ui-button application-navigation-item"
+            aria-label="代码开发"
+            aria-describedby={codingHintId}
+            aria-current={codingCurrent}
+            onClick={coding}
+          >
+            <Icon name="code" />
+          </button>
+          <span id={codingHintId} role="tooltip" className="application-navigation-tooltip">
+            代码开发
+          </span>
+        </div>
+        <div className="application-navigation-entry">
+          <button
+            type="button"
+            className="ui-button application-navigation-item"
+            aria-label="测试验收"
+            aria-describedby={testingHintId}
+            aria-current={testingCurrent}
+            onClick={testing}
+          >
+            <Icon name="outline" />
+          </button>
+          <span id={testingHintId} role="tooltip" className="application-navigation-tooltip">
+            测试验收
+          </span>
+        </div>
+        <div
+          className="application-navigation-entry"
+          onMouseEnter={showSettingsHint}
+          onMouseLeave={showSettingsHint}
+        >
+          <button
+            type="button"
+            className="ui-button application-navigation-item"
+            aria-label="设置"
+            aria-describedby={settingsHintId}
+            onFocus={showSettingsHint}
+            onKeyDown={dismissHint}
+            aria-current={settingsCurrent}
+            onClick={visitSettings}
+          >
+            <Icon name="settings" />
+          </button>
+          <span
+            className="application-navigation-tooltip"
+            role="tooltip"
+            id={settingsHintId}
+            hidden={settingsHintDismissed}
+          >
+            设置
           </span>
         </div>
       </nav>

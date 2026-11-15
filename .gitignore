@@ -25,3 +25,9 @@ output/playwright/
 /docs/verification/**/*.jpeg
 /docs/verification/**/*.webp
 /docs/verification/**/*.gif
+
+# Local prepared executable distributions; source/build locks remain versioned.
+/backend/distributions/
+
+# User service logs stay local; these are not project sources.
+/data/service-runtime-*/

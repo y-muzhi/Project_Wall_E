@@ -1,0 +1,319 @@
+.code-task-page {
+  box-sizing: border-box;
+  width: min(100%, 1160px);
+  margin-inline: auto;
+  padding: clamp(16px, 4vw, 40px);
+  min-height: 70vh;
+}
+.code-task-workspace {
+  width: 100%;
+  padding: 24px;
+  container-type: inline-size;
+}
+
+@media (max-width: 1279px) {
+  .code-task-workspace {
+    padding: 16px;
+  }
+}
+
+.code-task-execution-columns {
+  display: grid;
+  gap: 16px;
+  grid-template-areas: 'issues' 'records';
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.code-task-execution-issues {
+  grid-area: issues;
+  min-inline-size: 0;
+}
+
+.code-task-execution-record-column {
+  grid-area: records;
+  min-inline-size: 0;
+}
+
+@container (min-width: 1104px) {
+  .code-task-execution-columns {
+    grid-template-areas: 'records issues';
+    grid-template-columns: minmax(640px, 1fr) 360px;
+  }
+}
+
+.code-task-heading,
+.code-task-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.code-task-heading {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.code-task-heading h1,
+.code-task-heading p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.code-task-heading p {
+  margin-top: 6px;
+}
+.code-task-toolbar select {
+  max-width: min(18rem, 65vw);
+  min-height: 34px;
+}
+.code-task-result {
+  display: flex;
+  flex-direction: column;
+  min-height: 14rem;
+  margin-block: 16px;
+}
+.code-task-controls {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-block: 16px;
+  overflow-wrap: anywhere;
+}
+.code-delivery-workspace :is(code, pre, li, button) {
+  overflow-wrap: anywhere;
+}
+.code-delivery-workspace pre {
+  white-space: pre-wrap;
+}
+.code-delivery-workspace .ui-button {
+  max-inline-size: 100%;
+  white-space: normal;
+}
+.code-task-result > .empty-state {
+  flex: 1;
+}
+.code-task-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.code-task-rows > li {
+  display: grid;
+  grid-template-columns: minmax(9rem, 2fr) minmax(6rem, 1fr) repeat(2, minmax(5rem, 1fr)) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-block-end: 1px solid var(--ui-border, #d7dce1);
+}
+.code-task-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+}
+.code-task-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .code-task-rows > li {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+
+.code-task-drawer {
+  width: min(760px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+}
+.code-task-drawer form {
+  max-height: min(900px, calc(100dvh - 34px));
+  display: flex;
+  flex-direction: column;
+}
+.code-task-drawer-fields {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 12px clamp(12px, 4vw, 24px);
+}
+.code-task-drawer fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-block: 0 14px;
+}
+.code-task-drawer header p,
+.code-task-drawer fieldset p {
+  margin: 0;
+}
+.code-task-drawer input:not([type='checkbox']),
+.code-task-drawer select {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 34px;
+}
+.code-task-drawer pre,
+.code-task-drawer code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.code-task-drawer footer {
+  flex-wrap: wrap;
+}
+
+.code-model-calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.code-model-calls > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-block-end: 1px solid var(--ui-border, #d7dce1);
+}
+.code-model-calls h3,
+.code-model-calls p {
+  overflow-wrap: anywhere;
+}
+.code-model-audit details {
+  padding-block: 0.75rem;
+}
+.code-model-audit textarea {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-family: monospace;
+  resize: vertical;
+}
+
+.code-question-response fieldset {
+  min-inline-size: 0;
+  margin-block: 12px;
+}
+
+.code-question-response textarea {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.code-question-response input {
+  max-width: 100%;
+}
+
+.code-check-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-inline-size: 0;
+}
+
+.code-check-action > .field-help {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.code-candidate-diff,
+.code-candidate-file {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.code-candidate-diff__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.code-candidate-diff__list-collapsed,
+.code-candidate-file__columns {
+  display: none;
+}
+
+.code-candidate-diff li,
+.code-candidate-file h5 {
+  overflow-wrap: anywhere;
+}
+
+.code-candidate-diff li .ui-button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+
+.code-candidate-file__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.code-candidate-file pre {
+  min-width: 0;
+  max-width: 100%;
+  max-height: 65vh;
+  overflow: auto;
+  padding: 8px;
+}
+
+.code-candidate-file__removed,
+.code-candidate-file__added {
+  display: block;
+}
+
+.code-candidate-file__removed {
+  background: color-mix(in srgb, #be2635 12%, transparent);
+}
+
+.code-candidate-file__added {
+  background: color-mix(in srgb, #258047 12%, transparent);
+}
+
+@container (min-width: 896px) {
+  .code-candidate-diff__body {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .code-candidate-diff__list-toggle {
+    display: none;
+  }
+
+  .code-candidate-diff__list-collapsed {
+    display: block;
+  }
+}
+
+@container (min-width: 1120px) {
+  .code-candidate-file__columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(552px, 1fr));
+    gap: 16px;
+  }
+
+  .code-candidate-file__unified {
+    display: none;
+  }
+}
+
+.code-record-toolbar {
+  margin-block: 8px;
+  gap: 8px;
+}
+
+.code-task-record-viewport {
+  min-inline-size: 0;
+  max-block-size: min(56dvh, 32rem);
+  overflow: auto;
+}
+
+.code-task-record-viewport .code-task-execution-records {
+  padding-inline: 1.75rem 0.5rem;
+}
+
+.code-task-execution-records p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

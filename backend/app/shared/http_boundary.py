@@ -12,7 +12,7 @@ from fastapi import Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
-from backend.app.infrastructure.database import Database
+from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.idempotency import Idempotency, canonical_input, request_key
 from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.infrastructure.execution_lease import LeasedDatabase, ExecutionRetired
@@ -38,7 +38,7 @@ class HttpRuntime:
         return self.executor
 
 
-def idempotency_header(request: Request) -> str:
+def idempotency_header(request: Request, *, lowercase: bool = False) -> str:
     values = [
         value
         for name, value in request.scope.get('headers', [])
@@ -48,7 +48,11 @@ def idempotency_header(request: Request) -> str:
         reject('Idempotency-Key', 'REQUIRED', '必须提供此请求头')
     if len(values) != 1:
         reject('Idempotency-Key', 'DUPLICATE_PARAMETER', '幂等请求头不能重复提供')
-    return request_key(values[0].decode('latin-1'))
+    raw = values[0].decode('latin-1')
+    normalized = request_key(raw)
+    if lowercase and raw != normalized:
+        reject('Idempotency-Key', 'INVALID_FORMAT', '必须为小写UUID v4')
+    return normalized
 
 
 def request_query(request: Request, *, singles=(), arrays=None) -> dict:
@@ -94,10 +98,17 @@ async def handle_http(
 ) -> JSONResponse:
     request_id = new_request_id()
     request.state.request_id = request_id
+    error_contract = getattr(response_model, 'error_contract', 'document')
 
     def failure(code, details=None):
+        if error_contract == 'code' and code == 'STORAGE_UNAVAILABLE' and details is None:
+            details = {'capability_codes': ['DATABASE']}
         projected = error_response(
-            code, details, allowed_errors=response_model.errors, request_id=request_id
+            code,
+            details,
+            allowed_errors=response_model.errors,
+            request_id=request_id,
+            contract=error_contract,
         )
         return JSONResponse(projected.body, status_code=projected.status)
 
@@ -106,6 +117,10 @@ async def handle_http(
         body = await request_body(request, json_required=has_body)
         parsed = request_model.parse(request, body) if has_body else request_model.parse(request)
     except InvalidInput as error:
+        if error_contract == 'code':
+            from .code_errors import validation_details
+
+            return failure('INVALID_INPUT', validation_details(error))
         return failure('INVALID_INPUT', error.details)
     except Exception:
         return failure('INTERNAL_ERROR')
@@ -149,7 +164,7 @@ async def handle_http(
         return JSONResponse(
             {'success': True, 'data': data, 'error': None, 'meta': meta}, status_code=status
         )
-    except ExecutionRetired:
+    except (ExecutionRetired, StorageUnavailable):
         return failure('STORAGE_UNAVAILABLE')
     except Exception:
         return failure('INTERNAL_ERROR')

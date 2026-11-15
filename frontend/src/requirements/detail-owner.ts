@@ -132,12 +132,13 @@ export class RequirementDetailOwner {
     width: () => number,
     storage: Pick<Storage, 'getItem' | 'setItem'> | null,
     scrollport: HTMLElement | null = null,
+    documentId?: number,
   ) {
     this.api = api.forDetailReads();
     api = this.api;
     this.width = width;
     this.storage = storage;
-    this.read = new RequirementDetailRead(identity, api);
+    this.read = new RequirementDetailRead(identity, api, undefined, documentId);
     this.documents = new RequirementDocumentOwner(host, identity, api, this.readActual, scrollport);
     this.departure = new DetailDeparture(this.documents);
     this.releases.push(

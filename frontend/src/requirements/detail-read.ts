@@ -102,6 +102,7 @@ export class RequirementDetailRead {
   private pendingEpoch = -1;
   private pendingReuse = false;
   private readonly reading: ReadingSelection;
+  private readonly explicitInitialDocument: boolean;
   constructor(
     identity: number,
     api: ReadApi,
@@ -111,6 +112,7 @@ export class RequirementDetailRead {
     this.identity = positiveInteger(identity);
     this.api = api;
     this.reading = new ReadingSelection(identity, storage);
+    this.explicitInitialDocument = documentId !== undefined;
     this.selected = documentId === undefined ? this.reading.load() : documentId;
   }
   selectDocument(identity: number | null): Promise<boolean> {
@@ -201,6 +203,7 @@ export class RequirementDetailRead {
           if (
             this.selected === undefined ||
             (initialOrEmpty &&
+              !this.explicitInitialDocument &&
               (this.selected === null ||
                 !detail.documents.some((document) => document.id === this.selected)))
           )

@@ -2,7 +2,7 @@
 
 import sqlite3
 from .identifiers import require_write_transaction
-from .idempotency import canonical_input
+from backend.app.shared.json_canonical import canonical_input
 from backend.app.documents.snapshot import _time
 from backend.app.shared.pagination import PAGE_SIZE, page_offset
 

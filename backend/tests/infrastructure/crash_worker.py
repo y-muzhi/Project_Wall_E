@@ -1,4 +1,5 @@
 """Test-only subprocess with real abrupt exits, never a production dispatcher."""
+
 import os
 from pathlib import Path
 import sys
@@ -6,7 +7,7 @@ import sys
 from backend.app.infrastructure.database import Database
 from backend.app.infrastructure.idempotency import Idempotency, Scope, Success
 from backend.app.infrastructure.process_lock import ProcessLock, ProcessAlreadyRunning
-from backend.tests.infrastructure.test_database import insert_requirement
+from backend.tests.infrastructure.fixtures_v151 import insert_requirement
 
 
 KEY = '00000000-0000-4000-8000-000000000099'
@@ -39,9 +40,11 @@ def main():
             idempotency.succeed(connection, claim, SUCCESS)
             os._exit(22)
     if mode == 'committed':
+
         def operation(connection):
             insert_requirement(connection)
             return SUCCESS
+
         idempotency.execute(SCOPE, INPUT, operation)
         os._exit(23)
     lock.release()

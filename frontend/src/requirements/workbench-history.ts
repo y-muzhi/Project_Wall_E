@@ -2,12 +2,15 @@ import { snapshotObject } from '../api/client.ts';
 import { workbenchQuery, defaultWorkbenchQuery } from './workbench.ts';
 import type { WorkbenchQuery } from './workbench.ts';
 
+export type WorkbenchNavIntent = 'CHOOSE_CODE_DOCUMENT' | null;
+
 export type WorkbenchEntry = Readonly<{
   schema_version: 2;
   kind: 'WALLE_WORKBENCH';
   entry_id: string;
   query: WorkbenchQuery;
   scroll: number;
+  nav_intent: WorkbenchNavIntent;
 }>;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const key = (id: string) => 'walle:v1.5:workbench:' + id;
@@ -18,8 +21,13 @@ function scroll(value: unknown): number {
 }
 export function decodeWorkbenchEntry(input: unknown): WorkbenchEntry {
   const row = snapshotObject(input);
+  const fields = Object.keys(row).sort().join(',');
   if (
-    Object.keys(row).sort().join(',') !== 'entry_id,kind,query,schema_version,scroll' ||
+    (fields !== 'entry_id,kind,nav_intent,query,schema_version,scroll' &&
+      fields !== 'entry_id,kind,query,schema_version,scroll') ||
+    (fields.includes('nav_intent') &&
+      row.nav_intent !== null &&
+      row.nav_intent !== 'CHOOSE_CODE_DOCUMENT') ||
     row.schema_version !== 2 ||
     row.kind !== 'WALLE_WORKBENCH' ||
     typeof row.entry_id !== 'string' ||
@@ -40,6 +48,7 @@ export function decodeWorkbenchEntry(input: unknown): WorkbenchEntry {
     entry_id: row.entry_id,
     query,
     scroll: scroll(row.scroll),
+    nav_intent: row.nav_intent === 'CHOOSE_CODE_DOCUMENT' ? row.nav_intent : null,
   });
 }
 
@@ -69,7 +78,7 @@ export class WorkbenchHistory {
   get storageWarning(): string | null {
     return this.warning ?? this.restorationWarning;
   }
-  enter(mode: 'DEFAULT' | 'RESTORE'): WorkbenchEntry {
+  enter(mode: 'DEFAULT' | 'RESTORE', navIntent: WorkbenchNavIntent = null): WorkbenchEntry {
     this.warning = null;
     if (mode === 'RESTORE') {
       try {
@@ -115,6 +124,7 @@ export class WorkbenchHistory {
         entry_id: identity,
         query: defaultWorkbenchQuery,
         scroll: 0,
+        nav_intent: navIntent,
       }),
     );
   }
@@ -146,9 +156,49 @@ export class WorkbenchHistory {
 export type PageRoute =
   | Readonly<{ kind: 'WORKBENCH' }>
   | Readonly<{ kind: 'DETAIL'; id: number }>
+  | Readonly<{ kind: 'CODE_SETTINGS' }>
+  | Readonly<{ kind: 'TESTING_SETTINGS' }>
+  | Readonly<{ kind: 'TESTING_PLANS' }>
+  | Readonly<{ kind: 'TESTING_LIST' }>
+  | Readonly<{ kind: 'TESTING_TASK'; taskId: number }>
+  | Readonly<{ kind: 'TESTING_PARAMETERS' }>
+  | Readonly<{ kind: 'CODE_TASK_LIST'; requirementId: number; documentId: number }>
+  | Readonly<{ kind: 'CODE_TASK'; taskId: number }>
+  | Readonly<{ kind: 'CODE_PARAMETERS' }>
   | Readonly<{ kind: 'NOT_FOUND' }>;
+function canonicalId(value: string): number | null {
+  if (!/^[1-9][0-9]*$/.test(value)) return null;
+  const id = Number(value);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
 export function pageRoute(path: string): PageRoute {
+  if (path === '/settings/code') return Object.freeze({ kind: 'CODE_SETTINGS' });
+  if (path === '/settings/testing') return Object.freeze({ kind: 'TESTING_SETTINGS' });
+  if (path === '/testing/plans') return Object.freeze({ kind: 'TESTING_PLANS' });
+  if (path === '/testing') return Object.freeze({ kind: 'TESTING_LIST' });
+  const testingTask = /^\/testing\/tasks\/([^/]+)$/.exec(path);
+  if (testingTask) {
+    const taskId = canonicalId(testingTask[1]!);
+    return taskId
+      ? Object.freeze({ kind: 'TESTING_TASK', taskId })
+      : Object.freeze({ kind: 'TESTING_PARAMETERS' });
+  }
   if (path === '/requirements' || path === '/') return Object.freeze({ kind: 'WORKBENCH' });
+  const list = /^\/requirements\/([^/]+)\/documents\/([^/]+)\/code-tasks$/.exec(path);
+  if (list) {
+    const [requirementId, documentId] = list.slice(1).map(canonicalId);
+    return requirementId && documentId
+      ? Object.freeze({ kind: 'CODE_TASK_LIST', requirementId, documentId })
+      : Object.freeze({ kind: 'CODE_PARAMETERS' });
+  }
+  const task = /^\/code-tasks\/([^/]+)$/.exec(path);
+  if (task) {
+    const taskId = canonicalId(task[1]!);
+    return taskId
+      ? Object.freeze({ kind: 'CODE_TASK', taskId })
+      : Object.freeze({ kind: 'CODE_PARAMETERS' });
+  }
   const match = /^\/requirements\/([1-9][0-9]*)$/.exec(path);
   if (match) {
     const id = Number(match[1]);

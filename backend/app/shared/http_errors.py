@@ -141,7 +141,12 @@ def _details(code: str, value: object) -> dict[str, Any] | None:
 
 
 def error_response(
-    code: str, details: object, *, allowed_errors: Collection[str], request_id: str
+    code: str,
+    details: object,
+    *,
+    allowed_errors: Collection[str],
+    request_id: str,
+    contract: str = 'document',
 ) -> HttpError:
     """Project only registered and reachable errors; malformed results become 500.
 
@@ -149,13 +154,25 @@ def error_response(
     the same value. A new request (including replay) must allocate a new context.
     """
     request_id = _request_id(request_id)
-    if type(code) is not str or code not in ERRORS or code not in allowed_errors:
-        code, details = 'INTERNAL_ERROR', None
-    try:
-        projected = _details(code, details)
-    except ValueError:
-        code, projected = 'INTERNAL_ERROR', None
-    status, error_code, message = ERRORS[code]
+    if contract == 'code':
+        from .code_errors import error_fact
+
+        if type(code) is not str or code not in allowed_errors:
+            code, details = 'INTERNAL_ERROR', None
+        try:
+            status, error_code, message, projected = error_fact(code, details)
+        except (ValueError, TypeError, OverflowError):
+            status, error_code, message, projected = error_fact('INTERNAL_ERROR', None)
+    elif contract == 'document':
+        if type(code) is not str or code not in ERRORS or code not in allowed_errors:
+            code, details = 'INTERNAL_ERROR', None
+        try:
+            projected = _details(code, details)
+        except ValueError:
+            code, projected = 'INTERNAL_ERROR', None
+        status, error_code, message = ERRORS[code]
+    else:
+        raise ValueError('Unregistered HTTP error contract')
     return HttpError(
         status,
         {

@@ -1,16 +1,172 @@
+import { readCodeTaskRecords } from './code-task-records.ts';
+import { CREATE_CODE_DEFECT, readCodeDefect, readCodeDefects } from './code-task-defects.ts';
+import { REQUEST_CODE_REPAIR, readRepair, readRepairs } from './code-task-repair.ts';
+import {
+  ACCEPT_DELIVERY,
+  PREPARE_DELIVERY,
+  readDeliveryPlan,
+  readDeliveries,
+  readDelivery,
+} from './code-task-delivery.ts';
+import { readPlanComparison } from './code-task-candidates.ts';
+import type { CandidateComparisonSide as DeliverySide } from './code-task-candidates.ts';
+import { readTestingCall, readTestingCalls } from './testing-usage.ts';
+import {
+  REVIEW_TESTING_FINDING,
+  readTestingCases,
+  readTestingFindings,
+  readTestingReport,
+  readTestingTaskReport,
+  readTestingVerification,
+} from './testing-reports.ts';
+import { readTestingTaskOperation, readTestingTaskOperations } from './testing-task-operations.ts';
+import {
+  ATTACH_TESTING_ASSETS,
+  CREATE_TESTING_TASK,
+  INCREASE_TESTING_BUDGET,
+  RECONCILE_TESTING_TASK,
+  RESUME_TESTING_TASK,
+  DRAFT_TESTING_PLAN,
+  RUN_TESTING_TASK,
+  STOP_TESTING_TASK,
+  readTestingTask,
+  readTestingTasks,
+} from './testing-tasks.ts';
+import type { TestingTaskFilters } from './testing-tasks.ts';
+import { readTestingSeal, readTestingValidationOperation } from './testing-asset-operation.ts';
+import {
+  CREATE_TESTING_PACK,
+  SEAL_TESTING_PACK,
+  VALIDATE_TESTING_PACK,
+  PUBLISH_TESTING_PACK,
+  REVOKE_TESTING_PACK,
+  readTestingPack,
+  readTestingPacks,
+  readTestingReferenceSets,
+  readTestingValidation,
+} from './testing-assets.ts';
+import {
+  CREATE_TEST_PLAN,
+  TEST_PLAN_CONTROL_BINDINGS,
+  TEST_PLAN_DRAFT_BINDINGS,
+  readTestingPlan,
+  readTestingPlans,
+  readTestingPlanVersion,
+  readTestingPlanVersions,
+} from './testing-plans.ts';
+import { readTestingProfileChoices } from './testing-profile-options.ts';
+import {
+  TESTING_POLICY_BINDINGS,
+  readTestingAuthorization,
+  readTestingProfile,
+  readTestingProfiles,
+} from './testing-policy.ts';
+import { readRepositories, readRepository } from './code-repositories.ts';
+import { readRepositoryObservation } from './code-repository-observations.ts';
+import { readRepositoryOperation } from './code-repository-operations.ts';
+import { readCodeBaselineFiles, readCodeSnapshot } from './code-snapshots.ts';
+import { CREATE_CODE_TASK_BINDING, prepareCreateCodeTask } from './code-task-creation.ts';
+import type { CreateCodeTaskInput } from './code-task-creation.ts';
+import { readCodeTask, readDocumentCodeTasks } from './code-task-list.ts';
+import type { CandidateComparisonSide } from './code-task-candidates.ts';
+import {
+  readCandidateComparison,
+  readCandidateDiff,
+  readCandidateFile,
+  readCodeCandidate,
+  readCodeCandidates,
+} from './code-task-candidates.ts';
+import { readTaskOperations, readTaskOperation } from './code-task-operations.ts';
+import {
+  CANDIDATE_CHECK_BINDINGS,
+  readCodeVerification,
+  readCodeVerificationCases,
+  readCodeVerifications,
+} from './code-task-checks.ts';
+import { readTaskIssues } from './code-task-issues.ts';
+import {
+  LINK_HANDOFF_BINDING,
+  PREPARE_HANDOFF_BINDING,
+  readCodeHandoff,
+} from './code-task-handoff.ts';
+import { PERMISSION_RESPONSE_BINDING } from './code-task-permission-response.ts';
+import { PUBLISH_TESTING_CANDIDATE } from './code-task-publication.ts';
+import { LINK_TESTING_REPORT } from './code-task-report-link.ts';
+import { RECONCILE_ROLE_DELIVERY } from './code-task-reconciliation.ts';
+import { QUESTION_RESPONSE_BINDING } from './code-task-question-response.ts';
+import type { IssueKind, IssueStatus } from './code-task-issues.ts';
+import { readCodeModelCall, readCodeModelCalls } from './code-task-usage.ts';
+import { START_CODE_TASK_BINDING, readTaskStartOperation } from './code-task-start.ts';
+import { STOP_CODE_TASK_BINDING, readTaskStopOperation } from './code-task-stop.ts';
+import { RESUME_CODE_TASK_BINDING, readTaskResumeOperation } from './code-task-resume.ts';
+import { APPLY_CONFIGURATION } from './code-task-configuration.ts';
+import { INCREASE_CODE_BUDGET_BINDING } from './code-task-budget.ts';
+import type { CodeTaskFilters } from './code-task-list.ts';
+import { readDesignRevisions } from './code-design-revisions.ts';
+import type { DesignRevisionUsage } from './code-design-revisions.ts';
+import {
+  REPOSITORY_COMMAND_BINDINGS,
+  prepareRegisterCodeBaseline,
+  prepareRegisterRepository,
+  prepareRefreshRepository,
+} from './code-repository-commands.ts';
+import type {
+  RegisterCodeBaselineInput,
+  RegisterRepositoryInput,
+} from './code-repository-commands.ts';
+
+import {
+  AUTHORIZATION_BINDING,
+  prepareAuthorization,
+  readAuthorization,
+  readAuthorizations,
+} from './code-authorizations.ts';
+import type { AuthorizationFilters, AuthorizationScope } from './code-authorizations.ts';
+import {
+  EXECUTION_PROFILE_VERSION_BINDING,
+  prepareExecutionProfileVersion,
+  readExecutionProfileVersion,
+  readExecutionProfileVersions,
+} from './code-execution-profiles.ts';
+import type { ExecutionProfileContent } from './code-execution-profiles.ts';
 /** Explicit V1.5 API bindings. Each action owns its original body/key and
  * response expectations; retry is a caller decision on the same action.
  */
 import type { Ctx } from '@milkdown/kit/ctx';
 import type { BlockState } from '../documents/contracts.ts';
 import { ApiClient, ApiUnknown, ApiRejected, snapshotObject } from './client.ts';
-import type { ApiSuccess, JsonObject } from './client.ts';
+import type { ApiErrorPolicy, ApiSuccess, JsonObject } from './client.ts';
 import { array, checked, shape, id, require, distinct, choices } from './decoding.ts';
 import type { Decoder } from './decoding.ts';
+import { readPage } from './pagination.ts';
+import { readConfigurationOptions } from './code-configuration-options.ts';
+import {
+  CHECK_SET_VERSION_BINDING,
+  prepareCheckSetVersion,
+  readCheckSetVersion,
+  readCheckSetVersions,
+} from './code-check-sets.ts';
+import type { CheckSetContent } from './code-check-sets.ts';
+import type { ConfigurationOptionKind } from './code-configuration-options.ts';
 import * as models from './models.ts';
 import { modelCalls, modelCallDetail } from './model-calls.ts';
 import { suggestionMarkdown } from '../suggestions/preview.ts';
 import { DetailReadScope } from './detail-read-scope.ts';
+import { prepareCloseOriginalCommand } from './code-command-close.ts';
+import type { CommandCloseReceipt } from './code-command-close.ts';
+import { readCommandReceipt } from './code-command-receipts.ts';
+import type { OriginalResultPolicy, CommandReceipt } from './code-command-receipts.ts';
+import type { CommandIdentity } from './code-command-registry.ts';
+import {
+  configurationCollection,
+  configurationIdentityRow,
+  configurationIdentityReadErrors,
+  prepareConfigurationIdentity,
+  CONFIGURATION_IDENTITY_BINDINGS,
+} from './code-configuration-identities.ts';
+import { CommandRecovery } from '../code-tasks/command-recovery.ts';
+import type { OperationReader } from '../code-tasks/command-recovery.ts';
+import type { CommandRecoveryStore } from '../code-tasks/command-recovery-store.ts';
 
 export type ApiAction<T> = Readonly<{ submit: (signal?: AbortSignal) => Promise<ApiSuccess<T>> }>;
 const sameJson = (left: unknown, right: unknown) =>
@@ -120,6 +276,407 @@ export class WalleApi {
     this.ctx = ctx;
     this.readScope = readScope;
   }
+  commandReceipt<T>(
+    original: CommandIdentity,
+    policy: OriginalResultPolicy<T>,
+    signal?: AbortSignal,
+  ): Promise<ApiSuccess<CommandReceipt<T>>> {
+    return readCommandReceipt(this.client, original, policy, signal);
+  }
+  prepareCloseOriginalCommand<T>(
+    identity: unknown,
+    currentOrigin: string,
+    policy: OriginalResultPolicy<T>,
+  ): Promise<ApiAction<CommandCloseReceipt<T>>> {
+    return prepareCloseOriginalCommand(this.client, identity, currentOrigin, policy);
+  }
+  codeConfigurationOptions(kind: ConfigurationOptionKind, page = 1, signal?: AbortSignal) {
+    return readConfigurationOptions(this.client, kind, page, signal);
+  }
+  codeExecutionProfiles(page = 1, signal?: AbortSignal) {
+    return this.page(
+      configurationCollection('EXECUTION_PROFILE').path,
+      configurationIdentityRow,
+      [['page', String(page)]],
+      page,
+      signal,
+      configurationIdentityReadErrors,
+    );
+  }
+  codeCheckSets(page = 1, signal?: AbortSignal) {
+    return this.page(
+      configurationCollection('CHECK_SET').path,
+      configurationIdentityRow,
+      [['page', String(page)]],
+      page,
+      signal,
+      configurationIdentityReadErrors,
+    );
+  }
+  prepareCreateCodeExecutionProfile(name: string, currentOrigin: string) {
+    return prepareConfigurationIdentity(this.client, 'EXECUTION_PROFILE', name, currentOrigin);
+  }
+  prepareCreateCodeCheckSet(name: string, currentOrigin: string) {
+    return prepareConfigurationIdentity(this.client, 'CHECK_SET', name, currentOrigin);
+  }
+  codeCheckSetVersion(id: number, signal?: AbortSignal) {
+    return readCheckSetVersion(this.client, id, signal);
+  }
+  codeCheckSetVersions(checkSetId: number, page = 1, signal?: AbortSignal) {
+    return readCheckSetVersions(this.client, checkSetId, page, signal);
+  }
+  preparePublishCodeCheckSetVersion(
+    checkSetId: number,
+    content: CheckSetContent,
+    currentOrigin: string,
+  ) {
+    return prepareCheckSetVersion(this.client, checkSetId, content, currentOrigin);
+  }
+  codeExecutionProfileVersion(id: number, signal?: AbortSignal) {
+    return readExecutionProfileVersion(this.client, id, signal);
+  }
+  codeExecutionProfileVersions(profileId: number, page = 1, signal?: AbortSignal) {
+    return readExecutionProfileVersions(this.client, profileId, page, signal);
+  }
+  preparePublishCodeExecutionProfileVersion(
+    profileId: number,
+    content: ExecutionProfileContent,
+    currentOrigin: string,
+  ) {
+    return prepareExecutionProfileVersion(this.client, profileId, content, currentOrigin);
+  }
+  codeRepositories(page = 1, signal?: AbortSignal) {
+    return readRepositories(this.client, page, signal);
+  }
+  codeRepository(id: number, signal?: AbortSignal) {
+    return readRepository(this.client, id, signal);
+  }
+  repositoryOperation(operationId: number, signal?: AbortSignal) {
+    return readRepositoryOperation(this.client, operationId, signal);
+  }
+  codeDesignRevisions(
+    documentId: number,
+    usage: DesignRevisionUsage = 'MAIN',
+    page = 1,
+    signal?: AbortSignal,
+  ) {
+    return readDesignRevisions(this.client, documentId, usage, page, signal);
+  }
+  codeDefects(task: number, page: number, signal?: AbortSignal) {
+    return readCodeDefects(this.client, task, page, signal);
+  }
+  deliveryPlan(task: number, plan: number, page: number, signal?: AbortSignal) {
+    return readDeliveryPlan(this.client, task, plan, page, signal);
+  }
+  deliveryFile(
+    task: number,
+    plan: number,
+    candidate: number,
+    path: string,
+    side: DeliverySide,
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+  ) {
+    return readPlanComparison(
+      this.client,
+      task,
+      plan,
+      candidate,
+      path,
+      side,
+      offset,
+      length,
+      signal,
+    );
+  }
+  deliveries(task: number, page: number, signal?: AbortSignal) {
+    return readDeliveries(this.client, task, page, signal);
+  }
+  delivery(task: number, identity: number, signal?: AbortSignal) {
+    return readDelivery(this.client, task, identity, signal);
+  }
+  codeRepairs(task: number, page: number, signal?: AbortSignal) {
+    return readRepairs(this.client, task, page, signal);
+  }
+  codeRepair(task: number, identity: number, signal?: AbortSignal) {
+    return readRepair(this.client, task, identity, signal);
+  }
+  codeTaskRecords(task: number, page: number, session: number | null, signal?: AbortSignal) {
+    return readCodeTaskRecords(this.client, task, page, session, signal);
+  }
+  codeDefect(task: number, identity: number, signal?: AbortSignal) {
+    return readCodeDefect(this.client, task, identity, signal);
+  }
+  taskStartOperation(id: number, taskId: number, signal?: AbortSignal, key?: string) {
+    return readTaskStartOperation(this.client, id, taskId, signal, key);
+  }
+  taskResumeOperation(id: number, taskId: number, signal?: AbortSignal, key?: string) {
+    return readTaskResumeOperation(this.client, id, taskId, signal, key);
+  }
+  taskStopOperation(id: number, taskId: number, signal?: AbortSignal) {
+    return readTaskStopOperation(this.client, id, taskId, signal);
+  }
+  codeTaskIssues(
+    taskId: number,
+    kind: IssueKind,
+    page: number,
+    status: IssueStatus | '',
+    signal?: AbortSignal,
+  ) {
+    return readTaskIssues(this.client, taskId, kind, page, status, signal);
+  }
+  codeTaskOperations(taskId: number, page: number, signal?: AbortSignal) {
+    return readTaskOperations(this.client, taskId, page, signal);
+  }
+  codeTaskOperation(taskId: number, operationId: number, signal?: AbortSignal) {
+    return readTaskOperation(this.client, taskId, operationId, signal);
+  }
+  codeTaskCandidates(taskId: number, page: number, signal?: AbortSignal) {
+    return readCodeCandidates(this.client, taskId, page, signal);
+  }
+  codeTaskVerifications(taskId: number, candidateId: number, page: number, signal?: AbortSignal) {
+    return readCodeVerifications(this.client, taskId, candidateId, page, signal);
+  }
+  codeTaskVerification(taskId: number, verificationId: number, signal?: AbortSignal) {
+    return readCodeVerification(this.client, taskId, verificationId, signal);
+  }
+  codeTaskVerificationCases(
+    taskId: number,
+    verificationId: number,
+    itemId: number,
+    page: number,
+    signal?: AbortSignal,
+  ) {
+    return readCodeVerificationCases(this.client, taskId, verificationId, itemId, page, signal);
+  }
+  codeTaskCandidateDiff(taskId: number, candidateId: number, page: number, signal?: AbortSignal) {
+    return readCandidateDiff(this.client, taskId, candidateId, page, signal);
+  }
+  codeTaskCandidateFile(
+    taskId: number,
+    candidateId: number,
+    file: string,
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+  ) {
+    return readCandidateFile(this.client, taskId, candidateId, file, offset, length, signal);
+  }
+  codeTaskCandidateComparison(
+    taskId: number,
+    candidateId: number,
+    file: string,
+    side: CandidateComparisonSide,
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+  ) {
+    return readCandidateComparison(
+      this.client,
+      taskId,
+      candidateId,
+      file,
+      side,
+      offset,
+      length,
+      signal,
+    );
+  }
+  codeTaskCandidate(taskId: number, candidateId: number, signal?: AbortSignal) {
+    return readCodeCandidate(this.client, taskId, candidateId, signal);
+  }
+  codeTask(taskId: number, signal?: AbortSignal) {
+    return readCodeTask(this.client, taskId, signal);
+  }
+  documentCodeTasks(
+    documentId: number,
+    page = 1,
+    filters: CodeTaskFilters = {},
+    signal?: AbortSignal,
+  ) {
+    return readDocumentCodeTasks(this.client, documentId, page, filters, signal);
+  }
+  prepareCreateCodeTask(documentId: number, input: CreateCodeTaskInput, currentOrigin: string) {
+    return prepareCreateCodeTask(this.client, documentId, input, currentOrigin);
+  }
+  codeSnapshot(snapshotId: number, signal?: AbortSignal) {
+    return readCodeSnapshot(this.client, snapshotId, signal);
+  }
+  codeModelCalls(taskId: number, page = 1, signal?: AbortSignal) {
+    return readCodeModelCalls(this.client, taskId, page, signal);
+  }
+
+  codeModelCall(taskId: number, useId: number, signal?: AbortSignal) {
+    return readCodeModelCall(this.client, taskId, useId, signal);
+  }
+
+  codeBaselineFiles(snapshotId: number, page = 1, signal?: AbortSignal) {
+    return readCodeBaselineFiles(this.client, snapshotId, page, signal);
+  }
+  prepareRegisterRepository(input: RegisterRepositoryInput, currentOrigin: string) {
+    return prepareRegisterRepository(this.client, input, currentOrigin);
+  }
+  prepareRefreshRepository(repositoryId: number, currentOrigin: string) {
+    return prepareRefreshRepository(this.client, repositoryId, currentOrigin);
+  }
+  prepareRegisterCodeBaseline(
+    repositoryId: number,
+    input: RegisterCodeBaselineInput,
+    currentOrigin: string,
+  ) {
+    return prepareRegisterCodeBaseline(this.client, repositoryId, input, currentOrigin);
+  }
+  repositoryObservation(repositoryId: number, observationId: number, signal?: AbortSignal) {
+    return readRepositoryObservation(this.client, repositoryId, observationId, signal);
+  }
+  codeAuthorization(id: number, signal?: AbortSignal) {
+    return readAuthorization(this.client, id, signal);
+  }
+  codeAuthorizations(page = 1, filters: AuthorizationFilters = {}, signal?: AbortSignal) {
+    return readAuthorizations(this.client, page, filters, signal);
+  }
+  prepareApproveCodeAuthorization(
+    profileVersionId: number,
+    scope: AuthorizationScope,
+    currentOrigin: string,
+  ) {
+    return prepareAuthorization(this.client, profileVersionId, scope, currentOrigin);
+  }
+  testingTasks(filters: TestingTaskFilters, page = 1, signal?: AbortSignal) {
+    return readTestingTasks(this.client, filters, page, signal);
+  }
+  testingTask(id: number, signal?: AbortSignal) {
+    return readTestingTask(this.client, id, signal);
+  }
+  testingCalls(task: number, page: number, signal?: AbortSignal) {
+    return readTestingCalls(this.client, task, page, signal);
+  }
+  testingCall(task: number, identity: number, signal?: AbortSignal) {
+    return readTestingCall(this.client, task, identity, signal);
+  }
+  testingReport(identity: number, signal?: AbortSignal) {
+    return readTestingReport(this.client, identity, signal);
+  }
+  testingTaskReport(task: number, identity: number, signal?: AbortSignal) {
+    return readTestingTaskReport(this.client, task, identity, signal);
+  }
+  testingFindings(report: number, page: number, signal?: AbortSignal) {
+    return readTestingFindings(this.client, report, page, signal);
+  }
+  testingVerification(task: number, verification: number, signal?: AbortSignal) {
+    return readTestingVerification(this.client, task, verification, signal);
+  }
+  testingCases(
+    task: number,
+    verification: number,
+    item: number,
+    page: number,
+    signal?: AbortSignal,
+  ) {
+    return readTestingCases(this.client, task, verification, item, page, signal);
+  }
+  testingTaskOperation(task: number, operation: number, signal?: AbortSignal) {
+    return readTestingTaskOperation(this.client, task, operation, signal);
+  }
+  testingTaskOperations(task: number, page = 1, signal?: AbortSignal) {
+    return readTestingTaskOperations(this.client, task, page, signal);
+  }
+  testingPlans(page = 1, signal?: AbortSignal) {
+    return readTestingPlans(this.client, page, signal);
+  }
+  testingPlan(plan: number, signal?: AbortSignal) {
+    return readTestingPlan(this.client, plan, signal);
+  }
+  testingPlanVersions(plan: number, page = 1, signal?: AbortSignal) {
+    return readTestingPlanVersions(this.client, plan, page, signal);
+  }
+  testingPlanVersion(plan: number, version: number, signal?: AbortSignal) {
+    return readTestingPlanVersion(this.client, plan, version, signal);
+  }
+  testingProfileChoices(signal?: AbortSignal) {
+    return readTestingProfileChoices(this.client, signal);
+  }
+  testingPacks(versionId: number, page = 1, signal?: AbortSignal) {
+    return readTestingPacks(this.client, versionId, page, signal);
+  }
+  testingPack(versionId: number, packId: number, signal?: AbortSignal) {
+    return readTestingPack(this.client, versionId, packId, signal);
+  }
+  testingSeal(packId: number, operationId: number, signal?: AbortSignal) {
+    return readTestingSeal(this.client, packId, operationId, signal);
+  }
+  testingValidationOperation(packId: number, operationId: number, signal?: AbortSignal) {
+    return readTestingValidationOperation(this.client, packId, operationId, signal);
+  }
+  testingValidation(packId: number, validationId: number, signal?: AbortSignal) {
+    return readTestingValidation(this.client, packId, validationId, signal);
+  }
+  testingReferenceSets(page = 1, signal?: AbortSignal) {
+    return readTestingReferenceSets(this.client, page, signal);
+  }
+  testingProfiles(page = 1, name: string | null = null, signal?: AbortSignal) {
+    return readTestingProfiles(this.client, page, name, signal);
+  }
+  testingProfile(id: number, signal?: AbortSignal) {
+    return readTestingProfile(this.client, id, signal);
+  }
+  testingAuthorization(id: number, signal?: AbortSignal) {
+    return readTestingAuthorization(this.client, id, signal);
+  }
+  configurationRecovery(
+    store: CommandRecoveryStore,
+    readOperation: OperationReader,
+  ): CommandRecovery {
+    return new CommandRecovery(
+      this.client,
+      store,
+      [
+        ...CONFIGURATION_IDENTITY_BINDINGS,
+        ...REPOSITORY_COMMAND_BINDINGS,
+        CREATE_CODE_TASK_BINDING,
+        START_CODE_TASK_BINDING,
+        STOP_CODE_TASK_BINDING,
+        RESUME_CODE_TASK_BINDING,
+        ...CANDIDATE_CHECK_BINDINGS,
+        PUBLISH_TESTING_CANDIDATE,
+        LINK_TESTING_REPORT,
+        CREATE_CODE_DEFECT,
+        REQUEST_CODE_REPAIR,
+        PREPARE_DELIVERY,
+        ACCEPT_DELIVERY,
+        RECONCILE_ROLE_DELIVERY,
+        QUESTION_RESPONSE_BINDING,
+        PERMISSION_RESPONSE_BINDING,
+        PREPARE_HANDOFF_BINDING,
+        LINK_HANDOFF_BINDING,
+        APPLY_CONFIGURATION,
+        INCREASE_CODE_BUDGET_BINDING,
+        CHECK_SET_VERSION_BINDING,
+        EXECUTION_PROFILE_VERSION_BINDING,
+        AUTHORIZATION_BINDING,
+        ...TESTING_POLICY_BINDINGS,
+        CREATE_TEST_PLAN,
+        ...TEST_PLAN_CONTROL_BINDINGS,
+        ...TEST_PLAN_DRAFT_BINDINGS,
+        CREATE_TESTING_PACK,
+        SEAL_TESTING_PACK,
+        VALIDATE_TESTING_PACK,
+        PUBLISH_TESTING_PACK,
+        REVOKE_TESTING_PACK,
+        CREATE_TESTING_TASK,
+        ATTACH_TESTING_ASSETS,
+        INCREASE_TESTING_BUDGET,
+        RECONCILE_TESTING_TASK,
+        RESUME_TESTING_TASK,
+        DRAFT_TESTING_PLAN,
+        RUN_TESTING_TASK,
+        STOP_TESTING_TASK,
+        REVIEW_TESTING_FINDING,
+      ],
+      readOperation,
+    );
+  }
   forDetailReads(): WalleApi {
     return new WalleApi(this.client, this.ctx, new DetailReadScope(), this.assistantDocumentId);
   }
@@ -206,29 +763,18 @@ export class WalleApi {
     parameters: readonly (readonly [string, string])[],
     requestedPage: number,
     signal?: AbortSignal,
+    errorPolicy?: ApiErrorPolicy,
   ) {
-    id(requestedPage);
-    require(requestedPage <= 100000);
-    const response = await this.client.read(
+    return readPage(
+      this.client,
       path,
-      shape({ items: array(decode, 20) }),
+      decode,
+      (row) => row.id,
       parameters,
+      requestedPage,
       signal,
+      errorPolicy,
     );
-    try {
-      const pagination = response.meta.pagination;
-      require(
-        pagination !== undefined && 'page' in pagination && pagination.page === requestedPage,
-      );
-      require(
-        response.data.items.length ===
-          Math.min(20, Math.max(0, pagination.total - (requestedPage - 1) * 20)),
-      );
-      distinct(response.data.items.map((item) => item.id));
-      return response;
-    } catch {
-      throw new ApiUnknown(false);
-    }
   }
   private current = (identity: number) =>
     owned(models.documentDecoder(this.ctx, 'CURRENT'), identity);
@@ -244,6 +790,9 @@ export class WalleApi {
       filters.page ?? 1,
       signal,
     );
+  }
+  codeHandoff(taskId: number, handoffId: number, page = 1, signal?: AbortSignal) {
+    return readCodeHandoff(this.client, taskId, handoffId, page, signal);
   }
   getRequirementDetail(
     identity: number,

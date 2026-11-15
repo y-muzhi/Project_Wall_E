@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .audit_data import audit_json, MAX_AUDIT_BYTES
 from .database import StorageUnavailable
-from .idempotency import canonical_input
+from backend.app.shared.json_canonical import canonical_input
 from .model_gateway import ModelGateway, TransportResult
 from .model_profile import ModelProfile, MODEL_ID, DEFAULT_PROFILE
 from .resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid, FUNCTIONS
