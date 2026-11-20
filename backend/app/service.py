@@ -1,4 +1,4 @@
-"""Production API lifespan: verified existing Schema200 -> lock/recovery -> registered document/V2 routes.
+"""Production API lifespan: explicit verified Schema200/210 -> lock/recovery -> registered routes.
 
 No paid compatibility/effect claim and no placeholder product page. Initialization
 is the separate native database CLI. This factory never creates or repairs a DB.
@@ -60,9 +60,11 @@ from backend.app.guide.orchestrator import _native
 from backend.app.guide.worker import GuideWorker
 from backend.app.infrastructure.database import Database, configured_path
 from backend.app.infrastructure.execution_lease import ExecutionLease, LeasedDatabase
+from backend.app.infrastructure.formation_database import FormationDatabase
 from backend.app.infrastructure.idempotency import Idempotency
+from backend.app.infrastructure.model_profile import ModelProfile
 from backend.app.infrastructure.production_ai import production_options
-from backend.app.infrastructure.resources import ResourceCatalog
+from backend.app.infrastructure.resources import ConfigInvalid, ResourceCatalog
 from backend.app.infrastructure.schema_v20_release import load_release
 from backend.app.messages.api import message_router
 from backend.app.requirements.api import req_router
@@ -82,6 +84,7 @@ def create_app(
     worker_factory=None,
     frontend_directory=None,
     registration_installation=None,
+    schema_version=200,
 ):
     """Private process startup dependencies. Installation input is never HTTP data."""
     if (
@@ -90,14 +93,39 @@ def create_app(
     ):
         raise TypeError('Trusted registration installation inputs required')
 
+    if type(schema_version) is not int or schema_version not in (200, 210):
+        raise ValueError('An explicit supported database schema version is required')
+    if database is not None and isinstance(database, FormationDatabase) != (schema_version == 210):
+        raise ValueError('Injected database and explicit schema version differ')
+
     @asynccontextmanager
     async def lifespan(app):
-        actual_database = (
-            Database(configured_path(), schema_release=load_release())
-            if database is None
-            else database
-        )
-        resources = await _native(ResourceCatalog) if catalog is None else catalog
+        def startup_dependencies():
+            actual_database = database
+            if actual_database is None:
+                if schema_version == 210:
+                    from backend.app.infrastructure.formation_schema_release import (
+                        load_release as load_formation_release,
+                    )
+
+                    actual_database = FormationDatabase(
+                        configured_path(), formation_release=load_formation_release()
+                    )
+                else:
+                    actual_database = Database(configured_path(), schema_release=load_release())
+            resources = ResourceCatalog() if catalog is None else catalog
+            if schema_version == 210:
+                if catalog is None:
+                    resources = resources.for_formation_profile(ModelProfile.selected_profile())
+                elif not resources.collaboration.formation_driven:
+                    raise ConfigInvalid(
+                        'Schema210 startup requires its explicit formation resource'
+                    )
+            elif resources.collaboration.formation_driven:
+                raise ConfigInvalid('Formation resources require explicit Schema210 startup')
+            return actual_database, resources
+
+        actual_database, resources = await _native(startup_dependencies)
         worker = (
             GuideWorker(
                 actual_database, catalog=resources, orchestrator_options=production_options()
@@ -222,6 +250,10 @@ def create_app(
         TEST_PLAN_ROUTER,
     ):
         app.include_router(router)
+    if schema_version == 210:
+        from backend.app.formation.api import formation_router
+
+        app.include_router(formation_router)
     if frontend_directory is not None:
         from .frontend import install_frontend
 

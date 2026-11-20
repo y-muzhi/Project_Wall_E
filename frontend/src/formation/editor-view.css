@@ -1,0 +1,222 @@
+.formation-path-dialog {
+  box-sizing: border-box;
+  width: calc(100vw - 32px);
+  max-width: 960px;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--border-color, #dbe2ea);
+  border-radius: 12px;
+  background: var(--surface-primary, #fff);
+  color: inherit;
+  overflow: auto;
+}
+.formation-path-dialog::backdrop {
+  background: rgb(20 28 43 / 40%);
+}
+.formation-path-dialog > header,
+.formation-path-dialog > footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px;
+  background: var(--surface-primary, #fff);
+}
+.formation-path-dialog > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border-color, #dbe2ea);
+}
+.formation-path-dialog > header h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.formation-path-dialog > footer {
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid var(--border-color, #dbe2ea);
+  font-size: 12px;
+}
+.formation-path-editor {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.formation-path-editor p {
+  margin: 0;
+  line-height: 1.6;
+}
+.formation-path-editor h3,
+.formation-path-editor h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.formation-path-editor input:not([type='checkbox']),
+.formation-path-editor textarea,
+.formation-path-editor select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-color, #cdd5e1);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--surface-primary, #fff);
+  color: inherit;
+}
+.formation-path-editor textarea {
+  resize: vertical;
+}
+.formation-editor-field {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+}
+.formation-editor-field small {
+  font-size: 11px;
+  color: var(--text-secondary, #617084);
+}
+.formation-path-editor fieldset {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border-color, #dbe2ea);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+.formation-path-editor legend {
+  font-size: 12px;
+  padding: 0 4px;
+}
+.formation-add-change {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.formation-add-change label {
+  display: grid;
+  gap: 7px;
+  flex: 1;
+  min-width: 180px;
+}
+.formation-edit-changes {
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+.formation-edit-changes > li {
+  padding: 14px;
+  border: 1px solid var(--border-color, #dbe2ea);
+  border-radius: 10px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.formation-edit-changes header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.formation-change-fields,
+.formation-result-routes {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.formation-expected-form {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-secondary, #f5f7fa);
+  border-radius: 8px;
+}
+.formation-picker-pages {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.formation-selected-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.formation-selected-options > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--surface-secondary, #f5f7fa);
+  border-radius: 6px;
+  min-width: 0;
+}
+.formation-selected-options span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.formation-block-choices {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+}
+.formation-block-choices label {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  font-size: 12px;
+}
+.formation-path-preview {
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, #dbe2ea);
+  display: grid;
+  gap: 12px;
+}
+.formation-preview-changes {
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.formation-preview-changes > li {
+  padding: 12px;
+  border: 1px solid var(--border-color, #dbe2ea);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+}
+.formation-preview-changes > li > div {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+}
+.formation-preview-changes span {
+  color: var(--text-secondary, #617084);
+}
+@media (max-width: 600px) {
+  .formation-path-dialog > footer {
+    position: static;
+  }
+  .formation-path-editor {
+    padding: 12px;
+  }
+}

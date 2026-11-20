@@ -70,3 +70,18 @@ test('a failed version is never marked fresh and cannot cause a loading-effect r
  await reader.load(17,'v1');assert(reader.get(17).error);await reader.load(17,'v1');assert.equal(reads,1);
  fail=false;await reader.load(17,'v1',true);assert.equal(reads,2);assert.equal(reader.get(17).error,null);reader.dispose();
 });
+
+
+test('OpenAI request counts remain a distinct whole-request measurement', () => {
+ const value = {
+  call:call({model_name:'gpt-6.2-sol'}),requirement_id:3,action_type:'ASK',operation:'DISCUSS',
+  prompt_reference:'collaboration.common@openai-v1',context_reference:'formation_context_v21_1',
+  context_strategy:'collaboration_context_v1',selection_summary:null,sections:[],
+  included_history_ids:[],budget_removed_history_ids:[],raw_request_json:'{"input":[]}',
+  preflight:{input_tokens:2000,budget:{total_tokens:139264,input_tokens:131072,output_tokens:8192,
+   framing_reserve:0,soft_input_target:49152,counting:'openai_exact_request_v1'},counts:[2000]},
+ };
+ assert.deepEqual(modelCallDetail(value).preflight.counts,[2000]);
+ assert.throws(()=>modelCallDetail({...value,preflight:{...value.preflight,counts:Array(8).fill(0)}}));
+ assert.throws(()=>modelCallDetail({...value,preflight:{...value.preflight,budget:{...value.preflight.budget,counting:'EMPIRICAL'}}}));
+});

@@ -72,6 +72,39 @@ def audit_json(value, *, credentials=()):
     return canonical_input(sanitize_audit(value, credentials=credentials))
 
 
+def retain_openai_request_configuration(clean, original, profile):
+    # 'reasoning' in a request is a fixed effort configuration, not private
+    # model reasoning. Preserve only this typed path; the global scrubber still
+    # removes arbitrary reasoning_content/encrypted_content everywhere.
+    if profile.provider != 'openai':
+        return clean
+    request = original.get('request')
+    if request is not None:
+        expected = profile.snapshot['reasoning']
+        if type(request) is not dict or request.get('reasoning') != expected:
+            raise ValueError('OpenAI request configuration differs from its profile')
+        approved = sanitize_audit({'configuration': expected}, credentials=(profile.api_key,))[
+            'configuration'
+        ]
+        clean['request']['reasoning'] = approved
+        if clean['request'] != request:
+            raise ValueError('Exact OpenAI request cannot be safely retained')
+    if 'profile' in original:
+        if original['profile'] != profile.snapshot:
+            raise ValueError('OpenAI profile differs from its fixed identity')
+        clean['profile']['reasoning'] = profile.snapshot['reasoning']
+    return clean
+
+
+def counting_audit_json(value, profile):
+    clean = sanitize_audit(value, credentials=(profile.api_key,))
+    clean = retain_openai_request_configuration(clean, value, profile)
+    encoded = canonical_input(clean)
+    if len(encoded.encode('utf-8')) > MAX_AUDIT_BYTES:
+        raise AuditCapacityExceeded('Counting audit exceeds capacity')
+    return encoded
+
+
 def collaboration_audit_json(value, resources, *, credentials=()):
     """Preserve only the Schema-validated private program grant at its exact
     ContextBasis path. HTTP authorization and arbitrary credentials still use
@@ -83,6 +116,13 @@ def collaboration_audit_json(value, resources, *, credentials=()):
     basis = resources.validate('ContextBasis', value['context_basis'])
     grant = basis['canonical']['authorization']
     clean = sanitize_audit(value, credentials=credentials)
+    if value.get('profile', {}).get('provider') == 'openai':
+        from .model_profile import ModelProfile
+
+        profile = ModelProfile.from_snapshot(
+            value['profile'], api_key=credentials[0] if credentials else 'private-audit-validation'
+        )
+        clean = retain_openai_request_configuration(clean, value, profile)
     clean['context_basis']['canonical']['authorization'] = sanitize_audit(
         {'grant': grant}, credentials=credentials
     )['grant']

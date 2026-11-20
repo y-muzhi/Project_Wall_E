@@ -86,7 +86,7 @@ function closedReceipt(path: string): CommandReceipt<unknown> {
 async function rawDatabase(name: string): Promise<IDBDatabase> {
   safeName(name);
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(name, 1);
+    const request = indexedDB.open(name, 2);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -373,7 +373,7 @@ export async function storageProbe(): Promise<{ checks: readonly string[] }> {
     const upgrade = owned();
     await upgrade.store.reserve((await make(pathFor(70))).frozen);
     const upgraded = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(upgrade.name, 2);
+      const request = indexedDB.open(upgrade.name, 3);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -833,7 +833,7 @@ export async function boundsProbe(): Promise<{ checks: readonly string[] }> {
         if (property === 'open')
           return (databaseName: string) => {
             check(databaseName === blockedName, 'wrong owned blocked target');
-            const request = target.open(databaseName, 2);
+            const request = target.open(databaseName, 3);
             settled = new Promise<void>((resolve) => {
               request.addEventListener('blocked', () => {
                 wasBlocked = true;
@@ -854,7 +854,7 @@ export async function boundsProbe(): Promise<{ checks: readonly string[] }> {
       },
     });
     blockedStore = new CommandRecoveryStore({ name: blockedName, factory: () => factory });
-    await failure(blockedStore.list(), 'UNAVAILABLE');
+    await failure(blockedStore.list(), 'BLOCKED');
     check(wasBlocked, 'native blocked event not observed');
     blockedStore.close();
     held.close();
@@ -863,7 +863,7 @@ export async function boundsProbe(): Promise<{ checks: readonly string[] }> {
     check(wasAborted, 'refused blocked open continued into an upgrade');
     const unchanged = await rawDatabase(blockedName);
     check(
-      unchanged.version === 1 && unchanged.objectStoreNames.length === 2,
+      unchanged.version === 2 && unchanged.objectStoreNames.length === 2,
       'blocked open modified stores/version',
     );
     unchanged.close();

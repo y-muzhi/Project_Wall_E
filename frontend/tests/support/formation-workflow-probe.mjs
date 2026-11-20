@@ -1,0 +1,53 @@
+/** Replay real isolated HTTP envelopes in memory through the actual WalleApi codecs. */
+import assert from 'node:assert/strict';
+import { ApiClient, ApiRejected } from '../../src/api/client.ts';
+import { WalleApi } from '../../src/api/walle.ts';
+import { cards, guideRun, programReceipt } from '../../src/api/models.ts';
+import { formationProgramReceipt } from '../../src/api/formation-workflow.ts';
+let input='';
+for await (const chunk of process.stdin) input+=chunk;
+const fixture=JSON.parse(input);
+const copy=value=>structuredClone(value);
+const normalize=value=>{const u=new URL(value,'http://localhost');u.searchParams.sort();return u.pathname+u.search;};
+const responses=new Map(fixture.responses.map(row=>[row.method+' '+normalize(row.url),row]));
+const used=new Set();
+const client=new ApiClient(async (url,options)=>{
+ const key=(options.method??'GET')+' '+normalize(url);
+ const row=responses.get(key);assert.ok(row,'Unexpected request '+key);used.add(key);
+ if(row.method==='POST'){
+   assert.equal(new Headers(options.headers).get('Idempotency-Key'),fixture.key);
+   assert.deepEqual(JSON.parse(options.body),fixture.answers);
+ }
+ return new Response(JSON.stringify(row.body),{status:row.status,headers:{'Content-Type':'application/json'}});
+},()=>fixture.key);
+const api=new WalleApi(client,{}).forDocumentAssistant(1);
+const run=await api.getGuideRun(1);
+assert.equal(run.data.effect_state,'APPLIED');
+assert.equal(run.data.proposal_result,'APPLIED');
+assert.ok('accepted_target' in run.data);
+const mutated=copy(run.data);mutated.formation_result='REJECTED';mutated.effect_state='STRUCTURED_REJECTED';
+assert.throws(()=>guideRun(mutated));
+const messages=await api.listMessages(1);
+const original=messages.data.items.find(row=>row.id===fixture.message_id);
+assert.equal(original.card_state,'ANSWERED');
+assert.equal(original.structured_content.purpose,fixture.purpose);
+const group=cards(original.structured_content);
+assert.equal(group.cards[0].options.length,1);
+const bad=copy(group);bad.action_payload.publication_binding={};
+assert.throws(()=>cards(bad));
+const body=copy(fixture.answers);delete body.expected_discussion_version;
+const action=api.prepareCardResponses(fixture.message_id,body,fixture.answers.expected_discussion_version);
+const result=await action.submit();
+assert.equal(result.data.operation,fixture.purpose);
+assert.deepEqual(programReceipt(result.data),result.data);
+assert.equal(result.data.effects.proposal_disposition,'APPLIED');
+const formal=messages.data.items.find(row=>row.id===result.data.user_message_id);
+assert.deepEqual(formal.program_receipt,result.data);
+const unknown=copy(result.data);unknown.protected_semantic_digest='0'.repeat(64);
+assert.throws(()=>formationProgramReceipt(unknown));
+const proposals=await api.getFormationProposals(1,1);
+assert.equal(proposals.data.items[0].can_apply,false);
+assert.equal(proposals.data.items[0].expiry_reason,'ALREADY_ANSWERED');
+assert.equal(proposals.data.items[0].disposition,'APPLIED');
+assert.equal(used.size,responses.size);
+process.stdout.write('Actual formation workflow HTTP envelopes decoded successfully\n');

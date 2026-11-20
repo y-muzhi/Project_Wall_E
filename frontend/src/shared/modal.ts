@@ -32,7 +32,7 @@ export function trapModalTab(event: KeyboardEvent<HTMLDialogElement>): void {
   if (event.key !== 'Tab') return;
   const controls = [
     ...event.currentTarget.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
     ),
   ].filter((element) => element.getClientRects().length > 0);
   const first = controls[0],

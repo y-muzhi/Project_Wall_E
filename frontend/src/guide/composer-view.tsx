@@ -52,6 +52,7 @@ export function GuideComposer({
   const writing = state.action === 'REVISE';
   const available = state.available && !document.busy && document.mode === 'CURRENT';
   const disabled = !available || !owner.editable || state.refreshing;
+  const inputDisabled = !available || !owner.instructionEditable;
   const topicUpdating = Boolean(
     discussionState && ['SUBMITTING', 'UNKNOWN', 'CONFIRMED'].includes(discussionState.phase),
   );
@@ -112,6 +113,8 @@ export function GuideComposer({
   const focusTitle = latestDiscussion
     ? topics.find((topic) => topic.topic_ref === focus)?.title
     : state.detail.discussion_summary.focus_title;
+  const formationTarget = state.formation_target_label;
+  const discussionLabel = formationTarget ?? focusTitle;
   const readTopics = () => {
     if (!discussionState?.loading && discussion && !topicUpdating) void discussion.load();
   };
@@ -124,6 +127,21 @@ export function GuideComposer({
     >
       <div className="guide-composer-body">
         {handoff}
+        {state.formation_proposal !== null && (
+          <p role="status">
+            已选择调整
+            {state.formation_proposal.intent === 'ADJUST_WRITE' ? '原写入提案' : '原路线提案'}。
+            请在输入框填写要求，发送后才开始调整。
+            <button
+              type="button"
+              className="ui-button"
+              disabled={!owner.editable}
+              onClick={() => owner.clearProposalSelection()}
+            >
+              取消本轮选择
+            </button>
+          </p>
+        )}
         {viewingHistory !== null && (
           <p className="field-help">
             正在查看运行 #{viewingHistory}。输入仅发送当前明确选择的操作。
@@ -219,10 +237,13 @@ export function GuideComposer({
                   if (event.currentTarget.open && latestDiscussion === null) readTopics();
                 }}
               >
-                <summary title={focusTitle ?? undefined}>
-                  <span>讨论主题</span>
-                  <strong>{focusTitle ?? '暂无讨论主题'}</strong>
+                <summary title={discussionLabel ?? undefined}>
+                  <span>{formationTarget === null ? '讨论主题' : '讨论目标'}</span>
+                  <strong>{discussionLabel ?? '暂无讨论主题'}</strong>
                 </summary>
+                {formationTarget !== null && (
+                  <p className="field-help">讨论主题 · {focusTitle ?? '暂无讨论主题'}</p>
+                )}
                 {discussionState.loading && <p role="status">正在读取讨论主题…</p>}
                 {topics.length > 0 && (
                   <SingleSelect
@@ -329,7 +350,7 @@ export function GuideComposer({
             className="ui-input"
             aria-label="给 AI 的消息"
             value={state.instruction}
-            disabled={disabled}
+            disabled={inputDisabled}
             placeholder={writing ? '说明要写入的内容…' : '说明本次希望讨论的问题…'}
             rows={2}
             aria-invalid={!composing && state.instruction.length > 0 && !feedback.valid}
@@ -341,7 +362,7 @@ export function GuideComposer({
               if (action === null) return;
               event.preventDefault();
               if (action === 'SEND') send();
-              else if (action === 'NEWLINE' && !disabled) {
+              else if (action === 'NEWLINE' && !inputDisabled) {
                 const field = event.currentTarget;
                 field.setRangeText('\n', field.selectionStart, field.selectionEnd, 'end');
                 owner.change(field.value);

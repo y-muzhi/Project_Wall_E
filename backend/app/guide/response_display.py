@@ -8,8 +8,8 @@ import json
 
 from backend.app.infrastructure.audit_repository import AuditRepository, _owned
 from backend.app.infrastructure.guide_repository import GuideRepository
-from backend.app.infrastructure.identifiers import EntityKind, entity_id, message_sequence
 from backend.app.infrastructure.idempotency import canonical_input
+from backend.app.infrastructure.identifiers import EntityKind, entity_id, message_sequence
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.shared.command_execution import Rejected, operation_time
@@ -20,6 +20,27 @@ def response_text(raw):
     """Keep all returned assistant messages, including partial/non-JSON text."""
     if not isinstance(raw, dict):
         return None
+    if raw.get('object') == 'response':
+        from backend.app.infrastructure.openai_protocol import output_text
+
+        try:
+            return output_text(raw, complete=False)
+        except (ValueError, KeyError, TypeError):
+            # Refusals/incomplete messages may be displayed, never adopted.
+            texts = []
+            for item in raw.get('output', []) if type(raw.get('output')) is list else []:
+                if type(item) is not dict or item.get('type') != 'message':
+                    continue
+                for part in item.get('content', []) if type(item.get('content')) is list else []:
+                    if type(part) is dict:
+                        value = (
+                            part.get('text')
+                            if part.get('type') == 'output_text'
+                            else part.get('refusal')
+                        )
+                        if type(value) is str and value:
+                            texts.append(value)
+            return '\n\n'.join(texts) or None
     messages = []
     for choice in raw.get('choices', []) if isinstance(raw.get('choices'), list) else []:
         message = choice.get('message') if isinstance(choice, dict) else None

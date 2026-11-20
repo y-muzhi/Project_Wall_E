@@ -1,0 +1,17 @@
+# V2.1讨论接受与模型上下文（2026-11-16）
+
+三小时会话15:48开始，隔离a0f4059＋本轮源码，Schema210/r3，core/r52；无真实模型／计数、用户服务／正常库修改或Git操作。
+
+新增discuss_contracts／discuss_selection／discuss_acceptance／model_material／model_projection，原C01分派formation.discuss身份（含文档）且重放成功优先。复用原GuideRun／Message／pending与原生状态转移，PLANNED／PAUSED实际讨论才开始／恢复，支线RESUME核对原状态事件并接受后归一化ENTER，取消不撤销已提交恢复。目标／来源错误和冻结失败全事务回滚。同轮D/F各最多一次；新GuideRun冻结字段仅INSERT一次，不修改原不可变触发器。
+
+首轮接受4失败6通过：创建后UPDATE冻结字段触发存储保护；修复创建前冻结、同事务延后记录真实事件后，test_v21_discuss_acceptance.py 10 passed／49.23秒。此批当时使用v19候选；最终新材料资源升级见下方，后续共享存储回归再覆盖当前源码。
+
+新最终选材资源为v21／v22（v19／v20保留候选原字节，未冒充完整最终执行）：
+- v21 manifest f5505794725e072071e3c5f777dfb6b4744f84f13544cd22fb86cd8947cb7e23；release 8ae9cb47a15e3dd4388977d8561a4bb7efcc11892ab7bfca3fbc76ff847c7fb4。
+- v22 manifest 2e52b3a4507eee0b61f901dd5f6a6ef07191feedbc2deae0a94424b3fbd8d3ea；release e04ace2943cb88d8e95446a06e482bd673c572e151a2ec485ef9e2424b384719。
+
+修正材料包含：支线历史上次结果与当前结果分开、评估／建议当前性、旧消息实际effect_state、范围真实总数；只读投影不包含PublicationBinding。Canonical增加冻结formation／selection／proposal_context；Wire仍原八根，形成材料放project_position，完整目标放current_request，调整原卡作为独立必需PROPOSAL材料。Sources在Canonical保留实际SourceRef、Wire使用确已携带别名；原九根OutputDiscussion及进展内部delta。独立GENERATE／REVISE及旧purpose接受原release，执行入口按真实运行冻结release选择，计数／审计记录实际新layout和资源版本。
+
+test_v21_model_context.py＋test_v21_resource_release.py 23 passed／35.92秒：八根／八段计数、来源别名分离、同源实际区块无写权限、历史冻结重放、120非阻塞问题按100实体选材并声明21遗漏、101硬阻塞材料拒绝且回滚、新release未准入时0计数及离线固定八文本复核。首轮受限环境120秒超时不计通过，本机相同临时离线检查通过。实际Alias／Revision由原接受→Canonical→编译→计数／回放链取得，离线计数夹具不代表供应方Token真实性。
+
+当前继续B4普通12型增量／新卡正式发布及C07整单元采用，尚未取得新release完整执行／有效新卡／精确采用证据。共享图存储提取及原路径回归正执行，不提前记通过。无产品页面／浏览器／IDB／升级切换验收。

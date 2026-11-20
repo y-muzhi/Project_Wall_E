@@ -207,6 +207,11 @@ class DiscussionCommandInput:
 
 
 def discussion_command_input(payload):
+    command = payload.get('discussion_command') if type(payload) is dict else None
+    if type(command) is dict and command.get('type') == 'FORMATION':
+        from backend.app.formation.contracts import command_input
+
+        return command_input(payload)
     from backend.app.infrastructure.idempotency import request_key, canonical_input
     from .discussion import discussion_resources
 

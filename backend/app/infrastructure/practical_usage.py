@@ -4,8 +4,9 @@ Text counts plus reserve are a preflight estimate, never a universal bound.
 This gate cannot undo a paid request. It rejects adoption and further retries.
 """
 
-from backend.app.guide.counted_context import PRACTICAL_RELEASES, PRACTICAL_MODE, counting_release
+from backend.app.guide.counted_context import PRACTICAL_MODE, PRACTICAL_RELEASES, counting_release
 from backend.app.shared.validation import MAX_SAFE_INTEGER
+
 from .resources import ConfigInvalid
 
 
@@ -121,6 +122,18 @@ def validate_collaboration_usage(raw, *, profile, context, catalog, input_tokens
     from backend.app.guide.collaboration_counting import verify_counted
 
     evidence = verify_counted(context, catalog, profile)
+    if profile.provider == 'openai':
+        from .collaboration_provider import validate_measurements
+
+        validate_measurements(
+            raw,
+            release=catalog.collaboration.counting,
+            request_tokens=evidence['count_attempts'][-1]['measurement']['request_tokens'],
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        return
+
     validate_collaboration_measurements(
         raw,
         model=profile.model_name,

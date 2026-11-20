@@ -20,6 +20,8 @@
 
 本页仅导航，不复制各轮测试数、资源准入状态、PID或执行申请。
 
-## V2.1规划入口
+## V2.1设计与实施入口
 
-[文档形成主线与阶段性写入](iterations/pending/v2.1/WALL-E.文档形成主线与阶段性写入_V_2.1.md)已按用户要求归入V2.1；当前仅设计。接续见[项目管理](project/v2.1/README.md)，状态见[需求映射](traceability/v2.1/需求实现映射_V_2.1.md)，静态证据见[验证记录](verification/v2.1/README.md)。V1.5设计保留为现有实现基线，尚无V2.1正式规格。
+[统一大纲设计基线](iterations/pending/v2.1/WALL-E.大纲设计基线_V_2.1.md)汇总V2.1文档形成主线与阶段性写入的当前需求／流程；已启动独立工作区实施，当前处于实施及验收阶段。接续见[项目管理](project/v2.1/README.md)，状态见[需求映射](traceability/v2.1/需求实现映射_V_2.1.md)，各类实际检查及其范围见[验证记录](verification/v2.1/README.md)。V1.5设计保留为现有实现基线，尚无V2.1正式规格。
+
+V2.1详细初稿（2026-11-14）：[后端](iterations/pending/v2.1/WALL-E.后端设计文档_V_2.1.md)、[前端](iterations/pending/v2.1/WALL-E.前端设计文档_V_2.1.md)，按共享模板完整八章输出，0.1-draft-4／DRAFT，尚未正式审定／合并；现已按用户授权实施，实际状态以进度和映射为准，尚未整版验收。

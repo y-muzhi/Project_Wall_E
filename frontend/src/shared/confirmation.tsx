@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { Icon, BusyIndicator } from './icon.tsx';
 import { useId, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { registerModal, trapModalTab } from './modal.ts';
+import { activeModal, registerModal, trapModalTab } from './modal.ts';
 import { useMotionPresence } from './motion-react.ts';
 
 let active: HTMLDialogElement | null = null;
@@ -11,6 +12,7 @@ export type ConfirmationProps = Readonly<{
   description: string;
   busy: boolean;
   error?: string | null;
+  children?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   dangerous?: boolean;
@@ -53,12 +55,14 @@ export function Confirmation(props: ConfirmationProps) {
         candidate.focus();
         return document.activeElement === candidate;
       };
-      if (!focus(original))
+      if (!focus(original)) {
+        if (focus(activeModal())) return;
         for (const candidate of document.querySelectorAll<HTMLElement>(
           '[data-focus-fallback], main button:not(:disabled), main a[href]',
         )) {
           if (focus(candidate)) break;
         }
+      }
     };
   }, [props.open]);
   if (!present) return null;
@@ -73,6 +77,7 @@ export function Confirmation(props: ConfirmationProps) {
       aria-describedby={description}
       onKeyDown={trapModalTab}
       onCancel={(event) => {
+        event.stopPropagation();
         event.preventDefault();
         if (!content.busy) content.cancel();
       }}
@@ -91,6 +96,7 @@ export function Confirmation(props: ConfirmationProps) {
       </header>
       <div className="confirmation-content">
         <p id={description}>{content.description}</p>
+        {content.children}
         {content.error && (
           <p role="alert" className="inline-error">
             {content.error}

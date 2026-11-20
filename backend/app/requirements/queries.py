@@ -112,6 +112,21 @@ def get_requirement(
                 'summary': labels[kind],
                 'target_document_id': target,
             }
+        expanded_discussion = discussion if expand == 'discussion' else None
+        if (
+            expanded_discussion is not None
+            and document_id is not None
+            and repository.connection.execute(
+                "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='formation_heads'"
+            ).fetchone()
+            is not None
+        ):
+            from backend.app.formation.read_queries import get_summary
+
+            expanded_discussion = {
+                **discussion,
+                'formation_summary': get_summary(repository.connection, root),
+            }
         result = {
             'requirement': get_requirement_result(root),
             'documents': DocumentRepository(repository.connection).list_current_summaries(identity),
@@ -124,7 +139,7 @@ def get_requirement(
                 else discussion['last_step']['value'],
                 'pending_count': len(discussion['pending_user_message_ids']),
             },
-            'discussion': discussion if expand == 'discussion' else None,
+            'discussion': expanded_discussion,
             'active_operation': active,
         }
         return project_detail(result, expand)
@@ -172,7 +187,22 @@ def project_detail(value, expand):
 
     if summary['next_step'] is not None:
         discussion_resources().validate('NextStep', summary['next_step'])
-    discussion = validate_discussion(data['discussion']) if expand == 'discussion' else None
+    raw_discussion = data['discussion']
+    formation_summary = None
+    if (
+        expand == 'discussion'
+        and type(raw_discussion) is dict
+        and 'formation_summary' in raw_discussion
+    ):
+        from backend.app.formation.read_contracts import validate as formation_value
+
+        formation_summary = formation_value('Summary', raw_discussion['formation_summary'])
+        raw_discussion = {
+            key: value for key, value in raw_discussion.items() if key != 'formation_summary'
+        }
+    discussion = validate_discussion(raw_discussion) if expand == 'discussion' else None
+    if formation_summary is not None:
+        discussion = {**discussion, 'formation_summary': formation_summary}
     if expand != 'discussion' and data['discussion'] is not None:
         raise ValueError('Unrequested discussion must not be returned')
     active = data['active_operation']

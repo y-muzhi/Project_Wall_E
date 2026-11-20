@@ -1,3 +1,4 @@
+import { FormationWorkspace } from '../formation/workspace.ts';
 import type { WalleApi } from '../api/walle.ts';
 import type { RevisionSummary, VersionMarker } from '../api/models.ts';
 import { RequirementDetailRead } from './detail-read.ts';
@@ -21,6 +22,7 @@ export type DetailBindings = Readonly<{
   documents: RequirementDocumentOwner;
   directory: DocumentDirectoryCommands;
   discussion: RequirementDiscussion;
+  formation: FormationWorkspace | null;
   header: RequirementHeaderCommands;
   conversation: RequirementConversation;
   comments: RequirementCommentPanel;
@@ -50,7 +52,7 @@ export class RequirementDetailOwner {
   private bindings: DetailBindings | null = null;
   private readonly assistants = new Map<
     number | null,
-    Pick<DetailBindings, 'conversation' | 'discussion' | 'comments'>
+    Pick<DetailBindings, 'conversation' | 'discussion' | 'comments' | 'formation'>
   >();
   private assistantDocumentId: number | null | undefined;
   private async readAssistantDocument(documentId: number | null): Promise<DetailSnapshot> {
@@ -105,7 +107,19 @@ export class RequirementDetailOwner {
       return next;
     };
     const discussion = new RequirementDiscussion(actual, api, refreshDiscussion);
-    const regions = { conversation, comments, discussion };
+    const formation =
+      actual.current === null
+        ? null
+        : new FormationWorkspace(actual, api, read, adopt, conversation.receive);
+    if (formation !== null) {
+      conversation.composer.attachFormation(formation);
+      conversation.cards.attachFormation(formation);
+      formation.bindAdjustment((proposal, purpose, scope) =>
+        conversation.composer.adjustProposal(proposal, purpose, scope),
+      );
+    }
+    const regions = { conversation, comments, discussion, formation };
+    this.releases.push(conversation.subscribe(() => this.sync()));
     this.assistants.set(documentId, regions);
     return regions;
   }
@@ -213,7 +227,7 @@ export class RequirementDetailOwner {
         },
       }),
       header = new RequirementHeaderCommands(actual, this.api);
-    const { conversation, comments, discussion } = this.assistantRegions(actual, layout);
+    const { conversation, comments, discussion, formation } = this.assistantRegions(actual, layout);
     this.assistantDocumentId = actual.selected_document_id;
     const directory = new DocumentDirectoryCommands(
       actual,
@@ -226,6 +240,7 @@ export class RequirementDetailOwner {
       documents: this.documents,
       directory,
       discussion,
+      formation,
       header,
       conversation,
       comments,
@@ -259,6 +274,7 @@ export class RequirementDetailOwner {
         this.previous = actual;
         regions.directory.adopt(actual);
         regions.discussion.adopt(actual);
+        regions.formation?.adopt(actual);
         regions.header.adopt(actual);
         regions.conversation.adopt(actual);
         regions.comments.adopt(actual);
@@ -291,6 +307,11 @@ export class RequirementDetailOwner {
             regions.comments.comments.getSnapshot().page,
             true,
           );
+        regions.formation?.setView(
+          !this.supported || document.busy,
+          historical,
+          regions.conversation.getSnapshot().lease,
+        );
         this.priorHistory = historical;
         document.navigation?.setVisible(this.supported);
       }
@@ -450,6 +471,7 @@ export class RequirementDetailOwner {
     this.bindings?.header.dispose();
     this.bindings?.directory.dispose();
     for (const assistant of this.assistants.values()) {
+      assistant.formation?.dispose();
       assistant.discussion.dispose();
       assistant.conversation.dispose();
       assistant.comments.dispose();

@@ -39,7 +39,7 @@ test('v9 named definitions retain strict SourceRef and nested uppercase referenc
  assert.throws(()=>requirementDetail(detail({discussion:{...discussion,counters:{topic:0,evidence:1}}})));
 });
 
-test('document progress reads the discussion core alongside formation metadata', async () => {
+test('document progress reads and preserves the validated formation summary with discussion', async () => {
   const discussion = {
     schema_version: 2,
     focus_topic_ref: null,
@@ -53,7 +53,23 @@ test('document progress reads the discussion core alongside formation metadata',
   };
   const extended = {
     ...discussion,
-    formation_summary: { document_id: 2, exists: false, formation_version: null },
+    formation_summary: {
+      document_id: 2,
+      view_schema: 'formation_read_v21_1',
+      exists: false,
+      formation_version: null,
+      goal: null,
+      current_step_ref: null,
+      active_branch_ref: null,
+      counts: {
+        steps: { PLANNED: 0, IN_PROGRESS: 0, PAUSED: 0, COMPLETED: 0, CANCELLED: 0 },
+        branches: { OPEN: 0, RESOLVED: 0, DEFERRED: 0, DROPPED: 0 },
+        issues: { OPEN: 0, RESOLVED: 0, DEFERRED: 0, DROPPED: 0 },
+        proposals: { PENDING: 0, DEFERRED: 0, APPLIED: 0, SUPERSEDED: 0 },
+        pending_review_artifacts: 0,
+      },
+      availability: [],
+    },
   };
   const summaryDetail = detail({ documents: [summary(2)] });
   let expandedDiscussion = extended;
@@ -65,15 +81,16 @@ test('document progress reads the discussion core alongside formation metadata',
   const flow = new RequirementDiscussion(summaryDetail, api, async () => summaryDetail);
   try {
     assert.equal(await flow.load(), true);
-    assert.deepEqual(flow.getSnapshot().discussion, discussion);
+    assert.deepEqual(flow.getSnapshot().discussion, extended);
 
     for (const invalid of [
       { ...extended, counters: { topic: 0, evidence: 1 } },
       { ...extended, unexpected: true },
+      { ...extended, formation_summary: { ...extended.formation_summary, exists: true } },
     ]) {
       expandedDiscussion = invalid;
       assert.equal(await flow.load(), false);
-      assert.deepEqual(flow.getSnapshot().discussion, discussion);
+      assert.deepEqual(flow.getSnapshot().discussion, extended);
       assert.ok(flow.getSnapshot().error);
     }
 

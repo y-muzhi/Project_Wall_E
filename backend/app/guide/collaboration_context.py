@@ -4,15 +4,15 @@ Selection uses explicit identities and topic dependencies. It never queries a
 model, guesses relevance from text, or changes the accepted write authority.
 """
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 
 from backend.app.documents.markdown import parse_markdown
-from backend.app.documents.snapshot import validate_snapshot
 from backend.app.documents.scopes import resolve_scope
+from backend.app.documents.snapshot import validate_snapshot
 from backend.app.documents.sources import DocumentSources
-from backend.app.infrastructure.collaboration_resources import sha256
 from backend.app.infrastructure.audit_data import MAX_AUDIT_BYTES, AuditCapacityExceeded
+from backend.app.infrastructure.collaboration_resources import sha256
 from backend.app.infrastructure.document_repository import DocumentRepository
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.idempotency import canonical_input
@@ -20,7 +20,6 @@ from backend.app.infrastructure.requirement_repository import RequirementReposit
 from backend.app.infrastructure.schema_transport import compact
 from backend.app.requirements.discussion import validate_discussion
 from backend.app.shared.command_execution import Rejected
-
 
 KINDS = {'REQUIREMENT_BRIEF': 'brief', 'DESIGN': 'design', 'SPECIFICATION': 'specification'}
 RAW_FIELDS = (
@@ -132,6 +131,16 @@ def read_canonical(connection, identity, catalog, *, require_current=True):
             if isinstance(row['block_state_json'], dict)
             else json.loads(row['block_state_json'])
         )
+        if not resources.formation_driven and any(
+            block[prefix + '_source_type'] == 'CARD_RESPONSE'
+            for block in state['blocks']
+            for prefix in ('created', 'last_modified')
+        ):
+            from backend.app.infrastructure.resources import ConfigInvalid
+
+            raise ConfigInvalid(
+                'UNSUPPORTED_CARD_RESPONSE_PROVENANCE: this historical release cannot read the new source'
+            )
         verifier = DocumentSources(connection, root['id'], catalog, document_id=identity)
         snapshot = validate_snapshot(row['markdown_content'], state, verifier)
         ref = document_ref(identity, version)
@@ -308,6 +317,29 @@ def read_canonical(connection, identity, catalog, *, require_current=True):
         'selected': history_candidates,
         'omitted': [],
     }
+    if resources.formation_driven:
+        from backend.app.formation.repository import FormationRepository
+
+        material = accepted.get('formation')
+        if material is None:
+            raise Rejected('SOURCE_INVALID')
+        if run['status'] == 'RUNNING' and require_current:
+            actual_head = FormationRepository(connection).head(run['document_id'])
+            actual_f = None if actual_head is None else actual_head['version']
+            if actual_f != material['basis']['formation_version']:
+                raise Rejected(
+                    'STATE_CONFLICT',
+                    details={'reason': 'PATH_CHANGED', 'step_ref': None, 'proposal': None},
+                )
+        canonical.update(
+            layout_version=resources.layout,
+            formation=material,
+            formation_selection=accepted['formation_selection'],
+            proposal_context=accepted['proposal_context'],
+        )
+        effects = accepted['message_effects']
+        for message in [canonical['current_message'], *canonical['messages']]:
+            message['effect_state'] = effects.get(str(message['message_id']))
     return resources.validate('Canonical', canonical)
 
 
@@ -331,12 +363,20 @@ class CollaborationContext:
         return self.basis['canonical']
 
     @property
+    def response_format(self):
+        from backend.app.infrastructure.collaboration_format import response_format
+
+        return response_format(self.canonical, self.input)
+
+    @property
     def texts(self):
+        from backend.app.infrastructure.collaboration_format import counting_system_text
+
         wire = self.input
         # Inner field order is the order restored from the actual Wire bytes.
         part = lambda name: compact(wire[name]) if wire[name] else ''
         return (
-            self.system,
+            counting_system_text(self.canonical, self.system, self.response_format),
             self.input_json,
             compact(wire['current_request']),
             part('structure'),
@@ -423,8 +463,8 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
         raw_cards = json.loads(original['structured_content_json'])
         if raw_cards.get('purpose') == 'PHASE_CHANGE':
             from backend.app.infrastructure.collaboration_resources import (
-                CollaborationResources,
                 ROOT,
+                CollaborationResources,
             )
 
             group = CollaborationResources.load(ROOT.parent / 'v15').validate(
@@ -923,6 +963,10 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
             'unresolved_impacts': focus['unresolved_impacts'],
         }
     )
+    if resources.formation_driven:
+        from backend.app.formation.model_projection import append_proposal_material
+
+        append_proposal_material(canonical, goal, alias, material, resolve)
     structure = _structure(canonical, catalog)
     wire = {
         'schema_version': 1,
@@ -973,6 +1017,25 @@ def compile_context(canonical, catalog, *, omit_history=False, omit_background=F
             },
         },
     }
+    if resources.formation_driven:
+        from backend.app.formation.model_projection import project_material
+
+        wire['project_position']['formation'] = project_material(canonical['formation'], resolve)
+        wire['current_request'].update(
+            formation_selection=canonical['formation_selection'],
+            proposal_intent=canonical.get('proposal_context')
+            and (
+                'ADJUST_WRITE'
+                if canonical['proposal_context']['purpose'] == 'STAGED_WRITE'
+                else 'ADJUST_PATH'
+            ),
+            proposal_ref=None
+            if canonical['proposal_context'] is None
+            else canonical['proposal_context']['proposal_ref'],
+        )
+        history_effects = {row['message_id']: row['effect_state'] for row in canonical['messages']}
+        for message in wire['recent_history']:
+            message['effect_state'] = history_effects[int(message['ref'][1:])]
     # Canonical retains the fixed candidate set, so a saved basis can replay
     # every budget candidate without rereading an expanded history window.
     # The actual transmitted selection belongs to ContextBasis.selected.

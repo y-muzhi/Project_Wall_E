@@ -3,8 +3,22 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 export type JsonObject = { [key: string]: Json };
 export type PagePagination = { page: number; page_size: 20; total: number; total_pages: number };
 export type CursorPagination = { page_size: 20; next_cursor: number | null; has_more: boolean };
-export type ApiMeta = { request_id: string; pagination?: PagePagination | CursorPagination };
-export type ApiSuccess<T> = { data: T; meta: ApiMeta; status: number };
+export type FormationCursorPagination = Readonly<{
+  page_size: number;
+  next_cursor: string | null;
+  has_more: boolean;
+}>;
+type LegacyPagination = PagePagination | CursorPagination;
+type ApiPagination = LegacyPagination | FormationCursorPagination;
+export type ApiMeta<P extends ApiPagination = LegacyPagination> = {
+  request_id: string;
+  pagination?: P;
+};
+export type ApiSuccess<T, P extends ApiPagination = LegacyPagination> = {
+  data: T;
+  meta: ApiMeta<P>;
+  status: number;
+};
 export type ApiErrorPolicy = Readonly<{
   decode: (code: string, message: string, details: unknown, status: number) => JsonObject | null;
   mutationUnknown: (code: string, status: number) => boolean;
@@ -259,6 +273,15 @@ function errorDetails(code: string, value: unknown): JsonObject | null {
   if (value !== null) throw new TypeError('Unregistered error details');
   return null;
 }
+export function documentFailureDetails(
+  code: string,
+  details: unknown,
+  status: number,
+): JsonObject | null {
+  if (!Object.hasOwn(ERROR_STATUS, code) || ERROR_STATUS[code] !== status)
+    throw new TypeError('Unregistered error');
+  return errorDetails(code, details);
+}
 function meta(value: unknown): ApiMeta {
   const row = object(value);
   exact(row, Object.hasOwn(row, 'pagination') ? ['request_id', 'pagination'] : ['request_id']);
@@ -284,6 +307,68 @@ function meta(value: unknown): ApiMeta {
     pagination = { page_size: 20, next_cursor, has_more: item.has_more };
   }
   return { request_id: row.request_id, pagination };
+}
+
+function formationMeta(value: unknown): ApiMeta<FormationCursorPagination> {
+  const row = object(value);
+  exact(row, Object.hasOwn(row, 'pagination') ? ['request_id', 'pagination'] : ['request_id']);
+  if (typeof row.request_id !== 'string' || !UUID.test(row.request_id))
+    throw new TypeError('Invalid request ID');
+  if (!Object.hasOwn(row, 'pagination')) return { request_id: row.request_id };
+  const item = exact(row.pagination, ['page_size', 'next_cursor', 'has_more']);
+  const page_size = positiveInteger(item.page_size);
+  if (
+    page_size > 100 ||
+    typeof item.has_more !== 'boolean' ||
+    item.has_more !== (item.next_cursor !== null) ||
+    (item.next_cursor !== null &&
+      (typeof item.next_cursor !== 'string' ||
+        item.next_cursor.length < 1 ||
+        item.next_cursor.length > 4096))
+  )
+    throw new TypeError('Invalid formation pagination');
+  return {
+    request_id: row.request_id,
+    pagination: {
+      page_size,
+      next_cursor: item.next_cursor as string | null,
+      has_more: item.has_more,
+    },
+  };
+}
+function formationPath(value: string): string {
+  const base = /^\/api\/v1\/requirements\/[1-9][0-9]*\/documents\/[1-9][0-9]*\/formation\//;
+  if (!base.test(value)) throw new TypeError('Invalid formation path');
+  const tail = value.replace(base, '');
+  const number = '[1-9][0-9]*';
+  const allowed = [
+    '(steps|branches|issues|artifacts|proposals)',
+    'steps/s' + number,
+    'steps/s' + number + '/relations',
+    'artifacts/a' + number + '(/(ranges|lineage))?',
+    'events',
+    'events/' + number + '/changes(/' + number + '/members)?',
+    'events/' + number + '/closure-items',
+    'events/' +
+      number +
+      '/closure-items/(RESULT|ISSUE|BRANCH)/(s' +
+      number +
+      '\\.o' +
+      number +
+      '|i' +
+      number +
+      '|b' +
+      number +
+      ')/evidence',
+  ];
+  if (!allowed.some((pattern) => new RegExp('^' + pattern + '$').test(tail)))
+    throw new TypeError('Unregistered formation read');
+  return value;
+}
+function noPagination(value: unknown): ApiMeta {
+  const result = meta(value);
+  if (result.pagination !== undefined) throw new TypeError('Unexpected pagination');
+  return result;
 }
 
 /** Opaque command handle. Snapshot/string/key remain private and never mutate. */
@@ -418,6 +503,8 @@ export class ApiClient {
       command.key,
       command.success_status,
       decode,
+      meta,
+      true,
       signal,
       command.error_policy,
     );
@@ -439,21 +526,73 @@ export class ApiClient {
       null,
       [200],
       decode,
+      meta,
+      false,
       signal,
       errorPolicy,
     );
   }
-  private async request<T>(
+  async readFormation<T>(
+    target: string,
+    decode: Decoder<T>,
+    query: readonly (readonly [string, string])[] = [],
+    signal?: AbortSignal,
+    errorPolicy?: ApiErrorPolicy,
+  ): Promise<ApiSuccess<T, FormationCursorPagination>> {
+    const parameters = new URLSearchParams();
+    for (const [key, value] of query) parameters.append(key, value);
+    const encoded = parameters.toString();
+    return this.request(
+      formationPath(target) + (encoded ? '?' + encoded : ''),
+      'GET',
+      null,
+      null,
+      [200],
+      decode,
+      formationMeta,
+      false,
+      signal,
+      errorPolicy,
+    );
+  }
+  async previewFormation<T>(
+    target: string,
+    body: JsonObject,
+    decode: Decoder<T>,
+    signal?: AbortSignal,
+    errorPolicy?: ApiErrorPolicy,
+  ): Promise<ApiSuccess<T>> {
+    if (
+      !/^\/api\/v1\/requirements\/[1-9][0-9]*\/documents\/[1-9][0-9]*\/formation\/path-preview$/.test(
+        target,
+      )
+    )
+      throw new TypeError('Invalid formation preview path');
+    return this.request(
+      target,
+      'POST',
+      JSON.stringify(snapshot(body)),
+      null,
+      [200],
+      decode,
+      noPagination,
+      false,
+      signal,
+      errorPolicy,
+    );
+  }
+  private async request<T, P extends ApiPagination>(
     target: string,
     method: string,
     body: string | null,
     key: string | null,
     successStatus: readonly number[],
     decode: Decoder<T>,
+    decodeMeta: (value: unknown) => ApiMeta<P>,
+    mutation: boolean,
     signal?: AbortSignal,
     errorPolicy?: ApiErrorPolicy,
-  ): Promise<ApiSuccess<T>> {
-    const mutation = method !== 'GET';
+  ): Promise<ApiSuccess<T, P>> {
     errorPolicy = frozenErrorPolicy(errorPolicy);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -503,7 +642,7 @@ export class ApiClient {
       const parsed: unknown = JSON.parse(text);
       jsonValue(parsed);
       const envelope = exact(parsed, ['success', 'data', 'error', 'meta']),
-        context = meta(envelope.meta);
+        context = decodeMeta(envelope.meta);
       if (
         envelope.success === true &&
         envelope.error === null &&
@@ -533,14 +672,9 @@ export class ApiClient {
         if (mutation && errorPolicy.mutationUnknown(error.code, response.status))
           throw new ApiUnknown(true);
       } else {
-        if (
-          !Object.hasOwn(ERROR_STATUS, error.code) ||
-          ERROR_STATUS[error.code] !== response.status
-        )
-          throw new TypeError('Unregistered error');
+        details = documentFailureDetails(error.code, error.details, response.status);
         if (mutation && (error.code === 'INTERNAL_ERROR' || error.code === 'STORAGE_UNAVAILABLE'))
           throw new ApiUnknown(true);
-        details = errorDetails(error.code, error.details);
       }
       throw new ApiRejected(
         error.code,

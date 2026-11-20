@@ -165,6 +165,15 @@ export function RunRecordSummary({ run }: Readonly<{ run: GuideRun }>) {
             : '本轮未写入文档。'}
         </p>
       )}
+      {'effect_state' in run && run.effect_state === 'STRUCTURED_REJECTED' && (
+        <p role="status">本轮结构未应用，输入已保留，等待后续处理。</p>
+      )}
+      {'formation_result' in run && run.formation_result === 'APPLIED' && (
+        <p>文档形成主线已更新。</p>
+      )}
+      {'proposal_result' in run && run.proposal_result === 'APPLIED' && (
+        <p>提案已保存，等待确认。</p>
+      )}
       {run.progress_result === 'APPLIED' && <p>讨论进度已更新。</p>}
       {run.progress_result === 'REJECTED' && (
         <p role="alert" className="inline-error">

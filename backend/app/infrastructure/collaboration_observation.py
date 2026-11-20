@@ -5,6 +5,7 @@ claims a new output directory before creating the normal database/audits;
 re-running that directory cannot repeat an unknown external request.
 """
 
+import json
 from pathlib import Path
 
 from .collaboration_admission import AdmissionEvidence, _profile_digest
@@ -68,13 +69,29 @@ class CollaborationObservation:
         ):
             raise ConfigInvalid('Observation cannot change its release')
         run = connection.execute('SELECT * FROM guide_runs WHERE id=?', (identity,)).fetchone()
-        if (
-            run is None
-            or run['status'] != 'RUNNING'
-            or run['operation'] != 'DISCUSS'
-            or run['target_document_id'] is not None
-        ):
+        if run is None or run['status'] != 'RUNNING' or run['operation'] != 'DISCUSS':
             raise ConfigInvalid('Only the single isolated discussion observation is permitted')
+        expected_target = run['document_id'] if resources.formation_driven else None
+        if run['target_document_id'] != expected_target:
+            raise ConfigInvalid('Observation must retain its release-specific discussion target')
+        if resources.formation_driven:
+            try:
+                accepted = json.loads(run['execution_basis_json'])
+                authorization = accepted['authorization']
+            except (ValueError, TypeError, KeyError):
+                raise ConfigInvalid(
+                    'Observation requires the actual accepted discussion basis'
+                ) from None
+            if (
+                type(authorization) is not dict
+                or authorization.get('operation') != 'DISCUSS'
+                or type(authorization.get('target_document_id')) is not int
+                or authorization.get('target_document_id') != run['document_id']
+                or type(authorization.get('expected_content_version')) is not int
+                or authorization.get('expected_content_version') != 1
+                or authorization.get('allowed_targets') != []
+            ):
+                raise ConfigInvalid('Observation cannot obtain document-writing authority')
         if (
             connection.execute('SELECT count(*) FROM requirements').fetchone()[0] != 1
             or connection.execute('SELECT count(*) FROM guide_runs').fetchone()[0] != 1
@@ -104,6 +121,15 @@ class CollaborationObservation:
         permit = self
 
         class Counter:
+            async def count_context(self, profile, context):
+                if profile.snapshot != permit.profile or permit.count_calls >= permit.count_limit:
+                    raise ConfigInvalid('Observation count allowance is exhausted')
+                from .tokenization import check_text_capacity
+
+                check_text_capacity(profile, context.texts)
+                permit.count_calls += 1
+                return await delegate.count_context(profile, context)
+
             async def count(self, profile, texts):
                 if profile.snapshot != permit.profile or permit.count_calls >= permit.count_limit:
                     raise ConfigInvalid('Observation count allowance is exhausted')

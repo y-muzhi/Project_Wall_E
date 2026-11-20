@@ -18,7 +18,7 @@ from backend.app.shared.validation import MAX_SAFE_INTEGER
 from .markdown import BLOCK_TYPES, DocumentInvalid, ParsedBlock, ParsedMarkdown, parse_markdown
 
 ACTORS = frozenset({'USER', 'AI', 'SYSTEM'})
-SOURCES = frozenset({'TEMPLATE', 'GUIDE_RUN', 'SUGGESTION_BATCH', 'MANUAL_EDIT'})
+SOURCES = frozenset({'TEMPLATE', 'GUIDE_RUN', 'SUGGESTION_BATCH', 'MANUAL_EDIT', 'CARD_RESPONSE'})
 FIELDS = frozenset(
     {
         'block_id',

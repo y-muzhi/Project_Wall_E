@@ -26,6 +26,8 @@ export function composerFeedback(
   if (state.action === 'REVISE' && state.detail.current?.archived_at != null)
     return result('当前文档已归档，无法写入。');
   if (state.action === 'REVISE' && state.target === null) return result('请先选择写入范围。');
+  if (state.action === 'DISCUSS' && state.parent === null && state.formation_blocked)
+    return result(state.formation_blocked);
   if (!allowed) return result('目标或来源已变化，请核对当前文档及范围后再发送。');
   return result(null);
 }

@@ -78,6 +78,7 @@ def snapshot_pair(markdown: object, value: object) -> dict:
                 'GUIDE_RUN': {'AI'},
                 'SUGGESTION_BATCH': {'AI', 'USER'},
                 'MANUAL_EDIT': {'USER'},
+                'CARD_RESPONSE': {'USER'},
             }
             if origin.actor not in actors[origin.source_type]:
                 raise ValueError('Invalid provenance combination')

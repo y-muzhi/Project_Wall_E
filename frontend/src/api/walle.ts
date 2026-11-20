@@ -1,3 +1,40 @@
+import { FORMATION_PREVIEW_ERRORS } from './formation-errors.ts';
+import { pathPreview } from './formation-preview.ts';
+import type { PreviewOptions } from './formation-preview.ts';
+import { commandSha256 } from './code-command-snapshot.ts';
+import { formationCommandBody } from './formation-commands.ts';
+import { formationProgramReceipt } from './formation-workflow.ts';
+import { readFormationProposals } from './formation-reads.ts';
+import type { ProposalQuery } from './formation-reads.ts';
+import { FORMATION_WORKFLOW_ERRORS } from './formation-errors.ts';
+import { formationSelection } from './formation-workflow.ts';
+import { freezeFormationQuery } from './formation-reads.ts';
+import { readFormationChanges, readFormationMembers } from './formation-history.ts';
+import {
+  readFormationEvents,
+  readFormationClosure,
+  readFormationClosureEvidence,
+} from './formation-history.ts';
+import type { EventQuery, HistoryQuery, ClosureKind } from './formation-history.ts';
+import {
+  readFormationSteps,
+  readFormationStep,
+  readFormationBranches,
+  readFormationIssues,
+  readFormationArtifacts,
+  readFormationArtifact,
+  readFormationRelations,
+  readFormationRanges,
+  readFormationLineage,
+} from './formation-reads.ts';
+import type {
+  PageQuery,
+  StepQuery,
+  BranchQuery,
+  IssueQuery,
+  ArtifactQuery,
+  RelationQuery,
+} from './formation-reads.ts';
 import { readCodeTaskRecords } from './code-task-records.ts';
 import { CREATE_CODE_DEFECT, readCodeDefect, readCodeDefects } from './code-task-defects.ts';
 import { REQUEST_CODE_REPAIR, readRepair, readRepairs } from './code-task-repair.ts';
@@ -134,9 +171,20 @@ import type { ExecutionProfileContent } from './code-execution-profiles.ts';
  */
 import type { Ctx } from '@milkdown/kit/ctx';
 import type { BlockState } from '../documents/contracts.ts';
-import { ApiClient, ApiUnknown, ApiRejected, snapshotObject } from './client.ts';
-import type { ApiErrorPolicy, ApiSuccess, JsonObject } from './client.ts';
-import { array, checked, shape, id, require, distinct, choices } from './decoding.ts';
+import { ApiClient, ApiUnknown, ApiRejected, snapshotObject, stableJson } from './client.ts';
+import type { ApiErrorPolicy, ApiSuccess, JsonObject, FrozenRequest } from './client.ts';
+import {
+  array,
+  checked,
+  shape,
+  id,
+  require,
+  distinct,
+  choices,
+  text,
+  bool,
+  nonempty,
+} from './decoding.ts';
 import type { Decoder } from './decoding.ts';
 import { readPage } from './pagination.ts';
 import { readConfigurationOptions } from './code-configuration-options.ts';
@@ -168,7 +216,10 @@ import { CommandRecovery } from '../code-tasks/command-recovery.ts';
 import type { OperationReader } from '../code-tasks/command-recovery.ts';
 import type { CommandRecoveryStore } from '../code-tasks/command-recovery-store.ts';
 
-export type ApiAction<T> = Readonly<{ submit: (signal?: AbortSignal) => Promise<ApiSuccess<T>> }>;
+export type ApiAction<T> = Readonly<{
+  request?: FrozenRequest | undefined;
+  submit: (signal?: AbortSignal) => Promise<ApiSuccess<T>>;
+}>;
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left, (_key, value) =>
     value && typeof value === 'object' && !Array.isArray(value)
@@ -215,6 +266,17 @@ export type DocumentChange = Readonly<
   | { type: 'ARCHIVE' | 'RESTORE' }
   | { type: 'CONFIRM'; expected_content_version: number; revision_id: number }
 >;
+export type CreateFormationDiscuss = Readonly<{
+  expected_discussion_version: number;
+  operation: 'DISCUSS';
+  instruction: string;
+  target: ReturnType<typeof formationSelection>;
+  scope: Readonly<JsonObject> | null;
+  source_refs: readonly ReturnType<typeof models.sourceRef>[];
+  proposal_ref: Readonly<{ message_id: number; card_key: string }> | null;
+  proposal_intent: 'ADJUST_WRITE' | 'ADJUST_PATH' | null;
+  acknowledge_source_changes: boolean;
+}>;
 export type CreateGuide = Readonly<{
   expected_discussion_version: number;
   operation: (typeof models.operations)[number];
@@ -727,14 +789,30 @@ export class WalleApi {
     decoder: (original: JsonObject | null) => Decoder<T>,
     status: 200 | 201 | 202 | readonly (200 | 201 | 202)[] = 200,
     keyed = true,
+    errorPolicy?: ApiErrorPolicy,
+    originalRequest?: FrozenRequest,
   ): ApiAction<T> {
     const original = body === null ? null : snapshotObject(body);
-    const decode = decoder(original),
-      handle = this.client.prepare(method, path, original, {
-        idempotent: keyed,
-        success_status: status,
-      });
+    const decode = decoder(original);
+    const options = {
+      idempotent: keyed,
+      success_status: status,
+      ...(errorPolicy === undefined ? {} : { error_policy: errorPolicy }),
+    };
+    if (
+      originalRequest !== undefined &&
+      (originalRequest.method !== method ||
+        originalRequest.path !== path ||
+        stableJson(originalRequest.body === null ? null : JSON.parse(originalRequest.body)) !==
+          stableJson(original))
+    )
+      throw TypeError('Restored request differs from native command');
+    const handle =
+      originalRequest === undefined
+        ? this.client.prepare(method, path, original, options)
+        : this.client.restorePrepared(originalRequest, options);
     return Object.freeze({
+      request: this.client.exportPrepared(handle),
       submit: async (signal?: AbortSignal) => {
         this.readScope?.beginWrite();
         try {
@@ -803,6 +881,8 @@ export class WalleApi {
     const decode = checked(models.requirementDetail, (value) => {
       require(value.requirement.id === identity);
       require(expandDiscussion === (value.discussion !== null));
+      if (value.discussion !== null && value.discussion.formation_summary !== undefined)
+        require(value.discussion.formation_summary.document_id === documentId);
     });
     return this.readTogether(
       `requirement:${identity}:${documentId}:${expandDiscussion}`,
@@ -814,9 +894,246 @@ export class WalleApi {
         ]),
     );
   }
+  async getFormationSummary(requirementId: number, documentId: number, signal?: AbortSignal) {
+    const response = await this.getRequirementDetail(requirementId, signal, true, id(documentId));
+    const summary = response.data.discussion?.formation_summary;
+    if (summary === undefined) throw new ApiUnknown(false);
+    return { ...response, data: summary };
+  }
+  getFormationSteps(
+    requirementId: number,
+    documentId: number,
+    query: StepQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:steps:' + JSON.stringify([requirementId, documentId, query]),
+      signal,
+      (owned) => readFormationSteps(this.client, requirementId, documentId, query, owned),
+    );
+  }
+  getFormationStep(
+    requirementId: number,
+    documentId: number,
+    ref: string,
+    knownF?: number,
+    signal?: AbortSignal,
+  ) {
+    return this.readTogether(
+      'formation:step:' + JSON.stringify([requirementId, documentId, ref, knownF]),
+      signal,
+      (owned) => readFormationStep(this.client, requirementId, documentId, ref, knownF, owned),
+    );
+  }
+  getFormationBranches(
+    requirementId: number,
+    documentId: number,
+    query: BranchQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:branches:' + JSON.stringify([requirementId, documentId, query]),
+      signal,
+      (owned) => readFormationBranches(this.client, requirementId, documentId, query, owned),
+    );
+  }
+  getFormationIssues(
+    requirementId: number,
+    documentId: number,
+    query: IssueQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:issues:' + JSON.stringify([requirementId, documentId, query]),
+      signal,
+      (owned) => readFormationIssues(this.client, requirementId, documentId, query, owned),
+    );
+  }
+  getFormationArtifacts(
+    requirementId: number,
+    documentId: number,
+    query: ArtifactQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:artifacts:' + JSON.stringify([requirementId, documentId, query]),
+      signal,
+      (owned) => readFormationArtifacts(this.client, requirementId, documentId, query, owned),
+    );
+  }
+  getFormationArtifact(
+    requirementId: number,
+    documentId: number,
+    ref: string,
+    knownF?: number,
+    signal?: AbortSignal,
+  ) {
+    return this.readTogether(
+      'formation:artifact:' + JSON.stringify([requirementId, documentId, ref, knownF]),
+      signal,
+      (owned) => readFormationArtifact(this.client, requirementId, documentId, ref, knownF, owned),
+    );
+  }
+  getFormationRelations(
+    requirementId: number,
+    documentId: number,
+    ref: string,
+    query: RelationQuery,
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:relations:' + JSON.stringify([requirementId, documentId, ref, query]),
+      signal,
+      (owned) => readFormationRelations(this.client, requirementId, documentId, ref, query, owned),
+    );
+  }
+  getFormationRanges(
+    requirementId: number,
+    documentId: number,
+    ref: string,
+    role: 'ORIGIN' | 'CURRENT',
+    query: PageQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:ranges:' + JSON.stringify([requirementId, documentId, ref, role, query]),
+      signal,
+      (owned) =>
+        readFormationRanges(this.client, requirementId, documentId, ref, role, query, owned),
+    );
+  }
+  getFormationLineage(
+    requirementId: number,
+    documentId: number,
+    ref: string,
+    query: PageQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:lineage:' + JSON.stringify([requirementId, documentId, ref, query]),
+      signal,
+      (owned) => readFormationLineage(this.client, requirementId, documentId, ref, query, owned),
+    );
+  }
+  getFormationEvents(
+    requirementId: number,
+    documentId: number,
+    query: EventQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:events:' + JSON.stringify([requirementId, documentId, query]),
+      signal,
+      (owned) => readFormationEvents(this.client, requirementId, documentId, query, owned),
+    );
+  }
+  getFormationClosure(
+    requirementId: number,
+    documentId: number,
+    eventId: number,
+    kind: ClosureKind,
+    query: HistoryQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:closure:' + JSON.stringify([requirementId, documentId, eventId, kind, query]),
+      signal,
+      (owned) =>
+        readFormationClosure(this.client, requirementId, documentId, eventId, kind, query, owned),
+    );
+  }
+  getFormationClosureEvidence(
+    requirementId: number,
+    documentId: number,
+    eventId: number,
+    kind: ClosureKind,
+    itemRef: string,
+    query: HistoryQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:evidence:' +
+        JSON.stringify([requirementId, documentId, eventId, kind, itemRef, query]),
+      signal,
+      (owned) =>
+        readFormationClosureEvidence(
+          this.client,
+          requirementId,
+          documentId,
+          eventId,
+          kind,
+          itemRef,
+          query,
+          owned,
+        ),
+    );
+  }
+  getFormationChanges(
+    requirementId: number,
+    documentId: number,
+    eventId: number,
+    query: HistoryQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:changes:' + JSON.stringify([requirementId, documentId, eventId, query]),
+      signal,
+      (owned) =>
+        readFormationChanges(this.client, requirementId, documentId, eventId, query, owned),
+    );
+  }
+  getFormationMembers(
+    requirementId: number,
+    documentId: number,
+    eventId: number,
+    changeOrdinal: number,
+    query: HistoryQuery = {},
+    signal?: AbortSignal,
+  ) {
+    query = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation:members:' +
+        JSON.stringify([requirementId, documentId, eventId, changeOrdinal, query]),
+      signal,
+      (owned) =>
+        readFormationMembers(
+          this.client,
+          requirementId,
+          documentId,
+          eventId,
+          changeOrdinal,
+          query,
+          owned,
+        ),
+    );
+  }
   async getRequirement(identity: number, signal?: AbortSignal) {
     const response = await this.getRequirementDetail(identity, signal);
     return { ...response, data: response.data.requirement };
+  }
+  getFormationProposals(
+    requirementId: number,
+    documentId: number,
+    query: ProposalQuery = {},
+    signal?: AbortSignal,
+  ) {
+    const frozen = freezeFormationQuery(query);
+    return this.readTogether(
+      'formation-proposals:' + requirementId + ':' + documentId + ':' + JSON.stringify(frozen),
+      signal,
+      (owned) => readFormationProposals(this.client, requirementId, documentId, frozen, owned),
+    );
   }
   getCurrentDocument(identity: number, documentId: number, signal?: AbortSignal) {
     return this.readTogether(`document:${identity}:${documentId}`, signal, (owned) =>
@@ -1279,13 +1596,160 @@ export class WalleApi {
       202,
     );
   }
+  async previewFormationPath(
+    requirementId: number,
+    documentId: number,
+    body: Readonly<{ expected_discussion_version: number; discussion_command: JsonObject }>,
+    options: PreviewOptions = {},
+    signal?: AbortSignal,
+  ) {
+    const validated = formationCommandBody({ ...body, document_id: id(documentId) });
+    const command = validated.discussion_command as JsonObject;
+    require(command.action === 'ADJUST_PATH');
+    for (const key of Object.keys(options)) require(['section', 'limit', 'cursor'].includes(key));
+    if (options.section !== undefined) choices(['AFFECTED', 'WARNINGS'])(options.section);
+    if (options.limit !== undefined) require(id(options.limit) <= 100);
+    if (options.cursor !== undefined) {
+      require(options.section !== undefined);
+      text(options.cursor);
+      require(options.cursor.length > 0 && options.cursor.length <= 4096);
+    }
+    const original = snapshotObject({
+      expected_discussion_version: body.expected_discussion_version,
+      discussion_command: command,
+      ...options,
+    });
+    const expectedDigest = await commandSha256(
+      stableJson({ changes: command.changes, result_routes: command.result_routes })!,
+    );
+    const handle = this.client.prepare(
+      'POST',
+      target(
+        'requirements',
+        requirementId,
+        '/documents/' + id(documentId) + '/formation/path-preview',
+      ),
+      original,
+      { idempotent: false, success_status: 200, error_policy: FORMATION_PREVIEW_ERRORS },
+    );
+    return this.readTogether(
+      'formation:preview:' + JSON.stringify([requirementId, documentId, original]),
+      signal,
+      async (owned) => {
+        try {
+          const response = await this.client.commit(
+            handle,
+            checked(pathPreview, (value) =>
+              require(
+                value.document_id === documentId &&
+                  value.discussion_version === body.expected_discussion_version &&
+                  value.formation_version === command.expected_formation_version &&
+                  value.content_version === command.expected_content_version &&
+                  value.changes_digest === expectedDigest,
+              ),
+            ),
+            owned,
+          );
+          if (response.meta.pagination !== undefined) throw new ApiUnknown(false);
+          return response;
+        } catch (error) {
+          if (error instanceof ApiUnknown) throw new ApiUnknown(false);
+          throw error;
+        }
+      },
+    );
+  }
+  prepareFormationCommand(
+    identity: number,
+    body: Readonly<{ expected_discussion_version: number; discussion_command: JsonObject }>,
+    originalRequest?: FrozenRequest,
+  ) {
+    return this.action(
+      'PATCH',
+      target('requirements', identity),
+      { ...body, document_id: this.assistantOwner() },
+      (original) => {
+        const validated = formationCommandBody(original);
+        return checked(formationProgramReceipt, (receipt) =>
+          require(
+            receipt.requirement_id === identity &&
+              receipt.document_id === validated.document_id &&
+              receipt.operation === 'NATIVE_FORMATION' &&
+              (receipt.discussion_version === validated.expected_discussion_version ||
+                receipt.discussion_version ===
+                  (validated.expected_discussion_version as number) + 1),
+          ),
+        );
+      },
+      200,
+      true,
+      FORMATION_WORKFLOW_ERRORS,
+      originalRequest,
+    );
+  }
+  prepareFormationDiscuss(
+    identity: number,
+    body: CreateFormationDiscuss,
+    originalRequest?: FrozenRequest,
+  ) {
+    return this.action(
+      'POST',
+      target('requirements', identity, '/guide-runs'),
+      {
+        ...body,
+        document_id: this.assistantOwner(),
+      },
+      (original) => {
+        bodyFields(original!, [
+          'document_id',
+          'expected_discussion_version',
+          'operation',
+          'instruction',
+          'target',
+          'scope',
+          'source_refs',
+          'proposal_ref',
+          'proposal_intent',
+          'acknowledge_source_changes',
+        ]);
+        id(original!.document_id);
+        id(original!.expected_discussion_version);
+        choices(['DISCUSS'])(original!.operation);
+        const instruction = text(original!.instruction);
+        require([...instruction].length > 0 && [...instruction].length <= 10000);
+        const selected = formationSelection(original!.target);
+        if (original!.scope !== null) models.collaborationValue('legacy_scope')(original!.scope);
+        array(models.sourceRef, 1000)(original!.source_refs);
+        bool(original!.acknowledge_source_changes);
+        if (original!.proposal_ref === null) require(original!.proposal_intent === null);
+        else {
+          shape({ message_id: id, card_key: nonempty })(original!.proposal_ref);
+          choices(['ADJUST_WRITE', 'ADJUST_PATH'])(original!.proposal_intent);
+        }
+        const expected = {
+          ...selected,
+          branch_intent: selected.branch_intent === 'RESUME' ? 'ENTER' : selected.branch_intent,
+          branch_resume_basis: null,
+        };
+        return checked(models.formationRunReceipt, (receipt) =>
+          require(sameJson(receipt.accepted_target, expected)),
+        );
+      },
+      202,
+      true,
+      FORMATION_WORKFLOW_ERRORS,
+      originalRequest,
+    );
+  }
   prepareContinueGuide(identity: number, instruction: string, discussionVersion: number) {
     return this.action(
       'POST',
       target('guide-runs', identity, '/continue'),
       { instruction, expected_discussion_version: id(discussionVersion) },
-      () => checked(models.runReceipt, (value) => require(value.guide_run_id !== identity)),
+      () => checked(models.derivedRunReceipt, (value) => require(value.guide_run_id !== identity)),
       202,
+      true,
+      FORMATION_WORKFLOW_ERRORS,
     );
   }
   prepareCancelGuide(identity: number) {
@@ -1302,8 +1766,10 @@ export class WalleApi {
       'POST',
       target('guide-runs', identity, '/retry'),
       null,
-      () => checked(models.runReceipt, (value) => require(value.guide_run_id !== identity)),
+      () => checked(models.derivedRunReceipt, (value) => require(value.guide_run_id !== identity)),
       202,
+      true,
+      FORMATION_WORKFLOW_ERRORS,
     );
   }
   prepareModifyFromComment(
@@ -1327,7 +1793,12 @@ export class WalleApi {
     );
   }
 
-  prepareCardResponses(identity: number, body: models.Responses, discussionVersion: number) {
+  prepareCardResponses(
+    identity: number,
+    body: models.Responses,
+    discussionVersion: number,
+    originalRequest?: FrozenRequest,
+  ) {
     const action = this.action(
       'POST',
       target('conversation-messages', identity, '/responses'),
@@ -1345,8 +1816,12 @@ export class WalleApi {
         };
       },
       [200, 202],
+      true,
+      FORMATION_WORKFLOW_ERRORS,
+      originalRequest,
     );
     return Object.freeze({
+      request: action.request,
       submit: async (signal?: AbortSignal) => {
         const response = await action.submit(signal);
         if (

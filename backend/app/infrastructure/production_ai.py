@@ -8,38 +8,39 @@ Observations never change these resources or open a gate automatically.
 import hashlib
 
 from backend.app.guide.counted_context import (
-    CountedContext,
-    counting_release_for_function,
-    counting_digest_for_function,
-    PRACTICAL_RELEASE_SHA256,
-    PRACTICAL_MODE,
-    PRACTICAL_RELEASE_PATH,
-    EXPANDED_RELEASE_SHA256,
     EXPANDED_RELEASE_PATH,
-    LAYOUT_RELEASE_PATH,
-    LAYOUT_RELEASE_SHA256,
+    EXPANDED_RELEASE_SHA256,
     FULL_LAYOUT_RELEASE_PATH,
     FULL_LAYOUT_RELEASE_SHA256,
-    PROGRESSION_RELEASE_PATH,
-    PROGRESSION_RELEASE_SHA256,
     FULL_PROGRESSION_RELEASE_PATH,
     FULL_PROGRESSION_RELEASE_SHA256,
-    PROJECTION_RELEASE_PATH,
-    PROJECTION_RELEASE_SHA256,
     FULL_PROJECTION_RELEASE_PATH,
     FULL_PROJECTION_RELEASE_SHA256,
+    LAYOUT_RELEASE_PATH,
+    LAYOUT_RELEASE_SHA256,
+    PRACTICAL_MODE,
+    PRACTICAL_RELEASE_PATH,
+    PRACTICAL_RELEASE_SHA256,
+    PROGRESSION_RELEASE_PATH,
+    PROGRESSION_RELEASE_SHA256,
+    PROJECTION_RELEASE_PATH,
+    PROJECTION_RELEASE_SHA256,
+    CountedContext,
+    counting_digest_for_function,
+    counting_release_for_function,
 )
-from backend.app.shared.validation import strict_json_object
 from backend.app.shared.json_canonical import canonical_input
+from backend.app.shared.validation import strict_json_object
+
 from .model_profile import ModelProfile
 from .resources import (
-    ConfigInvalid,
-    FrozenFunction,
     V2_MANIFEST_SHA256,
     V3_MANIFEST_SHA256,
     V4_MANIFEST_SHA256,
     V5_MANIFEST_SHA256,
     V8_MANIFEST_SHA256,
+    ConfigInvalid,
+    FrozenFunction,
 )
 from .tokenization import TokenizationGateway
 
@@ -300,4 +301,10 @@ def production_options():
     """No credential read or network I/O during construction/startup."""
     # V1.5 gates exact release/profile in collaboration_execution, before
     # counting and Chat. Historical Function admissions cannot authorize it.
+    from .model_profile import OPENAI_PROFILE, ModelProfile
+
+    if ModelProfile.selected_profile() == OPENAI_PROFILE:
+        from .openai_counting import OpenAIInputCounter
+
+        return {'counting_counter': OpenAIInputCounter()}
     return {'counting_counter': TokenizationGateway()}

@@ -1,0 +1,70 @@
+name: V2.1 offline checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      long_load:
+        description: Run the two long growth and performance checks
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  regular:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [frontend, core, programs, ai]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13.5'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.15.0'
+          package-manager-cache: false
+      - name: Install locked dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./.venv/Scripts/python.exe -m pip install -r backend/requirements.lock -r backend/requirements-dev.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --prefix frontend
+      - name: Verify runner boundaries
+        run: ./.venv/Scripts/python.exe -B -m unittest discover -s tools/tests -p test_quality_gate_v21.py -q
+      - name: Verify evaluation evidence boundaries
+        run: ./.venv/Scripts/python.exe -B -m unittest discover -s tools/tests -p "test_v21_evaluation*.py" -q
+      - name: Run explicit V2.1 group
+        run: ./.venv/Scripts/python.exe -B tools/check-v21-offline.py --group ${{ matrix.group }}
+  long-load:
+    if: github.event_name == 'workflow_dispatch' && inputs.long_load
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13.5'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.15.0'
+          package-manager-cache: false
+      - name: Install locked dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./.venv/Scripts/python.exe -m pip install -r backend/requirements.lock -r backend/requirements-dev.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --prefix frontend
+      - name: Run explicit long checks
+        run: ./.venv/Scripts/python.exe -B tools/check-v21-offline.py --group load --timeout 10800

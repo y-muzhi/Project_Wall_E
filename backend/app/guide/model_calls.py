@@ -61,16 +61,16 @@ CALL_COLUMNS = """l.id,l.guide_run_id,l.call_no,l.attempt_no,l.model_name,l.call
  l.input_tokens,l.output_tokens,l.cache_info_json,l.duration_ms,l.started_at,l.ended_at,
  CASE WHEN json_valid(l.raw_response_json) THEN CASE WHEN json_type(l.raw_response_json,'$.usage.total_tokens')='integer'
  THEN json_extract(l.raw_response_json,'$.usage.total_tokens') END END AS actual_total_tokens,
- CASE WHEN json_valid(l.request_snapshot_json) THEN CASE WHEN json_valid(json_extract(l.request_snapshot_json,'$.request.messages[1].content')) THEN coalesce(
- json_extract(l.request_snapshot_json,'$.request.messages[1].content') ->> '$.current_request.message_id',
- json_extract(l.request_snapshot_json,'$.request.messages[1].content') ->> '$.current_request.user_message_id',
- json_extract(l.request_snapshot_json,'$.request.messages[1].content') ->> '$.request_metadata.user_message_id',
- json_extract(l.request_snapshot_json,'$.request.messages[1].content') ->> '$.user_input.message_id') END END AS user_message_id,
- CASE WHEN json_valid(l.request_snapshot_json) THEN CASE WHEN json_valid(json_extract(l.request_snapshot_json,'$.request.messages[1].content')) THEN coalesce(
+ CASE WHEN json_valid(l.request_snapshot_json) THEN CASE WHEN json_valid(coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content'))) THEN coalesce(
+ coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.current_request.message_id',
+ coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.current_request.user_message_id',
+ coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.request_metadata.user_message_id',
+ coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.user_input.message_id') END END AS user_message_id,
+ CASE WHEN json_valid(l.request_snapshot_json) THEN CASE WHEN json_valid(coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content'))) THEN coalesce(
  json_extract(l.request_snapshot_json,'$.context_basis.canonical.authorization.expected_content_version'),
- json_extract(l.request_snapshot_json,'$.request.messages[1].content') ->> '$.current_request.document_ref.content_version',
- json_extract(l.request_snapshot_json,'$.request.messages[1].content') ->> '$.request_metadata.current_document.content_version',
- json_extract(l.request_snapshot_json,'$.request.messages[1].content') ->> '$.current_document.content_version') END END AS document_version"""
+ coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.current_request.document_ref.content_version',
+ coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.request_metadata.current_document.content_version',
+ coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.current_document.content_version') END END AS document_version"""
 
 
 def list_model_calls(database, guide_run_id):
@@ -184,6 +184,15 @@ def _collaboration_detail(row, snapshot, *, catalog=None):
     sections = []
     wire = None
     messages = request.get('messages', []) if isinstance(request, dict) else []
+    openai_count = snapshot.get('profile', {}).get('provider') == 'openai'
+    if openai_count:
+        native = request.get('input', [])
+        if len(native) == 2 and [item.get('role') for item in native] == ['developer', 'user']:
+            messages = [
+                {'role': 'system', 'content': native[0]['content']},
+                {'role': 'user', 'content': native[1]['content']},
+            ]
+
     if len(messages) == 2 and [message.get('role') for message in messages] == ['system', 'user']:
         system = messages[0].get('content')
         wire = _json(messages[1].get('content'))
@@ -239,6 +248,8 @@ def _collaboration_detail(row, snapshot, *, catalog=None):
         if isinstance(counts, list) and len(counts) == 8
         else [None] * 8
     )
+    if openai_count:
+        counts = [_number(measurement.get('request_tokens'))]
     budget = None
     reference = counting.get('counting_resource')
     if reference is not None:
@@ -350,8 +361,9 @@ def get_model_call(database, llm_use_id, *, catalog=None):
             budget = None
             if counting.get('release_sha256'):
                 try:
-                    from .counted_context import counting_release
                     from backend.app.infrastructure.model_profile import ModelProfile
+
+                    from .counted_context import counting_release
 
                     budget = counting_release(
                         ModelProfile.from_snapshot(snapshot['profile']),
