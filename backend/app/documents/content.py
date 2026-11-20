@@ -66,6 +66,8 @@ def commit_content(
     summary,
     key,
     at,
+    formation_transaction=None,
+    card_authority=None,
 ):
     require_write_transaction(connection)
     documents = DocumentRepository(connection)
@@ -82,30 +84,45 @@ def commit_content(
         'GUIDE_RUN': ('GUIDE_ACTIVE', 'GUIDE_RUN'),
         'SUGGESTION_BATCH': ('SUGGESTION_REVIEWING', 'SUGGESTION_BATCH'),
     }
-    if source_type not in kinds or (
-        root['document_work_state'],
-        root['active_operation_type'],
-        root['active_operation_id'],
-    ) != (*kinds[source_type], source_id):
-        raise Rejected('WORK_STATE_CONFLICT')
-    binding = None
-    if source_type == 'MANUAL_EDIT':
-        binding = connection.execute(
-            "SELECT current_document_id FROM manual_edit_sessions WHERE draft_id=? AND requirement_id=? AND status='EDITING'",
-            (source_id, root['id']),
-        ).fetchone()
-    elif source_type == 'GUIDE_RUN':
-        binding = connection.execute(
-            "SELECT target_document_id FROM guide_runs WHERE id=? AND requirement_id=? AND status='RUNNING' AND operation='REVISE'",
-            (source_id, root['id']),
-        ).fetchone()
+    if source_type == 'CARD_RESPONSE':
+        from backend.app.formation.card_write_authority import require_authority
+
+        require_authority(
+            card_authority,
+            connection,
+            current,
+            source_id,
+            snapshot,
+            key,
+            source_refs,
+            summary,
+            resources,
+        )
     else:
-        binding = connection.execute(
-            "SELECT target_document_id FROM suggestion_batches WHERE id=? AND requirement_id=? AND status='PENDING'",
-            (source_id, root['id']),
-        ).fetchone()
-    if binding is None or binding[0] != current['id']:
-        raise Rejected('SOURCE_INVALID')
+        if source_type not in kinds or (
+            root['document_work_state'],
+            root['active_operation_type'],
+            root['active_operation_id'],
+        ) != (*kinds[source_type], source_id):
+            raise Rejected('WORK_STATE_CONFLICT')
+        binding = None
+        if source_type == 'MANUAL_EDIT':
+            binding = connection.execute(
+                "SELECT current_document_id FROM manual_edit_sessions WHERE draft_id=? AND requirement_id=? AND status='EDITING'",
+                (source_id, root['id']),
+            ).fetchone()
+        elif source_type == 'GUIDE_RUN':
+            binding = connection.execute(
+                "SELECT target_document_id FROM guide_runs WHERE id=? AND requirement_id=? AND status='RUNNING' AND operation='REVISE'",
+                (source_id, root['id']),
+            ).fetchone()
+        else:
+            binding = connection.execute(
+                "SELECT target_document_id FROM suggestion_batches WHERE id=? AND requirement_id=? AND status='PENDING'",
+                (source_id, root['id']),
+            ).fetchone()
+        if binding is None or binding[0] != current['id']:
+            raise Rejected('SOURCE_INVALID')
     sources = DocumentSources(connection, root['id'], resources, document_id=current['id'])
     prior = validate_snapshot(
         actual['markdown_content'], strict_json_object(actual['block_state_json']), sources
@@ -131,11 +148,28 @@ def commit_content(
                 'result': 'NO_CHANGE',
             }
         )
+    from backend.app.formation.transaction import capture_transaction
+
+    if formation_transaction is None:
+        formation_transaction = capture_transaction(connection, root['id'], actual['id'])
     updated = documents.replace_current(actual, candidate, increment(actual['content_version']), at)
     revision_id = entity_id(connection, EntityKind.REVISION)
     RevisionRepository(connection).insert_content(revision_id, updated, source_refs, summary, at)
-    AuditRepository(connection).record_content_commit(
+    content_event_id = AuditRepository(connection).record_content_commit(
         actual, updated, revision_id, source_type, source_id, source_refs, summary, key, at
+    )
+    from backend.app.formation.content_maintenance import maintain_content
+
+    maintain_content(
+        connection,
+        actual,
+        prior,
+        candidate,
+        revision_id,
+        content_event_id,
+        transaction=formation_transaction,
+        key=key,
+        at=at,
     )
     from backend.app.comments.commands import revalidate_anchors
 

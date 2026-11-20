@@ -22,6 +22,11 @@ from .discussion import empty_discussion
 
 
 def update_discussion(executor, payload, *, catalog=None, clock=None):
+    command = payload.get('discussion_command') if type(payload) is dict else None
+    if type(command) is dict and command.get('type') == 'FORMATION':
+        from backend.app.formation.commands import update
+
+        return update(executor, payload, catalog=catalog, clock=clock)
     from .contracts import discussion_command_input, discussion_command_result
     from .discussion import apply_user_command
     from backend.app.documents.guards import assert_idle

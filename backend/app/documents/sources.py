@@ -136,6 +136,23 @@ class DocumentSources:
                 return True
             except (ValueError, KeyError, RuntimeError):
                 return False
+        if origin.source_type == 'CARD_RESPONSE':
+            if origin.actor != 'USER' or self.document_id is None:
+                return False
+            from backend.app.formation.card_source import card_source
+            from backend.app.shared.command_execution import Rejected
+
+            try:
+                card_source(
+                    self.connection,
+                    self.requirement_id,
+                    self.document_id,
+                    origin.source_id,
+                    self.catalog,
+                )
+            except (Rejected, ValueError, KeyError, TypeError):
+                return False
+            return True
         if origin.source_type == 'GUIDE_RUN':
             if origin.actor != 'AI':
                 return False

@@ -1,17 +1,18 @@
 """V1.5 exact eight-text counting and bounded whole-material candidates."""
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 
 from backend.app.infrastructure.collaboration_resources import sha256
+from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.resources import ConfigInvalid
 from backend.app.infrastructure.schema_transport import compact
 from backend.app.infrastructure.tokenization import (
+    ExactCountUnavailable,
     TokenCounts,
     restore_measurement,
-    ExactCountUnavailable,
 )
-from backend.app.infrastructure.idempotency import canonical_input
+
 from .collaboration_context import CollaborationContext, compile_context
 from .context_builder import ContextLimitExceeded
 
@@ -25,8 +26,18 @@ class CountedCollaborationContext(CollaborationContext):
         return json.loads(self.counting_json)
 
 
-def restore_candidate_measurement(value, texts, profile, catalog):
+def restore_candidate_measurement(value, texts, profile, catalog, *, context=None):
     """Summary-only evidence can prove rejection, never an accepted request."""
+    if profile.provider == 'openai':
+        from backend.app.infrastructure.openai_counting import restore
+
+        if context is None or context.texts != texts:
+            raise ConfigInvalid('OpenAI count needs its exact frozen candidate')
+        raw = type(value) is dict and 'response' in value
+        measurement = restore(value, context, profile, raw_required=raw)
+        if not raw and measurement.request_tokens <= catalog.collaboration.counting['input_limit']:
+            raise ExactCountUnavailable('AUDIT_CAPACITY')
+        return measurement
     raw = type(value) is dict and 'response' in value
     measurement = restore_measurement(
         value, texts, raw_required=raw, expected_model=profile.model_name
@@ -43,6 +54,23 @@ def restore_candidate_measurement(value, texts, profile, catalog):
     if not raw and accepted:
         raise ExactCountUnavailable('AUDIT_CAPACITY')
     return measurement
+
+
+def receipt_type(profile):
+    if profile.provider == 'openai':
+        from backend.app.infrastructure.openai_counting import OpenAIInputCount
+
+        return OpenAIInputCount
+    return TokenCounts
+
+
+def predicted_input(measurement, profile, release):
+    if profile.provider == 'openai':
+        return measurement.request_tokens
+    counts = measurement.counts
+    if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0:
+        raise ConfigInvalid('Eight actual diagnostic counts required')
+    return counts[0] + counts[1] + release['framing_reserve']
 
 
 async def compile_counted(canonical, catalog, profile, *, counter, admission_guard=None):
@@ -68,16 +96,16 @@ async def compile_counted(canonical, catalog, profile, *, counter, admission_gua
             continue
         seen.add(digest)
         await admitted()
-        receipt = await counter.count(profile, context.texts)
-        if type(receipt) is not TokenCounts:
+        if profile.provider == 'openai' and hasattr(counter, 'count_context'):
+            receipt = await counter.count_context(profile, context)
+        else:
+            receipt = await counter.count(profile, context.texts)
+        if type(receipt) is not receipt_type(profile):
             raise ConfigInvalid('Exact immutable count receipt required')
         measurement = restore_candidate_measurement(
-            receipt.evidence, context.texts, profile, catalog
+            receipt.evidence, context.texts, profile, catalog, context=context
         )
-        counts = measurement.counts
-        if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0:
-            raise ConfigInvalid('Eight actual diagnostic counts required')
-        predicted = counts[0] + counts[1] + release['framing_reserve']
+        predicted = predicted_input(measurement, profile, release)
         accepted = (
             predicted <= release['input_limit']
             and predicted + release['output_limit'] <= release['total_limit']
@@ -97,7 +125,7 @@ async def compile_counted(canonical, catalog, profile, *, counter, admission_gua
         if accepted:
             evidence = {
                 'schema_version': 1,
-                'layout': 'collaboration_context_v1',
+                'layout': resources.layout,
                 'release_sha256': resources.release_sha256,
                 'model_profile_sha256': sha256(compact(profile.snapshot)),
                 'counting_resource': resources.release['counting'],
@@ -131,7 +159,7 @@ def verify_counted(context, catalog, profile, *, expected_canonical=None):
         evidence.get('model_profile_sha256'),
         evidence.get('counting_resource'),
     ) != (
-        'collaboration_context_v1',
+        resources.layout,
         resources.release_sha256,
         sha256(compact(profile.snapshot)),
         resources.release['counting'],
@@ -171,12 +199,10 @@ def verify_counted(context, catalog, profile, *, expected_canonical=None):
             or attempt.get('omitted') != candidate.basis['omitted']
         ):
             raise ConfigInvalid('Candidate selection differs from its snapshot')
-        counts = restore_candidate_measurement(
-            attempt['measurement'], candidate.texts, profile, catalog
-        ).counts
-        if len(counts) != 8 or counts[0] <= 0 or counts[1] <= 0:
-            raise ConfigInvalid('Count dimensions or empty diagnostics differ')
-        predicted = counts[0] + counts[1] + resources.counting['framing_reserve']
+        measurement = restore_candidate_measurement(
+            attempt['measurement'], candidate.texts, profile, catalog, context=candidate
+        )
+        predicted = predicted_input(measurement, profile, resources.counting)
         accepted = (
             predicted <= resources.counting['input_limit']
             and predicted + resources.counting['output_limit'] <= resources.counting['total_limit']
@@ -210,6 +236,21 @@ def restore_counted(snapshot, catalog, profile):
         raise ConfigInvalid('Persisted request release/profile differs')
     basis = resources.validate('ContextBasis', snapshot['context_basis'])
     request = snapshot['request']
+    if profile.provider == 'openai':
+        messages = request.get('input')
+        if (
+            type(messages) is not list
+            or len(messages) != 2
+            or [m.get('role') for m in messages] != ['developer', 'user']
+        ):
+            raise ConfigInvalid('OpenAI collaboration requires its two native input messages')
+        request = {
+            **request,
+            'messages': [
+                {'role': 'system', 'content': messages[0]['content']},
+                {'role': 'user', 'content': messages[1]['content']},
+            ],
+        }
     if len(request['messages']) != 2 or [message['role'] for message in request['messages']] != [
         'system',
         'user',
@@ -222,7 +263,7 @@ def restore_counted(snapshot, catalog, profile):
         canonical_input({'selected': basis['selected'], 'omitted': basis['omitted']}),
         compact(snapshot['counting']),
     )
-    if profile.request(context) != request:
+    if profile.request(context) != snapshot['request']:
         raise ConfigInvalid('Persisted model parameters differ')
     verify_counted(context, catalog, profile)
     return context

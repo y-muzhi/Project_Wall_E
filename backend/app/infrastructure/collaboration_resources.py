@@ -4,23 +4,77 @@ No database, provider or mutable release state. All access uses fixed identities
 and verified bytes. Offline readiness never grants permission to dispatch Chat.
 """
 
-from dataclasses import dataclass
 import hashlib
-import json
+from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
 from jsonschema import Draft202012Validator
 
-from .resources import ConfigInvalid, _validate
-from .schema_transport import compact, named_schema, declared_json
 from backend.app.shared.validation import strict_json_object
+
+from .resources import ConfigInvalid, _validate
+from .schema_transport import compact, declared_json, named_schema
 
 ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v17'
 MANIFEST_SHA256 = 'a8c5087236d8e4b4b40d62a92643832fe37cc2b5e426725f1ddde7d5670abc40'
 LONG_MANIFEST_SHA256 = '8a4a16de358eb66a6d057ffba4e54fd3b2e696d4673754cfe1435b0bb79ebc5e'
 DOCUMENT_MANIFEST_SHA256 = '91797e9b16c7d6849b2cc739d4f9267a3b11c34a2282aa771f7d8ec62ee461cd'
 DOCUMENT_LONG_MANIFEST_SHA256 = '931c7c1d5423a0863cdca3cbf295ed787c3ce688d5ece150bec21031a694178c'
+FORMATION_MANIFEST_SHA256 = 'b767b5d83c75a767fb6e4d67e35cdbe6f4af8865bce0ef7244ae6771e99e6eff'
+FORMATION_LONG_MANIFEST_SHA256 = '2ceae18bf41655413447d416be870f5b22f54e4d4dd0f7eae41ef1917859b7d9'
+FORMATION_CONTEXT_MANIFEST_SHA256 = (
+    'f5505794725e072071e3c5f777dfb6b4744f84f13544cd22fb86cd8947cb7e23'
+)
+FORMATION_CONTEXT_LONG_MANIFEST_SHA256 = (
+    '2e52b3a4507eee0b61f901dd5f6a6ef07191feedbc2deae0a94424b3fbd8d3ea'
+)
+FORMATION_GRAPH_MANIFEST_SHA256 = '8874e28f664dee2017fdb673bd6f8798af66f315eb5b82f808debc29852967d5'
+FORMATION_GRAPH_LONG_MANIFEST_SHA256 = (
+    'a6adc95e6f263d3c74e445017f6ee9db97a5961ed682ef9c5367851819334c45'
+)
+FORMATION_ADOPTION_MANIFEST_SHA256 = (
+    '0aad8f147f1cc5a279d2370c83632ce30dffc4fab70541c895a01be94cdfd498'
+)
+FORMATION_ADOPTION_LONG_MANIFEST_SHA256 = (
+    '5be0fe0590d41dfbdb5899a06d2addcd8f67e604ca3a1c5e961da1ad600b8dc9'
+)
+FORMATION_PROVENANCE_MANIFEST_SHA256 = (
+    '6afecca289a6369d94abe5d1a9c03ca7f6ff479d6cb4c2c25bff591fd1f3208c'
+)
+FORMATION_PROVENANCE_LONG_MANIFEST_SHA256 = (
+    '2bc51b4e8b90602331dadcb750743ab4f835d3d6ed83c7e2a4048523df53cc44'
+)
+FORMATION_RULES_MANIFEST_SHA256 = 'a2264f7ba58c7bca3a5b662c972a9bf3f866e7496ccf07b92c8fd2f7298ec08a'
+FORMATION_RULES_LONG_MANIFEST_SHA256 = (
+    '1ae4a50c73ebf7ebd3e7c177625a3d0e836058da0808de8bbfee404e7767785c'
+)
+FORMATION_TRANSPORT_MANIFEST_SHA256 = (
+    '19fc9e798a9bfb9027638f5e581bc54d7090615a4e71a449f51f1ab45736b046'
+)
+FORMATION_TRANSPORT_LONG_MANIFEST_SHA256 = (
+    '2dae5d4a369eadb8556165c8867abe2a83f5f8bb1e20b58b4a537161b5d7f468'
+)
+FORMATION_SCHEMA_COUNT_MANIFEST_SHA256 = (
+    'cebba2a6deb7a6084584272624ad21ab29760d369a9f8449e84679b22b6f3c24'
+)
+FORMATION_SCHEMA_COUNT_LONG_MANIFEST_SHA256 = (
+    'a3ff49a7787d8f81de2827152fff45896f3c86e84c9b50bef6b3b804169b1f26'
+)
+FORMATION_FRAMING_MANIFEST_SHA256 = (
+    '84290d277cc220452ce3e7889eb8a8a5275c957e8f868018ca884516d1c167fc'
+)
+FORMATION_FRAMING_LONG_MANIFEST_SHA256 = (
+    '60dc7351f1fbac1886b7ace1a8765ff698b8118f543b129a296beed51068266c'
+)
+FORMATION_FRAMING_BINDING_MANIFEST_SHA256 = (
+    'bf4376487589a057492b0aedd872ebb134b151612caba492b39679052b18e4fb'
+)
+FORMATION_FRAMING_BINDING_LONG_MANIFEST_SHA256 = (
+    '14b1b626f891b65d325d0b449aaf64a9e9a3a288514995ed2440f0fba5a3e09d'
+)
+OPENAI_MANIFEST_SHA256 = '9ddea44727ed60fe6e792708b3f109c7acbd33cb279c5e4e43c446a7dd6a9880'
+OPENAI_ARRAY_MANIFEST_SHA256 = '3b10a730eb5fcd346cec68b163bc4a2ee9ef1023674e513a369616bedaeaa543'
 OUTPUTS = MappingProxyType(
     {
         'DISCUSS': 'OutputDiscuss',
@@ -65,6 +119,28 @@ class CollaborationResources:
                 LONG_MANIFEST_SHA256,
                 DOCUMENT_MANIFEST_SHA256,
                 DOCUMENT_LONG_MANIFEST_SHA256,
+                FORMATION_MANIFEST_SHA256,
+                FORMATION_LONG_MANIFEST_SHA256,
+                FORMATION_CONTEXT_MANIFEST_SHA256,
+                FORMATION_CONTEXT_LONG_MANIFEST_SHA256,
+                FORMATION_GRAPH_MANIFEST_SHA256,
+                FORMATION_GRAPH_LONG_MANIFEST_SHA256,
+                FORMATION_ADOPTION_MANIFEST_SHA256,
+                FORMATION_ADOPTION_LONG_MANIFEST_SHA256,
+                FORMATION_PROVENANCE_MANIFEST_SHA256,
+                FORMATION_PROVENANCE_LONG_MANIFEST_SHA256,
+                FORMATION_RULES_MANIFEST_SHA256,
+                FORMATION_RULES_LONG_MANIFEST_SHA256,
+                FORMATION_TRANSPORT_MANIFEST_SHA256,
+                FORMATION_TRANSPORT_LONG_MANIFEST_SHA256,
+                FORMATION_SCHEMA_COUNT_MANIFEST_SHA256,
+                FORMATION_SCHEMA_COUNT_LONG_MANIFEST_SHA256,
+                FORMATION_FRAMING_MANIFEST_SHA256,
+                FORMATION_FRAMING_LONG_MANIFEST_SHA256,
+                FORMATION_FRAMING_BINDING_MANIFEST_SHA256,
+                FORMATION_FRAMING_BINDING_LONG_MANIFEST_SHA256,
+                OPENAI_MANIFEST_SHA256,
+                OPENAI_ARRAY_MANIFEST_SHA256,
             ):
                 raise ValueError('Collaboration manifest identity changed')
             manifest = strict_json_object(manifest_bytes)
@@ -147,6 +223,14 @@ class CollaborationResources:
             return self._texts[path]
         except (KeyError, TypeError, ValueError):
             raise ConfigInvalid('Resource identity or digest does not match') from None
+
+    @property
+    def formation_driven(self):
+        return self.release.get('formation_protocol') == 'formation_v21_1'
+
+    @property
+    def layout(self):
+        return self.counting['layout']
 
     @property
     def document_driven(self):

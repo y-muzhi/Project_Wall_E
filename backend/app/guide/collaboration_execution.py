@@ -15,14 +15,12 @@ from backend.app.infrastructure.model_gateway import ModelGateway
 from backend.app.infrastructure.resources import ConfigInvalid
 from backend.app.infrastructure.tokenization import (
     ExactCountUnavailable,
-    TokenCounts,
-    TokenizationGateway,
     check_text_capacity,
 )
 from backend.app.shared.command_execution import Rejected, operation_time
 
 from .collaboration_context import compile_context, read_canonical
-from .collaboration_counting import compile_counted, restore_candidate_measurement
+from .collaboration_counting import compile_counted, receipt_type, restore_candidate_measurement
 from .collaboration_results import persist_collaboration_result
 from .response_display import response_text
 
@@ -116,10 +114,15 @@ class _Counter:
             await self.admission_guard()
             await self.native(self.check)
             check_text_capacity(profile, texts)
-            receipt = await self.counter.count(profile, texts)
-            if type(receipt) is not TokenCounts:
+            if profile.provider == 'openai':
+                receipt = await self.counter.count_context(profile, candidate)
+            else:
+                receipt = await self.counter.count(profile, texts)
+            if type(receipt) is not receipt_type(profile):
                 raise ConfigInvalid('Exact count receipt required')
-            restore_candidate_measurement(receipt.evidence, texts, profile, self.catalog)
+            restore_candidate_measurement(
+                receipt.evidence, texts, profile, self.catalog, context=candidate
+            )
         except asyncio.CancelledError:
             try:
                 await self.native(
@@ -193,16 +196,16 @@ async def execute_collaboration(
     clock,
     observation=None,
 ):
-    from backend.app.infrastructure.collaboration_admission import CollaborationAdmission
+    from backend.app.infrastructure.collaboration_provider import admission_for, counter_for
 
-    admission = CollaborationAdmission(database, process_lock, catalog)
+    admission = admission_for(database, process_lock, catalog)
     if observation is not None:
         from backend.app.infrastructure.collaboration_observation import CollaborationObservation
 
         if type(observation) is not CollaborationObservation:
             raise ConfigInvalid('Only the explicit isolated observation capability is permitted')
         counting_counter = observation.counter(
-            TokenizationGateway() if counting_counter is None else counting_counter
+            counter_for(profile) if counting_counter is None else counting_counter
         )
         gateway = observation.gateway(ModelGateway() if gateway is None else gateway)
 
@@ -228,7 +231,7 @@ async def execute_collaboration(
             identity,
             canonical,
             catalog,
-            TokenizationGateway() if counting_counter is None else counting_counter,
+            counter_for(profile) if counting_counter is None else counting_counter,
             native,
             clock,
             admitted,
@@ -264,6 +267,8 @@ async def execute_collaboration(
     row, last = await state()
     if row['status'] != 'RUNNING':
         return execute_guide_run_result('AI_STOPPED', row, last)
+    if catalog.collaboration.formation_driven and not wire.succeeded:
+        return await fail('MODEL_ERROR')
     if wire.succeeded:
         await native(_parse, database, prepared['id'], clock)
     if response_text(wire.raw_response) is None:

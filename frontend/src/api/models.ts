@@ -1,9 +1,16 @@
+import {
+  acceptedSelection,
+  formationProgramReceipt,
+  isFormationPurpose,
+  validateFormationCards,
+} from './formation-workflow.ts';
+import { formationSummary } from './formation-values.ts';
 /** Public read models only. Private prompts/audit/business source proof stay in
  * the backend. Documents/revisions use the actual registered Markdown parser.
  */
 import type { Ctx } from '@milkdown/kit/ctx';
 import { validateBlockState, validateDocumentReadModel } from '../documents/contracts.ts';
-import { exact, snapshotObject } from './client.ts';
+import { exact, object, snapshotObject } from './client.ts';
 import type { JsonObject } from './client.ts';
 import type { DocumentReadModel } from '../documents/contracts.ts';
 import collaboration from '../../../backend/resources/v17/schemas/collaboration-contract.v5.json' with { type: 'json' };
@@ -168,7 +175,7 @@ const topicState = shape({
   unresolved_impacts: array(nonempty, 1000),
   updated_by_message_id: id,
 });
-export const discussionState = (value: unknown) => {
+const discussionCore = (value: unknown) => {
   collaborationValue('Discussion')(value);
   return shape({
     schema_version: choices([2]),
@@ -208,6 +215,19 @@ export const discussionState = (value: unknown) => {
     last_step: nullable(shape({ message_id: id, value: collaborationValue('NextStep') })),
     counters: shape({ topic: id, evidence: id }),
   })(value);
+};
+type DiscussionRead = ReturnType<typeof discussionCore> &
+  Readonly<{
+    formation_summary?: ReturnType<typeof formationSummary>;
+  }>;
+export const discussionState = (value: unknown): DiscussionRead => {
+  const row = object(value);
+  if (!Object.hasOwn(row, 'formation_summary')) return discussionCore(row);
+  const summary = formationSummary(row.formation_summary);
+  const core = Object.fromEntries(
+    Object.entries(row).filter(([key]) => key !== 'formation_summary'),
+  );
+  return Object.freeze({ ...discussionCore(core), formation_summary: summary });
 };
 export type DiscussionState = ReturnType<typeof discussionState>;
 export const resourceRef = shape({
@@ -258,7 +278,7 @@ export const requirementDetail = checked(
     requirement,
     documents: array(documentSummary, Number.MAX_SAFE_INTEGER),
     discussion_summary: discussionSummary,
-    discussion: nullable(collaborationValue('Discussion')),
+    discussion: nullable(discussionState),
     active_operation: nullable(
       shape({
         type: choices(['MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH']),
@@ -478,11 +498,20 @@ export const wireScope = (value: unknown) => {
   }
   return scope(row);
 };
-export const runReceipt = shape({
+const legacyRunReceipt = shape({
   processing: choices(['MODEL']),
   guide_run_id: id,
   user_message_id: id,
 });
+export const runReceipt = legacyRunReceipt;
+export const formationRunReceipt = shape({
+  processing: choices(['MODEL']),
+  guide_run_id: id,
+  user_message_id: id,
+  accepted_target: (value: unknown) => acceptedSelection(value),
+});
+export const derivedRunReceipt = (value: unknown) =>
+  'accepted_target' in snapshotObject(value) ? formationRunReceipt(value) : runReceipt(value);
 export type RunReceipt = ReturnType<typeof runReceipt>;
 const runFields = {
   id,
@@ -524,7 +553,10 @@ const runFields = {
   progress_error: nullable(nonempty),
   document_effect: nullable(documentEffect),
 };
-function checkRun(row: Model<ReturnType<typeof shape<typeof runFields>>>) {
+function checkRun(
+  row: Omit<Model<ReturnType<typeof shape<typeof runFields>>>, 'progress_result'> &
+    Readonly<{ progress_result: string | null }>,
+) {
   const actions = {
     DISCUSS: 'ASK',
     GENERATE: 'GENERATE',
@@ -556,7 +588,43 @@ function checkRun(row: Model<ReturnType<typeof shape<typeof runFields>>>) {
   );
   interval(row, [row.started_at, row.ended_at]);
 }
-export const guideSummary = checked(shape(runFields), checkRun);
+const formationRunFields = {
+  ...runFields,
+  progress_result: nullable(choices(['NOT_APPLICABLE', 'APPLIED', 'NO_CHANGE', 'REJECTED'])),
+  accepted_target: (value: unknown) => acceptedSelection(value),
+  effect_state: nullable(choices(['APPLIED', 'STRUCTURED_REJECTED', 'FAILED', 'CANCELLED'])),
+  formation_result: nullable(choices(['APPLIED', 'NO_CHANGE', 'REJECTED', 'NOT_APPLICABLE'])),
+  proposal_result: nullable(choices(['APPLIED', 'NO_CHANGE', 'REJECTED', 'NOT_APPLICABLE'])),
+  component_errors: array(choices(taskErrors), taskErrors.length),
+};
+function checkFormationRun(row: Model<ReturnType<typeof shape<typeof formationRunFields>>>) {
+  checkRun(row);
+  distinct(row.component_errors);
+  if (row.status === 'RUNNING')
+    require(
+      row.effect_state === null &&
+        row.formation_result === null &&
+        row.proposal_result === null &&
+        row.component_errors.length === 0,
+    );
+  else
+    require(
+      row.effect_state !== null && row.formation_result !== null && row.proposal_result !== null,
+    );
+  if (row.status === 'FAILED' || row.status === 'CANCELLED')
+    require(row.effect_state === row.status);
+  if (row.effect_state === 'STRUCTURED_REJECTED')
+    require(
+      row.component_errors.length > 0 &&
+        row.progress_result === 'REJECTED' &&
+        row.formation_result === 'REJECTED' &&
+        row.proposal_result === 'REJECTED',
+    );
+}
+export const guideSummary = (value: unknown) =>
+  'accepted_target' in snapshotObject(value)
+    ? checked(shape(formationRunFields), checkFormationRun)(value)
+    : checked(shape(runFields), checkRun)(value);
 export const analysis = (value: unknown) => {
   collaborationValue('Analysis')(value);
   return shape({
@@ -606,7 +674,26 @@ const decodeGuideRun = checked(
       require(row.final_result.suggestion_batch_id === row.suggestion_batch_id);
   },
 );
-export const guideRun = decodeGuideRun;
+const decodeFormationGuideRun = checked(
+  shape({
+    ...formationRunFields,
+    final_result: nullable(finalResult),
+    returned_responses: array(
+      shape({ llm_use_id: id, call_no: id, attempt_no: id, content: text }),
+      Number.MAX_SAFE_INTEGER,
+    ),
+  }),
+  (row) => {
+    checkFormationRun(row);
+    require((row.status === 'COMPLETED') === (row.final_result !== null));
+    if (row.final_result !== null)
+      require(row.final_result.suggestion_batch_id === row.suggestion_batch_id);
+  },
+);
+export const guideRun = (value: unknown) =>
+  'accepted_target' in snapshotObject(value)
+    ? decodeFormationGuideRun(value)
+    : decodeGuideRun(value);
 export const guideAccepted = shape({
   id,
   requirement_id: id,
@@ -629,7 +716,7 @@ const card = shape({
   question: nonempty,
   context: text,
   required: bool,
-  options: array(option, 8, 2),
+  options: array(option, 8, 1),
   selection_rule: shape({ min: count, max: count }),
   custom_answer: shape({ enabled: bool, max_length: count }),
   recommendation: nullable(shape({ option_keys: array(nonempty, 8), reason: text })),
@@ -642,7 +729,14 @@ export const cards = checked(
   shape({
     schema_version: choices([1]),
     intro: text,
-    purpose: choices(['CLARIFICATION', 'DOCUMENT_ACTION', 'PHASE_CHANGE', 'FACT_CONFIRMATION']),
+    purpose: choices([
+      'CLARIFICATION',
+      'DOCUMENT_ACTION',
+      'PHASE_CHANGE',
+      'FACT_CONFIRMATION',
+      'STAGED_WRITE',
+      'FORMATION_PATH_CHANGE',
+    ]),
     cards: array(card, 5, 1),
     action_payload: nullable(snapshotObject),
     program_binding: shape({
@@ -652,7 +746,8 @@ export const cards = checked(
     }),
   }),
   (row) => {
-    if (row.purpose === 'PHASE_CHANGE')
+    if (isFormationPurpose(row.purpose)) validateFormationCards(row);
+    else if (row.purpose === 'PHASE_CHANGE')
       validateDefinition('StoredCardGroup', row, historicalCollaboration.$defs);
     else collaborationValue('StoredCardGroup')(row);
     distinct(row.cards.map((item) => item.card_key));
@@ -708,7 +803,7 @@ export const responses = checked(
 );
 export type Cards = Model<typeof cards>;
 export type Responses = Model<typeof responses>;
-export const programReceipt = checked(
+const legacyProgramReceipt = checked(
   shape({
     processing: choices(['PROGRAM']),
     user_message_id: id,
@@ -726,6 +821,12 @@ export const programReceipt = checked(
       require(row.document_effect !== null);
   },
 );
+export const programReceipt = (value: unknown) =>
+  snapshotObject(value).schema === 'formation_program_receipt_v21_1'
+    ? formationProgramReceipt(value)
+    : legacyProgramReceipt(value);
+export const receiptPurpose = (value: ReturnType<typeof programReceipt>) =>
+  'operation' in value ? value.operation : value.purpose;
 export const message = (value: unknown) => {
   const row = exact(value, [
     'id',

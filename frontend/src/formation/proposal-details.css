@@ -1,0 +1,23 @@
+.formation-proposal-details {
+  min-width: 0;
+  max-width: 100%;
+  padding-block: 12px;
+  overflow-wrap: anywhere;
+}
+.formation-proposal-details h4,
+.formation-proposal-details h5 {
+  margin-block: 8px;
+}
+.formation-proposal-details pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.formation-patch-preview + .formation-patch-preview {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}

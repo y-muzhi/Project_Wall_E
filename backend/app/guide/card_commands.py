@@ -74,6 +74,19 @@ def submit(executor, payload, *, catalog=None, clock=None):
             remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
         )
         raw_cards = json.loads(original['structured_content_json'])
+        if raw_cards.get('purpose') in ('STAGED_WRITE', 'FORMATION_PATH_CHANGE'):
+            from backend.app.formation.card_apply import apply_card
+            from backend.app.infrastructure.model_profile import DEFAULT_PROFILE
+
+            selected = resources.for_formation_profile(
+                getattr(resources, '_collaboration_profile', None) or DEFAULT_PROFILE
+            )
+            try:
+                return apply_card(
+                    connection, root, original, raw_cards, request, selected, operation_time(clock)
+                )
+            except (CardsInvalid, ProtocolInvalid):
+                _invalid('回答必须准确覆盖原提案并只选择明确采用')
         if raw_cards.get('purpose') == 'PHASE_CHANGE':
             raise Rejected('CARD_EXPIRED')
         cards = decode_cards(original['structured_content_json'], resources.collaboration)
@@ -259,6 +272,7 @@ def submit(executor, payload, *, catalog=None, clock=None):
                 'CONTENT_VERSION_CONFLICT',
                 'SOURCE_VERSION_CONFLICT',
                 'TARGET_STALE',
+                'DOCUMENT_INVALID',
                 'CONFIG_INVALID',
             }
         ),

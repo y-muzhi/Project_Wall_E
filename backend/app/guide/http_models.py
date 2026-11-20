@@ -203,6 +203,7 @@ class CreateGuideRunRequest(CommandRequest):
         'acknowledge_source_changes',
     )
     mandatory = body_fields
+    body_fields = (*body_fields, 'proposal_intent')
     validate = staticmethod(create_guide_run_input)
     normalize = staticmethod(
         lambda payload, validated: (
@@ -239,11 +240,25 @@ class CreateGuideRunResponse:
     def project(data, request):
         from backend.app.shared.validation import strict_enum, strict_integer
 
-        fields = ('processing', 'guide_run_id', 'user_message_id')
+        formation = (
+            type(request.payload.get('target')) is dict
+            and 'discussion_step_ref' in request.payload['target']
+        )
+        if 'guide_run_id' in request.payload and 'accepted_target' in data:
+            formation = True
+        fields = ('processing', 'guide_run_id', 'user_message_id') + (
+            ('accepted_target',) if formation else ()
+        )
         value = object_fields(data, 'data', fields, fields)
         strict_enum(value['processing'], 'processing', ('MODEL',))
         strict_integer(value['guide_run_id'], 'guide_run_id')
         strict_integer(value['user_message_id'], 'user_message_id')
+        if formation:
+            from backend.app.formation.discuss_contracts import target_selection
+
+            value['accepted_target'] = target_selection(value['accepted_target'], 'accepted_target')
+            if value['accepted_target']['branch_intent'] == 'RESUME':
+                raise ValueError('An accepted branch recovery must be consumed')
         return value, None
 
 

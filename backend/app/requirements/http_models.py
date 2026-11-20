@@ -79,10 +79,22 @@ class GetRequirementResponse:
         value = project_detail(data, request.expand)
         if value['requirement']['id'] != request.requirement_id:
             raise ValueError('Read returned a different requirement')
+        if value['discussion'] is not None and 'formation_summary' in value['discussion']:
+            if value['discussion']['formation_summary']['document_id'] != request.document_id:
+                raise ValueError('Formation summary belongs to another document')
         return value, None
 
 
 class UpdateRequirementRequest(CommandRequest):
+    @classmethod
+    def parse(cls, request, body=None):
+        parsed = super().parse(request, body)
+        if parsed.payload.get('discussion_command', {}).get('type') == 'FORMATION':
+            from backend.app.shared.http_boundary import idempotency_header
+
+            idempotency_header(request, lowercase=True)
+        return parsed
+
     body_fields = (
         'expected_metadata_version',
         'changes',
@@ -113,6 +125,11 @@ class UpdateRequirementRequest(CommandRequest):
 class UpdateRequirementResponse:
     success_codes = ('UPDATED', 'NO_CHANGE')
     errors = GetRequirementResponse.errors | {
+        'FORMATION_INVALID',
+        'FORMATION_LIMIT_EXCEEDED',
+        'CONTENT_VERSION_CONFLICT',
+        'CARD_ALREADY_ANSWERED',
+        'CONFIG_INVALID',
         'METADATA_VERSION_CONFLICT',
         'DISCUSSION_VERSION_CONFLICT',
         'STATE_CONFLICT',
@@ -127,6 +144,16 @@ class UpdateRequirementResponse:
 
     @staticmethod
     def project(data, request):
+        if request.payload.get('discussion_command', {}).get('type') == 'FORMATION':
+            from backend.app.formation.http_projection import program_receipt
+
+            value = program_receipt(data)
+            if (
+                value['requirement_id'] != request.payload['requirement_id']
+                or value['document_id'] != request.payload['document_id']
+            ):
+                raise ValueError('Formation receipt belongs to another document')
+            return value, None
         if 'discussion_command' in request.payload:
             from .discussion import validate_discussion
 

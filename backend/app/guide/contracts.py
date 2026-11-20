@@ -12,12 +12,11 @@ from backend.app.shared.validation import (
     suffix_text,
 )
 from backend.app.infrastructure.idempotency import canonical_input
-from backend.app.infrastructure.resources import FUNCTIONS, ResourceCatalog
+from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.shared.http_errors import ERRORS
 from backend.app.infrastructure.idempotency import request_key
 from backend.app.shared.pagination import page_number, page_metadata
 from backend.app.shared.validation import raw_text
-from backend.app.shared.validation import instruction
 from backend.app.shared.validation import strict_boolean, ordinary_text
 from backend.app.messages.contracts import message_read_model
 
@@ -113,6 +112,11 @@ class CreateGuideRunInput:
 
 
 def create_guide_run_input(payload):
+    if type(payload) is dict and 'proposal_intent' in payload:
+        from backend.app.formation.discuss_contracts import formation_discuss_input
+
+        return formation_discuss_input(payload)
+
     from backend.app.requirements.discussion import discussion_resources
     from backend.app.shared.validation import normalize_text
 
@@ -496,7 +500,22 @@ def _scope(kind: str, reference: object) -> dict:
 def _guide_model(data: object, *, summary: bool) -> dict:
     from backend.app.requirements.discussion import discussion_resources
 
-    fields = tuple(field for field in STATUS_FIELDS if not summary or field != 'final_result')
+    formation = type(data) is dict and 'accepted_target' in data
+    extension = (
+        (
+            'accepted_target',
+            'effect_state',
+            'formation_result',
+            'proposal_result',
+            'component_errors',
+        )
+        if formation
+        else ()
+    )
+    fields = (
+        *tuple(field for field in STATUS_FIELDS if not summary or field != 'final_result'),
+        *extension,
+    )
     value = object_fields(
         data, 'read_model', fields if summary else (*fields, 'returned_responses'), fields
     )
@@ -557,7 +576,12 @@ def _guide_model(data: object, *, summary: bool) -> dict:
             strict_integer(counts[key], key, minimum=0)
     for field, options in [
         ('application_result', ('NOT_REQUESTED', 'APPLIED', 'NO_CHANGE', 'NOT_APPLIED')),
-        ('progress_result', ('NOT_REQUESTED', 'APPLIED', 'NO_CHANGE', 'REJECTED')),
+        (
+            'progress_result',
+            ('NOT_APPLICABLE', 'APPLIED', 'NO_CHANGE', 'REJECTED')
+            if formation
+            else ('NOT_REQUESTED', 'APPLIED', 'NO_CHANGE', 'REJECTED'),
+        ),
     ]:
         if value[field] is None:
             if terminal:
@@ -568,6 +592,46 @@ def _guide_model(data: object, *, summary: bool) -> dict:
         raise ValueError('Rejected progress requires its safe reason')
     if value['progress_error'] is not None:
         raw_text(value['progress_error'], 'progress_error', 1, 1000)
+    if formation:
+        from backend.app.formation.discuss_contracts import target_selection
+
+        target_selection(value['accepted_target'], 'accepted_target')
+        if value['accepted_target']['branch_intent'] == 'RESUME':
+            raise ValueError('Accepted selection must normalize a completed resume')
+        expected_effect = {'FAILED': 'FAILED', 'CANCELLED': 'CANCELLED'}.get(value['status'])
+        if expected_effect is not None and value['effect_state'] != expected_effect:
+            raise ValueError('Formation outcome differs from actual terminal state')
+        if value['status'] == 'RUNNING':
+            if (
+                any(
+                    value[key] is not None
+                    for key in ('effect_state', 'formation_result', 'proposal_result')
+                )
+                or value['component_errors']
+            ):
+                raise ValueError('Running discussion cannot claim applied effects')
+        else:
+            strict_enum(
+                value['effect_state'],
+                'effect_state',
+                ('APPLIED', 'STRUCTURED_REJECTED', 'FAILED', 'CANCELLED'),
+            )
+            for key in ('formation_result', 'proposal_result'):
+                strict_enum(value[key], key, ('APPLIED', 'NO_CHANGE', 'REJECTED', 'NOT_APPLICABLE'))
+        if type(value['component_errors']) is not list or len(
+            set(value['component_errors'])
+        ) != len(value['component_errors']):
+            raise ValueError('Component errors must be a unique registered code list')
+        for code in value['component_errors']:
+            strict_enum(code, 'component_errors', TASK_ERROR_CODES)
+        if value['effect_state'] == 'STRUCTURED_REJECTED' and (
+            not value['component_errors']
+            or any(
+                value[key] != 'REJECTED'
+                for key in ('progress_result', 'formation_result', 'proposal_result')
+            )
+        ):
+            raise ValueError('Rejected structured unit cannot expose partial application')
     if value['document_effect'] is not None:
         from backend.app.documents.contracts import document_effect
 
@@ -673,7 +737,9 @@ def get_guide_run_result(connection, row, message, batches, *, catalog=None, sum
         context = json.loads(call['request_snapshot_json']).get('context_basis')
         if context is None:
             continue
-        (catalog or ResourceCatalog()).collaboration.validate('ContextBasis', context)
+        (catalog or ResourceCatalog()).for_collaboration_release(
+            basis['resources']['release']
+        ).collaboration.validate('ContextBasis', context)
         selected = context['selected']
         ids = {identity for item in selected for identity in item['message_ids']}
         value['material_summary'] = {
@@ -704,11 +770,42 @@ def get_guide_run_result(connection, row, message, batches, *, catalog=None, sum
     effects = (
         None if full['final_result_json'] is None else strict_json_object(full['final_result_json'])
     )
+    formation_discussion = 'formation' in basis and full['operation'] == 'DISCUSS'
+    formation_selection = basis.get('formation_selection')
+    if formation_discussion and formation_selection is not None:
+        value.update(
+            accepted_target=formation_selection,
+            effect_state=None,
+            formation_result=None,
+            proposal_result=None,
+            component_errors=[],
+        )
+        if full['status'] != 'RUNNING':
+            value['progress_result'] = 'NOT_APPLICABLE'
+            value['formation_result'] = value['proposal_result'] = 'NOT_APPLICABLE'
+            value['effect_state'] = {'FAILED': 'FAILED', 'CANCELLED': 'CANCELLED'}.get(
+                full['status']
+            )
+        if effects is not None:
+            for field in (
+                'accepted_target',
+                'effect_state',
+                'formation_result',
+                'proposal_result',
+                'component_errors',
+            ):
+                value[field] = effects[field]
     if full['status'] == 'COMPLETED':
         if effects is None:
             raise ValueError('Completed run has no persisted result')
         for field in ('application_result', 'progress_result', 'progress_error', 'document_effect'):
             value[field] = effects[field]
+        if (
+            formation_discussion
+            and formation_selection is None
+            and value['progress_result'] == 'NOT_APPLICABLE'
+        ):
+            value['progress_result'] = 'NOT_REQUESTED'
         effect = value['document_effect']
         if effect is not None and effect['result'] != 'NO_CHANGE':
             event = connection.execute(

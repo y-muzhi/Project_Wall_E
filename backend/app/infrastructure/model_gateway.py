@@ -125,6 +125,14 @@ class ModelGateway:
     async def send(self, profile, context, *, testing_limits=None):
         if type(profile) is not ModelProfile:
             raise ValueError('A frozen model profile is required')
+        if profile.provider == 'openai':
+            if testing_limits is not None:
+                raise ValueError('OpenAI Testing transport is not configured')
+            from .openai_gateway import OpenAIGateway
+
+            return await OpenAIGateway(transport_factory=self._transport_factory).send(
+                profile, context
+            )
         if testing_limits is None:
             body = profile.request(context)
             timeouts = httpx.Timeout(connect=10, read=180, write=10, pool=10)

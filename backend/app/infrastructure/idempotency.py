@@ -55,10 +55,17 @@ class Scope:
     key: str
 
     def __post_init__(self):
-        if (
-            type(self.capability_id) is not str
-            or re.fullmatch(r'APP-[A-Z]+-CMD-C[0-9]{2}', self.capability_id) is None
-        ):
+        if type(self.capability_id) is not str:
+            raise ValueError('A complete registered command capability ID is required')
+        formation_capability = self.capability_id in (
+            'formation.command',
+            'formation.card.apply',
+            'formation.discuss',
+        )
+        registered_command = (
+            re.fullmatch(r'APP-[A-Z]+-CMD-C[0-9]{2}', self.capability_id) is not None
+        )
+        if not formation_capability and not registered_command:
             raise ValueError('A complete registered command capability ID is required')
         if type(self.target_identity) is not str or not self.target_identity:
             raise ValueError('Complete target identity is required')

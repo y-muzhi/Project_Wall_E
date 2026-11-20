@@ -1,3 +1,4 @@
+import type { FormationWorkspace } from '../formation/workspace.ts';
 import type { WalleApi } from '../api/walle.ts';
 import type { Message, GuideRun } from '../api/models.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
@@ -41,6 +42,7 @@ const signature = (actual: Actual) =>
  * parent owns reads and Run receipts; this collection never inserts/reorders
  * messages, guesses expiration or replaces an UNKNOWN command on refresh. */
 export class RequirementCardGroups {
+  private formation: FormationWorkspace | null = null;
   private value: CardGroupsState = Object.freeze({
     slots: [],
     available: false,
@@ -139,6 +141,10 @@ export class RequirementCardGroups {
     }
     this.wanted = actual;
     if (signature(actual) !== this.completed) void this.sync();
+  }
+  attachFormation(owner: FormationWorkspace): void {
+    this.formation = owner;
+    for (const card of this.owners.values()) card.attachFormation(owner);
   }
   setAvailable(available: boolean): void {
     if (this.closed || available === this.value.available) return;
@@ -242,6 +248,7 @@ export class RequirementCardGroups {
                   this.refreshMessages,
                   this.readAccepted,
                 );
+                if (this.formation !== null) owner.attachFormation(this.formation);
                 this.owners.set(message.id, owner);
                 this.releases.set(
                   message.id,

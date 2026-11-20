@@ -5,13 +5,14 @@ retains its original v1 identity for existing private integrations/old audits;
 new production requests use from_environment. Credentials are never snapshots.
 """
 
-from dataclasses import dataclass, field
 import os
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from urllib.parse import urlsplit
 
-from .resources import ConfigInvalid
 from backend.app.shared.validation import strict_json_object
+
+from .resources import ConfigInvalid
 
 MODEL_ID = 'doubao-seed-2-1-pro-260915'
 MODEL_VERSION = '260915'
@@ -20,11 +21,14 @@ DEEPSEEK_MODEL_VERSION = '260910'
 LEGACY_PROFILE = 'doubao-v1'
 DEFAULT_PROFILE = 'deepseek-v2'
 LONG_OUTPUT_PROFILE = 'deepseek-long-v3'
+OPENAI_PROFILE = 'openai-sol-v1'
+OPENAI_MODEL_ID = 'gpt-6.2-sol'
 PROFILES = MappingProxyType(
     {
         LEGACY_PROFILE: (MODEL_ID, MODEL_VERSION),
         DEFAULT_PROFILE: (DEEPSEEK_MODEL_ID, DEEPSEEK_MODEL_VERSION),
         LONG_OUTPUT_PROFILE: (DEEPSEEK_MODEL_ID, DEEPSEEK_MODEL_VERSION),
+        OPENAI_PROFILE: (OPENAI_MODEL_ID, OPENAI_MODEL_ID),
     }
 )
 BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
@@ -55,7 +59,11 @@ class ModelProfile:
     @classmethod
     def selected_profile(cls, environment=None):
         values = os.environ if environment is None else environment
-        model = values.get('WALLE_MODEL_ID', DEEPSEEK_MODEL_ID)
+        hint = values.get('WALLE_MODEL_PROFILE')
+        default_model = (
+            PROFILES[hint][0] if type(hint) is str and hint in PROFILES else DEEPSEEK_MODEL_ID
+        )
+        model = values.get('WALLE_MODEL_ID', default_model)
         selected = values.get(
             'WALLE_MODEL_PROFILE',
             next(
@@ -80,6 +88,13 @@ class ModelProfile:
     def from_environment(cls, environment=None):
         values = os.environ if environment is None else environment
         selected = cls.selected_profile(values)
+        if selected == OPENAI_PROFILE:
+            from .openai_protocol import BASE_URL as OPENAI_URL
+
+            url = values.get('WALLE_MODEL_BASE_URL', OPENAI_URL)
+            if type(url) is not str or url.rstrip('/') != OPENAI_URL:
+                raise ConfigInvalid('Only the official OpenAI endpoint is permitted')
+            return cls(values.get('OPENAI_API_KEY'), selected)
         url = values.get('WALLE_MODEL_BASE_URL', BASE_URL)
         if type(url) is not str:
             raise ConfigInvalid('Model endpoint is invalid')
@@ -96,6 +111,10 @@ class ModelProfile:
         ):
             raise ConfigInvalid('Only the approved credential-free Beijing endpoint is permitted')
         return cls(values.get('WALLE_MODEL_API_KEY'), selected)
+
+    @property
+    def provider(self):
+        return 'openai' if self.profile_id == OPENAI_PROFILE else 'volcengine'
 
     @property
     def model_name(self):
@@ -127,6 +146,10 @@ class ModelProfile:
 
     @property
     def snapshot(self):
+        if self.profile_id == OPENAI_PROFILE:
+            from .openai_protocol import snapshot
+
+            return snapshot(self.output_limit)
         return {
             'provider': 'volcengine',
             'model_name': self.model_name,
@@ -141,10 +164,14 @@ class ModelProfile:
         }
 
     def request(self, context):
+        if self.profile_id == OPENAI_PROFILE:
+            from .openai_protocol import request
+
+            return request(context, self.output_limit)
         if type(context.system) is not str or not context.system:
             raise ValueError('System protocol is required')
         strict_json_object(context.input_json)
-        return {
+        body = {
             'model': self.model_name,
             'messages': [
                 {'role': 'system', 'content': context.system},
@@ -155,8 +182,14 @@ class ModelProfile:
             'stream': False,
             'thinking': {'type': 'disabled'},
         }
+        output_format = getattr(context, 'response_format', None)
+        if output_format is not None:
+            body['response_format'] = output_format
+        return body
 
     def testing_request(self, context, *, output_cap):
+        if self.profile_id == OPENAI_PROFILE:
+            raise ConfigInvalid('OpenAI currently supports document collaboration only')
         if type(output_cap) is not int or not 1 <= output_cap <= self.output_limit:
             raise ConfigInvalid('Original Testing output bound differs')
         body = self.request(context)

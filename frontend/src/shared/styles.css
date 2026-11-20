@@ -2029,8 +2029,7 @@ input[type='radio'] {
   background: var(--surface);
 }
 .ai-read-panel > header,
-.message-thread > header,
-.conversation-message > header {
+.message-thread > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3104,11 +3103,24 @@ input[type='radio'] {
 .conversation-message.from-user > .message-body > :last-child {
   margin-bottom: 0;
 }
-.conversation-message.from-assistant > .message-body {
-  margin: 4px 12px 0 36px;
+.conversation-message.from-assistant {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
 }
-.conversation-message.from-assistant > .message-body > :first-child {
+.conversation-message.from-assistant > header {
+  display: flex;
+}
+.conversation-message.from-assistant > .message-body {
+  padding-inline-end: 12px;
+}
+.conversation-message.from-assistant > .message-body > :first-child,
+.conversation-message.from-assistant .model-return-content > .message-content:first-child {
   margin-top: 0;
+}
+.conversation-message.from-assistant > .message-body ~ * {
+  grid-column: 1 / -1;
 }
 .message-time {
   display: flex;
@@ -3117,13 +3129,6 @@ input[type='radio'] {
   width: 100%;
   margin-top: 8px;
   line-height: 20px;
-}
-.conversation-message > header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
 }
 .ai-message-avatar {
   display: inline-flex;

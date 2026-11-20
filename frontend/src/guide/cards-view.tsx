@@ -1,3 +1,4 @@
+import { FormationProposalDetails } from '../formation/proposal-details.tsx';
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { InteractionCards } from './cards.ts';
 import { responses as decodeResponses } from '../api/models.ts';
@@ -71,6 +72,14 @@ export function InteractionCardsView({
             ? '已失效 · 保留原问题供阅读'
             : '待确认 · 未提交的选择仅保存在本地'}
       </p>
+      {owner.formationReason !== null && <p role="status">{owner.formationReason}</p>}
+      <FormationProposalDetails
+        state={state}
+        owner={owner}
+        {...(documents
+          ? { render: (markdown: string) => documents.previewMarkdown(markdown) }
+          : {})}
+      />
       <CardActionDetails state={state} owner={owner} disabled={disabled} />
       {documents &&
         state.message.card_state === 'AVAILABLE' &&
@@ -250,6 +259,23 @@ export function InteractionCardsView({
           {submitLabel(state)}
         </button>
       )}
+      {(state.cards.purpose === 'STAGED_WRITE' ||
+        state.cards.purpose === 'FORMATION_PATH_CHANGE') &&
+        state.message.card_state === 'AVAILABLE' &&
+        ['READY', 'ERROR'].includes(state.phase) &&
+        disabled && (
+          <p role="status">
+            {busy || state.detail.activity.kind !== 'IDLE'
+              ? '当前正在处理文档操作，完成后可确认提案。'
+              : state.needs_refresh
+                ? '文档状态已变化，请重新读取正式状态后确认提案。'
+                : state.source.status !== 'COMPLETED'
+                  ? '提案来源的运行尚未完成。'
+                  : !state.available
+                    ? '当前页面不可提交提案，请返回可编辑的当前文档。'
+                    : '文档正在被其他操作占用，操作结束后可确认提案。'}
+          </p>
+        )}
       {state.phase === 'SUBMITTING' && <p role="status">正在提交整组答案…</p>}
       {state.phase === 'READING' && <p role="status">正在核实正式卡片与回答，保留原请求…</p>}
       {state.phase === 'CONFIRMED' && (
@@ -261,13 +287,17 @@ export function InteractionCardsView({
       )}
       {state.formal?.program_receipt && (
         <p role="status">
-          {state.formal.program_receipt.result === 'DEFERRED'
-            ? '已记录暂缓决定。'
-            : state.formal.program_receipt.purpose === 'PHASE_CHANGE'
-              ? '阶段确认已保存。'
-              : state.formal.program_receipt.document_effect?.result === 'NO_CHANGE'
-                ? '确认已保存，正文无变化。'
-                : '确认的事实变更已写入文档。'}
+          {'schema' in state.formal.program_receipt
+            ? state.formal.program_receipt.operation === 'STAGED_WRITE'
+              ? '已按提案保存文档。'
+              : '已采用路线调整。'
+            : state.formal.program_receipt.result === 'DEFERRED'
+              ? '已记录暂缓决定。'
+              : state.formal.program_receipt.purpose === 'PHASE_CHANGE'
+                ? '阶段确认已保存。'
+                : state.formal.program_receipt.document_effect?.result === 'NO_CHANGE'
+                  ? '确认已保存，正文无变化。'
+                  : '确认的事实变更已写入文档。'}
         </p>
       )}
       {state.error && !state.card_error && (
@@ -325,6 +355,8 @@ export function InteractionCardsView({
 function submitLabel(state: CardsState): string {
   const selected = state.answers.responses[0]?.selected_option_keys[0];
   if (state.cards.purpose === 'CLARIFICATION') return '提交整组答案';
+  if (state.cards.purpose === 'STAGED_WRITE') return '按提案写入';
+  if (state.cards.purpose === 'FORMATION_PATH_CHANGE') return '采用路线调整';
   if (selected === 'defer') return '确认暂缓';
   if (state.cards.purpose === 'DOCUMENT_ACTION')
     return state.cards.action_payload?.operation === 'GENERATE' ? '生成工作稿' : '更新工作稿';
@@ -337,7 +369,13 @@ function CardActionDetails({
 }: Readonly<{ state: CardsState; owner: InteractionCards; disabled: boolean }>) {
   const purpose = state.cards.purpose,
     payload = state.cards.action_payload;
-  if (purpose === 'CLARIFICATION' || payload === null) return null;
+  if (
+    purpose === 'CLARIFICATION' ||
+    purpose === 'STAGED_WRITE' ||
+    purpose === 'FORMATION_PATH_CHANGE' ||
+    payload === null
+  )
+    return null;
   const selection =
       state.message.card_state === 'ANSWERED' &&
       state.formal?.structured_content !== null &&

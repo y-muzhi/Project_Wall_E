@@ -20,6 +20,7 @@ const sources: Record<SourceType, string> = {
   GUIDE_RUN: 'AI 运行',
   SUGGESTION_BATCH: '建议批次',
   MANUAL_EDIT: '人工编辑',
+  CARD_RESPONSE: '卡片采用',
 };
 export function DocumentOutline({
   navigation,

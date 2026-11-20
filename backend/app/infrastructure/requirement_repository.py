@@ -179,6 +179,47 @@ class RequirementRepository:
             raise ValueError('Updated requirement is missing')
         return row
 
+    def advance_discussion(self, current, at):
+        """Advance a real document operation without rewriting its old discussion bytes."""
+        from .identifiers import increment
+        from backend.app.shared.command_execution import Rejected
+
+        require_write_transaction(self.connection)
+        if 'assistant_document_id' not in current:
+            raise ValueError('Discussion mutation requires an explicit document owner')
+        document_id = current['assistant_document_id']
+        changed = self.connection.execute(
+            'UPDATE requirement_documents SET discussion_version=? WHERE id=? AND requirement_id=? '
+            "AND document_type='CURRENT' AND archived_at IS NULL AND discussion_version=?",
+            (
+                increment(current['discussion_version']),
+                document_id,
+                current['id'],
+                current['discussion_version'],
+            ),
+        )
+        if changed.rowcount != 1:
+            actual = self.connection.execute(
+                'SELECT discussion_version FROM requirement_documents WHERE id=? AND requirement_id=? '
+                "AND document_type='CURRENT' AND archived_at IS NULL",
+                (document_id, current['id']),
+            ).fetchone()
+            if actual is None:
+                raise Rejected('NOT_FOUND')
+            raise Rejected(
+                'DISCUSSION_VERSION_CONFLICT',
+                details={
+                    'expected_version': current['discussion_version'],
+                    'actual_version': actual[0],
+                    'resource_kind': 'RequirementDocument',
+                    'resource_id': document_id,
+                },
+            )
+        self.connection.execute(
+            'UPDATE requirements SET updated_at=? WHERE id=?', (at, current['id'])
+        )
+        return self.get_for_document(current['id'], document_id)
+
     def update_discussion(self, current, discussion, at):
         from .identifiers import increment
         from backend.app.shared.json_canonical import canonical_input

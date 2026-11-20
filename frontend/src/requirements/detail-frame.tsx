@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode, CSSProperties } from 'react';
-import { DetailLayout, DetailViewportGuard } from './detail-layout.ts';
+import { DetailLayout, DetailViewportGuard, minimumDetailWidth } from './detail-layout.ts';
 import type { DetailTab } from './detail-layout.ts';
 import { Icon } from '../shared/icon.tsx';
 import { PageHeader } from '../application/header.tsx';
@@ -268,7 +268,7 @@ export function DetailFrame(props: DetailFrameProps) {
       )}
       {!visible && (
         <section className="detail-window-block" role="status">
-          <h2>当前窗口过窄，请将窗口调整至至少 1024px</h2>
+          <h2>当前窗口过窄，请将窗口调整至至少 {minimumDetailWidth}px</h2>
           <p>调整窗口后重新读取当前状态。</p>
           {guard.saving && <p>正在尝试保存草稿…</p>}
           {guard.save_failed && (

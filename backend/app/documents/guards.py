@@ -11,6 +11,13 @@ def assert_idle(
     connection: sqlite3.Connection, root: dict, *, remaining_conflicts: frozenset[str]
 ) -> None:
     require_write_transaction(connection)
+    inspect_idle(connection, root, remaining_conflicts=remaining_conflicts)
+
+
+def inspect_idle(
+    connection: sqlite3.Connection, root: dict, *, remaining_conflicts: frozenset[str]
+) -> None:
+    """The same actual occupancy checks, also usable by a read-only availability projection."""
     identity = root['id']
     activities = {
         'MANUAL_DRAFT': [

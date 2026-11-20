@@ -1,13 +1,12 @@
 /** One v4 IndexedDB ledger. Only transaction completion grants a send gate. */
 import { object, snapshotObject, positiveInteger } from '../api/client.ts';
-import { commandOrigin, verifiedCommandIdentity } from '../api/code-command-snapshot.ts';
+import { verifiedCommandIdentity } from '../api/code-command-snapshot.ts';
 import type { FrozenCodeCommand } from '../api/code-command-snapshot.ts';
 import type { CommandReceipt } from '../api/code-command-receipts.ts';
 import {
   pendingSummary,
   verifiedSummary,
   verifiedFrozen,
-  pendingSize,
   uuid,
   digest,
   receiptLocal,
@@ -23,49 +22,19 @@ import type {
   CommandReceiptLocal,
 } from './command-recovery-model.ts';
 
-export class CommandStorageError extends Error {
-  readonly reason: 'UNAVAILABLE' | 'CAPACITY' | 'CORRUPT';
-  constructor(reason: 'UNAVAILABLE' | 'CAPACITY' | 'CORRUPT') {
-    super(
-      reason === 'CAPACITY'
-        ? '待核对操作暂存容量不足，原输入已保留'
-        : reason === 'CORRUPT'
-          ? '原请求记录无法完整核实，请保留记录并核对原结果'
-          : '待核对操作暂存不可用，请保留原输入并核对原结果',
-    );
-    this.reason = reason;
-  }
-}
-const PENDING = 'pending_commands',
-  RECEIPTS = 'command_receipts',
-  INTENT = 'by_origin_intent';
-type Stores = { pending: IDBObjectStore; receipts: IDBObjectStore };
-type Complete<T> = (value: T) => void;
-type Fail = (error: CommandStorageError) => void;
+import { CommandLedger, CommandStorageError, checked, corrupt } from '../shared/command-ledger.ts';
+import {
+  ledgerPendingSize,
+  validateLedgerPending,
+  validateLedgerReceipt,
+  isFormationRecord,
+} from '../shared/command-ledger-model.ts';
+export { CommandStorageError } from '../shared/command-ledger.ts';
+const INTENT = 'by_origin_intent';
 type Changed = { pending?: Record<string, unknown>; receipt?: CommandReceiptLocal };
 type ReserveResult =
   | Readonly<{ kind: 'PREPARED' | 'EXISTING'; record: PendingSummary }>
   | Readonly<{ kind: 'RESOLVED'; receipt: CommandReceiptLocal }>;
-function reason(error: unknown): CommandStorageError {
-  if (error instanceof CommandStorageError) return error;
-  if (error instanceof DOMException && error.name === 'QuotaExceededError')
-    return new CommandStorageError('CAPACITY');
-  return new CommandStorageError('UNAVAILABLE');
-}
-function corrupt(): never {
-  throw new CommandStorageError('CORRUPT');
-}
-function checked<T>(body: () => T, fail: Fail): void {
-  try {
-    body();
-  } catch (error) {
-    fail(
-      error instanceof CommandStorageError || error instanceof DOMException
-        ? reason(error)
-        : new CommandStorageError('CORRUPT'),
-    );
-  }
-}
 function nextRevision(value: number): number {
   if (value === Number.MAX_SAFE_INTEGER) throw new CommandStorageError('CAPACITY');
   return value + 1;
@@ -133,186 +102,7 @@ function observed(
   return updates;
 }
 
-export class CommandRecoveryStore {
-  readonly origin: string;
-  private readonly name: string;
-  private readonly factory: () => IDBFactory;
-  private database: IDBDatabase | undefined;
-  private opening: Promise<IDBDatabase> | undefined;
-  private closed = false;
-  private readonly active = new Set<IDBTransaction>();
-  private readonly tasks = new Set<Promise<unknown>>();
-  constructor(diagnostic: { origin?: string; name?: string; factory?: () => IDBFactory } = {}) {
-    this.origin = commandOrigin(diagnostic.origin ?? globalThis.location.origin);
-    this.name = diagnostic.name ?? 'walle-v2-code-command-recovery';
-    this.factory = diagnostic.factory ?? (() => globalThis.indexedDB);
-  }
-  private disconnect(): void {
-    for (const transaction of this.active) {
-      try {
-        transaction.abort();
-      } catch {
-        /* Already settled; no new gate. */
-      }
-    }
-    this.database?.close();
-    this.database = undefined;
-    this.opening = undefined;
-  }
-  close(): void {
-    this.closed = true;
-    this.disconnect();
-  }
-  async settle(): Promise<void> {
-    while (this.tasks.size) await Promise.allSettled([...this.tasks]);
-  }
-  private open(): Promise<IDBDatabase> {
-    if (this.closed) return Promise.reject(new CommandStorageError('UNAVAILABLE'));
-    if (this.opening) return this.opening;
-    this.opening = new Promise((resolve, reject) => {
-      let request: IDBOpenDBRequest;
-      try {
-        request = this.factory().open(this.name, 1);
-      } catch {
-        reject(new CommandStorageError('UNAVAILABLE'));
-        return;
-      }
-      let refused = false;
-      const refuse = () => {
-        refused = true;
-        reject(new CommandStorageError('UNAVAILABLE'));
-      };
-      request.onblocked = refuse;
-      request.onerror = () => {
-        refused = true;
-        reject(reason(request.error));
-      };
-      request.onupgradeneeded = () => {
-        if (this.closed || refused) {
-          request.transaction?.abort();
-          return;
-        }
-        try {
-          const pending = request.result.createObjectStore(PENDING);
-          pending.createIndex(INTENT, ['origin', 'intent_key'], { unique: true });
-          request.result.createObjectStore(RECEIPTS);
-        } catch {
-          refuse();
-          request.transaction?.abort();
-        }
-      };
-      request.onsuccess = () => {
-        const database = request.result;
-        try {
-          if (
-            this.closed ||
-            refused ||
-            database.version !== 1 ||
-            database.objectStoreNames.length !== 2 ||
-            !database.objectStoreNames.contains(PENDING) ||
-            !database.objectStoreNames.contains(RECEIPTS)
-          )
-            throw new Error('Unavailable stores');
-          const transaction = database.transaction([PENDING, RECEIPTS], 'readonly');
-          const pending = transaction.objectStore(PENDING),
-            receipts = transaction.objectStore(RECEIPTS);
-          if (
-            pending.keyPath !== null ||
-            receipts.keyPath !== null ||
-            pending.autoIncrement ||
-            receipts.autoIncrement ||
-            !pending.indexNames.contains(INTENT)
-          )
-            throw new Error('Unavailable keys');
-          const index = pending.index(INTENT);
-          if (
-            !index.unique ||
-            index.multiEntry ||
-            JSON.stringify(index.keyPath) !== JSON.stringify(['origin', 'intent_key'])
-          )
-            throw new Error('Unavailable index');
-          this.database = database;
-          database.onversionchange = () => this.close();
-          resolve(database);
-        } catch {
-          database.close();
-          refuse();
-        }
-      };
-    });
-    return this.opening;
-  }
-  private transaction<T>(
-    mode: IDBTransactionMode,
-    perform: (stores: Stores, complete: Complete<T>, fail: Fail) => void,
-  ): Promise<T> {
-    const task = this.runTransaction(mode, perform);
-    this.tasks.add(task);
-    void task.then(
-      () => this.tasks.delete(task),
-      () => this.tasks.delete(task),
-    );
-    return task;
-  }
-  private async runTransaction<T>(
-    mode: IDBTransactionMode,
-    perform: (stores: Stores, complete: Complete<T>, fail: Fail) => void,
-  ): Promise<T> {
-    const database = await this.open();
-    if (this.closed || database !== this.database) throw new CommandStorageError('UNAVAILABLE');
-    return new Promise((resolve, reject) => {
-      let transaction: IDBTransaction;
-      try {
-        transaction = database.transaction([PENDING, RECEIPTS], mode, { durability: 'strict' });
-      } catch (error) {
-        this.disconnect();
-        reject(reason(error));
-        return;
-      }
-      this.active.add(transaction);
-      let output: T,
-        produced = false,
-        failure: CommandStorageError | undefined;
-      const fail: Fail = (error) => {
-        failure = error;
-        try {
-          transaction.abort();
-        } catch {
-          reject(error);
-        }
-      };
-      transaction.onerror = () => {
-        failure ??= reason(transaction.error);
-      };
-      transaction.onabort = () => {
-        this.active.delete(transaction);
-        // A logical capacity/CAS refusal preserves records; storage failures drop this connection.
-        if (failure?.reason !== 'CAPACITY' && failure?.reason !== 'CORRUPT') this.disconnect();
-        reject(failure ?? reason(transaction.error));
-      };
-      transaction.oncomplete = () => {
-        this.active.delete(transaction);
-        if (!produced || this.closed || database !== this.database)
-          reject(new CommandStorageError('UNAVAILABLE'));
-        else resolve(output);
-      };
-      try {
-        perform(
-          {
-            pending: transaction.objectStore(PENDING),
-            receipts: transaction.objectStore(RECEIPTS),
-          },
-          (value) => {
-            output = value;
-            produced = true;
-          },
-          fail,
-        );
-      } catch (error) {
-        fail(reason(error));
-      }
-    });
-  }
+export class CommandRecoveryStore extends CommandLedger {
   async list(): Promise<readonly PendingSummary[]> {
     const values = await this.transaction<unknown[]>('readonly', ({ pending }, done, fail) => {
       const rows: unknown[] = [];
@@ -327,6 +117,11 @@ export class CommandRecoveryStore {
           const key = cursor.key;
           if (!Array.isArray(key) || key.length !== 2) return corrupt();
           if (key[0] === this.origin) {
+            validateLedgerPending(cursor.value, this.origin);
+            if (isFormationRecord(cursor.value)) {
+              cursor.continue();
+              return;
+            }
             const summary = pendingSummary(cursor.value, this.origin);
             if (summary.key !== key[1]) return corrupt();
             // Never pass original body into a list owner.
@@ -357,6 +152,8 @@ export class CommandRecoveryStore {
       request.onsuccess = () => done(request.result);
     });
     if (value === undefined) return null;
+    validateLedgerPending(value, this.origin);
+    if (isFormationRecord(value)) return null;
     const verified = await verifiedSummary(value, this.origin);
     if (verified.key !== key) return corrupt();
     return value;
@@ -368,6 +165,8 @@ export class CommandRecoveryStore {
       request.onsuccess = () => done(request.result);
     });
     if (value === undefined) return null;
+    validateLedgerReceipt(value, this.origin);
+    if (isFormationRecord(value)) return null;
     const receipt = receiptLocal(value, this.origin);
     if (receipt.key !== key) return corrupt();
     await verifiedCommandIdentity(receipt, this.origin);
@@ -395,7 +194,7 @@ export class CommandRecoveryStore {
       record_revision: 1,
       lookup_status: null,
     });
-    const encoded = pendingSize(record);
+    const encoded = ledgerPendingSize(record);
     const result = await this.transaction<
       { kind: 'PREPARED' | 'EXISTING'; value: unknown } | { kind: 'RESOLVED'; value: unknown }
     >('readwrite', ({ pending, receipts }, done, fail) => {
@@ -421,7 +220,7 @@ export class CommandRecoveryStore {
                   const cursor = scan.result;
                   if (cursor) {
                     count++;
-                    total += pendingSize(cursor.value);
+                    total += ledgerPendingSize(cursor.value);
                     cursor.continue();
                     return;
                   }
@@ -682,6 +481,11 @@ export class CommandRecoveryStore {
           const key = cursor.key;
           if (!Array.isArray(key) || key.length !== 2) return corrupt();
           if (key[0] === this.origin) {
+            validateLedgerReceipt(cursor.value, this.origin);
+            if (isFormationRecord(cursor.value)) {
+              cursor.continue();
+              return;
+            }
             const receipt = receiptLocal(cursor.value, this.origin);
             if (receipt.key !== key[1]) return corrupt();
             if (Date.parse(receipt.resolved_at) <= cutoff)

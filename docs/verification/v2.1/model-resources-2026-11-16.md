@@ -1,0 +1,11 @@
+# V2.1新模型资源（2026-11-16）
+
+本轮三小时会话15:48开始，隔离工作区a0f4059＋未提交代码；新资源逻辑formation_v21_1／layout formation_context_v21_1。新增resource_schema.py及build-formation-resources.py，从冻结v17/v18生成独立v19/v20，不覆盖旧字节或改变默认资源。
+
+v19 manifest b767b5d83c75a767fb6e4d67e35cdbe6f4af8865bce0ef7244ae6771e99e6eff，release bb8fc50cebc72c92bd7d93cf48d12aa4334ad6d1ad67dfa5df1c5120ae8aac1c；v20 manifest 2ceae18bf41655413447d416be870f5b22f54e4d4dd0f7eae41ef1917859b7d9，release 1ce6ccd102332ccce614128a84e1351753b876547fcbe10e8b21939161efbb53。每批20个具备hash的资源文件；Prompt包含本次设计职责，输出仍九根，formation_delta位于进展内；12型delta／14型路线、临时身份／真实身份、模型来源别名／持久来源、两用途精确卡及私有分离严格定义。长输出与标准Profile各有独立资源，不自改预算。
+
+CollaborationResources新增固定manifest与formation_driven／layout，ResourceCatalog增加显式for_formation_profile及精确历史release查询；旧默认v17／v18保持。资源均OFFLINE_READY，实际执行仍须独立新release准入。
+
+命令：固定runtime＋quality_python.py backend/tests/formation/test_v21_resource_release.py -q -p no:cacheprovider --tb=short，quality_gate.environment／独占临时目录。17 passed，9.70秒。覆盖12型严格联合、模型卡别名与持久真实SourceRef、旧资源拒绝新增字段、两Profile固定选择、九根／计数配置、缺进展字段及私有字段拒绝、无LIVE拒绝。临时输出自动清理，无模型／计数API或服务操作。
+
+未完成：接受事务／冻结材料／Canonical-Wire实际投影、运行调用／C07整体采用、新卡发布与精确采用仍待接入。此记录不是供应方兼容或整个B4完成证据。

@@ -126,9 +126,13 @@ class GuideRepository:
             if basis.get('comment_source') is None
             else basis['comment_source']['id'],
             'function_type': 'collaboration_v1',
-            'context_template_key': 'collaboration_context_v1',
-            'context_template_version': 'v1',
-            'prompt_version': 'v1',
+            'context_template_key': 'formation_context_v21_1'
+            if 'formation' in basis
+            else 'collaboration_context_v1',
+            'context_template_version': 'v21_1' if 'formation' in basis else 'v1',
+            'prompt_version': basis['resources']['prompt']['version']
+            if 'formation' in basis
+            else 'v1',
             'action_type': request.action_type,
             'mode_snapshot': None,
             'instruction_summary': request.instruction,

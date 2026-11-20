@@ -13,6 +13,8 @@ from .validation import MAX_SAFE_INTEGER, REASONS
 ERRORS = {
     'INVALID_INPUT': (422, 'VALIDATION_FAILED', '请求参数不合法'),
     'NOT_FOUND': (404, 'NOT_FOUND', '资源不存在'),
+    'FORMATION_INVALID': (422, 'FORMATION_INVALID', '文档形成信息不合法'),
+    'FORMATION_LIMIT_EXCEEDED': (422, 'FORMATION_LIMIT_EXCEEDED', '本次文档形成操作超出允许范围'),
     'MANUAL_DRAFT_NOT_FOUND': (404, 'MANUAL_DRAFT_NOT_FOUND', '人工草稿不存在'),
     'STATE_CONFLICT': (409, 'STATE_CONFLICT', '当前状态不允许此操作'),
     'WORK_STATE_CONFLICT': (409, 'WORK_STATE_CONFLICT', '当前已有其他操作占用正文'),
@@ -64,6 +66,47 @@ def _request_id(value: str) -> str:
 
 
 def _details(code: str, value: object) -> dict[str, Any] | None:
+    if code == 'FORMATION_LIMIT_EXCEEDED':
+        from backend.app.shared.validation import strict_enum, strict_integer, object_fields
+
+        fields = ('resource_kind', 'limit', 'actual')
+        item = object_fields(value, 'details', fields, fields)
+        strict_enum(
+            item['resource_kind'],
+            'resource_kind',
+            ('CHANGE_COUNT', 'CHANGE_BYTES', 'PAGE_SIZE', 'STEP_RESULTS', 'MODEL_INPUT'),
+        )
+        strict_integer(item['limit'], 'limit', minimum=0)
+        strict_integer(item['actual'], 'actual', minimum=0)
+        return dict(item)
+    if code == 'STATE_CONFLICT' and value is not None:
+        from backend.app.formation.types import proposal, reference
+        from backend.app.shared.validation import strict_enum, object_fields
+
+        fields = ('reason', 'step_ref', 'proposal')
+        item = object_fields(value, 'details', fields, fields)
+        strict_enum(
+            item['reason'],
+            'reason',
+            (
+                'FORMATION_NOT_INITIALIZED',
+                'ARTIFACT_SUPERSEDED',
+                'PATH_CHANGED',
+                'GOAL_CHANGED',
+                'STEP_DEFINITION_CHANGED',
+                'TARGET_CHANGED',
+                'BRANCH_STATE_CHANGED',
+                'BRANCH_RETURN_MISMATCH',
+                'PROPOSAL_ADJUSTING',
+                'PROPOSAL_BASIS_CHANGED',
+                'SOURCE_UNAVAILABLE',
+                'INVALID_TRANSITION',
+            ),
+        )
+        if item['step_ref'] is not None:
+            reference(item['step_ref'], 'step_ref', 'STEP')
+        source = None if item['proposal'] is None else proposal(item['proposal'], 'proposal')
+        return {'reason': item['reason'], 'step_ref': item['step_ref'], 'proposal': source}
     if (
         code
         in ('METADATA_VERSION_CONFLICT', 'DISCUSSION_VERSION_CONFLICT', 'SOURCE_VERSION_CONFLICT')

@@ -39,6 +39,10 @@ def _structure_protocol():
 
 
 def program_receipt(data):
+    if type(data) is dict and data.get('schema') == 'formation_program_receipt_v21_1':
+        from backend.app.formation.http_projection import program_receipt as formation_receipt
+
+        return formation_receipt(data)
     fields = (
         'processing',
         'user_message_id',
@@ -144,7 +148,13 @@ def message_read_model(data):
         else:
             from .cards import validate_cards
 
-            validate_cards(value['structured_content'], _structure_protocol())
+            from .queries import reading_protocol
+            import json
+
+            validate_cards(
+                value['structured_content'],
+                reading_protocol(json.dumps(value['structured_content']), _structure_protocol()),
+            )
             strict_enum(value['card_state'], 'card_state', ('AVAILABLE', 'ANSWERED', 'EXPIRED'))
     if kind == 'CARD_RESPONSE' and (
         value['role'] != 'USER'

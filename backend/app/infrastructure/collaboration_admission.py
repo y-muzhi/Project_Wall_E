@@ -39,7 +39,7 @@ class AdmissionEvidence:
 
 
 def evidence_database(path, *, schema_release=None):
-    """Select an exact frozen 150/151 or released 200 read-only validator; never a writer."""
+    """Select a fixed 150/151 or released 200/210 read-only validator; never a writer."""
     import sqlite3
 
     source = Path(path)
@@ -67,6 +67,17 @@ def evidence_database(path, *, schema_release=None):
 
         release = load_release() if schema_release is None else schema_release
         return Database(source, schema_release=release, read_only=True)
+    if versions in ([(200,), (210,)], [(151,), (200,), (210,)]):
+        from .formation_database import FormationDatabase
+        from .formation_schema_release import load_release as load_formation_release
+
+        release = load_formation_release()
+        if (
+            schema_release is not None
+            and schema_release.schema_contract_sha256 != release.core.schema_contract_sha256
+        ):
+            raise SchemaMismatch('Schema210 evidence differs from the explicit core release')
+        return FormationDatabase(source, formation_release=release, read_only=True)
     raise SchemaMismatch('Unsupported frozen evidence history; preserve the original database')
 
 

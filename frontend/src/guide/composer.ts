@@ -1,7 +1,11 @@
+import { acceptedSelection } from '../api/formation-workflow.ts';
+import type { FormationWorkspace } from '../formation/workspace.ts';
+import { FormationUnsentError } from '../formation/command-recovery.ts';
+import type { JsonObject } from '../api/client.ts';
 import { ApiRejected, snapshotObject } from '../api/client.ts';
-import type { ApiAction, CreateGuide, WalleApi } from '../api/walle.ts';
+import type { ApiAction, CreateGuide, CreateFormationDiscuss, WalleApi } from '../api/walle.ts';
 import type { GuideRun, Message, RunReceipt } from '../api/models.ts';
-import { operations, sourceRef, runReceipt, scope as decodeScope } from '../api/models.ts';
+import { operations, sourceRef, derivedRunReceipt, scope as decodeScope } from '../api/models.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import { ordinaryInput } from '../shared/text.ts';
 import { ComposerDrafts } from './composer-drafts.ts';
@@ -10,9 +14,13 @@ type Operation = CreateGuide['operation'];
 type NewTarget = Extract<NonNullable<CreateGuide['target']>, { kind: 'NEW' }>;
 type Submitted = Readonly<
   | { kind: 'CREATE'; body: CreateGuide; raw: string }
+  | { kind: 'FORMATION'; body: CreateFormationDiscuss; raw: string; target_epoch: string }
   | { kind: 'CONTINUE'; parent: GuideRun; instruction: string; version: number; raw: string }
 >;
-type Settings = Pick<ComposerState, 'action' | 'target' | 'new_target' | 'review' | 'parent'>;
+type Settings = Pick<
+  ComposerState,
+  'action' | 'target' | 'new_target' | 'review' | 'parent' | 'formation_proposal'
+>;
 export type ComposerState = Readonly<{
   detail: DetailSnapshot;
   action: Operation;
@@ -22,6 +30,12 @@ export type ComposerState = Readonly<{
   review: GuideRun | null;
   parent: GuideRun | null;
   instruction: string;
+  formation_proposal: Readonly<{
+    proposal: { message_id: number; card_key: string };
+    intent: 'ADJUST_WRITE' | 'ADJUST_PATH';
+  }> | null;
+  formation_target_label: string | null;
+  formation_blocked: string | null;
   draft_warning: string | null;
   available: boolean;
   phase: 'READY' | 'ERROR' | 'SUBMITTING' | 'UNKNOWN' | 'READING' | 'CONFIRMED';
@@ -42,6 +56,7 @@ export type ComposerState = Readonly<{
 }>;
 type Api = Pick<
   WalleApi,
+  | 'prepareFormationDiscuss'
   | 'prepareCreateGuide'
   | 'prepareContinueGuide'
   | 'getGuideRun'
@@ -69,6 +84,10 @@ export class RequirementGuideComposer {
   private readonly adoptActual: (actual: DetailSnapshot) => Promise<void>;
   private readonly receive: (run: Pick<GuideRun, 'id' | 'requirement_id'>) => Promise<void>;
   private readonly refreshMessages: () => Promise<void>;
+  private formation: FormationWorkspace | null = null;
+  private formationRelease: (() => void) | null = null;
+  private inputEpoch = 0;
+  private submittedInputEpoch = 0;
   private command: ApiAction<RunReceipt> | undefined;
   private pending: Promise<boolean> | undefined;
   private work: string | undefined;
@@ -124,6 +143,9 @@ export class RequirementGuideComposer {
       review: null,
       parent: null,
       instruction: draft.instruction,
+      formation_proposal: null,
+      formation_target_label: null,
+      formation_blocked: null,
       draft_warning: draft.warning,
       available: false,
       phase: 'READY',
@@ -154,6 +176,26 @@ export class RequirementGuideComposer {
         console.error('WALL-E composer observer failed', error);
       }
   }
+  attachFormation(owner: FormationWorkspace): void {
+    this.formationRelease?.();
+    this.formation = owner;
+    const update = () =>
+      this.publish({
+        formation_target_label: owner.getSnapshot().mode === 'FORMATION' ? owner.targetLabel : null,
+        formation_blocked:
+          owner.getSnapshot().mode === 'FORMATION'
+            ? (owner.getSnapshot().target_error ?? owner.composeReason)
+            : null,
+      });
+    this.formationRelease = owner.subscribe(update);
+    update();
+  }
+  get instructionEditable(): boolean {
+    return (
+      !this.closed &&
+      (this.formation?.getSnapshot().mode === 'FORMATION' ? this.value.available : this.editable)
+    );
+  }
   get editable(): boolean {
     return !this.closed && !this.pending && ['READY', 'ERROR'].includes(this.value.phase);
   }
@@ -165,6 +207,7 @@ export class RequirementGuideComposer {
       !state.available ||
       state.needs_refresh ||
       state.refreshing ||
+      (state.action === 'DISCUSS' && !state.parent && state.formation_blocked !== null) ||
       state.detail.requirement.document_work_state !== 'IDLE'
     )
       return false;
@@ -217,19 +260,21 @@ export class RequirementGuideComposer {
     if (!available) this.controller?.abort();
   }
   change(instruction: string): void {
-    if (this.editable)
+    if (this.instructionEditable) {
+      this.inputEpoch++;
       this.publish({
         instruction,
         draft_warning: this.drafts.save(this.value.detail.requirement.id, instruction),
         error: null,
         error_code: null,
       });
+    }
   }
   beginSettings(): void {
     if (!this.editable || this.settings) return;
-    const { action, target, new_target, review, parent } = this.value;
+    const { action, target, new_target, review, parent, formation_proposal } = this.value;
     this.settings = {
-      value: capture({ action, target, new_target, review, parent }),
+      value: capture({ action, target, new_target, review, parent, formation_proposal }),
       configured: this.configured,
     };
   }
@@ -246,7 +291,14 @@ export class RequirementGuideComposer {
   choose(action: Operation): void {
     if (this.editable && operations.includes(action)) {
       this.configured = true;
-      this.publish({ action, parent: null, review: null, error: null, error_code: null });
+      this.publish({
+        action,
+        parent: null,
+        review: null,
+        formation_proposal: null,
+        error: null,
+        error_code: null,
+      });
     }
   }
   configureNew(name: string, kind: NewTarget['document_kind'], framework: boolean): void {
@@ -333,6 +385,50 @@ export class RequirementGuideComposer {
     });
     return true;
   }
+  adjustProposal(
+    proposal: { message_id: number; card_key: string },
+    purpose: 'STAGED_WRITE' | 'FORMATION_PATH_CHANGE',
+    originalScope: JsonObject | null = null,
+  ): boolean {
+    if (!this.editable) return false;
+    this.configured = true;
+    const actual = this.value.detail.current;
+    const wire = originalScope ?? { scope_type: 'DOCUMENT', scope_ref: null };
+    const scope = decodeScope(
+      wire.scope_type === 'SECTION'
+        ? {
+            scope_type: 'SECTION',
+            scope_ref: { block_id: snapshotObject(wire.scope_ref).heading_block_id },
+          }
+        : wire,
+    );
+    this.publish({
+      ...(actual === null
+        ? {}
+        : {
+            target: {
+              document_id: actual.id,
+              content_version: actual.content_version,
+              label: actual.name,
+              scope,
+              selection: null,
+            },
+          }),
+      action: 'DISCUSS',
+      parent: null,
+      review: null,
+      formation_proposal: {
+        proposal: { ...proposal },
+        intent: purpose === 'STAGED_WRITE' ? 'ADJUST_WRITE' : 'ADJUST_PATH',
+      },
+      error: null,
+      error_code: null,
+    });
+    return true;
+  }
+  clearProposalSelection(): void {
+    if (this.editable) this.publish({ formation_proposal: null });
+  }
   continueFrom(run: GuideRun | null): void {
     if (!this.editable) return;
     if (
@@ -341,7 +437,11 @@ export class RequirementGuideComposer {
     )
       throw TypeError('Owned ended parent required');
     this.configured = true;
-    this.publish({ parent: run ? capture(run) : null, action: 'DISCUSS' });
+    this.publish({
+      parent: run ? capture(run) : null,
+      action: 'DISCUSS',
+      formation_proposal: null,
+    });
   }
   async loadBinding(): Promise<boolean> {
     if (
@@ -371,6 +471,7 @@ export class RequirementGuideComposer {
         actual.discussion === null
       )
         throw Error('Discussion changed');
+      this.formation?.observeDiscussion(actual.discussion);
       const binding = snapshotObject(actual.discussion.binding);
       const refs = binding.source_refs;
       if (!Array.isArray(refs)) throw Error('Invalid sources');
@@ -424,6 +525,7 @@ export class RequirementGuideComposer {
       }
       try {
         const state = this.value;
+        this.submittedInputEpoch = this.inputEpoch;
         ordinaryInput(state.instruction, 'AI 指令', 1, 10000);
         if ([...state.instruction].length > 10000) throw Error('消息不能超过10000字符');
         this.delivered = false;
@@ -473,11 +575,42 @@ export class RequirementGuideComposer {
             proposal_ref: null,
             acknowledge_source_changes: false,
           };
-          this.publish({
-            submitted: capture({ kind: 'CREATE', body, raw: state.instruction }),
-            outcome: null,
-          });
-          this.command = this.api.prepareCreateGuide(state.detail.requirement.id, body);
+          const selected =
+            state.action === 'DISCUSS' && this.formation !== null
+              ? await this.formation.captureTarget()
+              : null;
+          if (selected !== null && this.formation !== null) {
+            const formationBody: CreateFormationDiscuss = {
+              expected_discussion_version: body.expected_discussion_version,
+              operation: 'DISCUSS',
+              instruction: body.instruction,
+              target: selected.selection,
+              scope: body.scope,
+              source_refs: body.source_refs,
+              proposal_ref: state.formation_proposal?.proposal ?? null,
+              proposal_intent: state.formation_proposal?.intent ?? null,
+              acknowledge_source_changes: body.acknowledge_source_changes,
+            };
+            this.publish({
+              submitted: capture({
+                kind: 'FORMATION',
+                body: formationBody,
+                raw: state.instruction,
+                target_epoch: selected.epoch,
+              }),
+              outcome: null,
+            });
+            this.command = this.formation.durable(
+              this.api.prepareFormationDiscuss(state.detail.requirement.id, formationBody),
+              selected.epoch,
+            );
+          } else {
+            this.publish({
+              submitted: capture({ kind: 'CREATE', body, raw: state.instruction }),
+              outcome: null,
+            });
+            this.command = this.api.prepareCreateGuide(state.detail.requirement.id, body);
+          }
         }
       } catch (error) {
         this.publish({
@@ -494,18 +627,34 @@ export class RequirementGuideComposer {
   private async send(): Promise<boolean> {
     this.publish({ phase: 'SUBMITTING', error: null, error_code: null });
     try {
-      const receipt = runReceipt((await this.command!.submit()).data);
+      const receipt = derivedRunReceipt((await this.command!.submit()).data);
       if (this.closed) return false;
       this.command = undefined;
+      const submitted = this.value.submitted;
+      if (submitted?.kind === 'FORMATION' && 'accepted_target' in receipt)
+        this.formation?.accepted(
+          acceptedSelection(receipt.accepted_target),
+          submitted.target_epoch,
+        );
+      const sameInput = this.inputEpoch === this.submittedInputEpoch;
       this.publish({
         phase: 'CONFIRMED',
         outcome: capture(receipt),
-        draft_warning: this.drafts.clear(this.value.detail.requirement.id),
+        ...(submitted?.kind === 'FORMATION' ? { formation_proposal: null } : {}),
+        ...(sameInput
+          ? {
+              ...(submitted?.kind === 'FORMATION' ? { instruction: '' } : {}),
+              draft_warning: this.drafts.clear(this.value.detail.requirement.id),
+            }
+          : {}),
       });
       return true;
     } catch (error) {
       if (this.closed) return false;
-      if (error instanceof ApiRejected && error.code !== 'REQUEST_IN_PROGRESS') {
+      if (error instanceof FormationUnsentError) {
+        this.command = undefined;
+        this.publish({ phase: 'ERROR', error: error.message, error_code: null });
+      } else if (error instanceof ApiRejected && error.code !== 'REQUEST_IN_PROGRESS') {
         this.command = undefined;
         this.publish({
           phase: 'ERROR',
@@ -593,7 +742,11 @@ export class RequirementGuideComposer {
       if (
         run.requirement_id !== this.value.detail.requirement.id ||
         (submitted.kind === 'CONTINUE' && run.parent_guide_run_id !== submitted.parent.id) ||
-        (submitted.kind === 'CREATE' && run.operation !== submitted.body.operation)
+        (submitted.kind === 'CREATE' && run.operation !== submitted.body.operation) ||
+        (submitted.kind === 'FORMATION' &&
+          (run.operation !== 'DISCUSS' ||
+            run.document_id !==
+              (this.value.detail.selected_document_id ?? this.value.detail.current?.id)))
       )
         throw Error('运行与原操作不一致。');
       if (!this.delivered) {
@@ -609,7 +762,7 @@ export class RequirementGuideComposer {
       this.publish({
         detail: capture(actual),
         phase: 'READY',
-        instruction: '',
+        ...(this.inputEpoch === this.submittedInputEpoch ? { instruction: '' } : {}),
         submitted: null,
         outcome: null,
         user_message: null,
@@ -635,6 +788,7 @@ export class RequirementGuideComposer {
     this.closed = true;
     this.epoch++;
     this.controller?.abort();
+    this.formationRelease?.();
     this.listeners.clear();
   }
 }

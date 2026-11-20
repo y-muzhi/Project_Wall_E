@@ -20,6 +20,7 @@ export type DetailGeometry = Readonly<{
   preferences: DetailPreferences;
   warning: string | null;
 }>;
+export const minimumDetailWidth = 480;
 export const preferencesKey = 'walle:v1.5:preferences';
 type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 function dimension(value: number): number {
@@ -103,7 +104,7 @@ export class DetailLayout {
     return () => this.listeners.delete(listener);
   };
   private compute(): DetailGeometry {
-    const supported = this.width >= 1024,
+    const supported = this.width >= minimumDetailWidth,
       drawer = this.available < 1212,
       split = this.available >= 1006;
     const left = supported && (drawer ? this.drawerOpen : this.preferences.left_open);
@@ -225,7 +226,7 @@ export class DetailViewportGuard {
   private readonly listeners = new Set<() => void>();
   constructor(width: number, actions: ViewportActions) {
     this.width = dimension(width);
-    this.blocked = this.width < 1024;
+    this.blocked = this.width < minimumDetailWidth;
     this.actions = actions;
     this.value = Object.freeze({
       phase: this.blocked ? 'BLOCKED' : 'SUPPORTED',
@@ -271,7 +272,7 @@ export class DetailViewportGuard {
     this.updateAvailability();
   }
   private updateAvailability(): void {
-    const blocked = this.width < 1024 || this.pageSuspended;
+    const blocked = this.width < minimumDetailWidth || this.pageSuspended;
     if (this.closed || blocked === this.blocked) return;
     this.blocked = blocked;
     if (!this.active) {

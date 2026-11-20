@@ -185,6 +185,10 @@ async def execute_guide_run(
             raise ConfigInvalid('Frozen profile is required')
         if row['function_type'] != 'collaboration_v1':
             raise ConfigInvalid('Only the current collaboration protocol can execute')
+        import json
+
+        accepted_basis = json.loads(row['execution_basis_json'])
+        resources = resources.for_collaboration_release(accepted_basis['resources']['release'])
         from .collaboration_execution import execute_collaboration
 
         return await execute_collaboration(

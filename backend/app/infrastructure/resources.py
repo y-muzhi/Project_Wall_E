@@ -4,16 +4,16 @@ Schema validation is a structural gate, never proof of business authorization,
 target freshness, facts, or model quality. Those gates belong to later units.
 """
 
-from dataclasses import dataclass
 import hashlib
 import json
-from pathlib import Path
 import re
+from dataclasses import dataclass
+from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker, validators
 
-from backend.app.shared.validation import InvalidInput, strict_json_object
 from backend.app.shared.json_canonical import canonical_input
+from backend.app.shared.validation import InvalidInput, strict_json_object
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[2] / 'resources' / 'v1'
 MANIFEST_SHA256 = '79b9435a8c410009ba93936354a6f15f90d911d6ae0f81194022322b25899bbc'
@@ -279,14 +279,18 @@ class ResourceCatalog:
         from .collaboration_resources import CollaborationResources
 
         if not hasattr(self, '_collaboration_resources'):
-            from .model_profile import ModelProfile, LONG_OUTPUT_PROFILE
             from .collaboration_resources import ROOT
+            from .model_profile import LONG_OUTPUT_PROFILE, ModelProfile
 
             selected = (
                 getattr(self, '_collaboration_profile', None) or ModelProfile.selected_profile()
             )
             self._collaboration_resources = CollaborationResources.load(
-                ROOT.parent / 'v18' if selected == LONG_OUTPUT_PROFILE else ROOT
+                ROOT.parent / 'openai-v2'
+                if selected == 'openai-sol-v1'
+                else ROOT.parent / 'v18'
+                if selected == LONG_OUTPUT_PROFILE
+                else ROOT
             )
         return self._collaboration_resources
 
@@ -295,9 +299,37 @@ class ResourceCatalog:
         if self.collaboration.reference('collaboration.release') == reference:
             return self
         from copy import copy
-        from .collaboration_resources import CollaborationResources, ROOT
 
-        for batch in ('v15', 'v16', 'v17', 'v18'):
+        from .collaboration_resources import ROOT, CollaborationResources
+
+        for batch in (
+            'v15',
+            'v16',
+            'v17',
+            'v18',
+            'v19',
+            'v20',
+            'v21',
+            'v22',
+            'v23',
+            'v24',
+            'v25',
+            'v26',
+            'v27',
+            'v28',
+            'v29',
+            'v30',
+            'v31',
+            'v32',
+            'v33',
+            'v34',
+            'v35',
+            'v36',
+            'v37',
+            'v38',
+            'openai-v1',
+            'openai-v2',
+        ):
             resources = CollaborationResources.load(ROOT.parent / batch)
             if resources.reference('collaboration.release') == reference:
                 selected = copy(self)
@@ -305,8 +337,32 @@ class ResourceCatalog:
                 return selected
         raise ConfigInvalid('Unknown frozen collaboration release')
 
+    def for_formation_profile(self, profile_id):
+        """Explicit V2.1 selection; old defaults and historical rounds keep their release."""
+        from copy import copy
+
+        from .collaboration_resources import ROOT, CollaborationResources
+        from .model_profile import LONG_OUTPUT_PROFILE, PROFILES
+
+        if profile_id not in PROFILES:
+            raise ConfigInvalid('Unknown model profile')
+        selected = copy(self)
+        selected._collaboration_profile = profile_id
+        from .model_profile import OPENAI_PROFILE
+
+        batch = (
+            'openai-v2'
+            if profile_id == OPENAI_PROFILE
+            else 'v38'
+            if profile_id == LONG_OUTPUT_PROFILE
+            else 'v37'
+        )
+        selected._collaboration_resources = CollaborationResources.load(ROOT.parent / batch)
+        return selected
+
     def for_collaboration_profile(self, profile_id):
         from copy import copy
+
         from .model_profile import PROFILES
 
         if profile_id not in PROFILES:
@@ -764,7 +820,7 @@ class ResourceCatalog:
 
     def _load_v5(self, root: Path) -> None:
         """FLOW-002 changes only initialization guidance and progress checks."""
-        from backend.app.guide.initialization_protocol import progression_prompt, PROGRESSION_POLICY
+        from backend.app.guide.initialization_protocol import PROGRESSION_POLICY, progression_prompt
 
         raw = (root / 'manifest.json').read_bytes()
         if hashlib.sha256(raw).hexdigest() != V5_MANIFEST_SHA256:

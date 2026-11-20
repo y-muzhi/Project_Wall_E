@@ -22,9 +22,9 @@ class QualityGateTests(unittest.TestCase):
 
     def test_environment_drops_credentials_and_product_configuration(self):
         env=gate.environment(Path('temporary'), {'PATH':'retained','WALLE_DATABASE_PATH':'private',
-            'DEEPSEEK_API_KEY':'private','HTTPS_PROXY':'private','NODE_OPTIONS':'private'})
+            'DEEPSEEK_API_KEY':'private','HTTPS_PROXY':'private','NODE_OPTIONS':'private','OPENAI_HTTP_PROXY':'private'})
         self.assertEqual(env['PATH'],'retained')
-        self.assertFalse(any(key in env for key in ('WALLE_DATABASE_PATH','DEEPSEEK_API_KEY','HTTPS_PROXY','NODE_OPTIONS')))
+        self.assertFalse(any(key in env for key in ('WALLE_DATABASE_PATH','DEEPSEEK_API_KEY','HTTPS_PROXY','NODE_OPTIONS','OPENAI_HTTP_PROXY')))
 
     def test_exit_status_and_timeout(self):
         with TemporaryDirectory() as directory:

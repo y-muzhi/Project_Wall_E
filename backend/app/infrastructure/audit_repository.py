@@ -4,27 +4,28 @@ No Provider I/O, business adoption or manufactured trusted-output success.
 The caller owns the process lock and the shared write transaction.
 """
 
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
-from .audit_data import audit_json
-from .guide_repository import GuideRepository
-from .identifiers import EntityKind, entity_id, increment, require_write_transaction
-from backend.app.shared.json_canonical import canonical_input
-from .message_repository import MessageRepository
-from .model_profile import ModelProfile
-from .requirement_repository import RequirementRepository
 from backend.app.documents.snapshot import _time
 from backend.app.guide.context_builder import assemble_input, restore_transport_input
 from backend.app.guide.counted_context import (
     CountedContext,
-    verify_counting_evidence,
     counting_snapshot,
+    verify_counting_evidence,
 )
-from backend.app.guide.model_context import read_context
 from backend.app.guide.initialization_protocol import NO_PROGRESS_MESSAGE
+from backend.app.guide.model_context import read_context
 from backend.app.shared.command_execution import Rejected
+from backend.app.shared.json_canonical import canonical_input
 from backend.app.shared.validation import MAX_SAFE_INTEGER, strict_integer, strict_json_object
+
+from .audit_data import audit_json
+from .guide_repository import GuideRepository
+from .identifiers import EntityKind, entity_id, increment, require_write_transaction
+from .message_repository import MessageRepository
+from .model_profile import ModelProfile
+from .requirement_repository import RequirementRepository
 
 
 def _owned(connection, run):
@@ -155,16 +156,30 @@ class AuditRepository:
         require_write_transaction(self.connection)
         request_key(key)
         if (
-            source_type not in ('MANUAL_EDIT', 'GUIDE_RUN', 'SUGGESTION_BATCH')
+            source_type not in ('MANUAL_EDIT', 'GUIDE_RUN', 'SUGGESTION_BATCH', 'CARD_RESPONSE')
             or before['id'] != after['id']
             or after['content_version'] != before['content_version'] + 1
         ):
             raise ValueError('Invalid formal content event')
         payload = {'source_refs': source_refs, 'change_summary': summary, 'idempotency_key': key}
+        if source_type == 'CARD_RESPONSE':
+            from backend.app.formation.card_source import card_source
+            from backend.app.infrastructure.model_profile import DEFAULT_PROFILE
+            from backend.app.infrastructure.resources import ResourceCatalog
+
+            descriptor, _ = card_source(
+                self.connection,
+                before['requirement_id'],
+                before['id'],
+                source_id,
+                ResourceCatalog().for_formation_profile(DEFAULT_PROFILE),
+            )
+            payload['card_response_source'] = descriptor
+        identity = entity_id(self.connection, EntityKind.DOCUMENT_AUDIT)
         self.connection.execute(
             "INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) VALUES (?,?,?,?,?,'CONTENT_UPDATE',?,?,?,'CONTENT_COMMITTED',?,?,?)",
             (
-                entity_id(self.connection, EntityKind.DOCUMENT_AUDIT),
+                identity,
                 after['requirement_id'],
                 after['id'],
                 source_type,
@@ -177,6 +192,7 @@ class AuditRepository:
                 canonical_input(payload),
             ),
         )
+        return identity
 
     def record_document_event(
         self, document, event_type, payload, at, *, revision_id=None, before_version=None
@@ -281,6 +297,7 @@ class AuditRepository:
     ):
         from backend.app.guide.collaboration_context import read_canonical
         from backend.app.guide.collaboration_counting import verify_counted
+
         from .audit_data import collaboration_audit_json
 
         require_write_transaction(self.connection)
@@ -317,6 +334,18 @@ class AuditRepository:
             'manifest_sha256': resources.manifest_sha256,
             'release': resources.reference('collaboration.release'),
         }
+        if resources.formation_driven:
+            protocol.update(
+                input_schema=resources.release['wire_schema']['key']
+                + '@'
+                + resources.release['wire_schema']['version'],
+                output_schema=next(
+                    item['schema_ref']['key'] + '@' + item['schema_ref']['version']
+                    for item in resources.release['output_schemas']
+                    if item['operation'] == run['operation']
+                ),
+                context_template=resources.layout + '@v21_1',
+            )
         snapshot = {
             'profile': profile.snapshot,
             'request': profile.request(context),
@@ -335,7 +364,7 @@ class AuditRepository:
             'guide_run_id': run_id,
             'call_no': 1,
             'attempt_no': 1,
-            'provider': 'volcengine',
+            'provider': profile.provider,
             'model_name': profile.model_name,
             'model_version': profile.model_version,
             'function_type': 'collaboration_v1',
@@ -519,7 +548,7 @@ class AuditRepository:
             'guide_run_id': run_id,
             'call_no': call_no,
             'attempt_no': attempt_no,
-            'provider': 'volcengine',
+            'provider': profile.provider,
             'model_name': profile.model_name,
             'model_version': profile.model_version,
             'function_type': function.function_type,
@@ -595,7 +624,7 @@ class AuditRepository:
             type(profile) is not ModelProfile
             or stored_profile.profile_id != profile.profile_id
             or (row['provider'], row['model_name'], row['model_version'])
-            != ('volcengine', profile.model_name, profile.model_version)
+            != (profile.provider, profile.model_name, profile.model_version)
         ):
             raise Rejected('CONFIG_INVALID')
         if row['raw_response_json'] is not None:
@@ -727,38 +756,47 @@ class AuditRepository:
                 strict_json_object(row['request_snapshot_json'])['profile']
             )
             if (row['provider'], row['model_name'], row['model_version']) != (
-                'volcengine',
+                stored_profile.provider,
                 stored_profile.model_name,
                 stored_profile.model_version,
             ):
                 raise ValueError('Audit model differs from its frozen profile')
             raw = strict_json_object(row['raw_response_json'])
-            if (
-                raw.get('model') != stored_profile.model_name
-                or type(raw.get('choices')) is not list
-                or len(raw['choices']) != 1
-            ):
-                raise ValueError('Wrong model or response cardinality')
-            choice = raw['choices'][0]
-            message = choice['message']
-            if type(choice) is not dict or type(message) is not dict:
-                raise ValueError('Malformed assistant envelope')
-            if (
-                row['finish_reason'] != 'stop'
-                or choice.get('finish_reason') != 'stop'
-                or message.get('role') != 'assistant'
-                or message.get('refusal')
-                or message.get('tool_calls')
-                or message.get('function_call')
-            ):
-                raise ValueError('Response is not usable non-tool assistant output')
-            content = message.get('content')
-            if (
-                type(content) is not str
-                or not content
-                or len(content.encode('utf-8')) > 1024 * 1024
-            ):
-                raise ValueError('Content missing or exceeds capacity')
+            if stored_profile.provider == 'openai':
+                from .openai_protocol import output_text
+
+                if raw.get('model') != stored_profile.model_name or row['finish_reason'] != 'stop':
+                    raise ValueError('OpenAI response differs from its frozen model or completion')
+                content = output_text(raw)
+                if len(content.encode('utf-8')) > 1024 * 1024:
+                    raise ValueError('OpenAI content exceeds capacity')
+            else:
+                if (
+                    raw.get('model') != stored_profile.model_name
+                    or type(raw.get('choices')) is not list
+                    or len(raw['choices']) != 1
+                ):
+                    raise ValueError('Wrong model or response cardinality')
+                choice = raw['choices'][0]
+                message = choice['message']
+                if type(choice) is not dict or type(message) is not dict:
+                    raise ValueError('Malformed assistant envelope')
+                if (
+                    row['finish_reason'] != 'stop'
+                    or choice.get('finish_reason') != 'stop'
+                    or message.get('role') != 'assistant'
+                    or message.get('refusal')
+                    or message.get('tool_calls')
+                    or message.get('function_call')
+                ):
+                    raise ValueError('Response is not usable non-tool assistant output')
+                content = message.get('content')
+                if (
+                    type(content) is not str
+                    or not content
+                    or len(content.encode('utf-8')) > 1024 * 1024
+                ):
+                    raise ValueError('Content missing or exceeds capacity')
             parsed = strict_json_object(content)
         except (ValueError, KeyError, TypeError, UnicodeError):
             pass

@@ -151,6 +151,26 @@ export function GuideComposer({
     >
       <div className="guide-composer-body">
         {associations}
+        {state.formation_proposal !== null && (
+          <p role="status">
+            已选择调整
+            {state.formation_proposal.intent === 'ADJUST_WRITE' ? '原写入提案' : '原路线提案'}。
+            请在输入框填写要求，发送后才开始调整。
+            <button
+              type="button"
+              className="ui-button"
+              disabled={!owner.editable}
+              onClick={() => owner.clearProposalSelection()}
+            >
+              取消本轮选择
+            </button>
+          </p>
+        )}
+        {state.action === 'DISCUSS' && state.formation_target_label !== null && (
+          <p className="field-help" role="status">
+            讨论目标：{state.formation_target_label}
+          </p>
+        )}
         {viewingHistory !== null && (
           <p className="field-help">
             正在查看运行 #{viewingHistory}。输入仅发送当前明确选择的操作。
@@ -327,6 +347,20 @@ export function GuideComposer({
                   <p className="field-help">
                     {targetName} · V{target.content_version} · {scopeNames[scopeType]}
                   </p>
+                  {scopeType === 'DOCUMENT' &&
+                    state.parent === null &&
+                    state.formation_proposal === null &&
+                    state.detail.current?.id === target.document_id &&
+                    state.detail.current.content_version !== target.content_version && (
+                      <button
+                        className="ui-button"
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => owner.selectDocument(target.document_id)}
+                      >
+                        使用当前整篇文档（V{state.detail.current.content_version}）
+                      </button>
+                    )}
                 </>
               )}
               {state.action === 'REVISE' && (
@@ -451,7 +485,7 @@ export function GuideComposer({
             className="ui-input"
             aria-label="给 AI 的消息"
             value={state.instruction}
-            disabled={disabled}
+            disabled={!state.available || !owner.instructionEditable || document.busy}
             placeholder="说明本次希望讨论或完成的工作…"
             rows={2}
             aria-invalid={!composing && state.instruction.length > 0 && !feedback.valid}

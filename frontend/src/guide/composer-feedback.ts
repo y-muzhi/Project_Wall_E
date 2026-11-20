@@ -42,6 +42,7 @@ export function composerFeedback(
     state.source_refs.length === 0
   )
     return result('当前文档尚未就绪，请重新读取状态或选择关联文档。', true);
+  if (state.action === 'DISCUSS' && state.formation_blocked) return result(state.formation_blocked);
   if (!allowed) return result('目标或来源已变化，请核对操作设置后再发送。', true);
   return result(null);
 }

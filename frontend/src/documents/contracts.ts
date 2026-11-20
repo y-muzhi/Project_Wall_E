@@ -17,7 +17,8 @@ export const BLOCK_TYPES = [
 ] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 export type Actor = 'USER' | 'AI' | 'SYSTEM';
-export type SourceType = 'TEMPLATE' | 'GUIDE_RUN' | 'SUGGESTION_BATCH' | 'MANUAL_EDIT';
+export type SourceType =
+  'TEMPLATE' | 'GUIDE_RUN' | 'SUGGESTION_BATCH' | 'MANUAL_EDIT' | 'CARD_RESPONSE';
 
 export interface BlockMetadata {
   readonly block_id: number;
@@ -111,7 +112,7 @@ function provenance(actor: unknown, source: unknown, id: unknown): void {
   if (
     (source === 'GUIDE_RUN' && actor === 'AI') ||
     (source === 'SUGGESTION_BATCH' && (actor === 'AI' || actor === 'USER')) ||
-    (source === 'MANUAL_EDIT' && actor === 'USER')
+    ((source === 'MANUAL_EDIT' || source === 'CARD_RESPONSE') && actor === 'USER')
   )
     return;
   invalid('署名或来源类型组合不合法');

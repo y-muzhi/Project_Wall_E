@@ -70,6 +70,15 @@ def _persist_in_transaction(
     context = restore_counted(snapshot, catalog, profile)
     frozen = read_canonical(connection, run['id'], catalog, require_current=False)
     verify_counted(context, catalog, profile, expected_canonical=frozen)
+    if catalog.collaboration.formation_driven and run['operation'] == 'DISCUSS':
+        from backend.app.formation.model_results import persist_unit
+
+        return persist_unit(connection, row, run, root, context, profile, catalog, at)
+    from backend.app.formation.transaction import capture_transaction
+
+    formation_transaction = capture_transaction(
+        connection, run['requirement_id'], run['target_document_id'] or run['document_id']
+    )
     raw = json.loads(row['raw_response_json']) if row['raw_response_json'] is not None else None
     original = response_text(raw)
     if original is None:
@@ -172,6 +181,14 @@ def _persist_in_transaction(
     assistant_id = entity_id(connection, EntityKind.MESSAGE)
     if header_valid and progress is not None:
         try:
+            if (
+                resources.formation_driven
+                and isinstance(progress, dict)
+                and progress.get('formation_delta') is not None
+            ):
+                raise ProgressInvalid(
+                    'Independent document operations cannot apply formation deltas'
+                )
             changed, reference_map = apply_progress(
                 root['discussion_state_json'],
                 progress,
@@ -196,7 +213,13 @@ def _persist_in_transaction(
 
         try:
             commit_document = prepare_document_result(
-                connection, run, context, primary['document_result'], catalog, at
+                connection,
+                run,
+                context,
+                primary['document_result'],
+                catalog,
+                at,
+                formation_transaction=formation_transaction,
             )
         except (Rejected, DocumentInvalid, PatchInvalid, TargetStale, ScopeInvalid):
             application = 'NOT_APPLIED'
@@ -226,7 +249,14 @@ def _persist_in_transaction(
     if primary is not None and cards is not None:
         try:
             from .card_binding import bind_cards
+            from backend.app.formation.proposal_contracts import PURPOSES
 
+            if (
+                resources.formation_driven
+                and isinstance(cards, dict)
+                and cards.get('purpose') in PURPOSES
+            ):
+                raise ValueError('New formation proposals require an explicit discussion round')
             stored_cards = bind_cards(
                 connection, root, run, context, cards, catalog, reference_map=reference_map
             )

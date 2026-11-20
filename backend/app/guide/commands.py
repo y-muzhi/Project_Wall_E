@@ -129,7 +129,36 @@ def _accept_collaboration(
     reuse_message=None,
     formal_answer=None,
     comment_source=None,
+    formation_input=None,
 ):
+    from backend.app.formation.discuss_contracts import FormationDiscussInput
+
+    if isinstance(request, FormationDiscussInput):
+        from backend.app.formation.discuss_acceptance import accept_discussion
+
+        return accept_discussion(
+            connection,
+            request,
+            catalog,
+            at,
+            parent=parent,
+            retry_of=retry_of,
+            reuse_message=reuse_message,
+            formal_answer=formal_answer,
+            comment_source=comment_source,
+        )
+
+    if (
+        formation_input is None
+        and request.operation == 'DISCUSS'
+        and catalog.collaboration.formation_driven
+    ):
+        from backend.app.infrastructure.model_profile import ModelProfile
+
+        catalog = catalog.for_collaboration_profile(
+            getattr(catalog, '_collaboration_profile', None) or ModelProfile.selected_profile()
+        )
+
     from copy import deepcopy
     from .accepted_context import capture_inputs
     from backend.app.requirements.contracts import requirement_read_model
@@ -215,6 +244,19 @@ def _accept_collaboration(
     }
     if comment_source is not None:
         basis['comment_source'] = comment_source
+    accepted_target = None
+    finish_formation_events = None
+    if formation_input is not None:
+        from backend.app.formation.discuss_acceptance import prepare_acceptance
+
+        accepted_target, finish_formation_events = prepare_acceptance(
+            connection, root, run_id, message, formation_input, catalog, at, basis
+        )
+        occupied = requirements.get_for_document(root['id'], request.document_id)
+    elif catalog.collaboration.formation_driven:
+        from backend.app.formation.reference_context import capture_reference_context
+
+        capture_reference_context(connection, occupied, catalog, basis)
     GuideRepository(connection).accept_collaboration(
         run_id,
         occupied,
@@ -232,10 +274,16 @@ def _accept_collaboration(
         if formal_answer is not None
         else None,
     )
-    return {'processing': 'MODEL', 'guide_run_id': run_id, 'user_message_id': message_id}
+    result = {'processing': 'MODEL', 'guide_run_id': run_id, 'user_message_id': message_id}
+    if finish_formation_events is not None:
+        finish_formation_events()
+        result['accepted_target'] = accepted_target
+    return result
 
 
 def create_guide_run(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    from backend.app.formation.discuss_contracts import FormationDiscussInput
+
     try:
         request = create_guide_run_input(payload)
     except InvalidInput as error:
@@ -252,9 +300,14 @@ def create_guide_run(executor: Idempotency, payload: object, *, catalog=None, cl
 
     return execute_idempotent(
         executor,
-        'APP-GUIDE-CMD-C01',
+        'formation.discuss' if isinstance(request, FormationDiscussInput) else 'APP-GUIDE-CMD-C01',
         request,
         operation,
+        target_identity=(
+            f'Requirement:{request.requirement_id}:Document:{request.document_id}'
+            if isinstance(request, FormationDiscussInput)
+            else None
+        ),
         allowed_failures=frozenset(
             {
                 'NOT_FOUND',
@@ -267,6 +320,7 @@ def create_guide_run(executor: Idempotency, payload: object, *, catalog=None, cl
                 'SOURCE_INVALID',
                 'SCOPE_INVALID',
                 'CONFIG_INVALID',
+                'CAPACITY_EXHAUSTED',
             }
         ),
     )
@@ -302,26 +356,40 @@ def continue_guide_run(executor: Idempotency, payload: object, *, catalog=None, 
                 'document_id': current['id'],
                 'expected_content_version': current['content_version'],
             }
-        internal = create_guide_run_input(
-            {
-                'requirement_id': root['id'],
-                'document_id': root['assistant_document_id'],
-                'expected_discussion_version': request.expected_discussion_version,
-                'operation': 'DISCUSS',
-                'instruction': request.instruction,
-                'target': target,
-                'scope': binding['scope'],
-                'source_refs': binding['source_refs'],
-                'proposal_ref': None,
-                'acknowledge_source_changes': False,
-                'idempotency_key': request.idempotency_key,
-            }
+        from backend.app.formation.discuss_continuation import derive_discussion, formation_catalog
+
+        selected_catalog = catalog or ResourceCatalog()
+        internal = derive_discussion(
+            connection,
+            previous,
+            root,
+            request.instruction,
+            request.idempotency_key,
+            request.expected_discussion_version,
         )
+        if internal is not None:
+            selected_catalog = formation_catalog(selected_catalog)
+        else:
+            internal = create_guide_run_input(
+                {
+                    'requirement_id': root['id'],
+                    'document_id': root['assistant_document_id'],
+                    'expected_discussion_version': request.expected_discussion_version,
+                    'operation': 'DISCUSS',
+                    'instruction': request.instruction,
+                    'target': target,
+                    'scope': binding['scope'],
+                    'source_refs': binding['source_refs'],
+                    'proposal_ref': None,
+                    'acknowledge_source_changes': False,
+                    'idempotency_key': request.idempotency_key,
+                }
+            )
         try:
             data = _accept_collaboration(
                 connection,
                 internal,
-                catalog or ResourceCatalog(),
+                selected_catalog,
                 operation_time(clock),
                 parent=previous['id'],
             )
@@ -512,15 +580,30 @@ def retry_guide_run(executor: Idempotency, payload: object, *, catalog=None, clo
             raise Rejected('SOURCE_INVALID')
         # This explicit retry recalculates authority from the fixed request;
         # none of the predecessor's allowed_targets or one-shot proof is reused.
-        internal = create_guide_run_input(
-            {
-                **basis['request'],
-                'expected_discussion_version': root['discussion_version'],
-                'proposal_ref': None,
-                'acknowledge_source_changes': False,
-                'idempotency_key': request.idempotency_key,
-            }
+        from backend.app.formation.discuss_continuation import derive_discussion, formation_catalog
+
+        selected_catalog = catalog or ResourceCatalog()
+        internal = derive_discussion(
+            connection,
+            previous,
+            root,
+            basis['request']['instruction'],
+            request.idempotency_key,
+            root['discussion_version'],
+            retry=True,
         )
+        if internal is not None:
+            selected_catalog = formation_catalog(selected_catalog)
+        else:
+            internal = create_guide_run_input(
+                {
+                    **basis['request'],
+                    'expected_discussion_version': root['discussion_version'],
+                    'proposal_ref': None,
+                    'acknowledge_source_changes': False,
+                    'idempotency_key': request.idempotency_key,
+                }
+            )
         comment_source = basis.get('comment_source')
         if comment_source is not None:
             actual_comment = CommentRepository(connection).get(comment_source['id'])
@@ -530,7 +613,7 @@ def retry_guide_run(executor: Idempotency, payload: object, *, catalog=None, clo
             data = _accept_collaboration(
                 connection,
                 internal,
-                catalog or ResourceCatalog(),
+                selected_catalog,
                 operation_time(clock),
                 retry_of=previous['id'],
                 reuse_message=message,

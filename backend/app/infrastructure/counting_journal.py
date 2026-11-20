@@ -6,21 +6,22 @@ Records are flushed before count I/O and after its observed result. The task
 lease fences filesystem effects as well as SQL; raw count arrays retain 30 days.
 """
 
+import os
+import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-import os
 from pathlib import Path
-import re
 from uuid import uuid4
 
-from .audit_data import audit_json, MAX_AUDIT_BYTES
-from .database import StorageUnavailable
-from .model_profile import ModelProfile
-from .process_lock import ProcessLock
-from .tokenization import ENDPOINT, measurement_summary, COUNT_FAILURE_REASONS, provider_error_value
 from backend.app.documents.snapshot import _time
 from backend.app.guide.context_builder import restore_transport_input
 from backend.app.shared.validation import strict_integer, strict_json_object
+
+from .audit_data import MAX_AUDIT_BYTES, audit_json
+from .database import StorageUnavailable
+from .model_profile import ModelProfile
+from .process_lock import ProcessLock
+from .tokenization import COUNT_FAILURE_REASONS, ENDPOINT, measurement_summary, provider_error_value
 
 
 class CountingJournal:
@@ -63,7 +64,9 @@ class CountingJournal:
     def _create(self, identity, phase, value, profile):
         if type(profile) is not ModelProfile:
             raise ValueError('Counting audit requires an approved immutable model profile')
-        encoded = audit_json(value, credentials=(profile.api_key,)).encode('utf-8')
+        from .audit_data import counting_audit_json
+
+        encoded = counting_audit_json(value, profile).encode('utf-8')
         try:
             with self._guard():
                 self.root.mkdir(exist_ok=True)
@@ -95,7 +98,7 @@ class CountingJournal:
         _time(at)
         strict_integer(actual['run']['id'], 'guide_run_id')
         wire = strict_json_object(texts[1])
-        from backend.app.guide.context_projection import projected, basis_from_actual
+        from backend.app.guide.context_projection import basis_from_actual, projected
 
         basis = basis_from_actual(actual, function, wire) if projected(function) else None
         value = restore_transport_input(wire, function, basis=basis)
@@ -124,6 +127,13 @@ class CountingJournal:
         _time(at)
         strict_integer(run_id, 'guide_run_id')
         resources.validate('ContextBasis', context.basis)
+        endpoint = ENDPOINT
+        request = {'model': profile.model_name, 'text': list(context.texts)}
+        if profile.provider == 'openai':
+            from .openai_protocol import COUNT_ENDPOINT, count_request
+
+            endpoint = COUNT_ENDPOINT
+            request = count_request(profile.request(context))
         record = {
             'schema_version': 1,
             'id': uuid4().hex,
@@ -132,13 +142,13 @@ class CountingJournal:
             'guide_run_id': run_id,
             'trigger_message_id': context.canonical['current_message']['message_id'],
             'owner_epoch': self.process_lock.owner_epoch,
-            'endpoint': ENDPOINT,
+            'endpoint': endpoint,
             'protocol': {
                 'function_type': 'collaboration_v1',
                 'release': resources.reference('collaboration.release'),
                 'manifest_sha256': resources.manifest_sha256,
             },
-            'request': {'model': profile.model_name, 'text': list(context.texts)},
+            'request': request,
             'read_manifest': strict_json_object(context.manifest_json),
         }
         self._create(record['id'], 'prepared', record, profile)

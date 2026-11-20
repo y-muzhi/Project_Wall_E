@@ -1,17 +1,17 @@
 """Same-snapshot immutable messages and D-004 card availability facts."""
 
 import json
+from functools import lru_cache
 
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.message_repository import MessageRepository
-from backend.app.infrastructure.resources import ResourceCatalog, ProtocolInvalid
 from backend.app.infrastructure.requirement_repository import RequirementRepository
+from backend.app.infrastructure.resources import ProtocolInvalid, ResourceCatalog
 from backend.app.shared.validation import (
     InvalidInput,
-    strict_json_object,
     strict_integer,
-    object_fields,
 )
+
 from .cards import CardsInvalid, decode_cards, decode_responses
 from .contracts import MESSAGE_FIELDS, list_messages_input, list_messages_result, message_read_model
 
@@ -27,9 +27,19 @@ def _same_run_root(repository, row, requirement_id):
             raise ValueError('Message run belongs to another requirement')
 
 
+@lru_cache(maxsize=1)
+def _formation_reading_protocol():
+    from backend.app.infrastructure.model_profile import DEFAULT_PROFILE
+
+    return ResourceCatalog().for_formation_profile(DEFAULT_PROFILE).collaboration
+
+
 def reading_protocol(raw, protocol):
+    if raw and json.loads(raw).get('purpose') in ('STAGED_WRITE', 'FORMATION_PATH_CHANGE'):
+        if protocol is None or not protocol.formation_driven:
+            return _formation_reading_protocol()
     if raw and json.loads(raw).get('purpose') == 'PHASE_CHANGE':
-        from backend.app.infrastructure.collaboration_resources import CollaborationResources, ROOT
+        from backend.app.infrastructure.collaboration_resources import ROOT, CollaborationResources
 
         return CollaborationResources.load(ROOT.parent / 'v15')
     return protocol
@@ -49,6 +59,13 @@ def card_state(repository, root, row, protocol, catalog=None):
         _same_run_root(repository, reply, root['id'])
     if replies:
         return 'ANSWERED'
+    if json.loads(row['structured_content_json']).get('purpose') in (
+        'STAGED_WRITE',
+        'FORMATION_PATH_CHANGE',
+    ):
+        from backend.app.formation.proposal_availability import message_card_state
+
+        return message_card_state(repository, root, row, catalog or ResourceCatalog())
     if json.loads(row['structured_content_json']).get('purpose') == 'PHASE_CHANGE':
         return 'EXPIRED'
     if (

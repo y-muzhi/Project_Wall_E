@@ -28,7 +28,7 @@ def environment(temporary, source=None):
     values = {key:value for key,value in source.items() if not (
         key.upper().startswith(('WALLE_', 'PYTHON', 'NODE_OPTIONS', 'NODE_PATH'))
         or any(word in key.upper() for word in ('TOKEN','SECRET','PASSWORD','API_KEY'))
-        or key.upper() in ('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY'))}
+        or key.upper() in ('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY','OPENAI_HTTP_PROXY'))}
     values.update(PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8', PYTHONUTF8='1',
         PYTEST_DISABLE_PLUGIN_AUTOLOAD='1', WALLE_CHECK_TEMP=str(temporary),
         TMP=str(temporary), TEMP=str(temporary), TMPDIR=str(temporary), NO_COLOR='1', CI='true')

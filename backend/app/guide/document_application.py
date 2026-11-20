@@ -33,7 +33,9 @@ def _refs(context):
     return list(result.values())
 
 
-def prepare_document_result(connection, run, context, result, catalog, at):
+def prepare_document_result(
+    connection, run, context, result, catalog, at, *, formation_transaction=None
+):
     canonical = context.canonical
     target = canonical['target']
     if target is None or run['operation'] not in ('GENERATE', 'REVISE'):
@@ -171,6 +173,7 @@ def prepare_document_result(connection, run, context, result, catalog, at):
             summary=result['change_summary'],
             key=run['idempotency_key'],
             at=at,
+            formation_transaction=formation_transaction,
         )
 
     return commit

@@ -1,3 +1,4 @@
+import { acceptedReplyTarget } from '../formation/accepted-target.ts';
 import { CopyButton } from '../shared/copy-button.tsx';
 import {
   createContext,
@@ -147,6 +148,8 @@ function LoadedRequestRecord({
     data = state.data;
   const calls =
     data?.items.filter((call) => messageId === null || call.user_message_id === messageId) ?? [];
+  const acceptedTarget =
+    surface.current?.id === runId ? acceptedReplyTarget(surface.current) : null;
   const last = calls.at(-1),
     unknown = data?.items.some((call) => call.user_message_id === null);
   return (
@@ -190,6 +193,7 @@ function LoadedRequestRecord({
           </button>
         )}
       </div>
+      {acceptedTarget !== null && <p className="formation-target">{acceptedTarget}</p>}
       {calls.length > 0 ? (
         <>
           <div className="model-token-line">
@@ -508,8 +512,10 @@ function TokenDetails({ detail }: Readonly<{ detail: ModelCallDetail }>) {
   const call = detail.call,
     preflight = detail.preflight,
     budget = preflight.budget;
-  const names =
-    detail.context_strategy === 'collaboration_context_v1'
+  const wholeRequest = budget?.counting === 'openai_exact_request_v1';
+  const names = wholeRequest
+    ? ['完整请求（含输出格式约束）']
+    : detail.context_strategy === 'collaboration_context_v1'
       ? [
           '系统规则与阶段指引',
           '完整Wire输入',
@@ -547,7 +553,7 @@ function TokenDetails({ detail }: Readonly<{ detail: ModelCallDetail }>) {
       </p>
       <h4>请求预检</h4>
       <dl className="model-property-grid">
-        <dt>预检输入（含预留量）</dt>
+        <dt>{wholeRequest ? '预检输入（整请求）' : '预检输入（含预留量）'}</dt>
         <dd>{number(preflight.input_tokens)}</dd>
         <dt>输入上限</dt>
         <dd>{number(budget?.input_tokens ?? null)}</dd>
@@ -563,7 +569,9 @@ function TokenDetails({ detail }: Readonly<{ detail: ModelCallDetail }>) {
         ))}
       </dl>
       <p className="field-help">
-        预检计数用于发送前预算校验，不代表实际用量。本轮输入、来源、模板和历史消息的分项计数已包含在上下文内容中，不可重复累加。
+        {wholeRequest
+          ? '整请求计数已包含系统规则、正文和输出格式约束，不再重复相加；实际用量以模型返回为准。'
+          : '预检计数用于发送前预算校验，不代表实际用量。本轮输入、来源、模板和历史消息的分项计数已包含在上下文内容中，不可重复累加。'}
       </p>
     </section>
   );

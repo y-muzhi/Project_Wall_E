@@ -95,6 +95,7 @@ class SubmitCardResponsesResponse:
             'DISCUSSION_VERSION_CONFLICT',
             'CONTENT_VERSION_CONFLICT',
             'TARGET_STALE',
+            'DOCUMENT_INVALID',
             'CONFIG_INVALID',
             'IDEMPOTENCY_CONFLICT',
             'REQUEST_IN_PROGRESS',

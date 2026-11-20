@@ -1,3 +1,7 @@
+import type { FormationWorkspace } from '../formation/workspace.ts';
+import { FormationUnsentError } from '../formation/command-recovery.ts';
+import { receiptPurpose } from '../api/models.ts';
+import { isFormationPurpose } from '../api/formation-workflow.ts';
 import { ApiRejected, snapshotObject } from '../api/client.ts';
 import type { ApiAction, WalleApi } from '../api/walle.ts';
 import {
@@ -59,6 +63,8 @@ export class InteractionCards {
   private readonly receive: (run: GuideRun) => Promise<void>;
   private readonly refreshMessages: () => Promise<void>;
   private readonly origin: string;
+  private formation: FormationWorkspace | null = null;
+  private releaseFormation: (() => void) | null = null;
   private action: ApiAction<Accepted> | undefined;
   private responseReference: number | null = null;
   private delivered = false;
@@ -168,6 +174,17 @@ export class InteractionCards {
         console.error('WALL-E card observer failed', error);
       }
   }
+  attachFormation(owner: FormationWorkspace): void {
+    this.releaseFormation?.();
+    this.formation = owner;
+    this.releaseFormation = owner.subscribe(() => this.publish({}));
+    if (isFormationPurpose(this.value.cards.purpose)) void owner.ensureInitialized();
+  }
+  get formationReason(): string | null {
+    return isFormationPurpose(this.value.cards.purpose)
+      ? (this.formation?.writeReason ?? null)
+      : null;
+  }
   get editable(): boolean {
     return (
       !this.closed &&
@@ -182,7 +199,8 @@ export class InteractionCards {
       !this.value.available ||
       this.value.needs_refresh ||
       this.value.message.card_state !== 'AVAILABLE' ||
-      this.value.cards.purpose === 'PHASE_CHANGE'
+      this.value.cards.purpose === 'PHASE_CHANGE' ||
+      this.formationReason !== null
     )
       return false;
     const { detail, source } = this.value,
@@ -193,7 +211,8 @@ export class InteractionCards {
       requirement.active_operation_type === null &&
       detail.activity.kind === 'IDLE' &&
       source.status === 'COMPLETED' &&
-      this.value.cards.program_binding.discussion_version === requirement.discussion_version
+      (isFormationPurpose(this.value.cards.purpose) ||
+        this.value.cards.program_binding.discussion_version === requirement.discussion_version)
     );
   }
   setAvailable(available: boolean): void {
@@ -379,7 +398,7 @@ export class InteractionCards {
     if (
       formal.guide_run_id === null &&
       (formal.program_receipt === null ||
-        formal.program_receipt.purpose !== this.value.cards.purpose)
+        receiptPurpose(formal.program_receipt) !== this.value.cards.purpose)
     )
       throw TypeError('Program answer requires its actual program receipt');
     if (formal.guide_run_id === this.value.source.id)
@@ -424,11 +443,15 @@ export class InteractionCards {
       }
       try {
         const submitted = checkAnswers(this.value.cards, this.value.answers);
-        this.action = this.api.prepareCardResponses(
+        const action = this.api.prepareCardResponses(
           this.value.message.id,
           submitted,
           this.value.detail.requirement.discussion_version,
         );
+        this.action =
+          isFormationPurpose(this.value.cards.purpose) && this.formation !== null
+            ? this.formation.durable(action)
+            : action;
         this.responseReference = null;
         this.delivered = false;
         this.publish({
@@ -461,7 +484,7 @@ export class InteractionCards {
         (receipt.processing === 'MODEL' && receipt.guide_run_id === this.value.source.id) ||
         (receipt.processing === 'PROGRAM' &&
           (receipt.requirement_id !== this.value.message.requirement_id ||
-            receipt.purpose !== this.value.cards.purpose))
+            receiptPurpose(receipt) !== this.value.cards.purpose))
       )
         throw TypeError('Receipt contradicts the owned card action');
       this.action = undefined;
@@ -475,7 +498,10 @@ export class InteractionCards {
       return true;
     } catch (error) {
       if (this.closed) return false;
-      if (error instanceof ApiRejected && error.code !== 'REQUEST_IN_PROGRESS') {
+      if (error instanceof FormationUnsentError) {
+        this.action = undefined;
+        this.publish({ phase: 'ERROR', error: error.message, error_code: null });
+      } else if (error instanceof ApiRejected && error.code !== 'REQUEST_IN_PROGRESS') {
         this.action = undefined;
         const reference = error.details?.response_message_id;
         this.responseReference =
@@ -647,7 +673,8 @@ export class InteractionCards {
         receipt.processing === 'MODEL'
           ? actual.formal.guide_run_id !== receipt.guide_run_id
           : actual.formal.guide_run_id !== null ||
-            actual.formal.program_receipt?.purpose !== receipt.purpose
+            actual.formal.program_receipt === null ||
+            receiptPurpose(actual.formal.program_receipt) !== receiptPurpose(receipt)
       )
         throw Error('正式回答与已接受回执不一致');
       await this.adoptActual(actual.detail);
@@ -678,6 +705,7 @@ export class InteractionCards {
     this.closed = true;
     this.epoch++;
     this.controller?.abort();
+    this.releaseFormation?.();
     this.listeners.clear();
   }
 }

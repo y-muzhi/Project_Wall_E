@@ -132,10 +132,16 @@ const collaborationDetail = checked(
           counting: text,
         }),
       ),
-      counts: array(nullable(count), 8, 8),
+      counts: checked(array(nullable(count), 8, 1), (values) => {
+        require(values.length === 1 || values.length === 8);
+      }),
     }),
   }),
   (detail) => {
+    require(
+      (detail.preflight.budget?.counting === 'openai_exact_request_v1') ===
+        (detail.preflight.counts.length === 1),
+    );
     require(detail.sections.every((section) => [...section.content].length === section.characters));
     require(new Set(detail.sections.map((section) => section.key)).size === detail.sections.length);
   },

@@ -21,7 +21,7 @@ import { Confirmation } from '../shared/confirmation.tsx';
 import { ToastViewport } from '../shared/toast.tsx';
 import { localTime } from '../shared/time.ts';
 import { DocumentRecords } from './document-records.tsx';
-import { DiscussionProgress } from './discussion-view.tsx';
+import { FormationProgress } from '../formation/progress-view.tsx';
 import { DocumentAssociations } from './document-associations.tsx';
 import { activeModal } from '../shared/modal.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
@@ -384,7 +384,7 @@ function LoadedDetail({
           }
           progress={
             actual.current ? (
-              <DiscussionProgress
+              <FormationProgress
                 key={actual.selected_document_id}
                 owner={owner}
                 active={
