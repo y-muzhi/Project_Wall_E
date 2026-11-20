@@ -3,7 +3,7 @@
  */
 import type { Ctx } from '@milkdown/kit/ctx';
 import { validateBlockState, validateDocumentReadModel } from '../documents/contracts.ts';
-import { exact, snapshotObject } from './client.ts';
+import { exact, object, snapshotObject } from './client.ts';
 import type { JsonObject } from './client.ts';
 import type { DocumentReadModel } from '../documents/contracts.ts';
 import collaboration from '../../../backend/resources/v17/schemas/collaboration-contract.v5.json' with { type: 'json' };
@@ -253,12 +253,19 @@ export const discussionSummary = checked(
     require((value.focus_topic_ref === null) === (value.focus_title === null));
   },
 );
+const readDiscussionCore = (value: unknown) => {
+  // Document detail can include formation metadata alongside the discussion.
+  const discussion = { ...object(value) };
+  delete discussion.formation_summary;
+  return collaborationValue('Discussion')(discussion);
+};
+
 export const requirementDetail = checked(
   shape({
     requirement,
     documents: array(documentSummary, Number.MAX_SAFE_INTEGER),
     discussion_summary: discussionSummary,
-    discussion: nullable(collaborationValue('Discussion')),
+    discussion: nullable(readDiscussionCore),
     active_operation: nullable(
       shape({
         type: choices(['MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH']),

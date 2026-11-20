@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { RequirementConversation } from './conversation-owner.ts';
+import type { RequirementDiscussion } from '../requirements/discussion.ts';
 import type { RequirementDocumentOwner } from '../requirements/document-owner.ts';
 import type { ToastStore } from '../shared/toast-store.ts';
 import { AiReadPanel } from './read-view.tsx';
@@ -70,10 +71,14 @@ export function GuideConversation({
   owner,
   documents,
   associations,
+  handoff,
+  discussion,
 }: Readonly<{
   owner: RequirementConversation;
   documents: RequirementDocumentOwner;
   associations?: ReactNode;
+  handoff?: ReactNode;
+  discussion: RequirementDiscussion;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     read = useSyncExternalStore(owner.read.subscribe, owner.read.getSnapshot),
@@ -114,6 +119,7 @@ export function GuideConversation({
                       groups={owner.cards}
                       message={message}
                       documents={documents}
+                      renderMarkdown={renderMarkdown}
                       busy={document.busy}
                     />
                   )}
@@ -127,6 +133,8 @@ export function GuideConversation({
             owner={owner.composer}
             documents={documents}
             associations={associations}
+            handoff={handoff}
+            discussion={discussion}
             review={read.run}
             viewingHistory={read.selection === 'HISTORY' ? read.selected : null}
           />

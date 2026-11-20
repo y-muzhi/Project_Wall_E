@@ -45,16 +45,41 @@ test('document discussion sends raw user input once and clears only its accepted
  assert.deepEqual(bodies[0],{expected_discussion_version:7,operation:'DISCUSS',instruction:'  原话😀\n第二行  ',target:{kind:'EXISTING',document_id:2,expected_content_version:3},scope:{scope_type:'DOCUMENT',scope_ref:null},source_refs:[],proposal_ref:null,acknowledge_source_changes:false});owner.dispose();
 });
 test('reading selection cannot silently change the configured write target or its captured version',async()=>{
- const actual=detail([doc(2),doc(3)]),{owner,bodies}=fixture(actual);owner.choose('REVISE');assert.equal(owner.allowed,true);
+ const actual=detail([doc(2),doc(3)]),{owner,bodies}=fixture(actual);owner.choose('REVISE');assert.equal(owner.allowed,false);
  owner.selectDocument(2);owner.change('修订目标 A');owner.adopt({...actual,current:doc(3)});assert.equal(await owner.submit(),true);
  assert.deepEqual(bodies[0].target,{kind:'EXISTING',document_id:2,expected_content_version:3});owner.dispose();
 });
-test('generation has a concrete new target and canonical SECTION scope uses heading_block_id',async()=>{
- const first=fixture();first.owner.choose('GENERATE');first.owner.configureNew('新方案','design',true);first.owner.change('生成');assert.equal(await first.owner.submit(),true);
- assert.deepEqual(first.bodies[0].target,{kind:'NEW',name:'新方案',document_kind:'design',template_ref:{key:'structure.design',version:'v1'}});assert.equal(first.bodies[0].scope,null);first.owner.dispose();
- const actual={...detail([doc(2)]),current:doc(2)},second=fixture(actual);second.owner.choose('REVISE');assert.equal(second.owner.select({document_id:2,content_version:3,label:'章节',selection:null,scope:{scope_type:'SECTION',scope_ref:{block_id:8}}}),true);
- second.owner.change('改章节');assert.equal(await second.owner.submit(),true);assert.deepEqual(second.bodies[0].scope,{scope_type:'SECTION',scope_ref:{heading_block_id:8}});second.owner.dispose();
+
+test('a mode switch preserves the draft and each send uses its explicitly selected scope', async () => {
+  const { owner, bodies, counts } = fixture();
+  const chapter = {
+    document_id: 2, content_version: 3, label: '第 1 章', selection: null,
+    scope: { scope_type: 'SECTION', scope_ref: { block_id: 8 } },
+  };
+  owner.change('请比较这些方案');
+  owner.choose('REVISE');
+  assert.equal(owner.getSnapshot().instruction, '请比较这些方案');
+  assert.equal(owner.allowed, false);
+  assert(owner.selectChapter(chapter));
+  owner.choose('DISCUSS');
+  assert.equal(counts.prepares, 0);
+  assert(await owner.submit());
+  assert.equal(bodies[0].operation, 'DISCUSS');
+  assert.deepEqual(bodies[0].scope, { scope_type: 'DOCUMENT', scope_ref: null });
+  owner.dispose();
+
+  const write = fixture();
+  write.owner.choose('REVISE');
+  write.owner.change('为当前文档写一份初稿');
+  assert.equal(await write.owner.submit(), false);
+  assert.equal(write.counts.prepares, 0);
+  write.owner.selectDocument(2);
+  assert(await write.owner.submit());
+  assert.equal(write.bodies[0].operation, 'REVISE');
+  assert.deepEqual(write.bodies[0].scope, { scope_type: 'DOCUMENT', scope_ref: null });
+  write.owner.dispose();
 });
+
 test('unknown acceptance retains the original prepared action across detail changes and panel hiding',async()=>{
  const {owner,counts,bodies,api,values}=fixture();api.prepareCreateGuide=(id,body)=>{counts.prepares++;bodies.push(body);return {async submit(){counts.sends++;if(counts.sends===1)throw new ApiUnknown(true);return {data:receipt};}};};
  owner.change('不可重写的输入');assert.equal(await owner.submit(),false);assert.equal(owner.getSnapshot().phase,'UNKNOWN');assert.equal(values.size,1);
@@ -78,26 +103,62 @@ test('the existing guide route transports a strict receipt and a frozen body/key
  assert.equal(requests[0].path,'/api/v1/requirements/1/guide-runs');assert.equal(requests[0].init.body,requests[1].init.body);assert.equal(JSON.parse(requests[0].init.body).instruction,' 原话 ');
 });
 
-test('Escape restores the opening configuration without discarding text or changing actual reading',()=>{
- const actual={...detail([doc(2),doc(3)]),current:doc(3)}, {owner,counts}=fixture(actual);
- owner.selectDocument(2);owner.choose('REVISE');owner.syncAssociatedSources([{kind:'REVISION',document_id:3,revision_id:23,block_ids:null}]);owner.change('保留输入');
- owner.beginSettings();owner.choose('GENERATE');owner.configureNew('未提交新稿','brief',false);owner.syncAssociatedSources([{kind:'REVISION',document_id:3,revision_id:33,block_ids:null}]);owner.change('仍需保留的最新输入');
- owner.endSettings(true);const state=owner.getSnapshot();assert.equal(state.action,'REVISE');assert.equal(state.target.document_id,2);
- assert.equal(state.source_refs[0].document_id,3);assert.equal(state.source_refs[0].revision_id,33);assert.equal(state.instruction,'仍需保留的最新输入');assert.equal(state.detail.current.id,3);
- assert.equal(counts.prepares,0);assert.equal(counts.sends,0);owner.dispose();
+
+test('switching during preflight and an unknown result preserves the original chapter write', async () => {
+  const pending = deferred();
+  const actual = detail();
+  const { owner, api, counts, bodies } = fixture(actual, { getRequirementDetail: () => pending.promise });
+  api.prepareCreateGuide = (_id, body) => {
+    counts.prepares++;
+    bodies.push(body);
+    return {async submit() {
+      counts.sends++;
+      if (counts.sends === 1) throw new ApiUnknown(true);
+      return { data: receipt };
+    }};
+  };
+
+  owner.choose('REVISE');
+  owner.change('保存第一章');
+  assert(owner.selectChapter({
+    document_id: 2, content_version: 3, label: '第一章', selection: null,
+    scope: { scope_type: 'SECTION', scope_ref: { block_id: 8 } },
+  }));
+  const sending = owner.submit();
+  await Promise.resolve();
+  assert.equal(owner.getSnapshot().phase, 'READING');
+  owner.choose('DISCUSS');
+  assert.equal(owner.getSnapshot().action, 'DISCUSS');
+  assert.equal(owner.getSnapshot().instruction, '保存第一章');
+  pending.resolve({data:{...actual,discussion:{binding:{source_refs:[]}}}});
+  assert.equal(await sending, false);
+  assert.equal(owner.getSnapshot().phase, 'UNKNOWN');
+  assert.equal(bodies[0].operation, 'REVISE');
+  assert.deepEqual(bodies[0].scope, { scope_type: 'SECTION', scope_ref: { heading_block_id: 8 } });
+
+  owner.choose('REVISE');
+  assert.equal(owner.getSnapshot().target, null);
+  assert(await owner.recover());
+  assert.equal(counts.prepares, 1);
+  assert.equal(counts.sends, 2);
+  assert.equal(owner.allowed, false);
+  owner.dispose();
 });
 
-test('Escape invalidates a late opening binding GET without reporting a false refresh error',async()=>{
- const pending=deferred(),{owner}=fixture(detail([doc(2)]),{getRequirementDetail:()=>pending.promise});
- owner.beginSettings();const read=owner.loadBinding();owner.endSettings(true);
- pending.resolve({data:{requirement:root,discussion:{binding:{target_document_id:2,scope:null,source_refs:[]}}}});
- assert.equal(await read,false);assert.equal(owner.getSnapshot().target.document_id,2);assert.equal(owner.getSnapshot().error,null);assert.equal(owner.getSnapshot().needs_refresh,false);owner.dispose();
-});
-
-test('closing settings keeps the selected operation, and later Escape cannot undo an accepted send',async()=>{
- const {owner,bodies,counts}=fixture();owner.beginSettings();owner.choose('GENERATE');owner.configureNew('已选稿件','brief',false);owner.endSettings();
- owner.change('明确生成');assert.equal(await owner.submit(),true);owner.endSettings(true);
- assert.equal(bodies[0].operation,'GENERATE');assert.equal(bodies[0].target.name,'已选稿件');assert.equal(counts.sends,1);owner.dispose();
+test('a changed discussion during preflight cannot grant a send with a new focus', async () => {
+  const pending = deferred();
+  const actual = detail();
+  const { owner, counts } = fixture(actual, { getRequirementDetail: () => pending.promise });
+  owner.change('按原主题继续');
+  const sending = owner.submit();
+  await Promise.resolve();
+  const updated = { ...actual, requirement: { ...actual.requirement, discussion_version: 8 } };
+  owner.adopt(updated);
+  pending.resolve({data:{...updated,discussion:{binding:{source_refs:[]}}}});
+  assert.equal(await sending, false);
+  assert.equal(counts.prepares, 0);
+  assert.equal(owner.getSnapshot().instruction, '按原主题继续');
+  owner.dispose();
 });
 
 test('without a selected document the composer cannot prepare an AI operation',async()=>{

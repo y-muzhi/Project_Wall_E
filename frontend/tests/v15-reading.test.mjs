@@ -5,6 +5,7 @@ import {ApiClient} from '../src/api/client.ts';
 import {WalleApi} from '../src/api/walle.ts';
 import {requirementDetail,sourceRef,revisionSummary} from '../src/api/models.ts';
 import {RequirementDetailRead} from '../src/requirements/detail-read.ts';
+import {RequirementDiscussion} from '../src/requirements/discussion.ts';
 
 const at='2026-10-22T00:00:00.000Z',key='00000000-0000-4000-8000-000000000001';
 const root=(changes={})=>({id:1,requirement_no:'REQ000001',title:'需求',requirement_type:'NEW',status:'PLANNING',metadata_version:1,initial_message_id:1,discussion_version:1,
@@ -36,6 +37,52 @@ test('v9 named definitions retain strict SourceRef and nested uppercase referenc
  const discussion={schema_version:2,focus_topic_ref:null,topics:[],evidence:[],pending_user_message_ids:[],binding:{target_document_id:null,source_refs:[],scope:null,document_kind:null},dispositions:[],last_step:null,counters:{topic:1,evidence:1}};
  assert.deepEqual(requirementDetail(detail({discussion})).discussion,discussion);
  assert.throws(()=>requirementDetail(detail({discussion:{...discussion,counters:{topic:0,evidence:1}}})));
+});
+
+test('document progress reads the discussion core alongside formation metadata', async () => {
+  const discussion = {
+    schema_version: 2,
+    focus_topic_ref: null,
+    topics: [],
+    evidence: [],
+    pending_user_message_ids: [],
+    binding: { target_document_id: 2, source_refs: [], scope: null, document_kind: 'brief' },
+    dispositions: [],
+    last_step: null,
+    counters: { topic: 1, evidence: 1 },
+  };
+  const extended = {
+    ...discussion,
+    formation_summary: { document_id: 2, exists: false, formation_version: null },
+  };
+  const summaryDetail = detail({ documents: [summary(2)] });
+  let expandedDiscussion = extended;
+  const api = new WalleApi(new ApiClient(async (path, init) => {
+    assert.equal(path, '/api/v1/requirements/1?expand=discussion&document_id=2');
+    assert.equal(init?.method, 'GET');
+    return response({ ...summaryDetail, discussion: expandedDiscussion });
+  }), null).forDocumentAssistant(2);
+  const flow = new RequirementDiscussion(summaryDetail, api, async () => summaryDetail);
+  try {
+    assert.equal(await flow.load(), true);
+    assert.deepEqual(flow.getSnapshot().discussion, discussion);
+
+    for (const invalid of [
+      { ...extended, counters: { topic: 0, evidence: 1 } },
+      { ...extended, unexpected: true },
+    ]) {
+      expandedDiscussion = invalid;
+      assert.equal(await flow.load(), false);
+      assert.deepEqual(flow.getSnapshot().discussion, discussion);
+      assert.ok(flow.getSnapshot().error);
+    }
+
+    expandedDiscussion = discussion;
+    assert.equal(await flow.load(), true);
+    assert.equal(flow.getSnapshot().error, null);
+  } finally {
+    flow.dispose();
+  }
 });
 
 test('zero-document read performs only summary GETs and returns a legal empty workspace',async()=>{

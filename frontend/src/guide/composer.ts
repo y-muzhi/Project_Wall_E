@@ -1,23 +1,21 @@
 import { ApiRejected, snapshotObject } from '../api/client.ts';
 import type { ApiAction, CreateGuide, WalleApi } from '../api/walle.ts';
 import type { GuideRun, Message, RunReceipt } from '../api/models.ts';
-import { operations, sourceRef, runReceipt, scope as decodeScope } from '../api/models.ts';
+import { sourceRef, runReceipt, scope as decodeScope } from '../api/models.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import { ordinaryInput } from '../shared/text.ts';
 import { ComposerDrafts } from './composer-drafts.ts';
 import type { GuideTarget } from './scope.ts';
-type Operation = CreateGuide['operation'];
-type NewTarget = Extract<NonNullable<CreateGuide['target']>, { kind: 'NEW' }>;
+type Operation = 'DISCUSS' | 'REVISE';
+type SendIntent = Pick<ComposerState, 'action' | 'target' | 'parent' | 'instruction'>;
 type Submitted = Readonly<
   | { kind: 'CREATE'; body: CreateGuide; raw: string }
   | { kind: 'CONTINUE'; parent: GuideRun; instruction: string; version: number; raw: string }
 >;
-type Settings = Pick<ComposerState, 'action' | 'target' | 'new_target' | 'review' | 'parent'>;
 export type ComposerState = Readonly<{
   detail: DetailSnapshot;
   action: Operation;
   target: GuideTarget | null;
-  new_target: NewTarget;
   source_refs: CreateGuide['source_refs'];
   review: GuideRun | null;
   parent: GuideRun | null;
@@ -49,6 +47,18 @@ type Api = Pick<
   | 'getRequirementDetail'
 >;
 const capture = <T>(value: T): T => snapshotObject(value) as unknown as T;
+
+function discussionTarget(detail: DetailSnapshot): GuideTarget | null {
+  const current = detail.current;
+  if (current === null || current.id !== (detail.selected_document_id ?? current.id)) return null;
+  return {
+    document_id: current.id,
+    content_version: current.content_version,
+    scope: { scope_type: 'DOCUMENT', scope_ref: null },
+    label: '整篇文档',
+    selection: null,
+  };
+}
 const conflicts = new Set([
   'STATE_CONFLICT',
   'WORK_STATE_CONFLICT',
@@ -77,8 +87,6 @@ export class RequirementGuideComposer {
   private epoch = 0;
   private controller: AbortController | undefined;
   private delivered = false;
-  private configured = false;
-  private settings: Readonly<{ value: Settings; configured: boolean }> | undefined;
   private readonly readAccepted: () => Promise<DetailSnapshot>;
   constructor(
     detail: DetailSnapshot,
@@ -104,22 +112,7 @@ export class RequirementGuideComposer {
     this.value = Object.freeze({
       detail: capture(detail),
       action: 'DISCUSS',
-      target:
-        detail.current === null
-          ? null
-          : {
-              document_id: detail.current.id,
-              content_version: detail.current.content_version,
-              scope: { scope_type: 'DOCUMENT' as const, scope_ref: null },
-              label: '整篇文档',
-              selection: null,
-            },
-      new_target: {
-        kind: 'NEW' as const,
-        name: '',
-        document_kind: 'brief' as const,
-        template_ref: null,
-      },
+      target: discussionTarget(detail),
       source_refs: [],
       review: null,
       parent: null,
@@ -158,6 +151,10 @@ export class RequirementGuideComposer {
     return !this.closed && !this.pending && ['READY', 'ERROR'].includes(this.value.phase);
   }
   get allowed(): boolean {
+    return this.allows(this.value);
+  }
+
+  private allows({ action, target, parent }: SendIntent): boolean {
     const state = this.value;
     if (
       this.closed ||
@@ -168,35 +165,31 @@ export class RequirementGuideComposer {
       state.detail.requirement.document_work_state !== 'IDLE'
     )
       return false;
-    if (state.parent !== null) return true;
-    if (state.action === 'GENERATE')
-      return (
-        [...state.new_target.name.trim()].length > 0 && [...state.new_target.name].length <= 80
-      );
-    const target = state.target;
-    if (target !== null) {
-      const actual = state.detail.documents.find((document) => document.id === target.document_id);
-      if (
-        !actual ||
-        actual.id !== (state.detail.selected_document_id ?? state.detail.current?.id) ||
-        actual.content_version !== target.content_version
-      )
-        return false;
-      if (['REVISE', 'PROPOSE_CHANGES'].includes(state.action) && actual.archived_at !== null)
-        return false;
-    }
-    return ['REVISE', 'PROPOSE_CHANGES'].includes(state.action)
-      ? target !== null
-      : ['COMPARE', 'REVIEW'].includes(state.action)
-        ? target !== null || state.source_refs.length > 0
-        : true;
+    if (parent !== null) return true;
+    if (target === null) return action === 'DISCUSS';
+    const actual = state.detail.documents.find((document) => document.id === target.document_id);
+    return (
+      actual !== undefined &&
+      actual.id === (state.detail.selected_document_id ?? state.detail.current?.id) &&
+      actual.content_version === target.content_version &&
+      (action === 'DISCUSS' || actual.archived_at === null)
+    );
   }
   adopt(detail: DetailSnapshot): void {
     if (detail.requirement.id !== this.value.detail.requirement.id)
       throw TypeError('Owned actual detail required');
     const changed =
       detail.requirement.discussion_version !== this.value.detail.requirement.discussion_version;
-    this.publish({ detail: capture(detail), ...(changed ? { binding_loaded: false } : {}) });
+    const target = this.value.target;
+    const retargetDiscussion =
+      this.value.action === 'DISCUSS' &&
+      target?.scope.scope_type === 'DOCUMENT' &&
+      target.document_id === detail.current?.id;
+    this.publish({
+      detail: capture(detail),
+      ...(changed ? { binding_loaded: false } : {}),
+      ...(retargetDiscussion ? { target: discussionTarget(detail) } : {}),
+    });
   }
   private sourcesWithAssociations(refs: CreateGuide['source_refs']): CreateGuide['source_refs'] {
     const documentId = this.value.detail.selected_document_id ?? this.value.detail.current?.id;
@@ -225,47 +218,19 @@ export class RequirementGuideComposer {
         error_code: null,
       });
   }
-  beginSettings(): void {
-    if (!this.editable || this.settings) return;
-    const { action, target, new_target, review, parent } = this.value;
-    this.settings = {
-      value: capture({ action, target, new_target, review, parent }),
-      configured: this.configured,
-    };
-  }
-  endSettings(cancel = false): void {
-    const original = this.settings;
-    this.settings = undefined;
-    if (!cancel || !original || !this.editable) return;
-    // Invalidate the opening GET as well: an escaped draft must not return later.
-    this.epoch++;
-    this.controller?.abort();
-    this.configured = original.configured;
-    this.publish({ ...original.value, error: null, error_code: null });
-  }
   choose(action: Operation): void {
-    if (this.editable && operations.includes(action)) {
-      this.configured = true;
-      this.publish({ action, parent: null, review: null, error: null, error_code: null });
-    }
-  }
-  configureNew(name: string, kind: NewTarget['document_kind'], framework: boolean): void {
-    if (this.editable) {
-      this.configured = true;
-      this.publish({
-        new_target: {
-          kind: 'NEW',
-          name,
-          document_kind: kind,
-          template_ref: framework ? { key: 'structure.' + kind, version: 'v1' } : null,
-        },
-      });
-    }
+    if (this.closed || action === this.value.action) return;
+    if (action !== 'DISCUSS' && action !== 'REVISE') return;
+    this.publish({
+      action,
+      target: action === 'DISCUSS' ? discussionTarget(this.value.detail) : null,
+      parent: null,
+      review: null,
+    });
   }
 
   selectDocument(identity: number): void {
     if (!this.editable) return;
-    this.configured = true;
     const owner = this.value.detail.selected_document_id ?? this.value.detail.current?.id;
     if (identity !== owner) throw TypeError('请先切换到目标文档，再使用该文档的AI助手');
     const document = this.value.detail.documents.find((item) => item.id === identity);
@@ -293,7 +258,6 @@ export class RequirementGuideComposer {
       )
         throw Error('Stale scope');
       decodeScope(target.scope);
-      this.configured = true;
       this.publish({ target: capture(target), error: null, error_code: null });
       return true;
     } catch {
@@ -340,8 +304,8 @@ export class RequirementGuideComposer {
       (run.requirement_id !== this.value.detail.requirement.id || run.status === 'RUNNING')
     )
       throw TypeError('Owned ended parent required');
-    this.configured = true;
-    this.publish({ parent: run ? capture(run) : null, action: 'DISCUSS' });
+    this.choose('DISCUSS');
+    this.publish({ parent: run ? capture(run) : null });
   }
   async loadBinding(): Promise<boolean> {
     if (
@@ -407,9 +371,13 @@ export class RequirementGuideComposer {
   }
   submit(): Promise<boolean> {
     if (!['READY', 'ERROR'].includes(this.value.phase)) return Promise.resolve(false);
+    // A mode change prepares the next round; capture this round before any reads await.
+    const { action, target, parent, instruction } = this.value;
+    const intent = { action, target, parent, instruction };
+    const version = this.value.detail.requirement.discussion_version;
     return this.enqueue('SEND', async () => {
-      if (!this.value.parent && !this.value.binding_loaded) {
-        if (!this.allowed) return false;
+      if (!parent && !this.value.binding_loaded) {
+        if (!this.allows(intent)) return false;
         this.publish({ phase: 'READING', error: null });
         const loaded = await this.loadBinding();
         if (!loaded) {
@@ -418,33 +386,29 @@ export class RequirementGuideComposer {
         }
         this.publish({ phase: 'READY' });
       }
-      if (!this.allowed) {
+      if (!this.allows(intent) || this.value.detail.requirement.discussion_version !== version) {
         this.publish({ phase: 'ERROR', error: '请核对讨论版本、工作占用及明确目标。' });
         return false;
       }
       try {
         const state = this.value;
-        ordinaryInput(state.instruction, 'AI 指令', 1, 10000);
-        if ([...state.instruction].length > 10000) throw Error('消息不能超过10000字符');
+        ordinaryInput(instruction, 'AI 指令', 1, 10000);
+        if ([...instruction].length > 10000) throw Error('消息不能超过10000字符');
         this.delivered = false;
-        if (state.parent) {
+        if (parent) {
           this.publish({
             submitted: capture({
               kind: 'CONTINUE',
-              parent: state.parent,
-              instruction: state.instruction,
-              version: state.detail.requirement.discussion_version,
-              raw: state.instruction,
+              parent,
+              instruction,
+              version,
+              raw: instruction,
             }),
             outcome: null,
           });
-          this.command = this.api.prepareContinueGuide(
-            state.parent.id,
-            state.instruction,
-            state.detail.requirement.discussion_version,
-          );
+          this.command = this.api.prepareContinueGuide(parent.id, instruction, version);
         } else {
-          const scope = state.target?.scope;
+          const scope = target?.scope;
           const wire =
             scope === undefined
               ? null
@@ -455,26 +419,24 @@ export class RequirementGuideComposer {
                   }
                 : scope;
           const body: CreateGuide = {
-            expected_discussion_version: state.detail.requirement.discussion_version,
-            operation: state.action,
-            instruction: state.instruction,
+            expected_discussion_version: version,
+            operation: action,
+            instruction,
             target:
-              state.action === 'GENERATE'
-                ? state.new_target
-                : state.target === null
-                  ? null
-                  : {
-                      kind: 'EXISTING',
-                      document_id: state.target.document_id,
-                      expected_content_version: state.target.content_version,
-                    },
-            scope: state.action === 'GENERATE' ? null : wire,
+              target === null
+                ? null
+                : {
+                    kind: 'EXISTING',
+                    document_id: target.document_id,
+                    expected_content_version: target.content_version,
+                  },
+            scope: wire,
             source_refs: state.source_refs,
             proposal_ref: null,
             acknowledge_source_changes: false,
           };
           this.publish({
-            submitted: capture({ kind: 'CREATE', body, raw: state.instruction }),
+            submitted: capture({ kind: 'CREATE', body, raw: instruction }),
             outcome: null,
           });
           this.command = this.api.prepareCreateGuide(state.detail.requirement.id, body);
@@ -487,7 +449,6 @@ export class RequirementGuideComposer {
         });
         return false;
       }
-      this.endSettings();
       return (await this.send()) ? this.finishWork() : false;
     });
   }

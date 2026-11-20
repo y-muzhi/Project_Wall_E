@@ -29,6 +29,59 @@ test('new detail version or active occupancy requires fresh progress and never g
  await flow.load();flow.adopt(detail(2));assert.equal(await flow.submit(command()),false);assert.equal(writes,0);
  flow.adopt({...detail(),requirement:{...detail().requirement,document_work_state:'MANUAL_EDITING'}});assert.equal(await flow.submit(command()),false);flow.dispose();
 });
+
+test('topic switching sends only the current document focus command and rereads on a conflict', async () => {
+  const topic = (topic_ref, title) => ({
+    topic_ref, title, mainline_ref: 'target', purpose: title,
+    expected_outcomes: [{ outcome_ref: 'outcome', text: title, criterion: title }],
+    assessment: 'DISCUSSING', evidence_refs: [], dependencies: [], unresolved_impacts: [],
+    updated_by_message_id: 1,
+  });
+  const topics = [topic('t1', '使用者'), topic('t2', '主流程')];
+  const current = ref => ({ ...state(), focus_topic_ref: ref, topics });
+  let actual = detail(1, current('t1'));
+  let failRefresh = false;
+  const commands = [];
+  const reader = new RequirementDiscussion(actual, {
+    async getRequirementDetail() { return { data: actual }; },
+    prepareUpdateDiscussion(id, body) {
+      commands.push({ id, ...body });
+      return { async submit() {
+        if (commands.length === 1) {
+          actual = detail(2, current('t1'));
+          throw new ApiRejected('DISCUSSION_VERSION_CONFLICT', '版本变化', null, 'request-id', 409);
+        }
+        actual = detail(3, current('t2'));
+        return { data: {requirement_id: 1, discussion_version: 3, discussion: actual.discussion} };
+      }};
+    },
+  }, async () => {
+    if (failRefresh) throw Error('detail GET failed');
+    return actual;
+  });
+
+  try {
+    assert(await reader.load());
+    assert.equal(commands.length, 0);
+    const change = {type: 'SET_FOCUS', topic_ref: 't2'};
+    assert.equal(await reader.submit(change), false);
+    assert.equal(reader.getSnapshot().discussion.focus_topic_ref, 't1');
+    failRefresh = true;
+    assert.equal(await reader.reread(), false);
+    assert.equal(reader.getSnapshot().discussion.focus_topic_ref, 't1');
+    failRefresh = false;
+    assert(await reader.reread());
+    assert.equal(reader.getSnapshot().version, 2);
+    assert(await reader.submit(change));
+    assert.equal(reader.getSnapshot().discussion.focus_topic_ref, 't2');
+    assert.deepEqual(commands, [1, 2].map(expected_discussion_version => ({
+      id: 1, expected_discussion_version, discussion_command: change,
+    })));
+  } finally {
+    reader.dispose();
+  }
+});
+
 test('the existing PATCH carries a strict discussion receipt and accepts reordered JSON keys',async()=>{
  const requests=[],key='00000000-0000-4000-8000-000000000001';
  const api=new WalleApi(new ApiClient(async(path,init)=>{requests.push({path,init});const discussion=state();discussion.binding.source_refs=[{message_id:1,kind:'MESSAGE'}];

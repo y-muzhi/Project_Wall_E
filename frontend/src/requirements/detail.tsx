@@ -351,23 +351,25 @@ function LoadedDetail({
                 key={actual.current.id}
                 owner={regions.conversation}
                 documents={owner.documents}
-                associations={
-                  <>
-                    {handoff && handoff !== 'INVALID' && (
-                      <DocumentHandoff
-                        api={api}
-                        owner={owner}
-                        link={handoff}
-                        active={supported && geometry.right_open && geometry.right_tab === 'AI'}
-                        blocked={blocked || document.busy || historical || !state.ready}
-                      />
-                    )}
-                    <DocumentAssociations
+                discussion={regions.discussion}
+                handoff={
+                  handoff &&
+                  handoff !== 'INVALID' && (
+                    <DocumentHandoff
+                      api={api}
                       owner={owner}
-                      blocked={blocked || document.busy}
+                      link={handoff}
                       active={supported && geometry.right_open && geometry.right_tab === 'AI'}
+                      blocked={blocked || document.busy || historical || !state.ready}
                     />
-                  </>
+                  )
+                }
+                associations={
+                  <DocumentAssociations
+                    owner={owner}
+                    blocked={blocked || document.busy}
+                    active={supported && geometry.right_open && geometry.right_tab === 'AI'}
+                  />
                 }
               />
             ) : (

@@ -16,6 +16,7 @@ import type { LocalDraftSnapshot } from './recovery-store.ts';
 import { TemplateHeadingLock, templateLockMessage } from './template-lock.ts';
 import type { DocumentStructureBinding } from './template-lock.ts';
 import { installFormatToolbar } from './format-toolbar.ts';
+import { chineseStrongDecorations } from './chinese-strong-display.ts';
 
 export type EditorEvents = Readonly<{
   change?: (snapshot: EditedSnapshot) => void;
@@ -154,7 +155,16 @@ export class RequirementEditor {
         input.block_state_json.next_block_id,
       );
       await crepe.create();
-      const document = crepe.editor.action((ctx) => validateDocumentReadModel(ctx, input).document);
+      const { document, source } = crepe.editor.action((ctx) =>
+        validateDocumentReadModel(ctx, input),
+      );
+      if (document.document_type === 'CURRENT' && document.markdown_content.includes('**')) {
+        crepe.editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx);
+          const presentation = chineseStrongDecorations(view.state.doc, source.blocks);
+          view.setProps({ decorations: () => presentation });
+        });
+      }
       const lock =
         structure === null
           ? null

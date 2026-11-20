@@ -2029,8 +2029,7 @@ input[type='radio'] {
   background: var(--surface);
 }
 .ai-read-panel > header,
-.message-thread > header,
-.conversation-message > header {
+.message-thread > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2055,6 +2054,9 @@ input[type='radio'] {
 .conversation-message time {
   color: var(--muted);
   font-size: 12px;
+}
+.walle-strong-marker {
+  display: none;
 }
 .message-content,
 .run-summary {
@@ -2212,110 +2214,67 @@ input[type='radio'] {
   border-radius: 9px;
   font-size: 13px;
 }
-.guide-composer-settings summary {
+.guide-composer-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  min-height: 32px;
-  font-size: 12px;
+  gap: 4px 8px;
+  min-width: 0;
 }
-.guide-composer-settings summary > span:first-child {
-  font-weight: 600;
-  flex: none;
+
+.guide-composer-toolbar > details[open],
+.guide-composer-toolbar > .guide-chapter-controls {
+  flex: 1 0 100%;
 }
-.guide-composer-settings summary > .guide-settings-trigger {
-  display: inline-flex;
+
+.guide-mode-switch {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  flex: none;
   gap: 6px;
+}
+
+.guide-mode-switch > .ui-button {
   min-height: 32px;
   padding: 4px 10px;
-  border: 1px solid #ccd8f6;
-  border-radius: 10px;
+  font-size: 13px;
+}
+
+.guide-mode-switch > .ui-button[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--text-accent);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 22px;
+  font-weight: 600;
 }
-.guide-composer-settings summary:hover > .guide-settings-trigger {
-  background: #e0e9ff;
-  border-color: #a9bdea;
-}
-.guide-composer-settings[open] > summary > .guide-settings-trigger {
-  background: #e0e9ff;
-  border-color: #9db5e8;
-}
-.guide-settings-chevron {
-  display: inline-flex;
-  transition: transform 140ms ease;
-}
-.guide-settings-chevron .ui-icon {
-  width: 14px;
-  height: 14px;
-}
-.guide-composer-settings[open] > summary .guide-settings-chevron {
-  transform: rotate(180deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .guide-settings-chevron {
-    transition: none;
-  }
-}
-.guide-composer-settings summary > span:first-child {
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: var(--surface);
-}
-.guide-composer-settings .scope-summary {
-  flex: 1;
+
+.guide-topic-controls {
+  flex: 1 1 148px;
   min-width: 0;
+}
+
+.guide-topic-controls > summary {
+  min-height: 32px;
+  cursor: pointer;
+  padding-block: 6px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.guide-topic-controls:not([open]) > summary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.guide-composer-settings[open] {
-  display: grid;
-  gap: 8px;
+
+.guide-topic-controls > summary > span {
+  margin-inline: 4px 8px;
+  color: var(--muted);
 }
-.guide-composer-settings[open] > label,
-.guide-composer-settings[open] > p,
-.guide-composer-settings[open] > .ui-button {
-  margin-top: 8px;
+
+.guide-topic-controls[open] > :not(summary) {
+  margin-block: 4px;
 }
-.guide-composer-settings fieldset {
-  min-width: 0;
-  margin: 8px 0 0;
-  padding: 8px 10px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-}
-.guide-composer-settings fieldset label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  overflow-wrap: anywhere;
-  padding: 4px 0;
-}
-.guide-composer-settings .guide-structure-choice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.guide-composer-settings input[type='checkbox'] {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 3px 0;
-}
-.guide-composer-settings summary {
-  list-style: none;
-}
-.guide-composer-settings summary::-webkit-details-marker {
-  display: none;
-}
+
 .guide-settings-actions {
   display: flex;
   justify-content: flex-end;
@@ -2324,30 +2283,24 @@ input[type='radio'] {
   margin-top: 8px;
   border-top: 1px solid var(--border-light);
 }
-.guide-action-effect {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 20px;
-}
 .guide-chapter-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
   min-width: 0;
-  padding: 8px 0;
 }
 .guide-chapter-controls > label {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  width: 100%;
+  flex: 1 1 230px;
   min-width: 0;
   font-size: 12px;
 }
 .guide-chapter-controls > .field-help {
-  flex-basis: 100%;
+  flex: 1 1 245px;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -2367,13 +2320,6 @@ input[type='radio'] {
   min-height: 28px;
   font-size: 12px;
   color: var(--text-accent);
-}
-.guide-composer-settings summary:focus-visible {
-  outline: none;
-}
-.guide-composer-settings summary:focus-visible > .guide-settings-trigger {
-  outline: 2px var(--control-focus-style) var(--focus-ring);
-  outline-offset: 2px;
 }
 .suggestion-row-editor {
   min-width: 0;
@@ -3104,11 +3050,24 @@ input[type='radio'] {
 .conversation-message.from-user > .message-body > :last-child {
   margin-bottom: 0;
 }
-.conversation-message.from-assistant > .message-body {
-  margin: 4px 12px 0 36px;
+.conversation-message.from-assistant {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
 }
-.conversation-message.from-assistant > .message-body > :first-child {
+.conversation-message.from-assistant > header {
+  display: flex;
+}
+.conversation-message.from-assistant > .message-body {
+  padding-inline-end: 12px;
+}
+.conversation-message.from-assistant > .message-body > :first-child,
+.conversation-message.from-assistant .model-return-content > .message-content:first-child {
   margin-top: 0;
+}
+.conversation-message.from-assistant > .message-body ~ * {
+  grid-column: 1 / -1;
 }
 .message-time {
   display: flex;
@@ -3117,13 +3076,6 @@ input[type='radio'] {
   width: 100%;
   margin-top: 8px;
   line-height: 20px;
-}
-.conversation-message > header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
 }
 .ai-message-avatar {
   display: inline-flex;

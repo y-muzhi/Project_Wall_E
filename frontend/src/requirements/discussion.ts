@@ -105,6 +105,21 @@ export class RequirementDiscussion {
       return false;
     }
   }
+  async reread(): Promise<boolean> {
+    if (this.closed || this.pending || this.value.loading) return false;
+    const generation = ++this.generation;
+    this.publish({ loading: true });
+    try {
+      const detail = await this.refresh();
+      if (this.closed || generation !== this.generation) return false;
+      this.adopt(detail);
+      return await this.load();
+    } catch {
+      if (!this.closed && generation === this.generation)
+        this.publish({ loading: false, error: '讨论进展读取失败，已显示内容仍保留。' });
+      return false;
+    }
+  }
   pauseRead(): void {
     this.generation++;
     this.controller?.abort();

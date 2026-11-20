@@ -4,7 +4,7 @@ export type MessageMarkdownRenderer = (markdown: string) => DocumentFragment;
 
 /** Display only. The installed document parser keeps authored HTML as text in a
  * read-only fragment; neither this component nor a rendering failure changes a message.
- * Card fallbacks and formal responses remain on the original text path. */
+ * Card source text and formal responses remain on the original text path. */
 export function MessageContent({
   content,
   render,

@@ -3,6 +3,7 @@ import type { Message } from '../api/models.ts';
 import type { RequirementCardGroups } from './card-groups.ts';
 import { InteractionCardsView } from './cards-view.tsx';
 import { MessageContent } from '../messages/content.tsx';
+import type { MessageMarkdownRenderer } from '../messages/content.tsx';
 import type { RequirementDocumentOwner } from '../requirements/document-owner.ts';
 /** Render in the original I35 article; source failures retain readable content
  * until verified controls recover. Damaged structures get no stale controls. */
@@ -11,11 +12,13 @@ export function CardMessage({
   message,
   busy = false,
   documents,
+  renderMarkdown,
 }: Readonly<{
   groups: RequirementCardGroups;
   message: Message;
   busy?: boolean;
   documents?: RequirementDocumentOwner;
+  renderMarkdown?: MessageMarkdownRenderer;
 }>) {
   const state = useSyncExternalStore(groups.subscribe, groups.getSnapshot);
   if (
@@ -34,7 +37,10 @@ export function CardMessage({
             <MessageContent content={message.content} />
           </details>
         ) : (
-          <MessageContent content={message.content} />
+          <MessageContent
+            content={message.content}
+            {...(renderMarkdown ? { render: renderMarkdown } : {})}
+          />
         ))}
       {(!slot || slot.loading) && <p role="status">正在读取卡片的实际来源运行…</p>}
       {slot?.error && (

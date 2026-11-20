@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react';
-import { useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useId, useMemo, useState, useSyncExternalStore } from 'react';
 import type { GuideRun } from '../api/models.ts';
-import { operations } from '../api/models.ts';
+import type { RequirementDiscussion } from '../requirements/discussion.ts';
 import type { RequirementDocumentOwner } from '../requirements/document-owner.ts';
 import type { RequirementGuideComposer } from './composer.ts';
-import { guideTarget, reviewTarget, chapterTargets, nextChapter } from './scope.ts';
-import { useDocumentCreation } from '../requirements/document-directory-view.tsx';
+import { reviewTarget, chapterTargets, nextChapter } from './scope.ts';
 import { instructionFeedback } from './input-feedback.ts';
 import { composerFeedback } from './composer-feedback.ts';
 import { composerShortcut } from './send-shortcut.ts';
@@ -13,136 +12,110 @@ import { SingleSelect } from '../shared/single-select.tsx';
 import { Icon } from '../shared/icon.tsx';
 const names = {
   DISCUSS: '讨论',
-  GENERATE: '生成新文档',
-  REVISE: '修订并保存',
-  PROPOSE_CHANGES: '提出修改建议',
-  COMPARE: '对照分析',
-  REVIEW: '检查',
-};
-const scopeNames = {
-  DOCUMENT: '整篇文档',
-  SECTION: '当前章节',
-  BLOCK: '当前区块',
-  SELECTION: '当前选区',
+  REVISE: '写入当前文档',
 } as const;
-const kinds = { brief: '需求说明', design: '设计文档', specification: '规格说明' };
-const quietSubscribe = () => () => {},
-  empty = () => null;
+
+const quietSubscribe = () => () => {};
+const empty = () => null;
+
 export function GuideComposer({
   owner,
   documents,
   associations,
+  handoff,
+  discussion,
   review = null,
   viewingHistory = null,
 }: {
   owner: RequirementGuideComposer;
   documents: RequirementDocumentOwner;
   associations?: ReactNode;
+  handoff?: ReactNode;
+  discussion?: RequirementDiscussion;
   review?: GuideRun | null;
   viewingHistory?: number | null;
 }) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     document = useSyncExternalStore(documents.subscribe, documents.getSnapshot);
-  const createDocument = useDocumentCreation();
-  const nav = useSyncExternalStore(
-      document.navigation?.subscribe ?? quietSubscribe,
-      document.navigation?.getSnapshot ?? empty,
-    ),
-    binding = documents.currentBinding;
-  const [composing, setComposing] = useState(false),
-    [settingsOpen, setSettingsOpen] = useState(false),
-    settings = useRef<HTMLDetailsElement>(null),
-    help = useId(),
-    target = state.target;
-  const targetName =
-    target === null
-      ? null
-      : (state.detail.documents.find((item) => item.id === target.document_id)?.name ??
-        target.label);
-  const disabled = !state.available || !owner.editable || state.refreshing || document.busy;
-  const scopeType = target?.scope.scope_type ?? 'DOCUMENT',
-    feedback = instructionFeedback(state.instruction),
-    guidance = composerFeedback(state, !disabled, owner.allowed),
-    guidanceId = help + '-guidance',
-    canSend = !disabled && !composing && owner.allowed && feedback.valid;
-  const closeSettings = (cancel = false) => {
-    owner.endSettings(cancel);
-    if (settings.current) {
-      settings.current.open = false;
-      if (cancel) settings.current.querySelector('summary')?.focus();
-      else
-        settings.current
-          .closest('.guide-composer')
-          ?.querySelector<HTMLTextAreaElement>('textarea')
-          ?.focus();
-    }
-  };
-  const openSettings = () => {
-    if (!settings.current) return;
-    settings.current.open = true;
-    requestAnimationFrame(() => {
-      const selector =
-        state.action === 'GENERATE' ? 'input:not([type=checkbox])' : '[aria-label="操作范围"]';
-      (
-        settings.current?.querySelector<HTMLElement>(selector) ??
-        settings.current?.querySelector<HTMLElement>('[role=combobox]')
-      )?.focus();
-    });
-  };
-  const scopeOptions = useMemo(
-    () =>
-      Object.keys(scopeNames).map((key) => {
-        const kind = key as keyof typeof scopeNames;
-        try {
-          if (!binding || nav?.error || binding.editor.loadedDocument.id !== target?.document_id)
-            throw Error('请先读取当前文档');
-          return {
-            kind,
-            target: guideTarget(
-              binding.editor,
-              kind,
-              nav?.selected_block ?? nav?.active_heading ?? null,
-              document.selection,
-            ),
-          };
-        } catch {
-          return { kind, target: null };
-        }
-      }),
-    [
-      binding,
-      nav?.selected_block,
-      nav?.active_heading,
-      nav?.error,
-      document.selection,
-      target?.document_id,
-    ],
+  const discussionState = useSyncExternalStore(
+    discussion?.subscribe ?? quietSubscribe,
+    discussion?.getSnapshot ?? empty,
   );
+  const navigation = useSyncExternalStore(
+    document.navigation?.subscribe ?? quietSubscribe,
+    document.navigation?.getSnapshot ?? empty,
+  );
+  const binding = documents.currentBinding;
+  const [composing, setComposing] = useState(false);
+  const help = useId();
+  const target = state.target;
+  const writing = state.action === 'REVISE';
+  const available = state.available && !document.busy && document.mode === 'CURRENT';
+  const disabled = !available || !owner.editable || state.refreshing;
+  const topicUpdating = Boolean(
+    discussionState && ['SUBMITTING', 'UNKNOWN', 'CONFIRMED'].includes(discussionState.phase),
+  );
+  const current = state.detail.current;
   const chapters = useMemo(() => {
+    if (!binding || document.mode !== 'CURRENT' || navigation?.error) return [];
     try {
-      return binding && document.mode === 'CURRENT' && !nav?.error
-        ? chapterTargets(binding.editor)
-        : [];
+      return chapterTargets(binding.editor);
     } catch {
       return [];
     }
-  }, [binding, document.mode, document.detail?.current?.content_version, nav?.error]);
+  }, [binding, document.mode, navigation?.error, current?.content_version]);
   const chapterId = target?.scope.scope_type === 'SECTION' ? target.scope.scope_ref.block_id : null;
-  const sameDocument = target?.document_id === binding?.editor.loadedDocument.id;
-  const chapter = sameDocument ? chapters.find((item) => item.block_id === chapterId) : undefined;
+  const chapter = chapters.find((item) => item.block_id === chapterId);
   const following = chapter ? nextChapter(chapters, chapter.block_id) : null;
+  const missingChapter = chapterId !== null && !chapter;
+  const scopeValue =
+    target?.scope.scope_type === 'DOCUMENT'
+      ? 'DOCUMENT'
+      : chapter
+        ? String(chapter.block_id)
+        : target && chapterId === null
+          ? 'REFERENCE'
+          : 'NONE';
+  const feedback = instructionFeedback(state.instruction);
+  const guidance = composerFeedback(state, available, owner.allowed);
+  const blocked =
+    (document.mode === 'HISTORY' ? '请返回当前文档后发送。' : null) ??
+    (available && owner.editable && writing && missingChapter
+      ? '原章节已失效，请重新选择。'
+      : null) ??
+    guidance.blocked ??
+    (topicUpdating ? '请先核实讨论主题的保存结果。' : null);
+  const guidanceId = help + '-guidance';
+  const effectId = help + '-effect';
+  const canSend = !disabled && !composing && blocked === null && feedback.valid;
   const chooseChapter = (id: number) => {
     const selected = chapters.find((item) => item.block_id === id);
     if (selected) owner.selectChapter(selected.target);
     else owner.rejectScope();
   };
-  const send = () => {
-    if (canSend) {
-      owner.endSettings();
-      if (settings.current) settings.current.open = false;
-      void owner.submit();
-    }
+  const chooseScope = (value: string) => {
+    if (disabled || topicUpdating || current === null) return;
+    if (value === 'DOCUMENT') owner.selectDocument(current.id);
+    else chooseChapter(Number(value));
   };
+  const send = () => {
+    if (canSend) void owner.submit();
+  };
+  const latestDiscussion =
+    discussionState && discussionState.version === state.detail.requirement.discussion_version
+      ? discussionState.discussion
+      : null;
+  const topics = discussionState?.discussion?.topics ?? [];
+  const focus = latestDiscussion
+    ? latestDiscussion.focus_topic_ref
+    : state.detail.discussion_summary.focus_topic_ref;
+  const focusTitle = latestDiscussion
+    ? topics.find((topic) => topic.topic_ref === focus)?.title
+    : state.detail.discussion_summary.focus_title;
+  const readTopics = () => {
+    if (!discussionState?.loading && discussion && !topicUpdating) void discussion.load();
+  };
+
   return (
     <section
       aria-label="AI 消息输入"
@@ -150,7 +123,7 @@ export function GuideComposer({
       aria-busy={state.refreshing || state.phase === 'SUBMITTING' || state.phase === 'READING'}
     >
       <div className="guide-composer-body">
-        {associations}
+        {handoff}
         {viewingHistory !== null && (
           <p className="field-help">
             正在查看运行 #{viewingHistory}。输入仅发送当前明确选择的操作。
@@ -169,282 +142,187 @@ export function GuideComposer({
             </button>
           </p>
         )}
-        <details
-          ref={settings}
-          className="guide-composer-settings"
-          onToggle={(event) => {
-            const open = event.currentTarget.open;
-            setSettingsOpen(open);
-            if (open) {
-              owner.beginSettings();
-              void owner.loadBinding();
-            } else owner.endSettings();
-          }}
-          onKeyDown={(event) => {
-            if (
-              event.key === 'Escape' &&
-              !event.nativeEvent.isComposing &&
-              !event.defaultPrevented &&
-              event.currentTarget.open
-            ) {
-              event.preventDefault();
-              event.stopPropagation();
-              owner.endSettings(true);
-              event.currentTarget.open = false;
-              event.currentTarget.querySelector('summary')?.focus();
-            }
-          }}
-        >
-          <summary role="button" aria-label="操作设置" aria-expanded={settingsOpen}>
-            <span>{names[state.action]}</span>
-            <span
-              className="scope-summary"
-              title={
-                state.action === 'GENERATE' ? state.new_target.name : (targetName ?? undefined)
-              }
-            >
-              {state.action === 'GENERATE'
-                ? state.new_target.name || '新文档'
-                : target
-                  ? `${targetName} · V${target.content_version}`
-                  : '未指定文档'}
-            </span>
-            <span className="guide-settings-trigger">
-              <Icon name="settings" />
-              操作设置
-              <span className="guide-settings-chevron">
-                <Icon name="down" />
-              </span>
-            </span>
-          </summary>
-          <label>
-            AI 操作
-            <SingleSelect
-              label="AI 操作"
-              value={state.action}
-              disabled={disabled || state.parent !== null}
-              options={operations.map((value) => ({ value, label: names[value] }))}
-              change={(value) => owner.choose(value as typeof state.action)}
-            />
-          </label>
-          {state.action === 'GENERATE' ? (
-            <>
-              <label>
-                文档名称
-                <input
-                  className="ui-input"
-                  value={state.new_target.name}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    owner.configureNew(
-                      event.currentTarget.value,
-                      state.new_target.document_kind,
-                      state.new_target.template_ref !== null,
-                    )
-                  }
-                />
-              </label>
-              <label>
-                文档类型
-                <SingleSelect
-                  label="生成文档类型"
-                  value={state.new_target.document_kind}
-                  disabled={disabled}
-                  options={Object.entries(kinds).map(([value, label]) => ({ value, label }))}
-                  change={(value) =>
-                    owner.configureNew(
-                      state.new_target.name,
-                      value as typeof state.new_target.document_kind,
-                      state.new_target.template_ref !== null,
-                    )
-                  }
-                />
-              </label>
-              <label className="guide-structure-choice">
-                <input
-                  type="checkbox"
-                  disabled={disabled}
-                  checked={state.new_target.template_ref !== null}
-                  onChange={(event) =>
-                    owner.configureNew(
-                      state.new_target.name,
-                      state.new_target.document_kind,
-                      event.currentTarget.checked,
-                    )
-                  }
-                />
-                绑定固定结构
-              </label>
-              <p className="field-help">成功后直接保存为未确认稿。</p>
+        <div className="guide-composer-toolbar">
+          <div className="guide-mode-switch" role="group" aria-label="对话状态">
+            {(['DISCUSS', 'REVISE'] as const).map((mode) => (
               <button
+                key={mode}
                 className="ui-button"
                 type="button"
-                disabled={disabled || !createDocument}
-                onClick={() => {
-                  closeSettings();
-                  createDocument?.({
-                    name: state.new_target.name,
-                    kind: (
-                      {
-                        brief: 'REQUIREMENT_BRIEF',
-                        design: 'DESIGN',
-                        specification: 'SPECIFICATION',
-                      } as const
-                    )[state.new_target.document_kind],
-                    framework: true,
-                  });
-                }}
+                aria-pressed={state.action === mode}
+                onClick={() => owner.choose(mode)}
               >
-                创建框架，分章撰写
+                {names[mode]}
               </button>
-              <p className="field-help">长文档可先创建章节框架，再选择“分章节撰写”，逐章保存。</p>
-            </>
-          ) : (
-            <>
-              {target && (
-                <>
-                  <label>
-                    操作范围
-                    <SingleSelect
-                      label="操作范围"
-                      value={scopeType}
-                      disabled={disabled || state.parent !== null}
-                      options={scopeOptions.map((item) => ({
-                        value: item.kind,
-                        label: scopeNames[item.kind],
-                        disabled: item.kind !== 'DOCUMENT' && item.target === null,
-                      }))}
-                      change={(value) => {
-                        if (value === 'DOCUMENT') owner.selectDocument(target.document_id);
-                        else {
-                          const selected = scopeOptions.find((item) => item.kind === value)?.target;
-                          if (selected) owner.select(selected);
-                          else owner.rejectScope();
-                        }
-                      }}
-                    />
-                  </label>
-                  <p className="field-help">
-                    {targetName} · V{target.content_version} · {scopeNames[scopeType]}
-                  </p>
-                </>
-              )}
-              {state.action === 'REVISE' && (
-                <p className="field-help">成功后直接保存授权范围内的修订。</p>
-              )}
-            </>
-          )}
-          {review && review.status !== 'RUNNING' && (
-            <button
-              className="ui-button"
-              type="button"
-              disabled={disabled}
-              onClick={() => owner.continueFrom(review)}
-            >
-              衔接此运行继续讨论
-            </button>
-          )}
-          {review?.action_type === 'REVIEW' &&
-            review.status === 'COMPLETED' &&
-            review.scope !== null && (
-              <button
-                className="ui-button"
-                type="button"
-                disabled={disabled || !binding}
-                onClick={() => {
-                  try {
-                    owner.useReview(review, reviewTarget(binding!.editor, review.scope!));
-                  } catch {
-                    owner.rejectScope();
-                  }
-                }}
-              >
-                根据这次检查修订
-              </button>
-            )}
-          <div className="guide-settings-actions">
-            <button
-              className="ui-button"
-              type="button"
-              disabled={disabled}
-              onClick={() => closeSettings(true)}
-            >
-              取消调整
-            </button>
-            <button
-              className="ui-button primary"
-              type="button"
-              disabled={disabled}
-              onClick={() => closeSettings()}
-            >
-              完成设置
-            </button>
+            ))}
           </div>
-        </details>
-        {state.parent === null && chapters.length > 0 && (
-          <div className="guide-chapter-controls">
-            {state.action === 'REVISE' && target?.scope.scope_type === 'SECTION' && sameDocument ? (
-              <>
-                <label>
-                  撰写章节
-                  <SingleSelect
-                    label="撰写章节"
-                    value={chapter ? String(chapter.block_id) : 'NONE'}
-                    disabled={disabled}
-                    options={[
-                      { value: 'NONE', label: '请选择章节', disabled: true },
-                      ...chapters.map((item) => ({
-                        value: String(item.block_id),
-                        label: `${'　'.repeat(item.level - 1)}${item.title}`,
-                      })),
-                    ]}
-                    change={(value) => chooseChapter(Number(value))}
-                  />
-                </label>
-                <p className="field-help">
-                  {chapter ? chapter.title : '原章节已失效，请重新选择'} ·
-                  每次仅保存所选章节；填写要求后发送。
-                </p>
-                {chapter && target.content_version !== chapter.target.content_version && (
+          {associations}
+          {writing ? (
+            <div className="guide-chapter-controls">
+              <label>
+                写入范围
+                <SingleSelect
+                  label="写入范围"
+                  value={scopeValue}
+                  disabled={
+                    disabled || topicUpdating || current === null || current.archived_at !== null
+                  }
+                  options={[
+                    { value: 'NONE', label: '请选择写入范围', disabled: true },
+                    { value: 'DOCUMENT', label: '整篇文档' },
+                    ...(scopeValue === 'REFERENCE' && target
+                      ? [{ value: 'REFERENCE', label: target.label }]
+                      : []),
+                    ...chapters.map((item) => ({
+                      value: String(item.block_id),
+                      label: '　'.repeat(item.level - 1) + item.title,
+                    })),
+                  ]}
+                  change={chooseScope}
+                />
+              </label>
+              <p className="field-help">
+                {current && `${current.name} · V${current.content_version} · `}
+                <span id={effectId}>{guidance.effect}</span>
+              </p>
+              {target &&
+                current &&
+                current.content_version !== target.content_version &&
+                !missingChapter &&
+                scopeValue !== 'REFERENCE' && (
                   <button
                     className="ui-button"
                     type="button"
-                    disabled={disabled}
-                    onClick={() => chooseChapter(chapter.block_id)}
+                    disabled={disabled || topicUpdating || current.archived_at !== null}
+                    onClick={() => chooseScope(scopeValue)}
                   >
-                    使用最新版本继续本章
+                    使用最新版本确认范围
                   </button>
                 )}
+              {following && target?.content_version === current?.content_version && (
                 <button
                   className="ui-button"
                   type="button"
-                  disabled={disabled || !following}
-                  onClick={() => {
-                    if (following) chooseChapter(following.block_id);
-                  }}
+                  disabled={disabled || topicUpdating || current?.archived_at !== null}
+                  onClick={() => chooseChapter(following.block_id)}
                 >
                   选择下一章
                 </button>
-                {!following && chapter && (
-                  <span className="field-help">当前层级没有下一章，可从列表选择其他章节。</span>
-                )}
-              </>
-            ) : (
-              <button
-                className="ui-button"
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  owner.endSettings();
-                  chooseChapter(chapters[0]!.block_id);
+              )}
+            </div>
+          ) : (
+            discussion &&
+            discussionState && (
+              <details
+                className="guide-topic-controls"
+                onToggle={(event) => {
+                  if (event.currentTarget.open && latestDiscussion === null) readTopics();
                 }}
               >
-                分章节撰写当前文档
+                <summary title={focusTitle ?? undefined}>
+                  <span>讨论主题</span>
+                  <strong>{focusTitle ?? '暂无讨论主题'}</strong>
+                </summary>
+                {discussionState.loading && <p role="status">正在读取讨论主题…</p>}
+                {topics.length > 0 && (
+                  <SingleSelect
+                    label="切换讨论主题"
+                    value={focus ?? ''}
+                    disabled={disabled || topicUpdating || !discussion.allowed}
+                    options={[
+                      { value: '', label: '请选择讨论主题', disabled: true },
+                      ...topics.map((topic) => ({ value: topic.topic_ref, label: topic.title })),
+                    ]}
+                    change={(value) => {
+                      if (!disabled && value !== focus)
+                        void discussion.submit({ type: 'SET_FOCUS', topic_ref: value });
+                    }}
+                  />
+                )}
+                {(latestDiscussion === null || discussionState.error) &&
+                  !discussionState.loading &&
+                  !topicUpdating && (
+                    <button
+                      className="ui-button"
+                      type="button"
+                      onClick={() => void discussion.reread()}
+                    >
+                      重新读取主题
+                    </button>
+                  )}
+              </details>
+            )
+          )}
+        </div>
+        {discussionState?.error &&
+          (!writing ||
+            discussionState.phase === 'CONFIRMED' ||
+            discussionState.phase === 'UNKNOWN') && (
+            <p role="alert" className="inline-error">
+              {discussionState.error}
+            </p>
+          )}
+        {discussion && topicUpdating && (
+          <div className="guide-send-guidance">
+            {discussionState?.phase === 'SUBMITTING' && <p role="status">正在保存讨论主题…</p>}
+            {discussionState?.phase === 'UNKNOWN' && (
+              <button
+                type="button"
+                className="ui-button"
+                disabled={disabled}
+                onClick={() => void discussion.retryUnknown()}
+              >
+                核实原主题请求
+              </button>
+            )}
+            {discussionState?.phase === 'CONFIRMED' && (
+              <button
+                type="button"
+                className="ui-button"
+                disabled={disabled || discussionState.loading}
+                onClick={() => void discussion.finish()}
+              >
+                读取主题保存结果
               </button>
             )}
           </div>
         )}
-        <p className="guide-action-effect">{guidance.effect}</p>
+        {viewingHistory !== null && review && review.status !== 'RUNNING' && (
+          <div className="guide-send-guidance">
+            <button
+              type="button"
+              className="ui-button"
+              disabled={disabled || topicUpdating}
+              onClick={() => owner.continueFrom(review)}
+            >
+              衔接此运行继续讨论
+            </button>
+            {review.action_type === 'REVIEW' &&
+              review.status === 'COMPLETED' &&
+              review.scope !== null &&
+              binding && (
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={disabled || topicUpdating}
+                  onClick={() => {
+                    try {
+                      owner.useReview(review, reviewTarget(binding.editor, review.scope!));
+                    } catch {
+                      owner.rejectScope();
+                    }
+                  }}
+                >
+                  根据这次检查修订
+                </button>
+              )}
+          </div>
+        )}
+        {!writing && (
+          <span id={effectId} className="sr-only">
+            {guidance.effect}
+          </span>
+        )}
         <label className="guide-message-field">
           <span className="sr-only">给 AI 的消息</span>
           <textarea
@@ -452,10 +330,10 @@ export function GuideComposer({
             aria-label="给 AI 的消息"
             value={state.instruction}
             disabled={disabled}
-            placeholder="说明本次希望讨论或完成的工作…"
+            placeholder={writing ? '说明要写入的内容…' : '说明本次希望讨论的问题…'}
             rows={2}
             aria-invalid={!composing && state.instruction.length > 0 && !feedback.valid}
-            aria-describedby={help}
+            aria-describedby={`${effectId} ${help}`}
             onChange={(event) => owner.change(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (composing) return;
@@ -488,15 +366,10 @@ export function GuideComposer({
             ? '正在输入…'
             : `${feedback.length} / 10000 字符${state.instruction.length > 0 && feedback.error ? ' · ' + feedback.error : ''}`}
         </p>
-        {guidance.blocked && (
-          <div id={guidanceId} className="guide-send-guidance">
-            <p>{guidance.blocked}</p>
-            {guidance.configure && !disabled && (
-              <button type="button" className="ui-button" onClick={openSettings}>
-                完善操作设置
-              </button>
-            )}
-          </div>
+        {blocked && (
+          <p id={guidanceId} className="guide-send-guidance">
+            {blocked}
+          </p>
         )}
         {state.phase === 'SUBMITTING' && <p role="status">正在提交本次操作…</p>}
         {state.phase === 'READING' && <p role="status">正在核实实际状态…</p>}
@@ -544,7 +417,7 @@ export function GuideComposer({
           className="ui-button primary"
           type="button"
           disabled={!canSend}
-          aria-describedby={guidance.blocked ? guidanceId : help}
+          aria-describedby={blocked ? guidanceId : help}
           onClick={send}
         >
           <Icon name="send" />
