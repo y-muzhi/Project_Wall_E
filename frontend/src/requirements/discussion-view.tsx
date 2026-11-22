@@ -18,7 +18,13 @@ import type { DiscussionCommand } from '../api/walle.ts';
 import brief from '../../../backend/resources/v17/guides/collaboration.brief.v2.json' with { type: 'json' };
 import design from '../../../backend/resources/v17/guides/collaboration.design.v2.json' with { type: 'json' };
 import specification from '../../../backend/resources/v17/guides/collaboration.specification.v2.json' with { type: 'json' };
-const guides = { REQUIREMENT_BRIEF: brief, DESIGN: design, SPECIFICATION: specification };
+const guides = {
+  REQUIREMENT_BRIEF: brief,
+  FRONTEND_DESIGN: design,
+  BACKEND_DESIGN: specification,
+  DESIGN: design,
+  SPECIFICATION: specification,
+};
 const natures = { FACT: '事实', CONSTRAINT: '约束', PROPOSAL: '建议' };
 type Evidence = DiscussionState['evidence'][number];
 function EvidenceRecords({

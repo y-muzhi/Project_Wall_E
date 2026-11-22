@@ -10,7 +10,7 @@ import {
 import { createPortal } from 'react-dom';
 import type { RequirementDetailOwner } from './detail-owner.ts';
 import type { DocumentSummary } from '../api/models.ts';
-import { documentKinds } from '../api/models.ts';
+import { creatableDocumentKinds } from '../api/models.ts';
 import { documentKindLabels, documentStructureRefs } from './catalog.ts';
 import { OwnedDocumentOutline } from './document-controls.tsx';
 import { SingleSelect } from '../shared/single-select.tsx';
@@ -24,7 +24,7 @@ import { EmptyState } from '../shared/empty-state.tsx';
 
 type CreationDefaults = Readonly<{
   name?: string;
-  kind?: (typeof documentKinds)[number];
+  kind?: (typeof creatableDocumentKinds)[number];
   framework?: boolean;
 }>;
 const DocumentCreationContext = createContext<((defaults?: CreationDefaults) => void) | null>(null);
@@ -79,7 +79,7 @@ function CreateDocumentDialog({
   const flow = owner.regions!.directory,
     state = useSyncExternalStore(flow.subscribe, flow.getSnapshot);
   const [name, setName] = useState(defaults.name ?? ''),
-    [kind, setKind] = useState<(typeof documentKinds)[number]>(
+    [kind, setKind] = useState<(typeof creatableDocumentKinds)[number]>(
       defaults.kind ?? 'REQUIREMENT_BRIEF',
     ),
     [framework, setFramework] = useState(defaults.framework ?? false),
@@ -157,7 +157,11 @@ function CreateDocumentDialog({
             : await flow.create({
                 name,
                 document_kind: kind,
-                template_ref: framework ? documentStructureRefs[kind]! : null,
+                template_ref:
+                  framework && kind === 'REQUIREMENT_BRIEF' ? documentStructureRefs[kind]! : null,
+                ...(kind === 'REQUIREMENT_BRIEF'
+                  ? {}
+                  : { initial_content: framework ? 'FRAMEWORK' : 'EMPTY' }),
               });
       if (done) {
         owner.toasts.push('success', '文档已创建');
@@ -237,7 +241,7 @@ function CreateDocumentDialog({
                   label="文档类型"
                   value={kind}
                   disabled={locked}
-                  options={documentKinds.map((value) => ({
+                  options={creatableDocumentKinds.map((value) => ({
                     value,
                     label: documentKindLabels[value],
                   }))}

@@ -17,6 +17,7 @@ from backend.app.infrastructure.identifiers import (
 from backend.app.shared.command_execution import Rejected
 from backend.app.shared.validation import strict_json_object
 from .contracts import document_effect
+from .design_profiles import DESIGN_KEYS
 from .snapshot import validate_snapshot, validate_creation_inheritance
 from .sources import DocumentSources
 
@@ -30,6 +31,8 @@ def validate_structure(candidate, prior, current, resources):
     if current['document_kind'] != 'SPECIFICATION' or current['template_ref'] is None:
         return
     reference = strict_json_object(current['template_ref'])
+    if reference['key'] in DESIGN_KEYS:
+        return
     if reference['key'] == 'structure.specification':
         resources.collaboration.content(reference)
         profile = resources.collaboration.structure('specification')

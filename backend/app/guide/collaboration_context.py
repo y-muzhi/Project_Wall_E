@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from backend.app.documents.markdown import parse_markdown
 from backend.app.documents.scopes import resolve_scope
 from backend.app.documents.snapshot import validate_snapshot
+from backend.app.documents.design_profiles import DESIGN_KEYS
 from backend.app.documents.sources import DocumentSources
 from backend.app.infrastructure.audit_data import MAX_AUDIT_BYTES, AuditCapacityExceeded
 from backend.app.infrastructure.collaboration_resources import sha256
@@ -1090,6 +1091,20 @@ def _structure(canonical, catalog):
             and document['content_version'] == target['expected_content_version']
         )
     )
+    design_structure = next(
+        (item for item in canonical['resources'] if item['resource_ref']['key'] in DESIGN_KEYS),
+        None,
+    )
+    if design_structure is not None:
+        reference = design_structure['resource_ref']
+        design = json.loads(design_structure['content_text'])
+        return {
+            'profile': kind,
+            'key': reference['key'],
+            'version': reference['version'],
+            'rules': [design['rule'], '章节结构参考：' + '；'.join(design['headings'])],
+            'template': None,
+        }
     profile = resources.structure(kind)
     template = None
     rules = list(profile['rules'])

@@ -19,6 +19,7 @@ from .contracts import (
     cancel_manual_draft_input,
     cancel_manual_draft_result,
 )
+from .design_profiles import DESIGN_PROFILES
 from .guards import active_manual_draft, assert_idle, current_at_version
 from .sources import DocumentSources, close_edit_session, register_edit_session
 
@@ -343,8 +344,14 @@ def create_document(executor, payload, *, catalog=None, clock=None):
         )
         resources = catalog if catalog is not None else ResourceCatalog()
         markdown = ''
-        reference = request.template_ref
-        if reference is not None:
+        reference = request.resolved_template_ref
+        stored_kind = request.document_kind
+        if request.document_kind in DESIGN_PROFILES:
+            profile = DESIGN_PROFILES[request.document_kind]
+            stored_kind = profile['stored_kind']
+            if request.initial_content == 'FRAMEWORK':
+                markdown = '\n\n'.join('# ' + heading for heading in profile['headings']) + '\n'
+        elif reference is not None:
             kind = {
                 'REQUIREMENT_BRIEF': 'brief',
                 'DESIGN': 'design',
@@ -398,7 +405,7 @@ def create_document(executor, payload, *, catalog=None, clock=None):
             snapshot,
             at,
             name=request.name,
-            document_kind=request.document_kind,
+            document_kind=stored_kind,
             template_ref=reference,
             origin=origin,
         )

@@ -260,6 +260,7 @@ export type CreateDocument = Readonly<{
   name: string;
   document_kind: (typeof models.documentKinds)[number];
   template_ref: ReturnType<typeof models.resourceRef> | null;
+  initial_content?: 'EMPTY' | 'FRAMEWORK';
 }>;
 export type DocumentChange = Readonly<
   | { type: 'RENAME'; name: string }
@@ -1529,7 +1530,7 @@ export class WalleApi {
       target('requirements', identity, '/documents'),
       body,
       (original) => {
-        bodyFields(original!, ['name', 'document_kind', 'template_ref']);
+        bodyFields(original!, ['name', 'document_kind', 'template_ref'], ['initial_content']);
         return checked(shape({ document: this.current(identity), revision_id: id }), (result) =>
           require(
             result.document.name === original!.name &&

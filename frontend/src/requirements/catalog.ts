@@ -56,9 +56,11 @@ export const documentStructureRefs = Object.freeze(
   ),
 );
 export const documentKindLabels = Object.freeze({
-  REQUIREMENT_BRIEF: '需求说明',
-  DESIGN: '设计文档',
-  SPECIFICATION: '规格说明',
+  REQUIREMENT_BRIEF: '设计大纲',
+  FRONTEND_DESIGN: '前端设计文档',
+  BACKEND_DESIGN: '后端设计文档',
+  DESIGN: '设计文档（旧）',
+  SPECIFICATION: '规格说明（旧）',
 } as const);
 /** Historical initialization still resolves its exact frozen template. */
 export const initializationTemplates = Object.freeze(

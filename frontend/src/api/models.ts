@@ -235,7 +235,12 @@ export const resourceRef = shape({
   version: nonempty,
   digest: checked(text, (value) => require(/^[0-9a-f]{64}$/.test(value))),
 });
-export const documentKinds = ['REQUIREMENT_BRIEF', 'DESIGN', 'SPECIFICATION'] as const;
+export const creatableDocumentKinds = [
+  'REQUIREMENT_BRIEF',
+  'FRONTEND_DESIGN',
+  'BACKEND_DESIGN',
+] as const;
+export const documentKinds = [...creatableDocumentKinds, 'DESIGN', 'SPECIFICATION'] as const;
 export const documentSummaryFields = {
   id,
   requirement_id: id,

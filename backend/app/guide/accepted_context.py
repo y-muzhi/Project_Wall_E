@@ -8,6 +8,7 @@ import json
 
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.document_repository import DocumentRepository
+from backend.app.documents.design_profiles import DESIGN_KINDS
 from backend.app.documents.queries import current_document_view
 from backend.app.documents.snapshot import validate_snapshot
 from backend.app.documents.sources import DocumentSources
@@ -182,6 +183,7 @@ def capture_inputs(connection, root, request, catalog):
     check_proposal(connection, root, request, resources)
     target, scope = request.target, request.scope
     document = None
+    design_structure = None
     authorization = {
         'operation': request.operation,
         'target_document_id': None,
@@ -204,6 +206,10 @@ def capture_inputs(connection, root, request, catalog):
         ):
             raise Rejected('STATE_CONFLICT')
         document = current_document_view(connection, current, catalog)
+        if document['document_kind'] in DESIGN_KINDS:
+            design_structure = document['template_ref']
+            # The published AI protocol continues to use the stored kind.
+            document['document_kind'] = current['document_kind']
         authorization.update(
             target_document_id=current['id'], expected_content_version=current['content_version']
         )
@@ -292,7 +298,7 @@ def capture_inputs(connection, root, request, catalog):
                 'SPECIFICATION': 'specification',
             }[document['document_kind']]
         )
-        structure = resources.reference('structure.' + profile)
+        structure = design_structure or resources.reference('structure.' + profile)
     # Capture disposition provenance too. A short project-position reference
     # must resolve to its actual user action, even outside the recent window.
     for disposition in discussion['dispositions']:

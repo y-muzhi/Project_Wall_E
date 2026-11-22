@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from backend.app.shared.validation import MISSING, strict_enum, strict_integer, strict_json_object
 from backend.app.shared.validation import object_fields
+from .design_profiles import DESIGN_KINDS, design_resource
 from .snapshot import SourceVerifier, _time, validate_snapshot
 
 DOCUMENT_FIELDS = (
@@ -263,9 +264,7 @@ def document_summary(value):
     if data['confirmed_revision_id'] is not None:
         strict_integer(data['confirmed_revision_id'], 'confirmed_revision_id')
     raw_text(data['name'], 'name', 1, 80)
-    strict_enum(
-        data['document_kind'], 'document_kind', ('REQUIREMENT_BRIEF', 'DESIGN', 'SPECIFICATION')
-    )
+    strict_enum(data['document_kind'], 'document_kind', DOCUMENT_KINDS)
     strict_enum(data['document_type'], 'document_type', ('CURRENT',))
     strict_enum(data['source_status'], 'source_status', ('UNCHANGED', 'UPDATED', 'UNAVAILABLE'))
     _time(data['updated_at'])
@@ -274,7 +273,7 @@ def document_summary(value):
     return data
 
 
-DOCUMENT_KINDS = ('REQUIREMENT_BRIEF', 'DESIGN', 'SPECIFICATION')
+DOCUMENT_KINDS = ('REQUIREMENT_BRIEF', 'DESIGN', 'SPECIFICATION', *DESIGN_KINDS)
 
 
 def document_name(value):
@@ -295,11 +294,28 @@ class CreateDocumentInput:
     document_kind: str
     template_ref: dict | None
     idempotency_key: str
+    initial_content: str | None = None
+
+    @property
+    def resolved_template_ref(self):
+        if self.initial_content is None:
+            return self.template_ref
+        reference, _ = design_resource(
+            self.document_kind, framework=self.initial_content == 'FRAMEWORK'
+        )
+        return reference
 
     def business_input(self):
         return {
-            field: getattr(self, field)
-            for field in ('requirement_id', 'name', 'document_kind', 'template_ref')
+            'requirement_id': self.requirement_id,
+            'name': self.name,
+            'document_kind': self.document_kind,
+            'template_ref': self.template_ref,
+            **(
+                {'initial_content': self.initial_content}
+                if self.initial_content is not None
+                else {}
+            ),
         }
 
 
@@ -309,8 +325,18 @@ def create_document_input(payload):
     import re
 
     fields = ('requirement_id', 'name', 'document_kind', 'template_ref', 'idempotency_key')
-    data = object_fields(payload, 'body', fields, fields)
+    data = object_fields(payload, 'body', (*fields, 'initial_content'), fields)
+    kind = strict_enum(data['document_kind'], 'document_kind', DOCUMENT_KINDS)
     reference = data['template_ref']
+    initial_content = None
+    if kind in DESIGN_KINDS:
+        initial_content = strict_enum(
+            data.get('initial_content'), 'initial_content', ('EMPTY', 'FRAMEWORK')
+        )
+        if reference is not None:
+            reject('template_ref', 'INVALID_FORMAT', '设计文档的结构由初始内容确定')
+    elif 'initial_content' in data:
+        reject('initial_content', 'INVALID_FORMAT', '当前文档类型使用模板引用')
     if reference is not None:
         reference = object_fields(
             reference, 'template_ref', ('key', 'version', 'digest'), ('key', 'version', 'digest')
@@ -329,9 +355,10 @@ def create_document_input(payload):
     return CreateDocumentInput(
         strict_integer(data['requirement_id'], 'requirement_id'),
         document_name(data['name']),
-        strict_enum(data['document_kind'], 'document_kind', DOCUMENT_KINDS),
+        kind,
         reference,
         request_key(data['idempotency_key']),
+        initial_content,
     )
 
 

@@ -216,7 +216,11 @@ class CollaborationResources:
             raise ConfigInvalid('Unknown collaboration resource identity') from None
 
     def content(self, reference: dict) -> str:
+        from backend.app.documents.design_profiles import DESIGN_KEYS, design_resource_content
+
         try:
+            if reference['key'] in DESIGN_KEYS:
+                return design_resource_content(reference)
             path, frozen = self._references[(reference['key'], reference['version'])]
             if reference != strict_json_object(frozen):
                 raise ValueError('Resource digest mismatch')

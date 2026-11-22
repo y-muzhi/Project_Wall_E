@@ -222,8 +222,8 @@ class CompleteManualDraftResponse:
 class CreateDocumentRequest(CommandRequest):
     from .contracts import create_document_input
 
-    body_fields = ('name', 'document_kind', 'template_ref')
-    mandatory = body_fields
+    mandatory = ('name', 'document_kind', 'template_ref')
+    body_fields = (*mandatory, 'initial_content')
     validate = staticmethod(create_document_input)
     normalize = staticmethod(
         lambda payload, validated: {
@@ -255,8 +255,9 @@ class CreateDocumentResponse:
 
     @staticmethod
     def project(data, request):
-        from .contracts import document_view
+        from .contracts import create_document_input, document_view
 
+        creation = create_document_input(request.payload)
         value = exact(data, ('document', 'revision_id'))
         current = document_view(value['document'])
         strict_integer(value['revision_id'], 'revision_id')
@@ -266,7 +267,7 @@ class CreateDocumentResponse:
             or current['document_kind'] != request.payload['document_kind']
             or current['content_version'] != 1
             or current['current_revision_id'] != value['revision_id']
-            or current['template_ref'] != request.payload['template_ref']
+            or current['template_ref'] != creation.resolved_template_ref
         ):
             raise ValueError('Created document contradicts the submitted target')
         return {'document': current, 'revision_id': value['revision_id']}, None

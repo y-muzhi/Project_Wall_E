@@ -3,6 +3,7 @@
 import sqlite3
 
 from backend.app.documents.contracts import DOCUMENT_FIELDS
+from backend.app.documents.design_profiles import design_document_kind
 from .identifiers import require_write_transaction
 
 
@@ -50,7 +51,6 @@ class DocumentRepository:
                 'id',
                 'requirement_id',
                 'name',
-                'document_kind',
                 'document_type',
                 'metadata_version',
                 'content_version',
@@ -60,7 +60,15 @@ class DocumentRepository:
                 'updated_at',
             )
             result.append(
-                document_summary({**{key: row[key] for key in keys}, 'source_status': status})
+                document_summary(
+                    {
+                        **{key: row[key] for key in keys},
+                        'document_kind': design_document_kind(
+                            row['document_kind'], row['template_ref']
+                        ),
+                        'source_status': status,
+                    }
+                )
             )
         return result
 
