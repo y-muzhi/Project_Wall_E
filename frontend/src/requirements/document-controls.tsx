@@ -138,6 +138,7 @@ export function OwnedDocumentOutline({
 export function OwnedDocumentControls({
   owner,
   blocked = false,
+  writeReason = null,
   auxiliary = true,
   notifyConfirmed,
   showSaveStatus = true,
@@ -147,6 +148,7 @@ export function OwnedDocumentControls({
   owner: RequirementDocumentOwner;
   showSaveStatus?: boolean;
   blocked?: boolean;
+  writeReason?: string | null;
   auxiliary?: boolean;
   notifyConfirmed?: ConfirmedNotice;
 }) {
@@ -185,7 +187,10 @@ export function OwnedDocumentControls({
       <button
         className="ui-button"
         type="button"
-        disabled={blocked || restoreBusy || (!owner.restoreAllowed && !retained)}
+        title={writeReason ?? undefined}
+        disabled={
+          blocked || writeReason !== null || restoreBusy || (!owner.restoreAllowed && !retained)
+        }
         onClick={() => setRestoreOpen(true)}
       >
         恢复到编辑草稿
@@ -231,6 +236,8 @@ export function OwnedDocumentControls({
           recovery={session.recovery}
           valid={session.editor.valid}
           blocked={blocked || state.busy || session.getSnapshot().blocked}
+          writeReason={writeReason}
+          saveNow={() => session.flushCurrent(true)}
           ended={async (outcome) => {
             notifyConfirmed?.(
               outcome,
@@ -257,7 +264,9 @@ export function OwnedDocumentControls({
               ? '读取编辑草稿'
               : '恢复草稿'
         }
-        confirmDisabled={blocked || state.busy || (!owner.restoreAllowed && !retained)}
+        confirmDisabled={
+          blocked || writeReason !== null || state.busy || (!owner.restoreAllowed && !retained)
+        }
         confirm={() => void restore()}
         cancel={() => {
           if (!restoreBusy) setRestoreOpen(false);

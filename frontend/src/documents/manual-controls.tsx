@@ -14,6 +14,7 @@ export function ManualStartControl(
     flow: ManualDraftStart;
     disabled: boolean;
     writeReady?: boolean;
+    writeReason?: string | null;
     started(): void | Promise<void>;
   }>,
 ) {
@@ -59,6 +60,7 @@ export function ManualStartControl(
           (state.phase !== 'UNKNOWN' && props.writeReady === false)
         }
         aria-busy={busy}
+        title={props.writeReason ?? undefined}
         onClick={() => void submit()}
       >
         {state.phase === 'UNKNOWN' ? '重新确认开始编辑' : busy ? '正在开始编辑…' : '人工编辑'}
@@ -91,6 +93,8 @@ export interface ManualDraftControlsProps {
   recovery: ManualDraftRecovery;
   valid: boolean;
   blocked: boolean;
+  writeReason?: string | null;
+  saveNow?(): Promise<boolean>;
   ended(outcome: ManualEndOutcome, localCleanupFailed: boolean): void | Promise<void>;
   serverSelected(server: DocumentReadModel): void | Promise<void>;
 }
@@ -117,6 +121,7 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
   const editable =
     ['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase) && ending.phase === 'EDITING';
   const locked = props.blocked || busy || endingBusy || recovery.checking;
+  const writesBlocked = locked || !!props.writeReason;
   const execute = async (
     work: () => Promise<boolean> | boolean,
     after?: (confirmed: boolean) => void | Promise<void>,
@@ -181,11 +186,23 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
           {props.valid && save.status === 'SAVED' && <> · {localTime(save.saved_at)}</>}
         </p>
       )}
+      {save.resume_required && props.saveNow && (
+        <button
+          className="ui-button"
+          type="button"
+          disabled={writesBlocked || !editable || !props.valid || save.status === 'CONFLICT'}
+          title={props.writeReason ?? '核对原保存状态后提交最新草稿'}
+          onClick={() => void execute(() => props.saveNow!())}
+        >
+          核对并保存草稿
+        </button>
+      )}
       <button
         className="ui-button primary"
         type="button"
         title={
-          !['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase)
+          props.writeReason ??
+          (!['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase)
             ? '请先处理草稿恢复提示，进入可编辑状态'
             : !editable
               ? '请先确认当前结束操作的结果'
@@ -193,9 +210,11 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
                 ? '请先处理正文格式或结构问题'
                 : save.status !== 'SAVED'
                   ? '等待最新内容保存确认后可完成编辑'
-                  : undefined
+                  : undefined)
         }
-        disabled={locked || error !== null || !editable || !props.valid || save.status !== 'SAVED'}
+        disabled={
+          writesBlocked || error !== null || !editable || !props.valid || save.status !== 'SAVED'
+        }
         onClick={() => void execute(() => props.ending.complete(), afterEnd)}
       >
         完成编辑
@@ -203,7 +222,8 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
       <button
         className="ui-button"
         type="button"
-        disabled={locked || error !== null || endingUnknown || ending.phase === 'CLOSED'}
+        title={props.writeReason ?? undefined}
+        disabled={writesBlocked || error !== null || endingUnknown || ending.phase === 'CLOSED'}
         onClick={() => setDialog('CANCEL')}
       >
         取消编辑
@@ -213,6 +233,13 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
   return (
     <section className="manual-draft-controls" aria-label="人工编辑操作">
       {props.actionHost ? createPortal(toolbar, props.actionHost) : toolbar}
+      {save.resume_required && (
+        <p role="status">
+          {save.local_storage_error
+            ? '最新正文仅保留在此页，尚未保存到服务。'
+            : '正文尚未保存到服务，恢复连接后请手动核对并保存。'}
+        </p>
+      )}
       {save.local_storage_error && (
         <p role="alert" className="inline-error">
           本地暂存未成功保护最新内容，请保持页面；后端保存状态以实际回执为准。
@@ -250,7 +277,8 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
         <button
           className="ui-button"
           type="button"
-          disabled={locked}
+          disabled={writesBlocked}
+          title={props.writeReason ?? undefined}
           onClick={() => void execute(() => props.ending.retryUnknown(), afterEnd)}
         >
           重新确认结束操作

@@ -9,14 +9,14 @@ lease fences filesystem effects as well as SQL; raw count arrays retain 30 days.
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 import os
-from pathlib import Path
 import re
 from uuid import uuid4
 
 from .audit_data import audit_json, MAX_AUDIT_BYTES
+from .count_audit_paths import count_audit_name, count_audit_root
 from .database import StorageUnavailable
 from .model_profile import ModelProfile
-from .process_lock import ProcessLock
+from .process_lock import matches_database
 from .tokenization import ENDPOINT, measurement_summary, COUNT_FAILURE_REASONS, provider_error_value
 from backend.app.documents.snapshot import _time
 from backend.app.guide.context_builder import restore_transport_input
@@ -26,14 +26,13 @@ from backend.app.shared.validation import strict_integer, strict_json_object
 class CountingJournal:
     def __init__(self, database, process_lock):
         self.database, self.process_lock = database, process_lock
-        base = Path(database.path).resolve()
-        self.root = base.with_name(base.name + '.count-audit')
+        self.root = count_audit_root(database.path)
 
     @contextmanager
     def _guard(self):
         def check():
             self.process_lock.assert_owned()
-            if self.process_lock.path != ProcessLock.for_database(self.database.path).path:
+            if not matches_database(self.process_lock, self.database):
                 raise RuntimeError('Counting audit lock must own this database')
             if self.root.is_symlink() or self.root.resolve() != self.root:
                 raise StorageUnavailable('Counting audit directory cannot be redirected')
@@ -49,13 +48,7 @@ class CountingJournal:
                 yield
 
     def _file(self, identity, phase):
-        if (
-            type(identity) is not str
-            or not re.fullmatch(r'[0-9a-f]{32}', identity)
-            or phase not in ('prepared', 'finished')
-        ):
-            raise ValueError('Private count record identity')
-        path = self.root / (identity + '.' + phase + '.json')
+        path = self.root / count_audit_name(identity, phase)
         if path.is_symlink() or path.resolve().parent != self.root:
             raise StorageUnavailable('Counting audit file cannot be redirected')
         return path

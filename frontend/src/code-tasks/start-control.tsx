@@ -29,22 +29,28 @@ export function TaskStartControl({ api, task, visible, ready, changed }: Props) 
   const path = taskStartPath(taskId);
   const recovery = useMemo(
     () =>
-      api.configurationRecovery(new CommandRecoveryStore(), async (original, link, signal) => {
-        if (original.decoder_kind !== 'APP-CODE-CMD-C35' || original.parameters.task_id !== taskId)
-          throw TypeError('Original start belongs to another task');
-        const { data } = await api.taskStartOperation(
-          link.operation_id,
-          taskId,
-          signal,
-          original.key,
-        );
-        return {
-          operation_id: data.id,
-          task_id: data.task_id,
-          testing_task_id: null,
-          status: data.status,
-        };
-      }),
+      api.configurationRecovery(
+        new CommandRecoveryStore({ scope: api.environmentScope }),
+        async (original, link, signal) => {
+          if (
+            original.decoder_kind !== 'APP-CODE-CMD-C35' ||
+            original.parameters.task_id !== taskId
+          )
+            throw TypeError('Original start belongs to another task');
+          const { data } = await api.taskStartOperation(
+            link.operation_id,
+            taskId,
+            signal,
+            original.key,
+          );
+          return {
+            operation_id: data.id,
+            task_id: data.task_id,
+            testing_task_id: null,
+            status: data.status,
+          };
+        },
+      ),
     [api, taskId],
   );
   const [pending, setPending] = useState<PendingSummary | null>(null);

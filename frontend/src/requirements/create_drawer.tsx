@@ -13,9 +13,11 @@ export function CreateRequirementDrawer({
   edit,
   create,
   cancel,
+  writeReason = null,
 }: Readonly<{
   open: boolean;
   state: CreateState;
+  writeReason?: string | null;
   edit(draft: CreateDraft): void;
   create(): void;
   cancel(): void;
@@ -93,7 +95,7 @@ export function CreateRequirementDrawer({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (!state.busy && !composing.current) create();
+          if (!state.busy && !composing.current && writeReason === null) create();
         }}
       >
         <header>
@@ -154,7 +156,8 @@ export function CreateRequirementDrawer({
           <button
             type="submit"
             className="ui-button primary"
-            disabled={state.busy}
+            disabled={state.busy || writeReason !== null}
+            title={writeReason ?? undefined}
             aria-busy={state.busy}
           >
             <BusyIndicator busy={state.busy} />

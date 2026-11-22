@@ -5,6 +5,7 @@ import { money, moneyMicro } from '../api/code-values.ts';
 import { testingAuthorizationPath } from '../api/testing-policy.ts';
 import { createTestingTaskInput, testingTasksPath } from '../api/testing-tasks.ts';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import { optionPage, PagedTaskSelect } from '../code-tasks/create-selection.tsx';
 import { useSettingsVisibility } from '../code-tasks/settings/read.ts';
 import { Confirmation } from '../shared/confirmation.tsx';
@@ -58,9 +59,14 @@ const decodeSession = shape({
   original: nullable(shape({ key: text, revision: count, kind: choices(['approve', 'create']) })),
 });
 type Session = ReturnType<typeof decodeSession>;
-function restore(storage: string, fixed: Draft, pinned?: CodingTestingSeed): Session {
+function restore(
+  api: WalleApi,
+  storage: string,
+  fixed: Draft,
+  pinned?: CodingTestingSeed,
+): Session {
   try {
-    const raw = sessionStorage.getItem(storage);
+    const raw = environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(storage);
     if (raw !== null) {
       const saved = decodeSession(JSON.parse(raw));
       if (pinned === undefined) return saved;
@@ -127,7 +133,7 @@ export function CreateTestingTaskDrawer({
           sourceId: String(pinned.candidate),
           purpose: 'ACCEPTANCE',
         };
-  const [session, setSession] = useState(() => restore(storage, fixed, pinned));
+  const [session, setSession] = useState(() => restore(api, storage, fixed, pinned));
   const snapshot = useRef(session);
   snapshot.current = session;
   const draft = session.draft;
@@ -154,7 +160,10 @@ export function CreateTestingTaskDrawer({
     snapshot.current = next;
     setSession(next);
     try {
-      sessionStorage.setItem(storage, JSON.stringify(next));
+      environmentBrowserStorage('sessionStorage', api.environmentScope).setItem(
+        storage,
+        JSON.stringify(next),
+      );
     } catch {
       setError('此浏览器暂时无法保存会话草稿');
     }

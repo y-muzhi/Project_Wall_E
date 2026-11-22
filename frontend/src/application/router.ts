@@ -1,4 +1,10 @@
 import type { WalleApi } from '../api/walle.ts';
+import {
+  bindBrowserHistory,
+  ScopedStoragePort,
+  type BrowserHistoryPort,
+  type StoragePort,
+} from '../api/environment-storage.ts';
 import { RequirementWorkbench } from '../requirements/workbench.ts';
 import type { WorkbenchQuery } from '../requirements/workbench.ts';
 import { CreateRequirementFlow } from '../requirements/create.ts';
@@ -92,8 +98,7 @@ type DetailEntry = Readonly<{
 }>;
 type Destination = Readonly<{ path: string; state: unknown; position: number | null }>;
 export interface BrowserPort {
-  history: Pick<History, 'state' | 'replaceState' | 'pushState' | 'go'> &
-    Partial<Pick<History, 'scrollRestoration'>>;
+  history: BrowserHistoryPort;
   pathname(): string;
   search?(): string;
   scroll(): number;
@@ -134,6 +139,7 @@ const positionKey = (id: string) => 'walle:v1.5:route-position:' + id;
 export class ApplicationRouter {
   private readonly api: WalleApi;
   private readonly browser: BrowserPort;
+  private readonly historyPort: BrowserHistoryPort;
   private readonly storage: Pick<Storage, 'getItem' | 'setItem'> | null;
   private readonly identify: () => string;
   private readonly history: WorkbenchHistory;
@@ -170,16 +176,18 @@ export class ApplicationRouter {
   constructor(
     api: WalleApi,
     browser: BrowserPort,
-    storage: Pick<Storage, 'getItem' | 'setItem'> | null,
+    storage: StoragePort | null,
     identify = () => crypto.randomUUID(),
   ) {
     this.api = api;
     this.browser = browser;
-    this.storage = storage;
+    const scope = api.environmentScope;
+    this.historyPort = scope ? bindBrowserHistory(browser.history, scope) : browser.history;
+    this.storage = scope && storage ? new ScopedStoragePort(storage, scope) : storage;
     this.identify = identify;
-    this.history = new WorkbenchHistory(browser.history, storage, identify);
+    this.history = new WorkbenchHistory(this.historyPort, this.storage, identify);
     this.currentPath = browser.pathname();
-    this.currentState = browser.history.state;
+    this.currentState = this.historyPort.state;
     this.position = this.readPosition(this.currentState, this.currentPath) ?? 0;
     this.apply(this.currentPath, true);
     this.release = browser.listen(this.pop);
@@ -340,7 +348,7 @@ export class ApplicationRouter {
     let task: TaskEntry | null = null;
     if (route.kind === 'WORKBENCH') {
       if (path === '/') {
-        this.browser.history.replaceState(this.browser.history.state, '', '/requirements');
+        this.historyPort.replaceState(this.historyPort.state, '', '/requirements');
         path = '/requirements';
       }
       entry = this.history.enter(restore ? 'RESTORE' : 'DEFAULT', navIntent);
@@ -351,7 +359,7 @@ export class ApplicationRouter {
       this.remember(entry, this.position);
     } else if (route.kind === 'DETAIL') {
       const detailEntry =
-        this.decodeDetail(this.browser.history.state, route.id) ??
+        this.decodeDetail(this.historyPort.state, route.id) ??
         Object.freeze({
           schema_version: 2,
           kind: 'WALLE_DETAIL',
@@ -362,7 +370,7 @@ export class ApplicationRouter {
         });
       const search = this.browser.search?.() ?? '';
       handoff = handoffQuery(search);
-      this.browser.history.replaceState(detailEntry, '', handoff ? path + search : path);
+      this.historyPort.replaceState(detailEntry, '', handoff ? path + search : path);
       if (detailEntry.from) {
         const { entry, position } = detailEntry.from;
         this.positions.set(entry.entry_id, position);
@@ -376,7 +384,7 @@ export class ApplicationRouter {
             ? (detailEntry.reading ?? null)
             : null;
     } else if (route.kind === 'CODE_TASK_LIST') {
-      taskList = this.readTaskList(route, this.browser.history.state) ?? {
+      taskList = this.readTaskList(route, this.historyPort.state) ?? {
         kind: 'WALLE_CODE_LIST',
         entry_id: this.identify(),
         position: this.position,
@@ -387,10 +395,10 @@ export class ApplicationRouter {
         revisionId: null,
         fromDetail: false,
       };
-      this.browser.history.replaceState(taskList, '', path);
+      this.historyPort.replaceState(taskList, '', path);
       this.remember(taskList, this.position);
     } else if (route.kind === 'CODE_TASK') {
-      task = this.readTask(route.taskId, this.browser.history.state) ?? {
+      task = this.readTask(route.taskId, this.historyPort.state) ?? {
         kind: 'WALLE_CODE_TASK',
         entry_id: this.identify(),
         position: this.position,
@@ -398,11 +406,11 @@ export class ApplicationRouter {
         fromList: null,
         scroll: 0,
       };
-      this.browser.history.replaceState(task, '');
+      this.historyPort.replaceState(task, '');
       this.remember(task, this.position);
     }
     this.currentPath = path;
-    this.currentState = this.browser.history.state;
+    this.currentState = this.historyPort.state;
     this.browser.scrollTop();
     this.publish({
       route,
@@ -426,11 +434,11 @@ export class ApplicationRouter {
       this.closed ||
       this.value.route.kind !== 'WORKBENCH' ||
       !entry ||
-      entryId(this.browser.history.state) !== entry.entry_id
+      entryId(this.historyPort.state) !== entry.entry_id
     )
       return;
     const saved = this.history.save(entry, query, scroll);
-    this.currentState = this.browser.history.state;
+    this.currentState = this.historyPort.state;
     this.publish({ entry: saved, warning: this.history.storageWarning });
   };
   navigationGuard = (blocked: boolean): void => {
@@ -474,13 +482,13 @@ export class ApplicationRouter {
         position: this.position + 1,
         from,
       });
-      this.browser.history.pushState(entry, '', '/requirements/' + id);
+      this.historyPort.pushState(entry, '', '/requirements/' + id);
       this.position++;
       this.apply('/requirements/' + id, true);
     });
   };
   private pushPage(path: string, state: unknown, routePath = path) {
-    this.browser.history.pushState(state, '', path);
+    this.historyPort.pushState(state, '', path);
     this.position++;
     this.apply(routePath, true);
   }
@@ -497,9 +505,9 @@ export class ApplicationRouter {
     )
       return;
     this.allowed(() => {
-      const detail = this.decodeDetail(this.browser.history.state, requirementId);
+      const detail = this.decodeDetail(this.historyPort.state, requirementId);
       if (!detail) throw Error('Missing original document history');
-      this.browser.history.replaceState({ ...detail, reading: source }, '');
+      this.historyPort.replaceState({ ...detail, reading: source }, '');
       const next: TaskListEntry = {
         kind: 'WALLE_CODE_LIST',
         entry_id: this.identify(),
@@ -517,9 +525,9 @@ export class ApplicationRouter {
   };
   saveCodeTaskList = (query: CodeTaskQuery, scroll: number): void => {
     const list = this.value.taskList;
-    if (!list || entryId(this.browser.history.state) !== list.entry_id) return;
+    if (!list || entryId(this.historyPort.state) !== list.entry_id) return;
     const state = { ...list, query: readCodeTaskQuery(query), scroll: Math.max(0, scroll) };
-    this.browser.history.replaceState(state, '');
+    this.historyPort.replaceState(state, '');
     this.currentState = state;
     this.publish({ taskList: state });
   };
@@ -549,7 +557,7 @@ export class ApplicationRouter {
     if (location === null || query === this.browser.search?.()) return;
 
     const scroll = Math.max(0, this.browser.scroll());
-    this.browser.history.replaceState({ ...task, scroll }, '');
+    this.historyPort.replaceState({ ...task, scroll }, '');
     const next: TaskEntry = {
       ...task,
       entry_id: this.identify(),
@@ -558,7 +566,7 @@ export class ApplicationRouter {
     };
     const source = this.originalTaskListPositions.get(task.entry_id);
     if (source !== undefined) this.originalTaskListPositions.set(next.entry_id, source);
-    this.browser.history.pushState(next, '', path);
+    this.historyPort.pushState(next, '', path);
     this.position = next.position;
     this.currentState = next;
     this.remember(next, this.position);
@@ -582,7 +590,7 @@ export class ApplicationRouter {
       scoped = { ...route, planId: identity };
     else return;
 
-    this.browser.history.replaceState(task, '', workspacePath(task.taskId, scoped));
+    this.historyPort.replaceState(task, '', workspacePath(task.taskId, scoped));
     this.currentState = task;
     this.publish({ taskWorkspace: scoped });
   };
@@ -598,7 +606,7 @@ export class ApplicationRouter {
       position !== undefined &&
       position < this.position
     )
-      this.browser.history.go(position - this.position);
+      this.historyPort.go(position - this.position);
     else this.pushPage(listPath(requirementId, documentId), null);
   };
   returnToCodeDocument = (requirementId: number, documentId: number): void => {
@@ -606,7 +614,7 @@ export class ApplicationRouter {
     const list = this.value.taskList;
     const sameDocument = list?.requirementId === requirementId && list.documentId === documentId;
     if (list?.fromDetail && sameDocument && this.trustedCodeBack.has(list.entry_id)) {
-      this.browser.history.go(-1);
+      this.historyPort.go(-1);
       return;
     }
     const entry: DetailEntry = {
@@ -648,7 +656,7 @@ export class ApplicationRouter {
   };
   openCodeSettings = (): void => {
     this.allowed(() => {
-      this.browser.history.pushState(null, '', '/settings/code');
+      this.historyPort.pushState(null, '', '/settings/code');
       this.position++;
       this.apply('/settings/code', false);
     });
@@ -696,7 +704,7 @@ export class ApplicationRouter {
   selectCodeSettingsSection = (section: CodeSettingsSection): void => {
     if (this.closed || this.value.route.kind !== 'CODE_SETTINGS') return;
     const path = '/settings/code';
-    this.browser.history.pushState(null, '', path + '?section=' + section);
+    this.historyPort.pushState(null, '', path + '?section=' + section);
     this.position++;
     this.apply(path, false);
   };
@@ -704,7 +712,7 @@ export class ApplicationRouter {
     this.allowed(() => {
       if (this.value.workbench)
         this.saveEntry(this.value.workbench.state.requested, this.browser.scroll());
-      this.browser.history.pushState(null, '', '/requirements');
+      this.historyPort.pushState(null, '', '/requirements');
       this.position++;
       this.apply('/requirements', false, navIntent);
     });
@@ -714,15 +722,15 @@ export class ApplicationRouter {
   /** Called by the detail component only after its own departure succeeded. */
   backToWorkbench = (): void => {
     if (this.closed) return;
-    this.browser.history.replaceState(null, '', '/requirements');
+    this.historyPort.replaceState(null, '', '/requirements');
     this.apply('/requirements', false);
   };
   private pop = (): void => {
     if (this.closed) return;
     const target: Destination = {
       path: this.browser.pathname(),
-      state: this.browser.history.state,
-      position: this.readPosition(this.browser.history.state, this.browser.pathname()),
+      state: this.historyPort.state,
+      position: this.readPosition(this.historyPort.state, this.browser.pathname()),
     };
     if (this.restoration) {
       const pending = this.restoration;
@@ -736,7 +744,7 @@ export class ApplicationRouter {
       this.restoration = null;
       this.allowed(() => {
         this.approved = pending.target;
-        this.browser.history.go(pending.target.position! - this.position);
+        this.historyPort.go(pending.target.position! - this.position);
       });
       return;
     }
@@ -749,7 +757,7 @@ export class ApplicationRouter {
         : approved.position === null || target.position === approved.position;
       if (target.path === approved.path && matchesEntry) {
         if (approved.state && pageRoute(target.path).kind === 'WORKBENCH')
-          this.browser.history.replaceState(approved.state, '', target.path);
+          this.historyPort.replaceState(approved.state, '', target.path);
         this.position = approved.position ?? target.position ?? this.position;
         this.apply(target.path, true);
         return;
@@ -764,13 +772,13 @@ export class ApplicationRouter {
       };
       if (target.position !== null && target.position !== this.position) {
         this.restoration = { original, target };
-        this.browser.history.go(this.position - target.position);
+        this.historyPort.go(this.position - target.position);
         return;
       }
       // Unowned/corrupt history cannot justify a guessed history.go direction.
-      this.browser.history.replaceState(original.state, '', original.path);
+      this.historyPort.replaceState(original.state, '', original.path);
       this.allowed(() => {
-        this.browser.history.replaceState(target.state, '', target.path);
+        this.historyPort.replaceState(target.state, '', target.path);
         this.position = target.position ?? this.position;
         this.apply(target.path, true);
       });

@@ -10,7 +10,7 @@ from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.message_repository import MessageRepository
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.infrastructure.practical_usage import validate_collaboration_usage
-from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.process_lock import matches_database
 from backend.app.infrastructure.collaboration_resources import OUTPUTS
 from backend.app.infrastructure.resources import ProtocolInvalid, ConfigInvalid
 from backend.app.shared.command_execution import Rejected, operation_time
@@ -24,7 +24,7 @@ def persist_collaboration_result(
     database, identity, *, process_lock, profile, catalog, clock=None, recovery_updated_at=None
 ):
     process_lock.assert_owned()
-    if process_lock.path != ProcessLock.for_database(database.path).path:
+    if not matches_database(process_lock, database):
         raise RuntimeError('C07 must own this database')
     at = operation_time(clock)
     with database.transaction(write=True) as connection:

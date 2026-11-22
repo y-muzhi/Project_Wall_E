@@ -168,24 +168,27 @@ export function QuestionResponseControl({
   const path = questionResponsePath(taskId, questionId);
   const recovery = useMemo(
     () =>
-      api.configurationRecovery(new CommandRecoveryStore(), async (original, link, signal) => {
-        if (original.path !== path || link.task_id !== taskId)
-          throw Error('Original answer owner differs');
-        const { data } = await api.codeTaskOperation(taskId, link.operation_id, signal);
-        if (
-          data.operation_type !== 'ANSWER_QUESTION' ||
-          data.fixed_input.question_id !== questionId ||
-          data.session_id !== sessionId ||
-          data.idempotency_key !== original.key
-        )
-          throw Error('Original answer operation differs');
-        return {
-          operation_id: data.id,
-          task_id: taskId,
-          testing_task_id: null,
-          status: data.status,
-        };
-      }),
+      api.configurationRecovery(
+        new CommandRecoveryStore({ scope: api.environmentScope }),
+        async (original, link, signal) => {
+          if (original.path !== path || link.task_id !== taskId)
+            throw Error('Original answer owner differs');
+          const { data } = await api.codeTaskOperation(taskId, link.operation_id, signal);
+          if (
+            data.operation_type !== 'ANSWER_QUESTION' ||
+            data.fixed_input.question_id !== questionId ||
+            data.session_id !== sessionId ||
+            data.idempotency_key !== original.key
+          )
+            throw Error('Original answer operation differs');
+          return {
+            operation_id: data.id,
+            task_id: taskId,
+            testing_task_id: null,
+            status: data.status,
+          };
+        },
+      ),
     [api, path, taskId, questionId, sessionId],
   );
   const [drafts, setDrafts] = useState(() => row.questions.map(newDraft));
@@ -380,7 +383,11 @@ export function QuestionResponseControl({
 
   async function openOriginal(original: PendingSummary) {
     const value = await recovery.store.detail(original.key);
-    const { frozen } = await verifiedFrozen(originalFrozen(value), recovery.store.origin);
+    const { frozen } = await verifiedFrozen(
+      originalFrozen(value),
+      recovery.store.origin,
+      recovery.store.scope,
+    );
     const input = decodeQuestionResponseInput(JSON.parse(frozen.body_json));
     if (
       frozen.path !== path ||

@@ -11,6 +11,7 @@ import type {
 } from '../../api/testing-policy.ts';
 import type { TestingProfileChoices } from '../../api/testing-profile-options.ts';
 import type { WalleApi } from '../../api/walle.ts';
+import { environmentBrowserStorage } from '../../api/environment-storage.ts';
 import { CommandStorageError } from '../../code-tasks/command-recovery-store.ts';
 import type { CommandRecovery } from '../../code-tasks/command-recovery.ts';
 import { Confirmation } from '../../shared/confirmation.tsx';
@@ -74,9 +75,11 @@ const decodeDraft = shape({
     return result;
   },
 });
-function loadDraft(): Draft {
+function loadDraft(api: WalleApi): Draft {
   try {
-    const stored = window.sessionStorage.getItem(draftKey);
+    const stored = environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(
+      draftKey,
+    );
     return stored === null ? empty() : decodeDraft(JSON.parse(stored));
   } catch {
     return empty();
@@ -219,7 +222,7 @@ export function TestingProfileForm({
 }>) {
   const [open, setOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [draft, setDraft] = useState<Draft>(loadDraft);
+  const [draft, setDraft] = useState<Draft>(() => loadDraft(api));
   const [draftUnavailable, setDraftUnavailable] = useState(false);
   const [options, setOptions] = useState<TestingProfileChoices | null>(null);
   const [loading, setLoading] = useState(false);
@@ -232,11 +235,14 @@ export function TestingProfileForm({
 
   useEffect(() => {
     try {
-      window.sessionStorage.setItem(draftKey, JSON.stringify(draft));
+      environmentBrowserStorage('sessionStorage', api.environmentScope).setItem(
+        draftKey,
+        JSON.stringify(draft),
+      );
     } catch {
       setDraftUnavailable(true);
     }
-  }, [draft]);
+  }, [api, draft]);
   useEffect(() => {
     active.current = true;
     return () => {

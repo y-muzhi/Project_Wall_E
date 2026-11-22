@@ -304,6 +304,11 @@ export class RequirementEditor {
   /** Parent checks this before completing; partial composition/invalid local
    * input cannot be mistaken for the older snapshot already saved on server.
    */
+  readVisibleDraft(): string {
+    if (this.closed || !this.session) throw Error('Manual editor is unavailable');
+    return this.action((ctx) => ctx.get(editorViewCtx).dom.innerText);
+  }
+
   flushLocal(): boolean {
     if (this.closed || this.composing) return false;
     if (!this.session) return true;

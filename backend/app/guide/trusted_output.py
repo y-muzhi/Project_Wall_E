@@ -24,7 +24,7 @@ from backend.app.infrastructure.audit_data import audit_json
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.model_profile import ModelProfile
-from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.process_lock import matches_database
 from backend.app.infrastructure.practical_usage import validate_practical_usage
 from backend.app.infrastructure.resources import ResourceCatalog, ProtocolInvalid, ConfigInvalid
 from backend.app.messages.cards import CardsInvalid, validate_cards
@@ -298,7 +298,7 @@ def produce_trusted_output(
     """
     strict_integer(llm_use_id, 'llm_use_id')
     process_lock.assert_owned()
-    if process_lock.path != ProcessLock.for_database(database.path).path:
+    if not matches_database(process_lock, database):
         raise RuntimeError('Validation lock must own this database')
     resources = ResourceCatalog() if catalog is None else catalog
     at = operation_time(clock)

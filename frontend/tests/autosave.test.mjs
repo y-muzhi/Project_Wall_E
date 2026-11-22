@@ -143,3 +143,60 @@ test('freeze drains newest before completion, discard pauses and waits, disposal
   disposed.edit('retain'); const pending = disposed.controller.flush(); await settle(); disposed.controller.dispose(); late.resolve(draft('retain', 2)); await pending;
   assert.equal(disposed.controller.state.status, 'CLOSED'); assert.equal(disposed.controller.state.confirmed_version, 1); assert.equal(disposed.clears.length, 0);
 });
+
+test('connection pause preserves local edits and never flushes on reconnection or blur until the user saves', async () => {
+  let sent = 0;
+  const rig = setup({
+    async save(ticket) { sent++; return draft(ticket.markdown_content, ticket.expected_version + 1); },
+    async read() { return draft(); },
+  });
+  rig.edit('before disconnect');
+  assert.deepEqual(rig.timing.live(), [2000, 10000]);
+  rig.controller.setEnvironmentWritable(false);
+  rig.edit('authored offline');
+  assert.equal(rig.controller.state.resume_required, true);
+  assert.deepEqual(rig.timing.live(), []);
+  assert.equal(rig.writes.at(-1)[2].markdown_content, 'authored offline');
+  assert.equal(await rig.controller.persistLocal(), true);
+  await rig.controller.flush(true);
+  assert.equal(sent, 0);
+  rig.controller.setEnvironmentWritable(true);
+  await rig.controller.flush();
+  assert.equal(sent, 0);
+  assert.deepEqual(rig.timing.live(), []);
+  await rig.controller.flush(true);
+  assert.equal(sent, 1);
+  assert.equal(rig.controller.state.status, 'SAVED');
+  assert.equal(rig.controller.state.resume_required, false);
+  rig.controller.dispose();
+});
+
+test('in-flight failure during disconnect keeps the exact unsolved ticket for explicit recovery', async () => {
+  const active = deferred();
+  const sent = [];
+  const rig = setup({
+    async save(ticket) {
+      sent.push(ticket);
+      if (sent.length === 1) return active.promise;
+      return draft(ticket.markdown_content, ticket.expected_version + 1);
+    },
+    async read() { return draft(); },
+  });
+  rig.edit('original');
+  const inflight = rig.controller.flush();
+  await settle();
+  rig.controller.setEnvironmentWritable(false);
+  active.reject(new ApiUnknown(true));
+  await inflight;
+  assert.equal(rig.controller.state.status, 'UNKNOWN');
+  assert.equal(sent.length, 1);
+  rig.controller.setEnvironmentWritable(true);
+  await rig.controller.flush();
+  assert.equal(sent.length, 1);
+  assert.equal(rig.controller.state.resume_required, true);
+  await rig.controller.flush(true);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1], sent[0]);
+  assert.equal(rig.controller.state.status, 'SAVED');
+  rig.controller.dispose();
+});

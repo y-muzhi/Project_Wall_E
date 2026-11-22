@@ -49,6 +49,7 @@ export class ManualDraftSession {
   private closed = false;
   private retiring: Promise<void> | undefined;
   private saving: Promise<boolean> | undefined;
+  private scopeFrozen = false;
   private constructor(
     initial: DetailSnapshot,
     editor: RequirementEditor,
@@ -133,7 +134,10 @@ export class ManualDraftSession {
               manual_draft_id: draftId,
               base_content_version: target.content_version,
             },
-            diagnostic.cacheName ? { name: diagnostic.cacheName } : {},
+            {
+              ...(diagnostic.cacheName ? { name: diagnostic.cacheName } : {}),
+              ...(api.environmentScope ? { scope: api.environmentScope } : {}),
+            },
           ),
       );
       const saveActions = new WeakMap<
@@ -164,6 +168,7 @@ export class ManualDraftSession {
         diagnostic.clock,
       );
       session = new ManualDraftSession(initial, editor, autosave, cache, api);
+      session.observeEnvironment(api);
       const owner = root.ownerDocument,
         visibility = () => {
           if (owner.hidden) void session?.flushCurrent();
@@ -200,13 +205,77 @@ export class ManualDraftSession {
   }
   private sync(): void {
     if (this.closed) return;
-    if (this.value.blocked) this.editor.setReadonly(true);
+    if (this.value.blocked || this.scopeFrozen) this.editor.setReadonly(true);
     this.publish({ valid: this.editor.valid, readonly: this.editor.readonly });
   }
   private chosen(): boolean {
     return ['RESTORED', 'SERVER_SELECTED'].includes(this.recovery.getSnapshot().phase);
   }
-  async flushCurrent(): Promise<boolean> {
+  private observeEnvironment(api: WalleApi): void {
+    const connection = api.environmentConnection;
+    if (!connection) return;
+    const observe = () => {
+      this.autosave.setEnvironmentWritable(connection.blockReason(true) === null);
+      if (connection.getSnapshot().phase === 'SCOPE_CHANGED' && !this.scopeFrozen) {
+        this.scopeFrozen = true;
+        void this.preserveLocal();
+        this.editor.setReadonly(true);
+        this.sync();
+      }
+    };
+    this.releases.push(connection.subscribe(observe));
+    observe();
+  }
+
+  async preserveLocal(): Promise<boolean> {
+    if (this.closed || !this.editor.flushLocal()) return false;
+    if (!this.chosen()) {
+      await this.cache.settle();
+      return !this.recovery.getSnapshot().storage_error;
+    }
+    return this.autosave.persistLocal();
+  }
+
+  async scopeRecoverySnapshot(): Promise<
+    Readonly<{
+      protected: boolean;
+      text: string | null;
+      originalMarkdown: boolean;
+      pending: number;
+    }>
+  > {
+    let protectedLocally = false;
+    let text: string | null = null;
+    let originalMarkdown = false;
+    try {
+      const valid = this.editor.flushLocal();
+      const recovered = !this.chosen() ? this.recovery.getSnapshot().local : null;
+      if (recovered || valid) {
+        text = recovered?.markdown_content ?? this.autosave.localSnapshot.markdown_content;
+        originalMarkdown = true;
+        protectedLocally = await this.preserveLocal();
+      } else {
+        text = this.editor.readVisibleDraft();
+      }
+    } catch {
+      // A retired or invalid editor can remain visible without verified local bytes.
+    }
+    return {
+      protected: protectedLocally,
+      text,
+      originalMarkdown,
+      pending: this.pendingEnvironmentOperations,
+    };
+  }
+
+  private get pendingEnvironmentOperations(): number {
+    return (
+      Number(this.autosave.state.status === 'UNKNOWN' || this.autosave.state.status === 'SAVING') +
+      Number(['SUBMITTING', 'CHECKING', 'UNKNOWN'].includes(this.ending.getSnapshot().phase))
+    );
+  }
+
+  async flushCurrent(userRequested = false): Promise<boolean> {
     if (
       this.closed ||
       this.value.blocked ||
@@ -215,7 +284,7 @@ export class ManualDraftSession {
       !this.editor.flushLocal()
     )
       return false;
-    await this.autosave.flush();
+    await this.autosave.flush(userRequested);
     return !this.closed && this.editor.valid && this.autosave.state.status === 'SAVED';
   }
   /** Synchronous input lock precedes the first await. Only the actual latest
@@ -258,7 +327,13 @@ export class ManualDraftSession {
   /** Parent obtains this snapshot with actual complete detail reads AFTER the
    * blocked save settles. Mismatch keeps the original editor/cache frozen. */
   revalidate(actual: DetailSnapshot): boolean {
-    if (this.closed || this.saving || this.ending.getSnapshot().phase !== 'EDITING') return false;
+    if (
+      this.closed ||
+      this.scopeFrozen ||
+      this.saving ||
+      this.ending.getSnapshot().phase !== 'EDITING'
+    )
+      return false;
     const root = actual.requirement,
       expected = this.initial.requirement;
     if (
@@ -313,6 +388,7 @@ export class ManualDraftSession {
   continueAfterFailedLeave(): boolean {
     if (
       this.closed ||
+      this.scopeFrozen ||
       this.saving ||
       this.value.block_reason !== 'LEAVING' ||
       this.ending.getSnapshot().phase !== 'EDITING'

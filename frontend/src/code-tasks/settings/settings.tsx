@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { positiveInteger } from '../../api/client.ts';
 import type { RepositoryOperation } from '../../api/code-repository-operations.ts';
 import type { WalleApi } from '../../api/walle.ts';
+import { environmentBrowserStorage, type StoragePort } from '../../api/environment-storage.ts';
 import { TEST_PLAN_RECOVERY_KINDS } from '../../api/testing-plans.ts';
 import { PageHeader } from '../../application/header.tsx';
 import { EmptyState } from '../../shared/empty-state.tsx';
@@ -66,7 +67,7 @@ export type RepositoryRefreshResult = Readonly<{
 }>;
 
 function pageOwner(api: WalleApi, observeRefresh: (operation: RepositoryOperation) => void) {
-  const store = new CommandRecoveryStore();
+  const store = new CommandRecoveryStore({ scope: api.environmentScope });
   const recovery: CommandRecovery = api.configurationRecovery(
     store,
     async (original, association, signal) => {
@@ -102,9 +103,9 @@ function pageOwner(api: WalleApi, observeRefresh: (operation: RepositoryOperatio
       };
     },
   );
-  let draftStorage: Storage | null = null;
+  let draftStorage: StoragePort | null = null;
   try {
-    draftStorage = window.sessionStorage;
+    draftStorage = environmentBrowserStorage('sessionStorage', api.environmentScope);
   } catch {
     // The forms retain their input in memory when drafts cannot be persisted.
   }

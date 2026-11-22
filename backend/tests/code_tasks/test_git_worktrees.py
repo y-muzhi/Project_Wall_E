@@ -30,6 +30,7 @@ def parse(raw, format='sha1', **options):
         format=format,
         query_exit_code=options.get('exit', 0),
         max_output_bytes=options.get('limit', 65536),
+        platform=options.get('platform', 'windows'),
     )
 
 
@@ -133,6 +134,17 @@ def test_paths_with_spaces_are_literal_and_duplicate_or_case_alias_fails():
     for other in ('C:/work tree', 'c:/WORK TREE'):
         with pytest.raises(metadata.WorktreeError, match='ALIAS_OR_DUPLICATE'):
             parse(record('C:/work tree', bare=True) + record(other, bare=True))
+
+
+def test_linux_paths_use_literal_case_and_refuse_lexical_aliases():
+    first = record('/repos/Task A', bare=True)
+    second = record('/repos/task a', bare=True)
+    assert len(parse(first + second, platform='linux').entries) == 2
+    with pytest.raises(metadata.WorktreeError, match='ALIAS_OR_DUPLICATE'):
+        parse(first + first, platform='linux')
+    for invalid in ('/repos//a', '/repos/../a', 'relative', '/repos/one\nother'):
+        with pytest.raises(metadata.WorktreeError, match='LOCAL_PATH_INVALID'):
+            parse(record(invalid, bare=True), platform='linux')
 
 
 @pytest.mark.parametrize('exit_code', [None, False, True, 1, 128, -1])

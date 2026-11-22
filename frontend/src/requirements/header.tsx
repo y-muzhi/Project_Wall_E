@@ -19,6 +19,8 @@ export function RequirementHeader(
     commands: RequirementHeaderCommands;
     ready: boolean;
     blocked: boolean;
+    writeReason?: string | null;
+    lifecycleReason?: string | null;
     history: boolean;
     refresh(): Promise<DetailSnapshot>;
     refreshRevisions(): Promise<void>;
@@ -132,7 +134,12 @@ export function RequirementHeader(
                   key={'lifecycle-' + state.lifecycle_generation}
                   caption="修改需求状态"
                   flow={life}
-                  blocked={props.blocked || props.commands.blockedFor('LIFECYCLE')}
+                  blocked={
+                    props.blocked ||
+                    !!props.lifecycleReason ||
+                    props.commands.blockedFor('LIFECYCLE')
+                  }
+                  reason={props.lifecycleReason ?? null}
                   writeReady={ready}
                   changed={requirementStatusChanged}
                 />
@@ -143,6 +150,7 @@ export function RequirementHeader(
                   flow={manual}
                   disabled={external || props.commands.blockedFor('MANUAL')}
                   writeReady={ready}
+                  writeReason={props.writeReason ?? null}
                   started={manualEditingStarted}
                 />
               )}

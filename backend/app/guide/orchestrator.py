@@ -13,7 +13,7 @@ from backend.app.infrastructure.audit_repository import AuditRepository
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.model_profile import ModelProfile
-from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.process_lock import matches_database
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.infrastructure.tokenization import ExactCountUnavailable
 from backend.app.shared.command_execution import Rejected, operation_time
@@ -120,6 +120,8 @@ async def execute_guide_run(
     Explicit private offline dependencies cannot bypass the release gate.
     Continuation/retry commands create a new run; no loop resumes old input.
     """
+    if getattr(database, 'environment_lock', None) is not None:
+        return {'code': 'ENVIRONMENT_CAPABILITY_DISABLED', 'data': None, 'details': None}
     try:
         identity = execute_guide_run_input(payload)
     except InvalidInput as error:
@@ -172,7 +174,7 @@ async def execute_guide_run(
 
     try:
         process_lock.assert_owned()
-        if process_lock.path != ProcessLock.for_database(database.path).path:
+        if not matches_database(process_lock, database):
             raise RuntimeError('ORCH must own this database')
         row, last = await state()
         if row['status'] != 'RUNNING':

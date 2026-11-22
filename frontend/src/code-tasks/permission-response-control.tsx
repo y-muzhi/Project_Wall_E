@@ -83,24 +83,27 @@ export function PermissionResponseControl({ api, task, row, visible, ready, chan
   const path = permissionResponsePath(taskId, permissionId);
   const recovery = useMemo(
     () =>
-      api.configurationRecovery(new CommandRecoveryStore(), async (original, link, signal) => {
-        if (original.path !== path || link.task_id !== taskId)
-          throw Error('Original permission response owner differs');
-        const { data } = await api.codeTaskOperation(taskId, link.operation_id, signal);
-        if (
-          data.operation_type !== 'DECIDE_PERMISSION' ||
-          data.fixed_input.permission_id !== permissionId ||
-          data.session_id !== sessionId ||
-          data.idempotency_key !== original.key
-        )
-          throw Error('Original permission operation differs');
-        return {
-          operation_id: data.id,
-          task_id: taskId,
-          testing_task_id: null,
-          status: data.status,
-        };
-      }),
+      api.configurationRecovery(
+        new CommandRecoveryStore({ scope: api.environmentScope }),
+        async (original, link, signal) => {
+          if (original.path !== path || link.task_id !== taskId)
+            throw Error('Original permission response owner differs');
+          const { data } = await api.codeTaskOperation(taskId, link.operation_id, signal);
+          if (
+            data.operation_type !== 'DECIDE_PERMISSION' ||
+            data.fixed_input.permission_id !== permissionId ||
+            data.session_id !== sessionId ||
+            data.idempotency_key !== original.key
+          )
+            throw Error('Original permission operation differs');
+          return {
+            operation_id: data.id,
+            task_id: taskId,
+            testing_task_id: null,
+            status: data.status,
+          };
+        },
+      ),
     [api, path, permissionId, sessionId, taskId],
   );
   const [pending, setPending] = useState<PendingSummary | null>(null);

@@ -10,6 +10,7 @@ export function RequirementLifecycleControl(
     blocked: boolean;
     writeReady?: boolean;
     caption?: string;
+    reason?: string | null;
     changed(outcome: LifecycleOutcome): void | Promise<void>;
   }>,
 ) {
@@ -49,6 +50,7 @@ export function RequirementLifecycleControl(
           change={(value) => void select(value)}
         />
       </div>
+      {props.reason && <p className="field-help">{props.reason}</p>}
       {busy && <span role="status">正在保存状态…</span>}
       {state.phase === 'UNKNOWN' && (
         <button

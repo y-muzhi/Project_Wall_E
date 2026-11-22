@@ -36,6 +36,7 @@ export function WorkbenchView({
   workbench,
   creation,
   choosingCodeDocument = false,
+  writeReason = null,
   restoreScroll = null,
   openRequirement,
   saveEntry,
@@ -45,6 +46,7 @@ export function WorkbenchView({
   workbench: RequirementWorkbench;
   choosingCodeDocument?: boolean;
   creation: CreateRequirementFlow;
+  writeReason?: string | null;
   restoreScroll?: number | null;
   openRequirement(id: number): void;
   saveEntry(query: WorkbenchQuery, scroll: number): void;
@@ -203,7 +205,13 @@ export function WorkbenchView({
           value={state.requested.requirement_type}
           change={(requirement_type) => query({ ...state.requested, requirement_type, page: 1 })}
         />
-        <button type="button" className="ui-button primary" onClick={() => setDrawer(true)}>
+        <button
+          type="button"
+          className="ui-button primary"
+          disabled={writeReason !== null}
+          title={writeReason ?? undefined}
+          onClick={() => setDrawer(true)}
+        >
           新建需求
         </button>
       </div>
@@ -319,6 +327,7 @@ export function WorkbenchView({
       <CreateRequirementDrawer
         open={drawer}
         state={create}
+        writeReason={writeReason}
         edit={(value) => creation.edit(value)}
         create={() => {
           void creation.submit();

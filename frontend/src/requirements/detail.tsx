@@ -1,6 +1,7 @@
 import { REQUIREMENT_STATUS_LABELS, saveStatusLabel } from '../shared/status-labels.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage, type StoragePort } from '../api/environment-storage.ts';
 import { DocumentHandoff } from './document-handoff.tsx';
 import type { DocumentHandoffEntry, DocumentReading } from '../application/router.ts';
 import { RequirementDetailOwner } from './detail-owner.ts';
@@ -119,6 +120,7 @@ function LoadedDetail({
   back,
   openCodeTasks,
   choosingCodeDocument,
+  writeReason,
   handoff,
 }: Readonly<{
   owner: RequirementDetailOwner;
@@ -128,6 +130,7 @@ function LoadedDetail({
   handoff: DocumentHandoffEntry;
   openCodeTasks?: OpenCodeTasks | undefined;
   choosingCodeDocument: boolean;
+  writeReason: string | null;
 }>) {
   const [documentActionHost, setDocumentActionHost] = useState<HTMLDivElement | null>(null);
   const product = useRef<HTMLDivElement>(null);
@@ -149,6 +152,12 @@ function LoadedDetail({
     historical = owner.documents.historical;
   const supported = geometry.mode !== 'BLOCKED' && viewport.phase === 'SUPPORTED',
     blocked = !supported || departure.phase !== 'IDLE',
+    writeBlocked = blocked || writeReason !== null,
+    ordinary = api.environmentScope !== undefined,
+    propertyReason = ordinary ? '此环境尚未开放修改需求名称。' : writeReason,
+    lifecycleReason = ordinary ? '此环境尚未开放修改需求状态。' : null,
+    metadataReason = ordinary ? '此环境尚未开放修改文档属性或确认版本。' : writeReason,
+    revisionReason = ordinary ? '此环境尚未开放添加版本说明。' : writeReason,
     actual = state.detail!,
     activity =
       actual.activity.kind === 'GUIDE'
@@ -232,8 +241,15 @@ function LoadedDetail({
           titleEditor={
             <RequirementPropertyControl
               flow={regions.header.title}
-              blocked={blocked || document.busy || historical || regions.header.blockedFor('TITLE')}
+              blocked={
+                writeBlocked ||
+                propertyReason !== null ||
+                document.busy ||
+                historical ||
+                regions.header.blockedFor('TITLE')
+              }
               writeReady={state.ready}
+              writeReason={propertyReason}
               refresh={owner.refresh}
             />
           }
@@ -256,8 +272,10 @@ function LoadedDetail({
               toolHint={openCodeTasks && selectedDocument === null ? '请先选择文档' : undefined}
               commands={regions.header}
               ready={state.ready}
-              blocked={blocked || document.busy}
+              blocked={writeBlocked || document.busy}
+              writeReason={writeReason}
               history={historical}
+              lifecycleReason={lifecycleReason}
               refresh={owner.refresh}
               refreshRevisions={async () => {
                 if (!(await owner.documents.revisions.refresh()))
@@ -303,15 +321,20 @@ function LoadedDetail({
               codeTasksBlocked={codeTasksBlocked}
             />
           }
-          outlineActions={<NewDocumentButton owner={owner} iconOnly />}
+          outlineActions={<NewDocumentButton owner={owner} iconOnly writeReason={writeReason} />}
           document={(navigation) => (
             <>
-              <DocumentMetadataBar owner={owner} navigation={navigation} />
+              <DocumentMetadataBar
+                owner={owner}
+                navigation={navigation}
+                writeReason={metadataReason}
+              />
               <OwnedDocumentControls
                 actionHost={documentActionHost}
                 showSaveStatus={false}
                 owner={owner.documents}
                 blocked={blocked}
+                writeReason={writeReason}
                 auxiliary={document.mode !== 'CURRENT' || !owner.documents.currentBinding}
                 notifyConfirmed={owner.notifyConfirmed}
               />
@@ -375,15 +398,21 @@ function LoadedDetail({
             )
           }
           suggestions={
-            <ConversationSuggestions
-              key={actual.selected_document_id}
-              owner={regions.conversation}
-              documents={owner.documents}
-              toasts={owner.toasts}
-            />
+            ordinary ? (
+              <p className="field-help">此环境暂未开放 AI 修改建议。</p>
+            ) : (
+              <ConversationSuggestions
+                key={actual.selected_document_id}
+                owner={regions.conversation}
+                documents={owner.documents}
+                toasts={owner.toasts}
+              />
+            )
           }
           progress={
-            actual.current ? (
+            ordinary ? (
+              <p className="field-help">此环境暂未开放 AI 讨论进展。</p>
+            ) : actual.current ? (
               <DiscussionProgress
                 key={actual.selected_document_id}
                 owner={owner}
@@ -422,6 +451,7 @@ function LoadedDetail({
               blocked={blocked || document.busy}
               revisions={owner.documents.revisions}
               history={regions.conversation.read.history}
+              versionsOnly={ordinary}
               readRun={owner.readRunRecord}
               versions={
                 <>
@@ -429,7 +459,8 @@ function LoadedDetail({
                     <RevisionSaveControl
                       flow={state.revisionSave}
                       ready={state.ready && state.revisionSave.allowed}
-                      blocked={blocked || historical}
+                      blocked={writeBlocked || historical || revisionReason !== null}
+                      writeReason={revisionReason}
                       refreshActual={owner.refresh}
                       saved={(receipt) => owner.savedRevision(receipt)}
                     />
@@ -489,6 +520,7 @@ export function RequirementDetail({
   reading,
   openCodeTasks,
   choosingCodeDocument = false,
+  writeReason = null,
   handoff = null,
 }: Readonly<{
   identity: number;
@@ -499,6 +531,7 @@ export function RequirementDetail({
   handoff?: DocumentHandoffEntry;
   openCodeTasks?: OpenCodeTasks | undefined;
   choosingCodeDocument?: boolean;
+  writeReason?: string | null;
 }>) {
   const host = useMemo(() => {
     const element = document.createElement('div');
@@ -510,9 +543,9 @@ export function RequirementDetail({
   callbacks.current = { back, ready };
   const [restoreError, setRestoreError] = useState(false);
   useEffect(() => {
-    let storage: Storage | null = null;
+    let storage: StoragePort | null = null;
     try {
-      storage = window.localStorage;
+      storage = environmentBrowserStorage('localStorage', api.environmentScope);
     } catch {}
     const owned = new RequirementDetailOwner(
       identity,
@@ -524,6 +557,14 @@ export function RequirementDetail({
       reading?.documentId,
     );
     const controller = new AbortController();
+    const connection = api.environmentConnection;
+    let lastPhase = connection?.getSnapshot().phase;
+    const release = connection?.subscribe(() => {
+      const current = connection.getSnapshot().phase;
+      const resumed = current === 'READY' && lastPhase !== 'READY';
+      lastPhase = current;
+      if (resumed) void owned.refresh().catch(() => undefined);
+    });
     setRestoreError(false);
     setOwner(owned);
     callbacks.current.ready?.(owned);
@@ -554,6 +595,7 @@ export function RequirementDetail({
     });
     return () => {
       controller.abort();
+      release?.();
       void owned.retire().catch((error) => console.error('WALL-E detail retirement failed', error));
       host.remove();
     };
@@ -573,6 +615,7 @@ export function RequirementDetail({
         back={() => callbacks.current.back()}
         openCodeTasks={openCodeTasks}
         choosingCodeDocument={choosingCodeDocument}
+        writeReason={writeReason}
       />
     </>
   ) : (
@@ -589,6 +632,7 @@ function DetailSurface({
   back,
   openCodeTasks,
   choosingCodeDocument,
+  writeReason,
   handoff,
 }: Readonly<{
   owner: RequirementDetailOwner;
@@ -598,6 +642,7 @@ function DetailSurface({
   handoff: DocumentHandoffEntry;
   openCodeTasks?: OpenCodeTasks | undefined;
   choosingCodeDocument: boolean;
+  writeReason: string | null;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot);
   if (owner.regions)
@@ -610,6 +655,7 @@ function DetailSurface({
         back={back}
         openCodeTasks={openCodeTasks}
         choosingCodeDocument={choosingCodeDocument}
+        writeReason={writeReason}
       />
     );
   return (

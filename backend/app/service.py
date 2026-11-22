@@ -32,10 +32,6 @@ from backend.app.code_tasks.repository_registration_api import (
     is_repository_write_path,
     repository_registration_router,
 )
-from backend.app.code_tasks.repository_registration_worker import (
-    RegistrationInstallation,
-    RepositoryRegistrationWorker,
-)
 from backend.app.code_tasks.repository_snapshot_reads import (
     is_repository_snapshot_path,
     repository_snapshot_router,
@@ -61,7 +57,6 @@ from backend.app.guide.worker import GuideWorker
 from backend.app.infrastructure.database import Database, configured_path
 from backend.app.infrastructure.execution_lease import ExecutionLease, LeasedDatabase
 from backend.app.infrastructure.idempotency import Idempotency
-from backend.app.infrastructure.production_ai import production_options
 from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.infrastructure.schema_v20_release import load_release
 from backend.app.messages.api import message_router
@@ -82,36 +77,66 @@ def create_app(
     worker_factory=None,
     frontend_directory=None,
     registration_installation=None,
+    ordinary=None,
+    recovery=None,
 ):
     """Private process startup dependencies. Installation input is never HTTP data."""
-    if (
-        registration_installation is not None
-        and type(registration_installation) is not RegistrationInstallation
-    ):
-        raise TypeError('Trusted registration installation inputs required')
+    if ordinary is not None and recovery is not None:
+        raise TypeError('Only one installed scope may be bound to the application')
+    if ordinary is not None or recovery is not None:
+        if any(
+            input_value is not None
+            for input_value in (database, worker_factory, registration_installation)
+        ):
+            raise TypeError('Installed execution must use its own admitted database and worker')
+    if registration_installation is not None:
+        from backend.app.code_tasks.repository_registration_worker import RegistrationInstallation
+
+        if type(registration_installation) is not RegistrationInstallation:
+            raise TypeError('Trusted registration installation inputs required')
+
+    @asynccontextmanager
+    async def recovery_lifespan(app):
+        resources = await _native(ResourceCatalog) if catalog is None else catalog
+        lease = ExecutionLease()
+        await _native(recovery.start)
+        app.state.walle_runtime = HttpRuntime(LeasedDatabase(recovery.database, lease), resources)
+        try:
+            yield
+        finally:
+            recovery.drain()
+            try:
+                await _native(lease.retire_and_wait)
+            finally:
+                app.state.walle_runtime = None
 
     @asynccontextmanager
     async def lifespan(app):
-        actual_database = (
-            Database(configured_path(), schema_release=load_release())
-            if database is None
-            else database
-        )
+        if ordinary is not None:
+            actual_database = ordinary.database
+        else:
+            actual_database = (
+                Database(configured_path(), schema_release=load_release())
+                if database is None
+                else database
+            )
         resources = await _native(ResourceCatalog) if catalog is None else catalog
-        worker = (
-            GuideWorker(
+        if ordinary is not None:
+            worker = GuideWorker(actual_database, catalog=resources, ordinary=ordinary)
+        elif worker_factory is not None:
+            worker = worker_factory(actual_database, resources)
+        else:
+            from backend.app.infrastructure.production_ai import production_options
+
+            worker = GuideWorker(
                 actual_database, catalog=resources, orchestrator_options=production_options()
             )
-            if worker_factory is None
-            else worker_factory(actual_database, resources)
-        )
         if (
             not isinstance(worker, GuideWorker)
             or worker.database is not actual_database
             or worker.catalog is not resources
         ):
             raise ValueError('The startup owner must bind this actual database and catalog')
-        await worker.start()
         http_lease = ExecutionLease()
         registration = None
         stop_service = planning_service = None
@@ -119,11 +144,17 @@ def create_app(
         stop_wake = asyncio.Event()
         stop_closing = asyncio.Event()
         try:
+            await worker.start()
             internal_runtime = HttpRuntime(actual_database, resources, worker.executor, worker)
-            if actual_database.schema_release is not None:
+            recover = ordinary is None or getattr(ordinary, 'recover_on_start', True)
+            if actual_database.schema_release is not None and recover:
                 await _native(recover_workspace_starts, internal_runtime)
                 await _native(recover_drafts, internal_runtime)
             if registration_installation is not None:
+                from backend.app.code_tasks.repository_registration_worker import (
+                    RepositoryRegistrationWorker,
+                )
+
                 registration = RepositoryRegistrationWorker(
                     internal_runtime, registration_installation
                 )
@@ -134,7 +165,7 @@ def create_app(
             app.state.walle_runtime = HttpRuntime(http_database, resources, executor, worker)
             app.state.walle_worker = worker
             app.state.walle_http_lease = http_lease
-            if actual_database.schema_release is not None:
+            if ordinary is None and actual_database.schema_release is not None:
                 app.state.walle_stop_wake = stop_wake
                 app.state.walle_planning_wake = planning_wake
                 planning_service = asyncio.create_task(
@@ -151,6 +182,9 @@ def create_app(
                         ),
                     )
                 )
+            if ordinary is not None:
+                await _native(ordinary.start)
+                worker.accepting = True
             yield
         finally:
             worker.accepting = False
@@ -160,7 +194,13 @@ def create_app(
             # Worker and recovery use the underlying actual DB independently.
             async def close():
                 try:
-                    await asyncio.to_thread(http_lease.retire)
+                    if ordinary is None:
+                        await asyncio.to_thread(http_lease.retire)
+                    else:
+                        try:
+                            await _native(ordinary.drain)
+                        finally:
+                            await asyncio.to_thread(http_lease.retire_and_wait)
                 finally:
                     try:
                         try:
@@ -189,7 +229,11 @@ def create_app(
                 app.state.walle_runtime = None
 
     app = FastAPI(
-        lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None, redirect_slashes=False
+        lifespan=recovery_lifespan if recovery is not None else lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        redirect_slashes=False,
     )
     for router in (
         req_router,
@@ -227,8 +271,15 @@ def create_app(
 
         install_frontend(app, frontend_directory)
 
+    if ordinary is not None or recovery is not None:
+        from backend.app.infrastructure.environment_http import api_admission
+
     @app.middleware('http')
     async def admission(request, call_next):
+        if recovery is not None:
+            return await api_admission(request, call_next, recovery, recovery=True)
+        if ordinary is not None:
+            return await api_admission(request, call_next, ordinary)
         runtime = getattr(request.app.state, 'walle_runtime', None)
         if not isinstance(runtime, HttpRuntime) or not runtime.worker.accepting:
             request_id = new_request_id()

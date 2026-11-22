@@ -37,9 +37,12 @@ export function TaskBudgetControl({ api, task, ready, changed }: Props) {
   const path = taskBudgetPath(task.id);
   const recovery = useMemo(
     () =>
-      api.configurationRecovery(new CommandRecoveryStore(), async () => {
-        throw Error('Budget changes do not produce a background operation');
-      }),
+      api.configurationRecovery(
+        new CommandRecoveryStore({ scope: api.environmentScope }),
+        async () => {
+          throw Error('Budget changes do not produce a background operation');
+        },
+      ),
     [api],
   );
   const [pending, setPending] = useState<PendingSummary | null>(null);

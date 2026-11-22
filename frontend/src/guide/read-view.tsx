@@ -215,12 +215,14 @@ export function AiReadPanel({
   renderMarkdown,
   scrollPort,
   scrollContent,
+  showRunRecords = true,
 }: Readonly<{
   scrollPort?: HTMLElement | null;
   scrollContent?: HTMLElement | null;
   owner: RequirementAiRead;
   structured?: (message: Message) => ReactNode;
   commands?: (run: GuideRun) => ReactNode;
+  showRunRecords?: boolean;
   renderMarkdown?: MessageMarkdownRenderer;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
@@ -294,7 +296,7 @@ export function AiReadPanel({
           ) : null
         }
         requestRecord={(message) =>
-          message.role === 'USER' && message.guide_run_id !== null ? (
+          showRunRecords && message.role === 'USER' && message.guide_run_id !== null ? (
             <RequestCallRecord runId={message.guide_run_id} messageId={message.id} />
           ) : null
         }

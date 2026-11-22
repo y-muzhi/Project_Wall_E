@@ -149,7 +149,7 @@ export class ManualDraftEnd {
         this.publish({ phase: 'ERROR', error: '当前输入尚未形成有效完整快照，请继续编辑后再完成' });
         return false;
       }
-      if (!(await this.autosave.freezeAndFlush())) {
+      if (!(await this.autosave.freezeAndFlush(true))) {
         this.publish({ phase: 'ERROR', error: '最新草稿尚未确认保存，请先处理保存状态' });
         return false;
       }

@@ -2844,6 +2844,23 @@ input[type='radio'] {
   padding: 32px;
 }
 
+.environment-connection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.environment-connection p {
+  margin: 0;
+}
+
+.application-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Explicit component feedback and disclosure layout. */
 .icon-button:hover:not(:disabled) {
   background: var(--surface-hover);

@@ -22,7 +22,7 @@ from backend.app.infrastructure.identifiers import (
 )
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.message_repository import MessageRepository
-from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.process_lock import matches_database
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.messages.cards import CardsInvalid
@@ -106,7 +106,7 @@ def persist_ai_result(database, payload, *, process_lock, profile, catalog=None,
         return {'code': error.code, 'data': None, 'details': None}
     try:
         process_lock.assert_owned()
-        if process_lock.path != ProcessLock.for_database(database.path).path:
+        if not matches_database(process_lock, database):
             raise RuntimeError('C07 lock must own this database')
         resources = ResourceCatalog() if catalog is None else catalog
         at = operation_time(clock)

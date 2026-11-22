@@ -4,6 +4,34 @@ import type { RequirementCardGroups } from './card-groups.ts';
 import { InteractionCardsView } from './cards-view.tsx';
 import { MessageContent } from '../messages/content.tsx';
 import type { RequirementDocumentOwner } from '../requirements/document-owner.ts';
+
+export function SavedCardMessage({ message }: Readonly<{ message: Message }>) {
+  const group = message.structured_content;
+  if (message.message_type !== 'INTERACTION_CARDS' || !group || !('cards' in group)) return null;
+  return (
+    <section className="interaction-cards" aria-label="已保存的决策卡片">
+      {group.intro && <MessageContent content={group.intro} />}
+      <p>
+        {message.card_state === 'ANSWERED'
+          ? '已回答'
+          : message.card_state === 'EXPIRED'
+            ? '已失效'
+            : '待确认'}
+      </p>
+      {group.cards.map((card) => (
+        <details key={card.card_key}>
+          <summary>{card.question}</summary>
+          {card.context && <MessageContent content={card.context} />}
+          <ul>
+            {card.options.map((option) => (
+              <li key={option.option_key}>{option.label}</li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </section>
+  );
+}
 /** Render in the original I35 article; source failures retain readable content
  * until verified controls recover. Damaged structures get no stale controls. */
 export function CardMessage({

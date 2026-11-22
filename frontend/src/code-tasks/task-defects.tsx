@@ -11,6 +11,7 @@ import type { CodeDefect } from '../api/code-task-defects.ts';
 import type { QuestionBasisRef, QuestionEvidenceRef } from '../api/code-task-question-response.ts';
 import type { TestingFinding } from '../api/testing-reports.ts';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
 import { localTime } from '../shared/time.ts';
@@ -31,9 +32,11 @@ type Draft = {
 const emptyDraft = (): Draft => ({ actual: '', expected: '', basis: null, evidence: [] });
 const visibleText = (value: string) => /[^\\p{White_Space}]/u.test(value);
 
-function restore(key: string, candidate: number | null): Draft {
+function restore(api: WalleApi, key: string, candidate: number | null): Draft {
   try {
-    const raw = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+    const raw = JSON.parse(
+      environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(key) ?? 'null',
+    );
     if (
       candidate === null ||
       raw === null ||
@@ -233,7 +236,7 @@ export function TaskDefects({
   const candidate = task.current_candidate_id;
   const key =
     'walle:v2.0:code:draft:' + location.origin + ':' + task.id + ':defect:' + (candidate ?? 'none');
-  const [draft, setDraft] = useState(() => restore(key, candidate));
+  const [draft, setDraft] = useState(() => restore(api, key, candidate));
   const [storageError, setStorageError] = useState(false);
   const [mode, setMode] = useState<'manual' | 'import' | null>(null);
   const [finding, setFinding] = useState<TestingFinding | null>(null);
@@ -242,14 +245,15 @@ export function TaskDefects({
   const [repairDefects, setRepairDefects] = useState<number[]>([]);
   useEffect(() => {
     try {
+      const storage = environmentBrowserStorage('sessionStorage', api.environmentScope);
       if (draft.actual || draft.expected || draft.basis || draft.evidence.length)
-        sessionStorage.setItem(key, JSON.stringify(draft));
-      else sessionStorage.removeItem(key);
+        storage.setItem(key, JSON.stringify(draft));
+      else storage.removeItem(key);
       setStorageError(false);
     } catch {
       setStorageError(true);
     }
-  }, [draft, key]);
+  }, [api, draft, key]);
 
   const load = useCallback(
     (signal: AbortSignal) => api.codeDefects(task.id, page, signal),

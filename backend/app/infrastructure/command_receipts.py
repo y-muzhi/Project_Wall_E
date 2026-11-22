@@ -17,7 +17,7 @@ from backend.app.shared.command_execution import Rejected
 from backend.app.shared.validation import MAX_SAFE_INTEGER
 
 from .database import SchemaMismatch
-from .idempotency import Claim, Scope, Success, canonical_input
+from .idempotency import Claim, Scope, Success, canonical_input, storage_identity
 
 COLUMNS = (
     'capability_id,target_identity,idempotency_key,business_input_json,status,owner_epoch,'
@@ -58,10 +58,10 @@ def require_v20(database):
         raise SchemaMismatch('Command control requires the explicit Schema200 database')
 
 
-def _row(connection, scope):
+def _row(connection, scope, *, identity=None):
     return connection.execute(
         'SELECT * FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=?',
-        scope.identity,
+        scope.identity if identity is None else identity,
     ).fetchone()
 
 
@@ -372,7 +372,8 @@ def lookup_receipt(database, scope):
     require_v20(database)
     command = command_for_scope(scope)
     with database.transaction() as connection:
-        return receipt_in_transaction(connection, command, _row(connection, scope))
+        row = _row(connection, scope, identity=storage_identity(database, scope))
+        return receipt_in_transaction(connection, command, row)
 
 
 def close_command(executor, scope):

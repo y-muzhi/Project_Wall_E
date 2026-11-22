@@ -112,7 +112,7 @@ function Findings({ api, record }: Readonly<{ api: WalleApi; record: TestingRepo
       const outcome = result.original_receipt?.original_outcome;
       if (outcome?.success !== true) return;
       const saved = outcome.data as TestingFinding;
-      if (saved.test_report_id === report && clearSavedFindingDraft(saved))
+      if (saved.test_report_id === report && clearSavedFindingDraft(saved, api.environmentScope))
         setEditor((opened) => (opened === saved.id ? null : opened));
       list.reload();
     },
@@ -173,6 +173,7 @@ function Findings({ api, record }: Readonly<{ api: WalleApi; record: TestingRepo
           {editor === row.id ? (
             <FindingReview
               finding={row}
+              scope={api.environmentScope}
               access={access}
               stale={list.loading || list.error !== null}
               refreshed={refresh}

@@ -27,7 +27,7 @@ export function useCreationCommands(
   created: (id: number, key: string) => void,
   conflict: (id: number) => void,
 ) {
-  const store = useMemo(() => new CommandRecoveryStore(), []);
+  const store = useMemo(() => new CommandRecoveryStore({ scope: api.environmentScope }), [api]);
   const recovery = useMemo(
     () =>
       api.configurationRecovery(store, async (original, association, signal) => {

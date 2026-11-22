@@ -14,6 +14,9 @@ export function ApplicationNavigation({
   settingsCurrent,
   testing,
   testingCurrent,
+  codingReason,
+  testingReason,
+  settingsReason,
 }: Readonly<{
   current: 'page' | 'location' | undefined;
   navigate(): void;
@@ -23,6 +26,9 @@ export function ApplicationNavigation({
   settingsCurrent: 'page' | undefined;
   testing(): void;
   testingCurrent: 'page' | undefined;
+  codingReason?: string;
+  testingReason?: string;
+  settingsReason?: string;
   headerHost?(element: HTMLDivElement | null): void;
   headerHeight?(height: number): void;
 }>) {
@@ -102,12 +108,14 @@ export function ApplicationNavigation({
             aria-label="代码开发"
             aria-describedby={codingHintId}
             aria-current={codingCurrent}
+            disabled={!!codingReason}
+            title={codingReason}
             onClick={coding}
           >
             <Icon name="code" />
           </button>
           <span id={codingHintId} role="tooltip" className="application-navigation-tooltip">
-            代码开发
+            {codingReason ?? '代码开发'}
           </span>
         </div>
         <div className="application-navigation-entry">
@@ -117,12 +125,14 @@ export function ApplicationNavigation({
             aria-label="测试验收"
             aria-describedby={testingHintId}
             aria-current={testingCurrent}
+            disabled={!!testingReason}
+            title={testingReason}
             onClick={testing}
           >
             <Icon name="outline" />
           </button>
           <span id={testingHintId} role="tooltip" className="application-navigation-tooltip">
-            测试验收
+            {testingReason ?? '测试验收'}
           </span>
         </div>
         <div
@@ -138,6 +148,8 @@ export function ApplicationNavigation({
             onFocus={showSettingsHint}
             onKeyDown={dismissHint}
             aria-current={settingsCurrent}
+            disabled={!!settingsReason}
+            title={settingsReason}
             onClick={visitSettings}
           >
             <Icon name="settings" />
@@ -148,7 +160,7 @@ export function ApplicationNavigation({
             id={settingsHintId}
             hidden={settingsHintDismissed}
           >
-            设置
+            {settingsReason ?? '设置'}
           </span>
         </div>
       </nav>

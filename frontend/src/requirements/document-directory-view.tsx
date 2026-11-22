@@ -424,10 +424,12 @@ export function NewDocumentButton({
   owner,
   label = '新建文档',
   iconOnly = false,
+  writeReason = null,
 }: {
   owner: RequirementDetailOwner;
   label?: string;
   iconOnly?: boolean;
+  writeReason?: string | null;
 }) {
   const flow = owner.regions!.directory;
   useSyncExternalStore(flow.subscribe, flow.getSnapshot);
@@ -440,8 +442,8 @@ export function NewDocumentButton({
       className={'ui-button' + (iconOnly ? ' icon-button document-create-trigger' : '')}
       type="button"
       aria-label={label}
-      title={iconOnly ? label : undefined}
-      disabled={!flow.allowed || create === null}
+      title={writeReason ?? (iconOnly ? label : undefined)}
+      disabled={writeReason !== null || !flow.allowed || create === null}
       onClick={() => create?.()}
     >
       {iconOnly ? <Icon name="plus" /> : label}
@@ -452,8 +454,10 @@ export function NewDocumentButton({
 export function DocumentMetadataBar({
   owner,
   navigation,
+  writeReason = null,
 }: {
   owner: RequirementDetailOwner;
+  writeReason?: string | null;
   navigation?: import('react').ReactNode;
 }) {
   const detail = useSyncExternalStore(owner.subscribe, owner.getSnapshot).detail,
@@ -469,7 +473,7 @@ export function DocumentMetadataBar({
     pending = useRef(false);
   const current = detail?.current;
   const execute = async (work: () => Promise<boolean>, message?: string) => {
-    if (pending.current) return;
+    if (pending.current || writeReason) return;
     pending.current = true;
     setBusy(true);
     setError(null);
@@ -532,7 +536,8 @@ export function DocumentMetadataBar({
           draft={name}
           editing={renamingCurrent}
           canRename={!editing && current.archived_at === null}
-          disabled={!flow.allowed || busy}
+          disabled={!flow.allowed || busy || !!writeReason}
+          disabledReason={writeReason}
           readOnly={unresolved}
           cancelDisabled={busy || unresolved}
           begin={beginRename}
@@ -570,8 +575,11 @@ export function DocumentMetadataBar({
                   <button
                     className="ui-button"
                     disabled={
-                      !flow.allowed || current.confirmed_revision_id === current.current_revision_id
+                      !!writeReason ||
+                      !flow.allowed ||
+                      current.confirmed_revision_id === current.current_revision_id
                     }
+                    title={writeReason ?? undefined}
                     onClick={() =>
                       void execute(
                         () =>
@@ -588,7 +596,8 @@ export function DocumentMetadataBar({
                   </button>
                   <button
                     className="ui-button"
-                    disabled={!flow.allowed}
+                    disabled={!flow.allowed || !!writeReason}
+                    title={writeReason ?? undefined}
                     onClick={() => setArchive(current)}
                   >
                     归档
@@ -597,7 +606,8 @@ export function DocumentMetadataBar({
               ) : (
                 <button
                   className="ui-button"
-                  disabled={!flow.allowed}
+                  disabled={!flow.allowed || !!writeReason}
+                  title={writeReason ?? undefined}
                   onClick={() =>
                     void execute(() => flow.metadata(current, { type: 'RESTORE' }), '文档已恢复')
                   }

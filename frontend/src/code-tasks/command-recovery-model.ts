@@ -1,12 +1,16 @@
 /** Browser observations only; never server ownership or permission. */
 import { exact, object, positiveInteger, snapshotObject } from '../api/client.ts';
 import { time } from '../api/decoding.ts';
+import type { EnvironmentScope } from '../api/environment-binding.ts';
 import {
   commandOrigin,
   verifiedCommandIdentity,
   commandSha256,
   commandRecoveryMode,
   COMMAND_BODY_BYTES,
+  COMMAND_SCOPE_FIELDS,
+  FROZEN_IDENTITY_FIELDS,
+  matchesCommandScope,
 } from '../api/code-command-snapshot.ts';
 import type {
   FrozenCodeCommand,
@@ -20,7 +24,7 @@ export const COMMAND_PENDING_LIMIT = 100;
 export const COMMAND_PENDING_BYTES = 128 * 1024 * 1024;
 export type PendingSummary = FrozenIdentity &
   Readonly<{
-    schema_version: 4;
+    schema_version: 4 | 5;
     intent_key: string;
     close_state: 'NONE' | 'REQUESTED' | 'ALREADY_RECEIVED';
     close_requested_at: string | null;
@@ -43,7 +47,7 @@ export type PendingAction = PendingSummary &
   }>;
 export type CommandReceiptLocal = FrozenIdentity &
   Readonly<{
-    schema_version: 4;
+    schema_version: 4 | 5;
     body_sha256: string | null;
     final_state: 'CONFIRMED' | 'REJECTED' | 'CANCELLED_UNSENT' | 'CLOSED_UNEXECUTED';
     task_id: number | null;
@@ -84,6 +88,7 @@ export const PENDING_FIELDS = [
   'recovery_mode',
 ] as const;
 export const IMMUTABLE_FIELDS = [
+  ...COMMAND_SCOPE_FIELDS,
   'schema_version',
   'owner_module',
   'origin',
@@ -109,8 +114,12 @@ export function digest(value: unknown): string {
   if (typeof value !== 'string' || !SHA.test(value)) throw new TypeError('Invalid local digest');
   return value;
 }
-export function pendingSize(value: unknown): number {
-  const row = exact(value, PENDING_FIELDS);
+function fieldsForScope(fields: readonly string[], scope: EnvironmentScope | undefined) {
+  return scope ? [...fields, ...COMMAND_SCOPE_FIELDS] : fields;
+}
+
+export function pendingSize(value: unknown, scope?: EnvironmentScope): number {
+  const row = exact(value, fieldsForScope(PENDING_FIELDS, scope));
   if (typeof row.body_json !== 'string') throw new TypeError('Original body unavailable');
   const body = encoder.encode(row.body_json).length;
   const meta = encoder.encode(
@@ -141,11 +150,16 @@ function associations(row: Record<string, unknown>, owner: string, path: string)
   )
     throw new TypeError('Stored command crosses original owner');
 }
-export function pendingSummary(value: unknown, currentOrigin: string): PendingSummary {
-  const row = exact(value, PENDING_FIELDS);
+export function pendingSummary(
+  value: unknown,
+  currentOrigin: string,
+  scope?: EnvironmentScope,
+): PendingSummary {
+  const row = exact(value, fieldsForScope(PENDING_FIELDS, scope));
   const original = registeredCommand(row.method, row.path, row.key);
   if (
-    row.schema_version !== 4 ||
+    row.schema_version !== (scope ? 5 : 4) ||
+    !matchesCommandScope(row, scope) ||
     row.origin !== commandOrigin(currentOrigin) ||
     row.owner_module !== original.owner_module ||
     row.decoder_kind !== original.decoder_kind ||
@@ -184,35 +198,30 @@ export function pendingSummary(value: unknown, currentOrigin: string): PendingSu
   )
     throw new TypeError('Stored dispatch observation invalid');
   return snapshotObject(
-    Object.fromEntries(SUMMARY_FIELDS.map((field) => [field, row[field]])),
+    Object.fromEntries(fieldsForScope(SUMMARY_FIELDS, scope).map((field) => [field, row[field]])),
   ) as PendingSummary;
 }
-export async function verifiedSummary(value: unknown, origin: string): Promise<PendingSummary> {
-  const summary = pendingSummary(value, origin);
-  await verifiedCommandIdentity(summary, origin);
+export async function verifiedSummary(
+  value: unknown,
+  origin: string,
+  scope?: EnvironmentScope,
+): Promise<PendingSummary> {
+  const summary = pendingSummary(value, origin, scope);
+  await verifiedCommandIdentity(summary, origin, scope);
   return summary;
 }
 export async function verifiedFrozen(
   value: FrozenCodeCommand,
   origin: string,
+  scope?: EnvironmentScope,
 ): Promise<{
   frozen: FrozenCodeCommand;
   recovery_mode: RecoveryMode;
 }> {
   const frozen = snapshotObject(
-    exact(value, [
-      'origin',
-      'owner_module',
-      'method',
-      'path',
-      'key',
-      'identity_sha256',
-      'decoder_kind',
-      'body_json',
-      'body_sha256',
-    ]),
+    exact(value, fieldsForScope([...FROZEN_IDENTITY_FIELDS, 'body_json', 'body_sha256'], scope)),
   );
-  const original = await verifiedCommandIdentity(frozen, origin);
+  const original = await verifiedCommandIdentity(frozen, origin, scope);
   if (
     typeof frozen.body_json !== 'string' ||
     encoder.encode(frozen.body_json).length > COMMAND_BODY_BYTES
@@ -229,27 +238,38 @@ export async function verifiedFrozen(
     recovery_mode: commandRecoveryMode(original, input),
   };
 }
-export function receiptLocal(value: unknown, currentOrigin: string): CommandReceiptLocal {
-  const row = exact(value, [
-    'schema_version',
-    'owner_module',
-    'origin',
-    'key',
-    'method',
-    'path',
-    'identity_sha256',
-    'body_sha256',
-    'final_state',
-    'task_id',
-    'testing_task_id',
-    'operation_id',
-    'http_status',
-    'result_code',
-    'resolved_at',
-  ]);
+export function receiptLocal(
+  value: unknown,
+  currentOrigin: string,
+  scope?: EnvironmentScope,
+): CommandReceiptLocal {
+  const row = exact(
+    value,
+    fieldsForScope(
+      [
+        'schema_version',
+        'owner_module',
+        'origin',
+        'key',
+        'method',
+        'path',
+        'identity_sha256',
+        'body_sha256',
+        'final_state',
+        'task_id',
+        'testing_task_id',
+        'operation_id',
+        'http_status',
+        'result_code',
+        'resolved_at',
+      ],
+      scope,
+    ),
+  );
   const original = registeredCommand(row.method, row.path, row.key);
   if (
-    row.schema_version !== 4 ||
+    row.schema_version !== (scope ? 5 : 4) ||
+    !matchesCommandScope(row, scope) ||
     row.origin !== commandOrigin(currentOrigin) ||
     row.owner_module !== original.owner_module ||
     !['CONFIRMED', 'REJECTED', 'CANCELLED_UNSENT', 'CLOSED_UNEXECUTED'].includes(
@@ -299,19 +319,13 @@ export function persistedReceipt(value: CommandReceiptLocal): Record<string, unk
 }
 export function originalFrozen(value: unknown): FrozenCodeCommand {
   const row = object(value);
+  const fields = [
+    ...FROZEN_IDENTITY_FIELDS,
+    'body_json',
+    'body_sha256',
+    ...COMMAND_SCOPE_FIELDS.filter((field) => Object.hasOwn(row, field)),
+  ];
   return snapshotObject(
-    Object.fromEntries(
-      [
-        'origin',
-        'owner_module',
-        'method',
-        'path',
-        'key',
-        'identity_sha256',
-        'decoder_kind',
-        'body_json',
-        'body_sha256',
-      ].map((field) => [field, row[field]]),
-    ),
+    Object.fromEntries(fields.map((field) => [field, row[field]])),
   ) as FrozenCodeCommand;
 }
