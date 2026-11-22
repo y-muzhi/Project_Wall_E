@@ -18,6 +18,7 @@ export function FormationPage<T>({
   onPathChanged,
   identity,
   showTotal = true,
+  compactControls = false,
 }: Readonly<{
   scope: string;
   load: (cursor: string | null, signal: AbortSignal) => Promise<Result<T>>;
@@ -27,6 +28,7 @@ export function FormationPage<T>({
   onPathChanged?: () => void;
   identity?: (row: T) => string | number;
   showTotal?: boolean;
+  compactControls?: boolean;
 }>) {
   const [cursor, setCursor] = useState<string | null>(null),
     [previous, setPrevious] = useState<(string | null)[]>([]);
@@ -77,17 +79,19 @@ export function FormationPage<T>({
     loading = state.scope !== scope || state.loading;
   return (
     <div className="formation-page" aria-busy={loading}>
-      <div className="formation-page-heading">
-        {showTotal && result !== null && <span>共 {result.data.total} 项</span>}
-        <button
-          type="button"
-          className="ui-button"
-          disabled={loading}
-          onClick={() => setReload((value) => value + 1)}
-        >
-          刷新
-        </button>
-      </div>
+      {(!compactControls || state.error !== null) && (
+        <div className="formation-page-heading">
+          {showTotal && result !== null && <span>共 {result.data.total} 项</span>}
+          <button
+            type="button"
+            className="ui-button"
+            disabled={loading}
+            onClick={() => setReload((value) => value + 1)}
+          >
+            刷新
+          </button>
+        </div>
+      )}
       {loading && <p role="status">正在读取…</p>}
       {state.error && (
         <p role="alert" className="inline-error">
@@ -109,33 +113,35 @@ export function FormationPage<T>({
           ))}
         </ul>
       )}
-      <nav className="formation-pagination" aria-label="列表分页">
-        <button
-          type="button"
-          className="ui-button"
-          disabled={loading || previous.length === 0}
-          onClick={() => {
-            const last = previous.at(-1) ?? null;
-            setPrevious((values) => values.slice(0, -1));
-            setCursor(last);
-          }}
-        >
-          上一页
-        </button>
-        <button
-          type="button"
-          className="ui-button"
-          disabled={loading || state.error !== null || result?.meta.pagination.has_more !== true}
-          onClick={() => {
-            const next = result?.meta.pagination.next_cursor;
-            if (next === null || next === undefined) return;
-            setPrevious((values) => [...values, cursor]);
-            setCursor(next);
-          }}
-        >
-          下一页
-        </button>
-      </nav>
+      {(!compactControls || previous.length > 0 || result?.meta.pagination.has_more === true) && (
+        <nav className="formation-pagination" aria-label="列表分页">
+          <button
+            type="button"
+            className="ui-button"
+            disabled={loading || previous.length === 0}
+            onClick={() => {
+              const last = previous.at(-1) ?? null;
+              setPrevious((values) => values.slice(0, -1));
+              setCursor(last);
+            }}
+          >
+            上一页
+          </button>
+          <button
+            type="button"
+            className="ui-button"
+            disabled={loading || state.error !== null || result?.meta.pagination.has_more !== true}
+            onClick={() => {
+              const next = result?.meta.pagination.next_cursor;
+              if (next === null || next === undefined) return;
+              setPrevious((values) => [...values, cursor]);
+              setCursor(next);
+            }}
+          >
+            下一页
+          </button>
+        </nav>
+      )}
     </div>
   );
 }

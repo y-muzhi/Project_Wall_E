@@ -17,7 +17,7 @@ import type { RemainingChoices } from './completion-state.ts';
 import { FormationNextStep } from './next-step-view.tsx';
 import { FormationClosure } from './closure-view.tsx';
 import type { eventView } from '../api/formation-history.ts';
-import { useRef, useState, useSyncExternalStore } from 'react';
+import { useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { FormationWorkspace } from './workspace.ts';
 import type { FormationStepDetail } from '../api/formation-values.ts';
@@ -35,7 +35,7 @@ const tabNames = {
   RESULTS: '成果',
   ISSUES: '问题',
   BRANCHES: '支线',
-  HISTORY: '记录',
+  HISTORY: '事件记录',
 } as const;
 type Tab = (typeof tabs)[number];
 function NativeAction({
@@ -640,6 +640,7 @@ export function FormationStepView({
 }: Readonly<{ owner: FormationWorkspace; discuss: () => void }>) {
   const state = useSyncExternalStore(owner.read.subscribe, owner.read.getSnapshot);
   const { tab } = useSyncExternalStore(owner.subscribe, owner.getSnapshot);
+  const tabId = useId();
   const retained = useRef<Readonly<{
     owner: FormationWorkspace;
     detail: FormationStepDetail;
@@ -706,19 +707,37 @@ export function FormationStepView({
         </p>
       )}
       <div role="tablist" aria-label="步骤详情分类" className="formation-tabs">
-        {tabs.map((value) => (
+        {tabs.map((value, index) => (
           <button
             key={value}
+            id={tabId + '-' + value}
             type="button"
             role="tab"
             aria-selected={tab === value}
+            aria-controls={tabId + '-content'}
+            tabIndex={tab === value ? 0 : -1}
             onClick={() => owner.setTab(value)}
+            onKeyDown={(event) => {
+              const offsets = { ArrowLeft: -1, ArrowRight: 1 };
+              let nextIndex = index;
+              if (event.key === 'Home') nextIndex = 0;
+              else if (event.key === 'End') nextIndex = tabs.length - 1;
+              else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+                nextIndex = (index + offsets[event.key] + tabs.length) % tabs.length;
+              else return;
+              event.preventDefault();
+              const next = tabs[nextIndex] ?? value;
+              owner.setTab(next);
+              document.getElementById(tabId + '-' + next)?.focus();
+            }}
           >
             {tabNames[value]}
           </button>
         ))}
       </div>
-      {content}
+      <div id={tabId + '-content'} role="tabpanel" aria-labelledby={tabId + '-' + tab}>
+        {content}
+      </div>
     </section>
   );
 }

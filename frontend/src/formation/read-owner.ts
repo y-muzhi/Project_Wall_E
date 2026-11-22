@@ -151,6 +151,15 @@ export class FormationReadOwner {
       throw new TypeError('Invalid cursor');
     return this.readPage(cursor, true);
   }
+  async revealStep(ref: string): Promise<boolean> {
+    stepRef(ref);
+    if (
+      this.value.page.phase === 'READY' &&
+      this.value.page.data?.data.items.some((step) => step.step_ref === ref)
+    )
+      return true;
+    return this.readPage(null, false, ref);
+  }
   async setShowCancelled(value: boolean): Promise<boolean> {
     if (typeof value !== 'boolean') throw new TypeError('Invalid display preference');
     if (value === this.value.show_cancelled) return true;
@@ -167,7 +176,11 @@ export class FormationReadOwner {
     });
     return pending;
   }
-  private async readPage(cursor: string | null, allowRecovery: boolean): Promise<boolean> {
+  private async readPage(
+    cursor: string | null,
+    allowRecovery: boolean,
+    reveal: string | null = null,
+  ): Promise<boolean> {
     const summary = this.value.summary.data;
     if (this.closed || summary === null || !summary.exists || summary.formation_version === null)
       return false;
@@ -177,27 +190,41 @@ export class FormationReadOwner {
     const controller = new AbortController();
     this.pageController = controller;
     const filter = this.value.show_cancelled;
-    this.publish({ page: loading(this.value.page), page_cursor: cursor });
+    this.publish({
+      page: loading(this.value.page),
+      ...(reveal === null ? { page_cursor: cursor } : {}),
+    });
+    const visited = new Set<string | null>();
+    let next = cursor;
     try {
-      const response = await this.api.getFormationSteps(
-        this.requirementId,
-        this.documentId,
-        {
-          limit: 20,
-          known_f: summary.formation_version,
-          include_cancelled: filter,
-          ...(cursor === null ? {} : { cursor }),
-        },
-        controller.signal,
-      );
-      if (!this.live(generation) || epoch !== this.pageEpoch) return false;
-      if (
-        response.data.document_id !== this.documentId ||
-        response.data.formation_version !== summary.formation_version
-      )
-        throw new ApiUnknown(false);
-      this.publish({ page: ready(response) });
-      return true;
+      while (!visited.has(next)) {
+        visited.add(next);
+        const response = await this.api.getFormationSteps(
+          this.requirementId,
+          this.documentId,
+          {
+            limit: 20,
+            known_f: summary.formation_version,
+            include_cancelled: filter,
+            ...(next === null ? {} : { cursor: next }),
+          },
+          controller.signal,
+        );
+        if (!this.live(generation) || epoch !== this.pageEpoch) return false;
+        if (
+          response.data.document_id !== this.documentId ||
+          response.data.formation_version !== summary.formation_version
+        )
+          throw new ApiUnknown(false);
+        if (reveal === null || response.data.items.some((step) => step.step_ref === reveal)) {
+          this.publish({ page: ready(response), page_cursor: next });
+          return true;
+        }
+        if (response.meta.pagination.next_cursor === null) break;
+        next = response.meta.pagination.next_cursor;
+      }
+      this.publish({ page: failed(this.value.page, '当前路线中未找到该步骤，请刷新主线') });
+      return false;
     } catch (error) {
       if (!this.live(generation) || epoch !== this.pageEpoch) return false;
       if (stale(error) && allowRecovery) return this.recover(generation);

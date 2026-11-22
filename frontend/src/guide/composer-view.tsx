@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { useId, useMemo, useState, useSyncExternalStore } from 'react';
 import type { GuideRun } from '../api/models.ts';
 import type { RequirementDiscussion } from '../requirements/discussion.ts';
@@ -6,7 +6,7 @@ import type { RequirementDocumentOwner } from '../requirements/document-owner.ts
 import type { RequirementGuideComposer } from './composer.ts';
 import { reviewTarget, chapterTargets, nextChapter } from './scope.ts';
 import { instructionFeedback } from './input-feedback.ts';
-import { composerFeedback } from './composer-feedback.ts';
+import { composerFeedback, composerProgress } from './composer-feedback.ts';
 import { composerShortcut } from './send-shortcut.ts';
 import { SingleSelect } from '../shared/single-select.tsx';
 import { Icon } from '../shared/icon.tsx';
@@ -17,6 +17,18 @@ const names = {
 
 const quietSubscribe = () => () => {};
 const empty = () => null;
+
+const shortcutHint = 'Enter 发送 · Ctrl / ⌘ + Enter 换行';
+
+function closeOtherDisclosures(event: MouseEvent<HTMLElement>) {
+  if (!(event.target instanceof Element)) return;
+  const current = event.target.closest('.guide-composer-disclosure');
+  for (const panel of event.currentTarget.querySelectorAll<HTMLDetailsElement>(
+    '.guide-composer-disclosure[open]',
+  )) {
+    if (panel !== current) panel.open = false;
+  }
+}
 
 export function GuideComposer({
   owner,
@@ -88,6 +100,34 @@ export function GuideComposer({
     (topicUpdating ? '请先核实讨论主题的保存结果。' : null);
   const guidanceId = help + '-guidance';
   const effectId = help + '-effect';
+  const topicError =
+    !writing || discussionState?.phase === 'CONFIRMED' || discussionState?.phase === 'UNKNOWN'
+      ? (discussionState?.error ?? null)
+      : null;
+  const inputError = !composing && state.instruction.length > 0 ? feedback.error : null;
+  const problem = state.error ?? topicError ?? inputError;
+  const progress = composerProgress(state, discussionState?.phase === 'SUBMITTING');
+  const working = progress !== null;
+  const context = state.formation_proposal
+    ? '已选原提案'
+    : state.parent
+      ? '衔接运行 #' + state.parent.id
+      : handoff
+        ? '查看代码移交'
+        : viewingHistory === null
+          ? shortcutHint
+          : '查看历史运行';
+  let statusLabel = progress ?? blocked ?? state.draft_warning ?? context;
+  if (problem !== null) statusLabel = '操作未完成';
+  if (state.phase === 'UNKNOWN' || discussionState?.phase === 'UNKNOWN') statusLabel = '结果待核实';
+  const statusMessage = problem ?? progress ?? blocked ?? state.draft_warning ?? shortcutHint;
+  const hasStatusActions =
+    problem !== null ||
+    state.phase === 'UNKNOWN' ||
+    state.phase === 'CONFIRMED' ||
+    discussionState?.phase === 'UNKNOWN' ||
+    discussionState?.phase === 'CONFIRMED' ||
+    context !== shortcutHint;
   const canSend = !disabled && !composing && blocked === null && feedback.valid;
   const chooseChapter = (id: number) => {
     const selected = chapters.find((item) => item.block_id === id);
@@ -123,43 +163,24 @@ export function GuideComposer({
     <section
       aria-label="AI 消息输入"
       className="guide-composer"
-      aria-busy={state.refreshing || state.phase === 'SUBMITTING' || state.phase === 'READING'}
+      onClickCapture={closeOtherDisclosures}
+      onKeyDown={(event) => {
+        if (
+          event.key !== 'Escape' ||
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          !(event.target instanceof Element)
+        )
+          return;
+        const panel = event.target.closest<HTMLDetailsElement>('.guide-composer-disclosure[open]');
+        if (panel === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        panel.open = false;
+        panel.querySelector('summary')?.focus();
+      }}
     >
       <div className="guide-composer-body">
-        {handoff}
-        {state.formation_proposal !== null && (
-          <p role="status">
-            已选择调整
-            {state.formation_proposal.intent === 'ADJUST_WRITE' ? '原写入提案' : '原路线提案'}。
-            请在输入框填写要求，发送后才开始调整。
-            <button
-              type="button"
-              className="ui-button"
-              disabled={!owner.editable}
-              onClick={() => owner.clearProposalSelection()}
-            >
-              取消本轮选择
-            </button>
-          </p>
-        )}
-        {viewingHistory !== null && (
-          <p className="field-help">
-            正在查看运行 #{viewingHistory}。输入仅发送当前明确选择的操作。
-          </p>
-        )}
-        {state.parent && (
-          <p role="status">
-            衔接运行 #{state.parent.id}，创建新的讨论轮次。
-            <button
-              className="ui-button"
-              type="button"
-              disabled={disabled}
-              onClick={() => owner.continueFrom(null)}
-            >
-              取消衔接
-            </button>
-          </p>
-        )}
         <div className="guide-composer-toolbar">
           <div className="guide-mode-switch" role="group" aria-label="对话状态">
             {(['DISCUSS', 'REVISE'] as const).map((mode) => (
@@ -176,63 +197,69 @@ export function GuideComposer({
           </div>
           {associations}
           {writing ? (
-            <div className="guide-chapter-controls">
-              <label>
-                写入范围
-                <SingleSelect
-                  label="写入范围"
-                  value={scopeValue}
-                  disabled={
-                    disabled || topicUpdating || current === null || current.archived_at !== null
-                  }
-                  options={[
-                    { value: 'NONE', label: '请选择写入范围', disabled: true },
-                    { value: 'DOCUMENT', label: '整篇文档' },
-                    ...(scopeValue === 'REFERENCE' && target
-                      ? [{ value: 'REFERENCE', label: target.label }]
-                      : []),
-                    ...chapters.map((item) => ({
-                      value: String(item.block_id),
-                      label: '　'.repeat(item.level - 1) + item.title,
-                    })),
-                  ]}
-                  change={chooseScope}
-                />
-              </label>
-              <p className="field-help">
-                {current && `${current.name} · V${current.content_version} · `}
-                <span id={effectId}>{guidance.effect}</span>
-              </p>
-              {target &&
-                current &&
-                current.content_version !== target.content_version &&
-                !missingChapter &&
-                scopeValue !== 'REFERENCE' && (
+            <details className="guide-composer-disclosure guide-target-control">
+              <summary title={target?.label ?? '请选择写入范围'}>
+                <span>写入范围</span>
+                <strong>{chapter?.title ?? target?.label ?? '请选择'}</strong>
+              </summary>
+              <div className="guide-composer-popover guide-chapter-controls">
+                <label>
+                  写入范围
+                  <SingleSelect
+                    label="写入范围"
+                    value={scopeValue}
+                    disabled={
+                      disabled || topicUpdating || current === null || current.archived_at !== null
+                    }
+                    options={[
+                      { value: 'NONE', label: '请选择写入范围', disabled: true },
+                      { value: 'DOCUMENT', label: '整篇文档' },
+                      ...(scopeValue === 'REFERENCE' && target
+                        ? [{ value: 'REFERENCE', label: target.label }]
+                        : []),
+                      ...chapters.map((item) => ({
+                        value: String(item.block_id),
+                        label: '　'.repeat(item.level - 1) + item.title,
+                      })),
+                    ]}
+                    change={chooseScope}
+                  />
+                </label>
+                <p className="field-help">
+                  {current && `${current.name} · V${current.content_version} · `}
+                  <span id={effectId}>{guidance.effect}</span>
+                </p>
+                {target &&
+                  current &&
+                  current.content_version !== target.content_version &&
+                  !missingChapter &&
+                  scopeValue !== 'REFERENCE' && (
+                    <button
+                      className="ui-button"
+                      type="button"
+                      disabled={disabled || topicUpdating || current.archived_at !== null}
+                      onClick={() => chooseScope(scopeValue)}
+                    >
+                      使用最新版本确认范围
+                    </button>
+                  )}
+                {following && target?.content_version === current?.content_version && (
                   <button
                     className="ui-button"
                     type="button"
-                    disabled={disabled || topicUpdating || current.archived_at !== null}
-                    onClick={() => chooseScope(scopeValue)}
+                    disabled={disabled || topicUpdating || current?.archived_at !== null}
+                    onClick={() => chooseChapter(following.block_id)}
                   >
-                    使用最新版本确认范围
+                    选择下一章
                   </button>
                 )}
-              {following && target?.content_version === current?.content_version && (
-                <button
-                  className="ui-button"
-                  type="button"
-                  disabled={disabled || topicUpdating || current?.archived_at !== null}
-                  onClick={() => chooseChapter(following.block_id)}
-                >
-                  选择下一章
-                </button>
-              )}
-            </div>
+              </div>
+            </details>
           ) : (
             discussion &&
             discussionState && (
               <details
-                className="guide-topic-controls"
+                className="guide-composer-disclosure guide-target-control"
                 onToggle={(event) => {
                   if (event.currentTarget.open && latestDiscussion === null) readTopics();
                 }}
@@ -241,104 +268,42 @@ export function GuideComposer({
                   <span>{formationTarget === null ? '讨论主题' : '讨论目标'}</span>
                   <strong>{discussionLabel ?? '暂无讨论主题'}</strong>
                 </summary>
-                {formationTarget !== null && (
-                  <p className="field-help">讨论主题 · {focusTitle ?? '暂无讨论主题'}</p>
-                )}
-                {discussionState.loading && <p role="status">正在读取讨论主题…</p>}
-                {topics.length > 0 && (
-                  <SingleSelect
-                    label="切换讨论主题"
-                    value={focus ?? ''}
-                    disabled={disabled || topicUpdating || !discussion.allowed}
-                    options={[
-                      { value: '', label: '请选择讨论主题', disabled: true },
-                      ...topics.map((topic) => ({ value: topic.topic_ref, label: topic.title })),
-                    ]}
-                    change={(value) => {
-                      if (!disabled && value !== focus)
-                        void discussion.submit({ type: 'SET_FOCUS', topic_ref: value });
-                    }}
-                  />
-                )}
-                {(latestDiscussion === null || discussionState.error) &&
-                  !discussionState.loading &&
-                  !topicUpdating && (
-                    <button
-                      className="ui-button"
-                      type="button"
-                      onClick={() => void discussion.reread()}
-                    >
-                      重新读取主题
-                    </button>
+                <div className="guide-composer-popover guide-topic-controls">
+                  {formationTarget !== null && (
+                    <p className="field-help">讨论主题 · {focusTitle ?? '暂无讨论主题'}</p>
                   )}
+                  {discussionState.loading && <p role="status">正在读取讨论主题…</p>}
+                  {topics.length > 0 && (
+                    <SingleSelect
+                      label="切换讨论主题"
+                      value={focus ?? ''}
+                      disabled={disabled || topicUpdating || !discussion.allowed}
+                      options={[
+                        { value: '', label: '请选择讨论主题', disabled: true },
+                        ...topics.map((topic) => ({ value: topic.topic_ref, label: topic.title })),
+                      ]}
+                      change={(value) => {
+                        if (!disabled && value !== focus)
+                          void discussion.submit({ type: 'SET_FOCUS', topic_ref: value });
+                      }}
+                    />
+                  )}
+                  {(latestDiscussion === null || discussionState.error) &&
+                    !discussionState.loading &&
+                    !topicUpdating && (
+                      <button
+                        className="ui-button"
+                        type="button"
+                        onClick={() => void discussion.reread()}
+                      >
+                        重新读取主题
+                      </button>
+                    )}
+                </div>
               </details>
             )
           )}
         </div>
-        {discussionState?.error &&
-          (!writing ||
-            discussionState.phase === 'CONFIRMED' ||
-            discussionState.phase === 'UNKNOWN') && (
-            <p role="alert" className="inline-error">
-              {discussionState.error}
-            </p>
-          )}
-        {discussion && topicUpdating && (
-          <div className="guide-send-guidance">
-            {discussionState?.phase === 'SUBMITTING' && <p role="status">正在保存讨论主题…</p>}
-            {discussionState?.phase === 'UNKNOWN' && (
-              <button
-                type="button"
-                className="ui-button"
-                disabled={disabled}
-                onClick={() => void discussion.retryUnknown()}
-              >
-                核实原主题请求
-              </button>
-            )}
-            {discussionState?.phase === 'CONFIRMED' && (
-              <button
-                type="button"
-                className="ui-button"
-                disabled={disabled || discussionState.loading}
-                onClick={() => void discussion.finish()}
-              >
-                读取主题保存结果
-              </button>
-            )}
-          </div>
-        )}
-        {viewingHistory !== null && review && review.status !== 'RUNNING' && (
-          <div className="guide-send-guidance">
-            <button
-              type="button"
-              className="ui-button"
-              disabled={disabled || topicUpdating}
-              onClick={() => owner.continueFrom(review)}
-            >
-              衔接此运行继续讨论
-            </button>
-            {review.action_type === 'REVIEW' &&
-              review.status === 'COMPLETED' &&
-              review.scope !== null &&
-              binding && (
-                <button
-                  type="button"
-                  className="ui-button"
-                  disabled={disabled || topicUpdating}
-                  onClick={() => {
-                    try {
-                      owner.useReview(review, reviewTarget(binding.editor, review.scope!));
-                    } catch {
-                      owner.rejectScope();
-                    }
-                  }}
-                >
-                  根据这次检查修订
-                </button>
-              )}
-          </div>
-        )}
         {!writing && (
           <span id={effectId} className="sr-only">
             {guidance.effect}
@@ -354,7 +319,7 @@ export function GuideComposer({
             placeholder={writing ? '说明要写入的内容…' : '说明本次希望讨论的问题…'}
             rows={2}
             aria-invalid={!composing && state.instruction.length > 0 && !feedback.valid}
-            aria-describedby={`${effectId} ${help}`}
+            aria-describedby={`${effectId} ${help} ${guidanceId}`}
             onChange={(event) => owner.change(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (composing) return;
@@ -375,70 +340,156 @@ export function GuideComposer({
             }}
           />
         </label>
-        <p
-          id={help}
-          className={
-            !composing && state.instruction.length > 0 && !feedback.valid
-              ? 'field-help inline-error'
-              : 'field-help guide-character-count'
-          }
-        >
-          {composing
-            ? '正在输入…'
-            : `${feedback.length} / 10000 字符${state.instruction.length > 0 && feedback.error ? ' · ' + feedback.error : ''}`}
-        </p>
-        {blocked && (
-          <p id={guidanceId} className="guide-send-guidance">
-            {blocked}
-          </p>
-        )}
-        {state.phase === 'SUBMITTING' && <p role="status">正在提交本次操作…</p>}
-        {state.phase === 'READING' && <p role="status">正在核实实际状态…</p>}
-        {state.phase === 'CONFIRMED' && <p role="status">操作已接受，正在读取运行结果。</p>}
-        {state.draft_warning && <p role="status">{state.draft_warning}</p>}
-        {state.error && (
-          <p role="alert" className="inline-error">
-            {state.error}
-          </p>
-        )}
-        {state.phase === 'UNKNOWN' && (
-          <button
-            className="ui-button"
-            type="button"
-            disabled={!state.available || state.refreshing}
-            onClick={() => void owner.recover()}
-          >
-            核实原请求
-          </button>
-        )}
-        {state.phase === 'CONFIRMED' && (
-          <button
-            className="ui-button"
-            type="button"
-            disabled={!state.available || state.refreshing}
-            onClick={() => void owner.finish()}
-          >
-            读取已接受结果
-          </button>
-        )}
-        {state.phase === 'ERROR' && (
-          <button
-            className="ui-button"
-            type="button"
-            disabled={disabled}
-            onClick={() => void owner.refresh()}
-          >
-            重新读取状态
-          </button>
-        )}
       </div>
       <footer className="guide-composer-footer">
-        <span className="guide-send-hint">Enter 发送 · Ctrl / ⌘ + Enter 换行</span>
+        <details className="guide-composer-disclosure guide-composer-status">
+          <summary
+            data-tone={problem !== null ? 'error' : working ? 'busy' : undefined}
+            title={statusMessage}
+          >
+            {working && problem === null && (
+              <span className="guide-wait-indicator" aria-hidden="true" />
+            )}
+            <span>{statusLabel}</span>
+            {hasStatusActions && <Icon name="more" />}
+          </summary>
+          <div className="guide-composer-popover guide-composer-status-details">
+            {progress && <p>{progress}</p>}
+            {!working && blocked && blocked !== problem && <p>{blocked}</p>}
+            {problem && <p className="inline-error">{problem}</p>}
+            {state.draft_warning && state.draft_warning !== statusMessage && (
+              <p>{state.draft_warning}</p>
+            )}
+            {state.phase === 'UNKNOWN' && (
+              <button
+                className="ui-button"
+                type="button"
+                disabled={!state.available || state.refreshing}
+                onClick={() => void owner.recover()}
+              >
+                核实原请求
+              </button>
+            )}
+            {state.phase === 'CONFIRMED' && (
+              <button
+                className="ui-button"
+                type="button"
+                disabled={!state.available || state.refreshing}
+                onClick={() => void owner.finish()}
+              >
+                读取已接受结果
+              </button>
+            )}
+            {state.phase === 'ERROR' && (
+              <button
+                className="ui-button"
+                type="button"
+                disabled={disabled}
+                onClick={() => void owner.refresh()}
+              >
+                重新读取状态
+              </button>
+            )}
+            {discussionState?.phase === 'UNKNOWN' && discussion && (
+              <button
+                className="ui-button"
+                type="button"
+                disabled={disabled}
+                onClick={() => void discussion.retryUnknown()}
+              >
+                核实原主题请求
+              </button>
+            )}
+            {discussionState?.phase === 'CONFIRMED' && discussion && (
+              <button
+                className="ui-button"
+                type="button"
+                disabled={disabled || discussionState.loading}
+                onClick={() => void discussion.finish()}
+              >
+                读取主题保存结果
+              </button>
+            )}
+            {handoff}
+            {state.formation_proposal !== null && (
+              <p role="status">
+                已选择调整
+                {state.formation_proposal.intent === 'ADJUST_WRITE' ? '原写入提案' : '原路线提案'}。
+                请在输入框填写要求，发送后才开始调整。
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={!owner.editable}
+                  onClick={() => owner.clearProposalSelection()}
+                >
+                  取消本轮选择
+                </button>
+              </p>
+            )}
+            {viewingHistory !== null && (
+              <p className="field-help">
+                正在查看运行 #{viewingHistory}。输入仅发送当前明确选择的操作。
+              </p>
+            )}
+            {state.parent && (
+              <p role="status">
+                衔接运行 #{state.parent.id}，创建新的讨论轮次。
+                <button
+                  className="ui-button"
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => owner.continueFrom(null)}
+                >
+                  取消衔接
+                </button>
+              </p>
+            )}
+
+            {viewingHistory !== null && review && review.status !== 'RUNNING' && (
+              <div className="guide-send-guidance">
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={disabled || topicUpdating}
+                  onClick={() => owner.continueFrom(review)}
+                >
+                  衔接此运行继续讨论
+                </button>
+                {review.action_type === 'REVIEW' &&
+                  review.status === 'COMPLETED' &&
+                  review.scope !== null &&
+                  binding && (
+                    <button
+                      type="button"
+                      className="ui-button"
+                      disabled={disabled || topicUpdating}
+                      onClick={() => {
+                        try {
+                          owner.useReview(review, reviewTarget(binding.editor, review.scope!));
+                        } catch {
+                          owner.rejectScope();
+                        }
+                      }}
+                    >
+                      根据这次检查修订
+                    </button>
+                  )}
+              </div>
+            )}
+            <p className="field-help">{shortcutHint}</p>
+          </div>
+        </details>
+        <span id={guidanceId} className="sr-only" role="status">
+          {statusLabel === shortcutHint ? '' : statusMessage}
+        </span>
+        <p id={help} className="guide-character-count" title={`${feedback.length} / 10000 字符`}>
+          {composing ? '输入中' : `${feedback.length}/10000`}
+        </p>
         <button
           className="ui-button primary"
           type="button"
           disabled={!canSend}
-          aria-describedby={blocked ? guidanceId : help}
+          aria-describedby={`${guidanceId} ${help}`}
           onClick={send}
         >
           <Icon name="send" />

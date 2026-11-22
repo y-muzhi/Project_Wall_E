@@ -1,4 +1,6 @@
 .guide-associated-documents {
+  flex: none;
+  inline-size: 104px;
   min-width: 0;
   border: 1px solid var(--border-light);
   border-radius: 8px;
@@ -8,11 +10,9 @@
   cursor: pointer;
   color: var(--text-accent);
   font-size: 12px;
+  white-space: nowrap;
 }
-.guide-associated-documents[open] > summary {
-  margin-bottom: 10px;
-}
-.guide-associated-documents > fieldset {
+.guide-associated-documents .guide-composer-popover > fieldset {
   border: 0;
   padding: 0;
   margin: 0;

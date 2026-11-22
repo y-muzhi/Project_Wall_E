@@ -127,7 +127,7 @@ export function DocumentAssociations({
   return (
     <details
       ref={panel}
-      className="guide-associated-documents"
+      className="guide-composer-disclosure guide-associated-documents"
       onToggle={(event) => {
         const expanded = event.currentTarget.open;
         setOpen(expanded);
@@ -145,97 +145,99 @@ export function DocumentAssociations({
       }}
     >
       <summary>关联文档 · {saved.length}</summary>
-      {state.loading && <p role="status">正在读取关联文档…</p>}
-      {locked && <p className="field-help">{reason}</p>}
-      {binding && (
-        <>
-          <fieldset disabled={locked}>
-            <legend>关联文档</legend>
-            {documents.length ? (
-              documents.map((document) => (
-                <label key={document.id}>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(document.id)}
-                    onChange={(event) => {
-                      setDraft(
-                        event.currentTarget.checked
-                          ? [...selected, document.id]
-                          : selected.filter((id) => id !== document.id),
-                      );
-                    }}
-                  />
-                  <span>
-                    {document.name} · v{document.content_version}
-                  </span>
-                </label>
-              ))
-            ) : (
-              <EmptyState icon="info" message="暂无其他可关联文档" compact />
+      <div className="guide-composer-popover">
+        {state.loading && <p role="status">正在读取关联文档…</p>}
+        {locked && <p className="field-help">{reason}</p>}
+        {binding && (
+          <>
+            <fieldset disabled={locked}>
+              <legend>关联文档</legend>
+              {documents.length ? (
+                documents.map((document) => (
+                  <label key={document.id}>
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(document.id)}
+                      onChange={(event) => {
+                        setDraft(
+                          event.currentTarget.checked
+                            ? [...selected, document.id]
+                            : selected.filter((id) => id !== document.id),
+                        );
+                      }}
+                    />
+                    <span>
+                      {document.name} · v{document.content_version}
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <EmptyState icon="info" message="暂无其他可关联文档" compact />
+              )}
+            </fieldset>
+            {stale && (
+              <p className="field-help">
+                部分来源已有新版本；已有关联继续使用保存的版本。
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={locked || latest}
+                  onClick={() => setLatest(true)}
+                >
+                  使用最新版本
+                </button>
+              </p>
             )}
-          </fieldset>
-          {stale && (
-            <p className="field-help">
-              部分来源已有新版本；已有关联继续使用保存的版本。
+            {latest && (
+              <p className="field-help">完成后将采用所选文档的当前版本，已发送请求保留原快照。</p>
+            )}
+            <div className="guide-settings-actions">
+              <button type="button" className="ui-button" disabled={pending} onClick={cancel}>
+                取消
+              </button>
               <button
                 type="button"
-                className="ui-button"
-                disabled={locked || latest}
-                onClick={() => setLatest(true)}
+                className="ui-button primary"
+                title={locked ? reason : !changed ? '关联文档未改变。' : undefined}
+                disabled={locked || !changed}
+                onClick={() => void save()}
               >
-                使用最新版本
+                保存关联文档
               </button>
-            </p>
-          )}
-          {latest && (
-            <p className="field-help">完成后将采用所选文档的当前版本，已发送请求保留原快照。</p>
-          )}
-          <div className="guide-settings-actions">
-            <button type="button" className="ui-button" disabled={pending} onClick={cancel}>
-              取消
-            </button>
-            <button
-              type="button"
-              className="ui-button primary"
-              title={locked ? reason : !changed ? '关联文档未改变。' : undefined}
-              disabled={locked || !changed}
-              onClick={() => void save()}
-            >
-              保存关联文档
-            </button>
-          </div>
-        </>
-      )}
-      {(state.error || error) && (
-        <p role="alert" className="inline-error">
-          {error ?? state.error}
-        </p>
-      )}
-      {!state.loading && !pending && (!binding || state.error || error) && (
-        <button type="button" className="ui-button" onClick={() => void reread()}>
-          重新读取关联文档
-        </button>
-      )}
-      {state.phase === 'UNKNOWN' && (
-        <button
-          type="button"
-          className="ui-button"
-          disabled={blocked}
-          onClick={() => void flow.retryUnknown().then(reconcile)}
-        >
-          核实原请求
-        </button>
-      )}
-      {state.phase === 'CONFIRMED' && (
-        <button
-          type="button"
-          className="ui-button"
-          disabled={blocked || state.loading}
-          onClick={() => void flow.finish().then(reconcile)}
-        >
-          读取保存结果
-        </button>
-      )}
+            </div>
+          </>
+        )}
+        {(state.error || error) && (
+          <p role="alert" className="inline-error">
+            {error ?? state.error}
+          </p>
+        )}
+        {!state.loading && !pending && (!binding || state.error || error) && (
+          <button type="button" className="ui-button" onClick={() => void reread()}>
+            重新读取关联文档
+          </button>
+        )}
+        {state.phase === 'UNKNOWN' && (
+          <button
+            type="button"
+            className="ui-button"
+            disabled={blocked}
+            onClick={() => void flow.retryUnknown().then(reconcile)}
+          >
+            核实原请求
+          </button>
+        )}
+        {state.phase === 'CONFIRMED' && (
+          <button
+            type="button"
+            className="ui-button"
+            disabled={blocked || state.loading}
+            onClick={() => void flow.finish().then(reconcile)}
+          >
+            读取保存结果
+          </button>
+        )}
+      </div>
     </details>
   );
 }

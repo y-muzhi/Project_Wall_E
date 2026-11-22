@@ -265,3 +265,34 @@ test('wrong-document summary is a read error, never an empty formation', async (
   assert.equal(owner.getSnapshot().summary.data, null);
   assert.equal(calls.length, 0);
 });
+
+test('revealing a step follows result cursors and keeps the viewing selection and focus separate', async () => {
+  const cursors = [];
+  const { owner } = setup({
+    async getFormationSteps(_req, _doc, query) {
+      cursors.push(query.cursor ?? null);
+      const current = query.cursor === 'next' ? 's9' : 's1';
+      return {
+        ...page(1, [current]),
+        meta: { pagination: { next_cursor: current === 's1' ? 'next' : null } },
+      };
+    },
+  });
+  assert(await owner.refresh());
+  assert(await owner.selectStep('s1'));
+  assert(await owner.revealStep('s9'));
+  const located = owner.getSnapshot();
+  assert.deepEqual(cursors, [null, null, 'next']);
+  assert.equal(located.page_cursor, 'next');
+  assert.equal(located.page.data.data.items[0].step_ref, 's9');
+  assert.equal(located.selected_step_ref, 's1');
+  assert.equal(located.summary.data.current_step_ref, null);
+
+  assert.equal(await owner.revealStep('s20'), false);
+  const missing = owner.getSnapshot();
+  assert.equal(missing.page_cursor, 'next');
+  assert.equal(missing.page.data, located.page.data);
+  assert.equal(missing.page.phase, 'ERROR');
+  assert.match(missing.page.error, /未找到/);
+  owner.dispose();
+});

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {composerFeedback} from '../src/guide/composer-feedback.ts';
+import {composerFeedback,composerProgress} from '../src/guide/composer-feedback.ts';
 
 const state=(changes={})=>({action:'DISCUSS',phase:'READY',needs_refresh:false,detail:{requirement:{status:'CLOSED',document_work_state:'IDLE'}},target:null,source_refs:[],...changes});
 test('feedback distinguishes discussion and saved revisions without granting send authority',()=>{
@@ -16,4 +16,13 @@ test('unknown results and real work occupancy take precedence over new configura
  const unknown=composerFeedback(state({action:'REVISE',phase:'UNKNOWN'}),false,false);assert.match(unknown.blocked,/核实原请求/);
  const editing=state({detail:{requirement:{document_work_state:'MANUAL_EDITING'}}});assert.match(composerFeedback(editing,false,false).blocked,/完成或取消人工编辑/);
  const proposals=state({detail:{requirement:{document_work_state:'SUGGESTION_REVIEWING'}}});assert.match(composerFeedback(proposals,false,false).blocked,/完成或放弃当前修改建议/);
+});
+
+test('request progress uses the active stage and leaves idle forms clear', () => {
+  assert.equal(composerProgress(state(), false), null);
+  assert.equal(composerProgress(state({ phase: 'SUBMITTING' }), false), '正在发送');
+  assert.equal(composerProgress(state({ phase: 'CONFIRMED' }), false), '读取结果');
+  const running = state({ detail: { requirement: { document_work_state: 'GUIDE_ACTIVE' } } });
+  assert.equal(composerProgress(running, false), '等待回复');
+  assert.equal(composerProgress(state(), true), '保存讨论主题');
 });

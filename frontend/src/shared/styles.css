@@ -2142,11 +2142,11 @@ input[type='radio'] {
   flex-basis: 100%;
 }
 .guide-composer {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: none;
   min-height: 0;
-  max-height: 55%;
   gap: 6px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -2171,6 +2171,7 @@ input[type='radio'] {
 }
 .guide-composer textarea {
   resize: vertical;
+  max-height: min(26dvh, 160px);
   line-height: 1.6;
 }
 .guide-composer p {
@@ -2190,29 +2191,103 @@ input[type='radio'] {
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
   padding: 2px;
 }
 .guide-composer-footer {
   flex: none;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 68px 116px;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.guide-send-hint {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 20px;
+  gap: 6px;
+  min-width: 0;
 }
 .guide-composer-footer > .ui-button {
-  width: auto;
-  margin-left: auto;
+  width: 100%;
   min-height: 34px;
   border-radius: 9px;
   font-size: 13px;
+  white-space: nowrap;
+}
+.guide-composer-status {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.guide-composer-status > summary {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 7px;
+  border-radius: 7px;
+  list-style: none;
+  cursor: pointer;
+}
+.guide-composer-status > summary::-webkit-details-marker {
+  display: none;
+}
+.guide-composer-status > summary:hover,
+.guide-composer-status[open] > summary {
+  background: var(--surface);
+}
+.guide-composer-status > summary[data-tone='busy'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.guide-composer-status > summary[data-tone='error'] {
+  color: var(--danger);
+}
+.guide-composer-status > summary > svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+.guide-composer-status > summary > span:not(.guide-wait-indicator) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-wait-indicator {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .guide-wait-indicator {
+    animation: guide-wait-spin 900ms linear infinite;
+  }
+}
+@keyframes guide-wait-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.guide-composer-popover {
+  position: absolute;
+  z-index: 3;
+  inset-inline: 0;
+  inset-block-end: calc(100% + 6px);
+  max-height: min(46dvh, 320px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-overlay);
+  color: var(--text);
+  background: var(--surface-base);
+}
+.guide-composer-status[open] .guide-composer-status-details,
+.guide-target-control[open] > .guide-topic-controls {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
 }
 .guide-composer-toolbar {
   display: flex;
@@ -2221,58 +2296,46 @@ input[type='radio'] {
   gap: 4px 8px;
   min-width: 0;
 }
-
-.guide-composer-toolbar > details[open],
-.guide-composer-toolbar > .guide-chapter-controls {
-  flex: 1 0 100%;
-}
-
 .guide-mode-switch {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
   align-items: center;
   gap: 6px;
 }
-
 .guide-mode-switch > .ui-button {
   min-height: 32px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   font-size: 13px;
+  white-space: nowrap;
 }
-
+.guide-mode-switch > .ui-button:first-child {
+  inline-size: 48px;
+}
+.guide-mode-switch > .ui-button:last-child {
+  inline-size: 99px;
+}
 .guide-mode-switch > .ui-button[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--text-accent);
   font-weight: 600;
 }
-
-.guide-topic-controls {
+.guide-target-control {
   flex: 1 1 148px;
   min-width: 0;
 }
-
-.guide-topic-controls > summary {
+.guide-target-control > summary {
   min-height: 32px;
   cursor: pointer;
   padding-block: 6px;
   line-height: 20px;
-  overflow-wrap: anywhere;
-  font-size: 13px;
-}
-
-.guide-topic-controls:not([open]) > summary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
 }
-
-.guide-topic-controls > summary > span {
+.guide-target-control > summary > span {
   margin-inline: 4px 8px;
   color: var(--muted);
-}
-
-.guide-topic-controls[open] > :not(summary) {
-  margin-block: 4px;
 }
 
 .guide-settings-actions {
@@ -2305,7 +2368,11 @@ input[type='radio'] {
   overflow-wrap: anywhere;
 }
 .guide-character-count {
-  text-align: right;
+  text-align: end;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .guide-send-guidance {
   display: flex;
@@ -2465,9 +2532,9 @@ input[type='radio'] {
   color: var(--text);
 }
 .guide-composer .guide-message-field textarea:focus-visible {
-  outline-offset: -2px;
+  outline: none;
 }
-.guide-composer:focus-within {
+.guide-composer:has(.guide-message-field textarea:focus-visible) {
   border-color: var(--border-focus);
 }
 .guide-composer-body {

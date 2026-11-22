@@ -31,3 +31,13 @@ export function composerFeedback(
   if (!allowed) return result('目标或来源已变化，请核对当前文档及范围后再发送。');
   return result(null);
 }
+
+/** The footer swaps progress text in place as the original request advances. */
+export function composerProgress(state: ComposerState, savingTopic: boolean): string | null {
+  if (state.phase === 'SUBMITTING') return '正在发送';
+  if (state.phase === 'READING') return '核实请求';
+  if (state.phase === 'CONFIRMED') return '读取结果';
+  if (state.detail.requirement.document_work_state === 'GUIDE_ACTIVE') return '等待回复';
+  if (savingTopic) return '保存讨论主题';
+  return state.refreshing ? '同步状态' : null;
+}
