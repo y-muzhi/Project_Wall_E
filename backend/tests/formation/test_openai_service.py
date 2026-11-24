@@ -100,3 +100,26 @@ def test_actual_cli_observation_uses_only_one_native_call_and_new_owned_slot(
     assert result.returncode == 0, result.stderr
     assert 'admission=LIVE_VERIFIED' in result.stdout
     assert 'credentials_read=0; provider_calls=0; service_started=0' in result.stdout
+
+
+def test_explicit_activation_requires_exact_release_and_keeps_actual_state(monkeypatch):
+    from backend.app.infrastructure.collaboration_admission import AdmissionEvidence
+    from backend.app.infrastructure.resources import ConfigInvalid
+
+    profile, catalog = module().profile_and_catalog()
+    resource = catalog.collaboration
+    offline = AdmissionEvidence(resource.release['admission'])
+    key = 'WALLE_ACTIVATED_OPENAI_RELEASE_SHA256'
+    for digest in ('', '0' * 64):
+        monkeypatch.setenv(key, digest)
+        with pytest.raises(ConfigInvalid):
+            resource.require_live(profile.snapshot, admission=offline)
+    monkeypatch.setenv(key, resource.release_sha256)
+    resource.require_live(profile.snapshot, admission=offline)
+    assert offline.value['state'] == 'OFFLINE_READY'
+    with pytest.raises(ConfigInvalid):
+        resource.require_live(profile.snapshot)
+    with pytest.raises(ConfigInvalid):
+        resource.require_live(
+            profile.snapshot, admission=AdmissionEvidence({**offline.value, 'state': 'SUSPENDED'})
+        )

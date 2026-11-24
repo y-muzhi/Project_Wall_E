@@ -46,6 +46,12 @@ async def get_requirement_http(request: Request):
             runtime.database,
             parsed.requirement_id,
             expand=parsed.expand,
+            progress_view=parsed.progress_view,
+            progress_limit=parsed.progress_limit,
+            progress_group=parsed.progress_group,
+            progress_cursor=parsed.progress_cursor,
+            progress_step_ref=parsed.progress_step_ref,
+            catalog=runtime.catalog,
             document_id=parsed.document_id,
         ),
     )

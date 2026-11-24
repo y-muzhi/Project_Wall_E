@@ -1,11 +1,10 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { FormationWorkspace } from './workspace.ts';
-import type { FormationPathEditor, PathChangeType } from './path-editor.ts';
+import type { FormationPathEditor } from './path-editor.ts';
 import { pathChangeLabels } from './path-editor.ts';
 import type { previewEntity } from '../api/formation-preview.ts';
 import { registerModal, trapModalTab } from '../shared/modal.ts';
-import { EditorText, PathChangeFields, ResultRouteFields } from './editor-fields.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
 import { stepLabels, branchLabels, issueLabels } from './labels.ts';
 import './editor-view.css';
@@ -162,7 +161,6 @@ export function FormationPathEditorView({
 }: Readonly<{ owner: FormationWorkspace; editor: FormationPathEditor }>) {
   const state = useSyncExternalStore(editor.subscribe, editor.getSnapshot),
     workspace = useSyncExternalStore(owner.subscribe, owner.getSnapshot);
-  const [type, setType] = useState<PathChangeType>('SET_GOAL');
   const ref = useRef<HTMLDialogElement>(null),
     title = useRef<HTMLHeadingElement>(null);
   useLayoutEffect(() => {
@@ -188,7 +186,7 @@ export function FormationPathEditorView({
     <dialog
       ref={ref}
       className="formation-path-dialog"
-      aria-label="调整文档路线"
+      aria-label="旧路线草稿"
       tabIndex={-1}
       onKeyDown={trapModalTab}
       onCancel={(event) => {
@@ -199,12 +197,12 @@ export function FormationPathEditorView({
     >
       <header>
         <h2 tabIndex={-1} ref={title}>
-          调整文档路线
+          旧路线草稿
         </h2>
         <button
           type="button"
           className="ui-button"
-          aria-label="关闭路线编辑"
+          aria-label="关闭草稿"
           onClick={() => owner.closePathEditor()}
         >
           关闭
@@ -212,7 +210,7 @@ export function FormationPathEditorView({
       </header>
       <div className="formation-path-editor">
         <p className="field-help">
-          路线调整只保存步骤、成果和关联，不生成或修改正文。未提交的编辑会在当前浏览器标签页暂存。
+          这是此前保存在本机的草稿。可查看原操作，依据仍有效时可预览并保存。
         </p>
         {state.based_on_proposal !== null && (
           <p>基于原路线提案，保存成功后保留原提案并记录替代关系。</p>
@@ -224,101 +222,32 @@ export function FormationPathEditorView({
           </p>
         )}
         {state.phase === 'UNKNOWN' && (
-          <p role="status">
-            原调整结果待核实。后续编辑不会替换原请求，请先关闭编辑并处理待核实操作。
-          </p>
+          <p role="status">原调整的结果待核实。请关闭草稿，从待核实操作中读取原请求的结果。</p>
         )}
-        {state.phase === 'SAVING' && (
-          <p role="status">正在保存原调整。关闭编辑不会撤销已发送的操作。</p>
-        )}
+        {state.phase === 'SAVING' && <p role="status">正在保存原草稿，结果将记录在本次操作下。</p>}
         {editor.stale && (
-          <div className="formation-note">
-            <p>主线或正文依据已变化。原编辑保持，请按最新状态重新核对后再预览。</p>
-            <button
-              type="button"
-              className="ui-button"
-              disabled={workspace.pending.length > 0 || saving}
-              onClick={() => void editor.rebase()}
-            >
-              按最新状态重新核对
-            </button>
-          </div>
+          <p role="status">主线或正文已更新。可查看原草稿，回到对话按最新状态提出调整。</p>
         )}
-        <EditorText
-          label="本次调整原因"
-          value={state.reason}
-          multiline
-          onChange={(text) => editor.reason(text)}
-        />
-        <div className="formation-add-change">
-          <label>
-            调整类型
-            <select
-              aria-label="调整类型"
-              value={type}
-              onChange={(event) => setType(event.target.value as PathChangeType)}
-            >
-              {(Object.keys(pathChangeLabels) as PathChangeType[]).map((value) => (
-                <option key={value} value={value}>
-                  {pathChangeLabels[value]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="ui-button"
-            disabled={state.changes.length >= 20}
-            onClick={() => editor.add(type)}
-          >
-            添加调整
-          </button>
-          <span>{state.changes.length} / 20 项</span>
-        </div>
-        {state.changes.length === 0 && (
-          <EmptyState icon="outline" message="尚未添加路线调整" compact />
-        )}
-        <ol className="formation-edit-changes">
-          {state.changes.map((change, index) => (
+        {state.reason && <p>{state.reason}</p>}
+        <ol>
+          {state.changes.map((change) => (
             <li key={change.local_key}>
-              <header>
-                <h3>
-                  {index + 1}.{' '}
-                  {pathChangeLabels[change.value.type as PathChangeType] ?? '待核对操作'}
-                </h3>
-                <div className="formation-toolbar">
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={index === 0}
-                    aria-label={'上移调整 ' + (index + 1)}
-                    onClick={() => editor.move(change.local_key, -1)}
-                  >
-                    上移
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={index === state.changes.length - 1}
-                    aria-label={'下移调整 ' + (index + 1)}
-                    onClick={() => editor.move(change.local_key, 1)}
-                  >
-                    下移
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-button"
-                    onClick={() => editor.remove(change.local_key)}
-                  >
-                    {change.value.type === 'CANCEL_STEP' ? '删除操作及其成果去向' : '删除此调整'}
-                  </button>
-                </div>
-              </header>
-              <PathChangeFields owner={owner} editor={editor} change={change} />
+              <details>
+                <summary>
+                  {pathChangeLabels[change.value.type as keyof typeof pathChangeLabels] ??
+                    '草稿操作'}
+                </summary>
+                <pre>{JSON.stringify(change.value, null, 2)}</pre>
+              </details>
             </li>
           ))}
         </ol>
-        <ResultRouteFields owner={owner} editor={editor} />
+        {state.result_routes.length > 0 && (
+          <details>
+            <summary>原成果去向</summary>
+            <pre>{JSON.stringify(state.result_routes, null, 2)}</pre>
+          </details>
+        )}
         {validating !== null && <p className="field-help">{validating}</p>}
         <Preview editor={editor} />
       </div>
@@ -332,7 +261,7 @@ export function FormationPathEditorView({
                 ? '请先核对最新版本'
                 : workspace.pending.length > 0
                   ? '请先核实原操作'
-                  : (owner.writeReason ?? '请补齐编辑并预览后保存')}
+                  : (owner.writeReason ?? '请先预览原草稿')}
         </div>
         <div className="formation-toolbar">
           <button
@@ -349,7 +278,7 @@ export function FormationPathEditorView({
             disabled={!editor.canSave}
             onClick={() => void save()}
           >
-            确认保存路线
+            保存原草稿
           </button>
         </div>
       </footer>

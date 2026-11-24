@@ -68,6 +68,7 @@ export function FormationPage<T>({
           onPathChanged?.();
         setState((old) => ({
           ...old,
+          result: error instanceof ApiRejected && error.code === 'NOT_FOUND' ? null : old.result,
           loading: false,
           error: error instanceof ApiRejected ? error.message : '暂时无法读取，请重试',
         }));

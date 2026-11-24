@@ -38,7 +38,7 @@ def get_guide_run(
         return {'code': 'INTERNAL_ERROR', 'data': None, 'details': None}
 
 
-def list_guide_runs(database: Database, payload: object) -> dict:
+def list_guide_runs(database: Database, payload: object, *, catalog=None) -> dict:
     try:
         request = list_guide_runs_input(payload)
     except InvalidInput as error:
@@ -60,7 +60,9 @@ def list_guide_runs(database: Database, payload: object) -> dict:
                 for row in rows:
                     message, batches = repository.status_references(row)
                     items.append(
-                        get_guide_run_result(connection, row, message, batches, summary=True)
+                        get_guide_run_result(
+                            connection, row, message, batches, summary=True, catalog=catalog
+                        )
                     )
                 result = {
                     'code': 'READ_OK',

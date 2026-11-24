@@ -1,15 +1,15 @@
+import { FormationReadSources } from './source-list.tsx';
+import { ProgressGroup, ViewedProgress } from './progress-group.tsx';
 import { FormationInlineBranches } from './inline-branches.tsx';
 import { FormationProposals } from './proposals-view.tsx';
 import { FormationPathEditorView } from './editor-view.tsx';
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { createPortal } from 'react-dom';
 import type { RequirementDetailOwner } from '../requirements/detail-owner.ts';
 import { DiscussionProgress } from '../requirements/discussion-view.tsx';
 import type { FormationWorkspace } from './workspace.ts';
 import { FormationStepView } from './detail-view.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
 import { Icon } from '../shared/icon.tsx';
-import { registerModal, trapModalTab } from '../shared/modal.ts';
 import { stepLabels } from './labels.ts';
 import './progress-view.css';
 function RecoveryPanel({ owner }: Readonly<{ owner: FormationWorkspace }>) {
@@ -55,13 +55,9 @@ function RecoveryPanel({ owner }: Readonly<{ owner: FormationWorkspace }>) {
 }
 function FormationPanel({
   owner,
-  expanded,
-  toggle,
   discuss,
 }: Readonly<{
   owner: FormationWorkspace;
-  expanded: boolean;
-  toggle: () => void;
   discuss: () => void;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
@@ -73,25 +69,16 @@ function FormationPanel({
   const panel = useRef<HTMLElement>(null);
   const restoreAnchor = useRef(owner.scrollAnchor);
   const scrollSave = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [sideBySide, setSideBySide] = useState(false);
+  const [openStep, setOpenStep] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
   const detailId = useId();
 
-  const scrollHost = () =>
-    panel.current?.closest<HTMLElement>('.formation-dialog, .detail-panel-content');
+  const scrollHost = () => panel.current?.closest<HTMLElement>('.detail-panel-content');
   const nodeFor = (ref: string) =>
     Array.from(routeList.current?.children ?? []).find(
       (item) => item.getAttribute('data-step-ref') === ref,
     );
-  useLayoutEffect(() => {
-    const element = panel.current;
-    if (!expanded || element === null) return;
-    const update = () => setSideBySide(element.clientWidth >= 820);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [expanded]);
   useLayoutEffect(() => {
     const anchor = restoreAnchor.current;
     const route = routeList.current;
@@ -106,7 +93,7 @@ function FormationPanel({
     }
   }, [page]);
   useEffect(() => {
-    const host = panel.current?.closest<HTMLElement>('.formation-dialog, .detail-panel-content');
+    const host = panel.current?.closest<HTMLElement>('.detail-panel-content');
     if (host == null) return;
     const rememberScroll = () => {
       if (scrollSave.current !== null) clearTimeout(scrollSave.current);
@@ -135,7 +122,8 @@ function FormationPanel({
       if (!(await owner.read.revealStep(ref)) || panel.current === null) return;
       if (requireCurrent && owner.read.getSnapshot().summary.data?.current_step_ref !== ref) return;
       // Select and scroll within the route without dispatching a discussion action.
-      void owner.selectView(ref);
+      if (state.brief) setOpenStep(ref);
+      else void owner.selectView(ref);
       requestAnimationFrame(() => {
         const node = nodeFor(ref);
         const host = scrollHost();
@@ -159,99 +147,72 @@ function FormationPanel({
       void owner.selectView(null);
     void owner.setShowCancelled(value);
   };
-  const chooseDocument = () =>
-    void owner.chooseStep(null).then((ok) => {
-      if (ok) discuss();
-    });
   const hasPendingProposals = (summary?.counts.proposals.PENDING ?? 0) > 0;
   const hasRoute = summary?.exists === true;
   const currentStep = summary?.current_step_ref ?? null;
   const stepTitles = new Map(page?.data.items.map((step) => [step.step_ref, step.title]));
   const nodeDetail = (
     <div id={detailId} className="formation-node-detail">
-      <FormationStepView owner={owner} discuss={discuss} />
+      <FormationStepView owner={owner} />
     </div>
   );
   return (
-    <section
-      ref={panel}
-      className={'formation-progress' + (sideBySide ? ' has-side-detail' : '')}
-      aria-label="文档主线"
-    >
+    <section ref={panel} className="formation-progress" aria-label="文档主线">
       <header className="formation-heading">
         <h2>文档主线</h2>
         <div className="formation-heading-actions">
-          {expanded && (
+          {hasRoute && (
             <button type="button" className="ui-button" onClick={discuss}>
-              返回 AI 对话
+              继续讨论
             </button>
           )}
-          <details className="formation-options">
-            <summary className="ui-button icon-button" aria-label="主线操作" title="主线操作">
-              <Icon name="more" />
-            </summary>
-            <div className="formation-options-menu">
-              {!expanded && (
-                <button type="button" className="ui-button" onClick={discuss}>
-                  返回 AI 对话
-                </button>
-              )}
-              <button
-                type="button"
-                className="ui-button"
-                disabled={state.loading || state.phase === 'SENDING'}
-                onClick={() =>
-                  void (state.phase === 'CONFIRMED' ? owner.finish() : owner.refresh())
-                }
-              >
-                {state.phase === 'CONFIRMED' ? '刷新已确认结果' : '刷新主线'}
-              </button>
-              <button
-                type="button"
-                className="ui-button"
-                disabled={owner.targetReason !== null}
-                title={owner.targetReason ?? undefined}
-                onClick={chooseDocument}
-              >
-                {owner.busy ? '下一轮讨论整篇' : '讨论整篇文档'}
-              </button>
-              {hasRoute && (
+          {(!state.brief || owner.hasPathDraft) && (
+            <details className="formation-options">
+              <summary className="ui-button icon-button" aria-label="主线操作" title="主线操作">
+                <Icon name="more" />
+              </summary>
+              <div className="formation-options-menu">
                 <button
                   type="button"
                   className="ui-button"
-                  disabled={owner.targetReason !== null}
-                  title={owner.targetReason ?? undefined}
-                  onClick={(event) => {
-                    const options = event.currentTarget.closest('details');
-                    if (options !== null) options.open = false;
-                    owner.openPathEditor();
-                  }}
+                  disabled={state.loading || state.phase === 'SENDING'}
+                  onClick={() =>
+                    void (state.phase === 'CONFIRMED' ? owner.finish() : owner.refresh())
+                  }
                 >
-                  调整路线
+                  {state.phase === 'CONFIRMED' ? '刷新已确认结果' : '刷新主线'}
                 </button>
-              )}
-            </div>
-          </details>
-          <button
-            type="button"
-            className="ui-button formation-expand"
-            data-formation-expand={owner.documentId}
-            aria-label={expanded ? '收起主线' : '展开主线'}
-            onClick={toggle}
-          >
-            <Icon name={expanded ? 'close' : 'panel'} />
-            {expanded ? '收起视图' : '展开视图'}
-          </button>
+                {hasRoute && owner.hasPathDraft && (
+                  <button
+                    type="button"
+                    className="ui-button"
+                    disabled={owner.targetReason !== null}
+                    title={owner.targetReason ?? undefined}
+                    onClick={(event) => {
+                      const options = event.currentTarget.closest('details');
+                      if (options !== null) options.open = false;
+                      owner.openPathEditor();
+                    }}
+                  >
+                    查看旧路线草稿
+                  </button>
+                )}
+              </div>
+            </details>
+          )}
         </div>
       </header>
       {summary?.goal && (
-        <details className="formation-goal">
-          <summary>
-            <span>文档目标</span>
-            <strong>{summary.goal.text}</strong>
-          </summary>
+        <section className="formation-document-goal" aria-label="文档目标">
+          <h3>文档目标</h3>
           <p>{summary.goal.text}</p>
-        </details>
+          {state.brief?.focus && (
+            <details onToggle={(event) => setGoalOpen(event.currentTarget.open)}>
+              <summary>文档级讨论记录</summary>
+              {goalOpen && <ViewedProgress owner={owner} stepRef={null} />}
+            </details>
+          )}
+        </section>
       )}
       {state.editor_open && owner.pathEditor !== null && (
         <FormationPathEditorView owner={owner} editor={owner.pathEditor} />
@@ -292,41 +253,116 @@ function FormationPanel({
       )}
       {hasRoute && hasPendingProposals && <FormationProposals owner={owner} />}
       {summary?.exists === false && (
-        <EmptyState icon="outline" message="文档主线尚未建立，请先在 AI 对话中讨论文档目标" fill />
+        <>
+          {state.previousTopics.length > 0 ||
+          (state.brief?.decision_total ?? 0) > 0 ||
+          (state.brief?.issue_total ?? 0) > 0 ? (
+            <section aria-label="已有讨论">
+              <h3>已有讨论</h3>
+              <p>本文档尚未建立主线</p>
+              {state.brief && <ProgressGroup owner={owner} brief={state.brief} group="decisions" />}
+              {state.brief && <ProgressGroup owner={owner} brief={state.brief} group="issues" />}
+              <ul>
+                {state.previousTopics.map((topic) => (
+                  <li key={topic.topic_ref}>
+                    {topic.title}
+                    <FormationReadSources
+                      owner={owner}
+                      label="讨论来源"
+                      sources={[{ kind: 'MESSAGE', message_id: topic.updated_by_message_id }]}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : (
+            <EmptyState icon="outline" message="文档主线尚未建立" fill />
+          )}
+          <button className="ui-button" type="button" onClick={discuss}>
+            讨论文档目标
+          </button>
+        </>
       )}
+      {state.brief &&
+        hasRoute &&
+        (state.brief.decision_total > 0 ||
+          state.brief.issue_total > 0 ||
+          state.brief.next?.kind === 'RECOMMENDATION') && (
+          <section className="formation-discussion" aria-label="当前讨论进展">
+            {(['decisions', 'issues'] as const).map((group) => (
+              <ProgressGroup
+                key={[
+                  owner.documentId,
+                  state.brief!.formation_version,
+                  state.brief!.discussion_version,
+                  state.brief!.revision_id,
+                  group,
+                ].join('/')}
+                owner={owner}
+                brief={state.brief!}
+                group={group}
+              />
+            ))}
+            {state.brief.next?.kind === 'RECOMMENDATION' && (
+              <div>
+                <h3>建议下一步</h3>
+                <p>{state.brief.next.reason}</p>
+                {state.brief.next.source_refs.length > 0 && (
+                  <FormationReadSources
+                    owner={owner}
+                    sources={state.brief.next.source_refs}
+                    label="建议依据"
+                  />
+                )}
+              </div>
+            )}
+          </section>
+        )}
       {hasRoute && (
         <div className="formation-body">
           <section className="formation-route" aria-label="主线步骤">
+            <h3>主线步骤</h3>
+            {state.brief && (
+              <p className="formation-focus-caption">
+                {state.brief.focus ? '当前讨论 · ' + state.brief.focus.title : '当前讨论整份文档'}
+              </p>
+            )}
             <div className="formation-route-heading">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={read.show_cancelled}
-                  disabled={state.loading || locating}
-                  onChange={(event) => setShowCancelled(event.target.checked)}
-                />
-                已放弃节点 {summary.counts.steps.CANCELLED > 0 && summary.counts.steps.CANCELLED}
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={state.show_branches}
-                  onChange={(event) => owner.setShowBranches(event.target.checked)}
-                />
-                支线
-              </label>
-              <button
-                type="button"
-                className="ui-button formation-current"
-                disabled={currentStep === null || state.loading || locating}
-                title={currentStep === null ? '当前没有聚焦在单个步骤上' : undefined}
-                onClick={() => {
-                  if (currentStep !== null) void locateStep(currentStep, true);
-                }}
-              >
-                <Icon name="locate" />
-                定位当前步骤
-              </button>
+              {(summary.counts.steps.CANCELLED > 0 || read.show_cancelled) && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={read.show_cancelled}
+                    disabled={state.loading || locating}
+                    onChange={(event) => setShowCancelled(event.target.checked)}
+                  />
+                  已放弃节点 {summary.counts.steps.CANCELLED > 0 && summary.counts.steps.CANCELLED}
+                </label>
+              )}
+              {!state.brief && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={state.show_branches}
+                    onChange={(event) => owner.setShowBranches(event.target.checked)}
+                  />
+                  支线
+                </label>
+              )}
+              {currentStep !== null && page !== null && !stepTitles.has(currentStep) && (
+                <button
+                  type="button"
+                  className="ui-button formation-current"
+                  disabled={currentStep === null || state.loading || locating}
+                  title={currentStep === null ? '当前没有聚焦在单个步骤上' : undefined}
+                  onClick={() => {
+                    if (currentStep !== null) void locateStep(currentStep, true);
+                  }}
+                >
+                  <Icon name="locate" />
+                  定位当前步骤
+                </button>
+              )}
             </div>
             {read.page.error && (
               <div className="formation-toolbar">
@@ -361,7 +397,8 @@ function FormationPanel({
             {page !== null && page.data.items.length > 0 && (
               <ol className="formation-route-list" ref={routeList}>
                 {page.data.items.map((step) => {
-                  const selected = step.step_ref === read.selected_step_ref;
+                  const selected =
+                    step.step_ref === (state.brief ? openStep : read.selected_step_ref);
                   const current = step.step_ref === summary.current_step_ref;
                   return (
                     <li
@@ -375,12 +412,12 @@ function FormationPanel({
                         type="button"
                         className="formation-node"
                         aria-current={current ? 'step' : undefined}
-                        aria-expanded={sideBySide ? undefined : selected}
-                        aria-pressed={sideBySide ? selected : undefined}
+                        aria-expanded={selected}
                         aria-controls={selected ? detailId : undefined}
                         onClick={() => {
-                          if (sideBySide && selected) return;
-                          void owner.selectView(selected ? null : step.step_ref);
+                          const next = selected ? null : step.step_ref;
+                          if (state.brief) setOpenStep(next);
+                          else void owner.selectView(next);
                         }}
                       >
                         <span className="formation-node-marker" aria-hidden="true">
@@ -391,19 +428,34 @@ function FormationPanel({
                             <strong>{step.title}</strong>
                             <span className="formation-node-status">{stepLabels[step.status]}</span>
                           </span>
-                          <small>
-                            {current && '当前讨论 · '}
-                            {step.status === 'CANCELLED' && '原第 ' + step.position + ' 步 · '}
-                            成果 {step.expected_results.length}
-                            {step.relation_counts.issues > 0 &&
-                              ' · 问题 ' + step.relation_counts.issues}
-                            {step.relation_counts.branches > 0 &&
-                              ' · 支线 ' + step.relation_counts.branches}
-                          </small>
+                          <small>预期成果 · {step.expected_results[0]?.description}</small>
                         </span>
                       </button>
-                      {selected && !sideBySide && nodeDetail}
-                      {state.show_branches &&
+                      {selected &&
+                        (state.brief ? (
+                          <section
+                            id={detailId}
+                            className="formation-node-detail"
+                            aria-label="步骤详情"
+                          >
+                            {step.expected_results.length > 1 && (
+                              <>
+                                <h4>其他预期成果</h4>
+                                <ul>
+                                  {step.expected_results.slice(1).map((result) => (
+                                    <li key={result.result_ref}>{result.description}</li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+                            <ViewedProgress owner={owner} stepRef={step.step_ref} />
+                            {step.last_event && <p>最近活动 · {step.last_event.reason}</p>}
+                          </section>
+                        ) : (
+                          nodeDetail
+                        ))}
+                      {!state.brief &&
+                        state.show_branches &&
                         step.relation_counts.branches > 0 &&
                         summary.formation_version !== null && (
                           <FormationInlineBranches
@@ -414,7 +466,6 @@ function FormationPanel({
                             locating={locating}
                             locate={(ref) => void locateStep(ref)}
                             formationVersion={summary.formation_version}
-                            discuss={discuss}
                           />
                         )}
                     </li>
@@ -451,62 +502,10 @@ function FormationPanel({
               </nav>
             )}
           </section>
-          {sideBySide && nodeDetail}
         </div>
       )}
-      {hasRoute && !hasPendingProposals && <FormationProposals owner={owner} />}
+      {hasRoute && !hasPendingProposals && !state.brief && <FormationProposals owner={owner} />}
     </section>
-  );
-}
-function ExpandedFormation({
-  owner,
-  close,
-  discuss,
-}: Readonly<{ owner: FormationWorkspace; close: () => void; discuss: () => void }>) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useLayoutEffect(() => {
-    const dialog = ref.current!;
-    dialog.showModal();
-    const release = registerModal(dialog);
-    return () => {
-      dialog.close();
-      release();
-      queueMicrotask(() => {
-        const entry = document.querySelector<HTMLElement>(
-          '[data-formation-expand="' + owner.documentId + '"]',
-        );
-        if (
-          entry?.isConnected &&
-          !entry.closest('[hidden],[inert]') &&
-          entry.getClientRects().length > 0
-        )
-          entry.focus({ preventScroll: true });
-      });
-    };
-  }, [owner]);
-  return createPortal(
-    <dialog
-      ref={ref}
-      className="formation-dialog"
-      aria-label="展开文档主线"
-      tabIndex={-1}
-      onKeyDown={trapModalTab}
-      onCancel={(event) => {
-        event.preventDefault();
-        close();
-      }}
-    >
-      <FormationPanel
-        owner={owner}
-        expanded
-        toggle={close}
-        discuss={() => {
-          close();
-          discuss();
-        }}
-      />
-    </dialog>,
-    document.body,
   );
 }
 export function FormationProgress({
@@ -549,10 +548,9 @@ function OwnedFormationProgress({
 }>) {
   const state = useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
   const read = useSyncExternalStore(workspace.read.subscribe, workspace.read.getSnapshot);
-  const [expanded, setExpanded] = useState(false);
   const initialized = useRef(false);
   useEffect(() => {
-    if (!active || initialized.current || read.page.phase !== 'READY') return;
+    if (!active || state.brief || initialized.current || read.page.phase !== 'READY') return;
     initialized.current = true;
     const current = read.summary.data?.current_step_ref;
     if (
@@ -561,19 +559,21 @@ function OwnedFormationProgress({
       read.page.data?.data.items.some((step) => step.step_ref === current)
     )
       void workspace.selectView(current);
-  }, [active, read.page, read.selected_step_ref, read.summary.data, workspace]);
+  }, [active, state.brief, read.page, read.selected_step_ref, read.summary.data, workspace]);
   useEffect(() => {
-    if (active) void workspace.refresh();
+    if (active) void workspace.refresh(false);
   }, [workspace, active]);
   useEffect(() => {
-    if (!active) setExpanded(false);
-  }, [active]);
+    if (active && !state.loading && read.summary.data?.exists && read.page.phase === 'IDLE') {
+      void workspace.read.loadPage(null);
+    }
+  }, [workspace, active, state.loading, read.summary.data, read.page.phase]);
   if (state.mode === 'LEGACY')
     return <DiscussionProgress owner={owner} active={active} blocked={blocked} discuss={discuss} />;
   if (state.mode === 'UNKNOWN')
     return (
       <section aria-label="文档主线">
-        <p role="status">正在读取文档主线…</p>
+        {(state.loading || !state.error) && <p role="status">正在读取文档主线…</p>}
         {state.error && <p role="alert">{state.error}</p>}
         <button
           type="button"
@@ -583,16 +583,10 @@ function OwnedFormationProgress({
         >
           重新读取
         </button>
+        <button type="button" className="ui-button" onClick={discuss}>
+          返回 AI 对话
+        </button>
       </section>
     );
-  return expanded ? (
-    <ExpandedFormation owner={workspace} close={() => setExpanded(false)} discuss={discuss} />
-  ) : (
-    <FormationPanel
-      owner={workspace}
-      expanded={false}
-      toggle={() => setExpanded(true)}
-      discuss={discuss}
-    />
-  );
+  return <FormationPanel owner={workspace} discuss={discuss} />;
 }

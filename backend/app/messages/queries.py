@@ -122,7 +122,9 @@ def card_state(repository, root, row, protocol, catalog=None):
     return 'AVAILABLE'
 
 
-def project_message(repository, root, row, protocol, catalog=None):
+def project_message(
+    repository, root, row, protocol, catalog=None, *, operations=None, suggestions=None
+):
     data = {
         field: row[field]
         for field in MESSAGE_FIELDS
@@ -175,6 +177,27 @@ def project_message(repository, root, row, protocol, catalog=None):
             )
         except (CardsInvalid, InvalidInput, ProtocolInvalid):
             pass
+    if operations is None:
+        from backend.app.formation.chat_operations import chat_operations
+
+        operations = chat_operations(
+            repository.connection, root['id'], row['document_id'], [row['id']]
+        )
+    if row['id'] in operations:
+        data['formation_operations'] = operations[row['id']]
+    if (
+        row['role'] == 'ASSISTANT'
+        and row['message_type'] == 'TEXT'
+        and row['guide_run_id'] is not None
+    ):
+        from backend.app.formation.initial_suggestion import audited_initials, public_initial
+
+        if suggestions is None:
+            suggestions = audited_initials(
+                repository.connection, root['id'], row['document_id'], [row['id']]
+            )
+        if row['id'] in suggestions:
+            data['initial_route_suggestion'] = public_initial(suggestions[row['id']])
     return message_read_model(data)
 
 
@@ -200,7 +223,37 @@ def list_messages(database, payload, *, catalog=None):
                     if any(row['message_type'] != 'TEXT' for row in rows)
                     else None
                 )
-                items = [project_message(repository, root, row, protocol, catalog) for row in rows]
+                from backend.app.formation.chat_operations import chat_operations
+
+                operations = chat_operations(
+                    connection, root['id'], request.document_id, [row['id'] for row in rows]
+                )
+                from backend.app.formation.initial_suggestion import audited_initials
+
+                suggestions = audited_initials(
+                    connection,
+                    root['id'],
+                    request.document_id,
+                    [
+                        row['id']
+                        for row in rows
+                        if row['role'] == 'ASSISTANT'
+                        and row['message_type'] == 'TEXT'
+                        and row['guide_run_id'] is not None
+                    ],
+                )
+                items = [
+                    project_message(
+                        repository,
+                        root,
+                        row,
+                        protocol,
+                        catalog,
+                        operations=operations,
+                        suggestions=suggestions,
+                    )
+                    for row in rows
+                ]
                 more = bool(rows) and repository.older_exists(
                     root['id'], rows[0]['sequence_no'], request.document_id
                 )

@@ -70,6 +70,8 @@ def derive_discussion(connection, previous, root, instruction, key, version, *, 
 
 
 def formation_catalog(catalog):
+    if catalog.collaboration.formation_driven:
+        return catalog
     return catalog.for_formation_profile(
-        getattr(catalog, '_collaboration_profile', None) or DEFAULT_PROFILE
+        getattr(catalog, '_collaboration_profile', None) or DEFAULT_PROFILE, discussion_routes=True
     )

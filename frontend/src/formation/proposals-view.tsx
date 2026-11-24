@@ -66,17 +66,6 @@ function ProposalRow({
         >
           请 AI 继续调整
         </button>
-        {proposal.purpose === 'FORMATION_PATH_CHANGE' && (
-          <button
-            type="button"
-            className="ui-button"
-            disabled={adjust !== null}
-            title={adjust ?? undefined}
-            onClick={() => owner.openPathEditor(ref, proposal.payload)}
-          >
-            手动调整路线
-          </button>
-        )}
         {proposal.purpose === 'STAGED_WRITE' && proposal.disposition === 'PENDING' && (
           <button
             type="button"

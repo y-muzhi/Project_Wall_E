@@ -2196,17 +2196,17 @@ input[type='radio'] {
 .guide-composer-footer {
   flex: none;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 68px 116px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 .guide-composer-footer > .ui-button {
-  width: 100%;
-  min-height: 34px;
-  border-radius: 9px;
-  font-size: 13px;
-  white-space: nowrap;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
 }
 .guide-composer-status {
   min-width: 0;
@@ -4485,4 +4485,28 @@ input[type='radio'] {
 }
 .conversation-content:has(.message-thread.is-empty) {
   min-height: 100%;
+}
+
+.message-route-proposal {
+  margin-block-start: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.message-route-proposal summary {
+  cursor: pointer;
+}
+.message-route-proposal ol,
+.message-route-proposal ul {
+  padding-inline-start: 1.5rem;
+}
+
+.message-route-operation {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.65rem;
+  margin-block-start: 0.5rem;
+  padding-inline-start: 0.65rem;
+  border-inline-start: 2px solid currentColor;
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
 }

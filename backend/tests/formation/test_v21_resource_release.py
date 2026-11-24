@@ -69,10 +69,10 @@ def test_only_new_releases_recognize_new_fields_and_explicit_profile_selection(r
     from backend.app.infrastructure.model_profile import DEFAULT_PROFILE, LONG_OUTPUT_PROFILE
 
     catalog = ResourceCatalog()
-    selected = catalog.for_formation_profile(DEFAULT_PROFILE)
+    selected = catalog.for_formation_profile(DEFAULT_PROFILE, discussion_routes=False)
     assert not catalog.collaboration.formation_driven
     assert selected.collaboration.release_sha256 == resources.release_sha256
-    long = catalog.for_formation_profile(LONG_OUTPUT_PROFILE).collaboration
+    long = catalog.for_formation_profile(LONG_OUTPUT_PROFILE, discussion_routes=False).collaboration
     assert (
         long.formation_driven
         and long.counting['output_limit'] != resources.counting['output_limit']

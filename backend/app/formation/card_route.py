@@ -14,6 +14,28 @@ from .route_storage import apply_disposition_events, persist_route, resolve_rout
 
 
 def apply_route(connection, root, proposal, response_id, key, catalog, transaction, at):
+    before, plan = prepare_route_graph(
+        connection, root, proposal.payload['changes'], proposal.payload['result_routes']
+    )
+    checked = verify_links(connection, root, plan.links, catalog) if plan.links else ()
+    effect = persist_prepared_route(
+        connection,
+        root,
+        before,
+        plan,
+        checked,
+        response_id,
+        key,
+        transaction,
+        at,
+        command={'type': 'CARD_APPLY', 'proposal': proposal.reference},
+        reason=proposal.payload['change_summary'],
+        proposal=proposal,
+    )
+    return None, effect['reference_map']
+
+
+def prepare_route_graph(connection, root, changes, result_routes):
     repository = FormationRepository(connection)
     document_id = root['assistant_document_id']
     head, steps, branches, issues, edges = repository.graph(document_id)
@@ -33,8 +55,38 @@ def apply_route(connection, root, proposal, response_id, key, catalog, transacti
         set(edges['DEPENDENCY']),
         set(edges['REPLACES']),
     )
-    plan = prepare_route(*before, proposal.payload['changes'], proposal.payload['result_routes'])
-    checked = verify_links(connection, root, plan.links, catalog) if plan.links else ()
+    plan = prepare_route(*before, changes, result_routes, expanded_model_changes=not changes)
+    return before, plan
+
+
+def persist_prepared_route(
+    connection,
+    root,
+    before,
+    plan,
+    checked,
+    response_id,
+    key,
+    transaction,
+    at,
+    *,
+    command,
+    reason,
+    proposal=None,
+    source_run_id=None,
+    focus_event=None,
+    sources=None,
+):
+    document_id = root['assistant_document_id']
+    repository = FormationRepository(connection)
+    head = before[0]
+    if not plan.changed and proposal is None:
+        return {
+            'result': 'NO_CHANGE',
+            'event_ids': [],
+            'reference_map': [],
+            'formation_changed': False,
+        }
     mapping, counters = repository.allocate_path_references(document_id, plan.scope)
     resolved = resolve_route(plan, mapping, counters)
     resolved = replace(resolved, changed=True)
@@ -46,11 +98,18 @@ def apply_route(connection, root, proposal, response_id, key, catalog, transacti
         )
         for link in checked
     )
-    fact = proposal_fact(proposal)
-    keys = (*event_keys(before, resolved), fact.owner)
+    fact = proposal_fact(proposal) if proposal is not None else None
+    keys = list(event_keys(before, resolved))
+    if focus_event is not None:
+        action, ref = focus_event
+        keys.append((action, mapping.get(ref, ref)))
+    if fact is not None:
+        keys.append(fact.owner)
     ids = allocate_event_ids(connection, keys)
     resolved = apply_disposition_events(resolved, ids)
-    facts = [*route_facts(before, resolved, keys), fact]
+    facts = list(route_facts(before, resolved, keys))
+    if fact is not None:
+        facts.append(fact)
     after = {
         **transaction.before,
         'discussion_version': transaction.before['discussion_version'] + 1,
@@ -60,14 +119,17 @@ def apply_route(connection, root, proposal, response_id, key, catalog, transacti
     views = write_headers(
         connection,
         root=root,
-        command={'type': 'CARD_APPLY', 'proposal': proposal.reference},
+        command=command,
         event_ids=ids,
         facts=facts,
         extra_counts=Counter(('CONTENT_ASSOCIATED', link.step_ref) for link in checked),
         message_id=response_id,
         key=key,
         at=at,
-        reason=proposal.payload['change_summary'],
+        reason=reason,
+        source_run_id=source_run_id,
+        actor='AI' if source_run_id is not None else 'USER',
+        sources=None if sources is None else {event_key: sources for event_key in keys},
         version_before=transaction.before,
         version_after=after,
         head_before=head,
@@ -87,8 +149,14 @@ def apply_route(connection, root, proposal, response_id, key, catalog, transacti
                 artifact, link.result_refs, link.ranges, ('CONTENT_ASSOCIATED', link.step_ref)
             )
         )
-    consume(connection, proposal, ids[fact.owner])
+    if fact is not None:
+        consume(connection, proposal, ids[fact.owner])
     if transaction.touch(at) != after:
         raise ValueError('Actual route adoption versions differ from their event batch')
     write_facts(connection, document_id, ids, views, facts)
-    return None, reference_map_view(plan, mapping)
+    return {
+        'result': 'APPLIED',
+        'event_ids': list(ids.values()),
+        'reference_map': reference_map_view(plan, mapping),
+        'formation_changed': True,
+    }

@@ -32,7 +32,7 @@ class ModelPlan:
     changed: bool
 
 
-def prepare_model(connection, root, context, value, catalog):
+def prepare_model(connection, root, context, value, catalog, *, initial_position=1):
     delta = formation_delta(value)
     frozen = context.canonical['formation']['basis']
     if delta['basis'] != frozen:
@@ -235,9 +235,11 @@ def prepare_model(connection, root, context, value, catalog):
     route = resolve_route(symbolic, mapping, result_counters)
     route.head['next_step_no'] = next_step
     if initial is not None:
-        first = mapping[initial['steps'][0]['temp_ref']]
-        route.head['current_step_ref'] = first
-        route.steps[first]['status'] = 'IN_PROGRESS'
+        if type(initial_position) is not int or not 1 <= initial_position <= len(initial['steps']):
+            raise ProgressInvalid('The starting step is outside the proposed route')
+        target = mapping[initial['steps'][initial_position - 1]['temp_ref']]
+        route.head['current_step_ref'] = target
+        route.steps[target]['status'] = 'IN_PROGRESS'
     topics = {row['topic_ref'] for row in context.canonical['discussion']['topics']}
     step_topics = {ref: set() for ref in route.steps}
     for row in connection.execute(

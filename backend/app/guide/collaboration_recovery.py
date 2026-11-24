@@ -68,6 +68,7 @@ def complete_saved_returns(database, request, process_lock, catalog):
                     connection,
                     row['id'],
                     profile=profile,
+                    database=database,
                     catalog=catalog,
                     at=request.operation_time,
                     recovery_updated_at=expected,

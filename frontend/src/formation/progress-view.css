@@ -41,10 +41,6 @@
 .formation-toolbar .ui-button {
   min-height: 32px;
 }
-.formation-expand {
-  border-color: var(--border);
-  white-space: nowrap;
-}
 .formation-options {
   position: relative;
 }
@@ -83,30 +79,6 @@
 }
 .formation-target .ui-button {
   min-height: 30px;
-}
-.formation-goal {
-  font-size: 12px;
-  color: var(--muted);
-}
-.formation-goal > summary {
-  padding-block: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.formation-goal > summary > span {
-  margin-inline: 4px 8px;
-  font-weight: 600;
-}
-.formation-goal > summary > strong {
-  font-weight: 400;
-}
-.formation-goal[open] > summary > strong {
-  display: none;
-}
-.formation-goal > p {
-  padding: 6px 8px 3px;
-  color: var(--text);
 }
 .formation-body {
   display: grid;
@@ -214,7 +186,8 @@
   color: var(--accent);
 }
 .formation-node small {
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--muted);
 }
 .formation-node-status {
@@ -372,47 +345,6 @@
 .formation-page-heading {
   font-size: 12px;
 }
-.formation-next-choice {
-  display: grid;
-  gap: 8px;
-  margin: 12px 0;
-}
-.formation-next-choice select {
-  width: 100%;
-  min-height: 36px;
-}
-.formation-dialog {
-  box-sizing: border-box;
-  width: calc(100vw - 32px);
-  max-width: 1120px;
-  height: calc(100dvh - 32px);
-  max-height: calc(100dvh - 32px);
-  padding: 0;
-  border: 1px solid var(--border-color, #dbe2ea);
-  border-radius: 12px;
-  background: var(--surface-primary, #fff);
-  color: var(--text-primary, #202938);
-  overflow: auto;
-}
-.formation-dialog::backdrop {
-  background: rgb(20 28 43 / 40%);
-}
-.formation-dialog .formation-progress {
-  min-height: 100%;
-  padding: 18px;
-}
-.formation-progress.has-side-detail .formation-body {
-  grid-template-columns: minmax(292px, 35%) minmax(0, 1fr);
-}
-.formation-progress.has-side-detail .formation-body > .formation-node-detail {
-  border-inline-start: 1px solid var(--border-light);
-  padding: 4px 0 4px 16px;
-}
-.formation-progress.has-side-detail .formation-step-detail {
-  border-top: 0;
-  padding-top: 0;
-}
-
 .formation-proposals {
   padding: 10px 0;
   border-bottom: 1px solid var(--border-color, #dbe2ea);
@@ -442,35 +374,6 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-}
-.formation-next-choice {
-  min-width: 0;
-}
-.formation-next-choice .formation-records {
-  max-height: min(30dvh, 240px);
-  overflow: auto;
-}
-.formation-next-choice .formation-records .ui-button {
-  text-align: left;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.formation-disposition {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-.formation-disposition label {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-.formation-disposition select,
-.formation-disposition textarea {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 36px;
 }
 
 .formation-history-pair {
@@ -525,37 +428,11 @@
   gap: 6px;
   padding: 6px 8px 8px;
 }
-.formation-completion-fields {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-}
-.formation-completion-fields > section,
 .formation-analysis-results {
   margin-block: 16px;
 }
-.formation-source-choice {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-.formation-source-choice > label {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  overflow-wrap: anywhere;
-}
-.formation-evidence-picker p {
-  max-height: 160px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 
 .formation-progress summary,
-.formation-completion-fields summary,
 .formation-path-editor summary {
   min-height: 32px;
   box-sizing: border-box;
@@ -563,4 +440,38 @@
   line-height: 20px;
   cursor: pointer;
   overflow-wrap: anywhere;
+}
+
+.formation-path-editor pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.formation-document-goal {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0;
+  border-block: 1px solid var(--border-light);
+}
+.formation-document-goal h3,
+.formation-route > h3,
+.formation-discussion h3 {
+  font-size: 14px;
+}
+.formation-document-goal p {
+  font-size: 14px;
+}
+.formation-document-goal summary,
+.formation-focus-caption {
+  font-size: 12px;
+  color: var(--muted);
+}
+.formation-document-goal summary {
+  cursor: pointer;
+}
+.formation-route-heading:empty {
+  display: none;
+}
+.formation-focus-caption {
+  padding-block-start: 4px;
 }

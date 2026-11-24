@@ -1,4 +1,8 @@
-import { positiveInteger } from '../api/client.ts';
+import { object, positiveInteger, snapshotObject } from '../api/client.ts';
+import { validateDefinition } from '../api/resource-schema.ts';
+import priorWire from '../../../backend/resources/v37/schemas/collaboration-wire.v3.json' with { type: 'json' };
+import routeWire from '../../../backend/resources/v39/schemas/collaboration.wire.v39.json' with { type: 'json' };
+import lifecycleWire from '../../../backend/resources/v41/schemas/collaboration.wire.v41.json' with { type: 'json' };
 import { sourceRef, collaborationValue } from '../api/models.ts';
 import type { Message } from '../api/models.ts';
 import type { WalleApi } from '../api/walle.ts';
@@ -8,6 +12,27 @@ export type SourceReadApi = Pick<
   'getRevision' | 'getMessage' | 'getGuideRun' | 'listModelCalls' | 'getModelCall'
 >;
 const json = (value: unknown) => JSON.stringify(value, null, 2);
+
+function savedWire(requestText: string) {
+  const request = object(JSON.parse(requestText));
+  const messages = request.messages ?? request.input;
+  if (!Array.isArray(messages)) throw Error('保存请求缺少对话输入');
+  const user = messages.find((row) => row?.role === 'user');
+  if (typeof user?.content !== 'string') throw Error('保存请求缺少用户输入');
+  const wire = object(JSON.parse(user.content));
+  const position = object(wire.project_position);
+  if (!Object.hasOwn(position, 'formation')) return collaborationValue('Wire')(wire);
+  const formation = object(position.formation);
+  const context = formation.route_context;
+  const schema =
+    context === undefined
+      ? priorWire
+      : Object.hasOwn(object(context), 'previous_order')
+        ? lifecycleWire
+        : routeWire;
+  validateDefinition('Wire', wire, schema.$defs);
+  return snapshotObject(wire);
+}
 
 /** Lazy actual source reads, with no command, reassembly or count capability. */
 export async function readSource(
@@ -142,12 +167,7 @@ export async function readSource(
           })),
     );
     if (!selected) continue;
-    const request = JSON.parse(detail.raw_request_json) as {
-        messages: { role: string; content: string }[];
-      },
-      wire = collaborationValue('Wire')(
-        JSON.parse(request.messages.find((item) => item.role === 'user')!.content),
-      );
+    const wire = savedWire(detail.raw_request_json);
     const blockIds = selected.block_ids as number[],
       messageIds = selected.message_ids as number[];
     const documents = (wire.documents as Record<string, unknown>[])

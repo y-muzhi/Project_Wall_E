@@ -5,6 +5,7 @@ from collections.abc import Callable
 from backend.app.infrastructure.database import Database, SchemaMismatch, StorageUnavailable
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.shared.validation import InvalidInput, MISSING
+from backend.app.shared.command_execution import Rejected
 from .contracts import get_requirement_input, get_requirement_result, list_requirements_input
 
 
@@ -26,6 +27,8 @@ def _query(
             'data': data,
             'details': None,
         }
+    except Rejected as error:
+        return {'code': error.code, 'data': None, 'details': error.details}
     except StorageUnavailable:
         return {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None}
     except SchemaMismatch:
@@ -43,17 +46,44 @@ def list_requirements(database: Database, payload: object = MISSING) -> dict:
 
 
 def get_requirement(
-    database: Database, requirement_id: object = MISSING, *, expand=None, document_id=None
+    database: Database,
+    requirement_id: object = MISSING,
+    *,
+    expand=None,
+    document_id=None,
+    progress_view=None,
+    progress_limit=3,
+    progress_group=None,
+    progress_cursor=None,
+    progress_step_ref=None,
+    catalog=None,
 ) -> dict:
-    from backend.app.shared.validation import strict_enum
+    from backend.app.shared.validation import reject, strict_enum, strict_integer
 
     def validate():
         if expand is not None:
             strict_enum(expand, 'expand', ('discussion',))
         if document_id is not None:
-            from backend.app.shared.validation import strict_integer
-
             strict_integer(document_id, 'document_id')
+        if progress_view is not None:
+            strict_enum(progress_view, 'progress_view', ('brief', 'document'))
+            if document_id is None or expand != 'discussion':
+                reject('progress_view', 'INVALID_FORMAT', '进展摘要需要文档和讨论范围')
+        elif progress_limit != 3:
+            reject('progress_limit', 'INVALID_FORMAT', '进展条数需要摘要视图')
+        if progress_step_ref is not None:
+            from backend.app.formation.types import reference
+
+            reference(progress_step_ref, 'progress_step_ref', 'STEP')
+            if progress_view != 'brief':
+                reject('progress_step_ref', 'INVALID_FORMAT', '步骤阅读需要进展摘要')
+        if progress_group is not None:
+            strict_enum(progress_group, 'progress_group', ('decisions', 'issues'))
+            if progress_view is None:
+                reject('progress_group', 'INVALID_FORMAT', '分页需要进展摘要')
+        if progress_cursor is not None and progress_group is None:
+            reject('progress_cursor', 'INVALID_FORMAT', '分页需要指定分组')
+        strict_integer(progress_limit, 'progress_limit', maximum=20)
         return get_requirement_input(requirement_id)
 
     def read(repository: RequirementRepository, identity: int) -> dict | None:
@@ -127,6 +157,25 @@ def get_requirement(
                 **discussion,
                 'formation_summary': get_summary(repository.connection, root),
             }
+            if progress_view is not None:
+                from backend.app.formation.progress_brief import progress_brief
+
+                view_key = (
+                    'view_progress'
+                    if progress_step_ref is not None or progress_view == 'document'
+                    else 'progress_brief'
+                )
+                expanded_discussion[view_key] = progress_brief(
+                    repository.connection,
+                    root,
+                    expanded_discussion['formation_summary'],
+                    progress_limit,
+                    group=progress_group,
+                    cursor=progress_cursor,
+                    catalog=catalog,
+                    viewed_step=progress_step_ref,
+                    whole_document=progress_view == 'document',
+                )
         result = {
             'requirement': get_requirement_result(root),
             'documents': DocumentRepository(repository.connection).list_current_summaries(identity),
@@ -188,6 +237,7 @@ def project_detail(value, expand):
     if summary['next_step'] is not None:
         discussion_resources().validate('NextStep', summary['next_step'])
     raw_discussion = data['discussion']
+    brief = None
     formation_summary = None
     if (
         expand == 'discussion'
@@ -197,12 +247,43 @@ def project_detail(value, expand):
         from backend.app.formation.read_contracts import validate as formation_value
 
         formation_summary = formation_value('Summary', raw_discussion['formation_summary'])
+        view_key = 'view_progress' if 'view_progress' in raw_discussion else 'progress_brief'
+        brief = raw_discussion.get(view_key)
+        if brief is not None:
+            exact(
+                brief,
+                (
+                    'document_id',
+                    'discussion_version',
+                    'formation_version',
+                    'revision_id',
+                    'goal',
+                    'next',
+                    'focus',
+                    'decisions',
+                    'decision_total',
+                    'decision_next_cursor',
+                    'issue_next_cursor',
+                    'issues',
+                    'issue_total',
+                ),
+            )
+            if (
+                brief['document_id'] != formation_summary['document_id']
+                or brief['formation_version'] != formation_summary['formation_version']
+                or brief['discussion_version'] != summary['discussion_version']
+            ):
+                raise ValueError('Progress brief does not match the discussion snapshot')
         raw_discussion = {
-            key: value for key, value in raw_discussion.items() if key != 'formation_summary'
+            key: value
+            for key, value in raw_discussion.items()
+            if key not in ('formation_summary', 'progress_brief', 'view_progress')
         }
     discussion = validate_discussion(raw_discussion) if expand == 'discussion' else None
     if formation_summary is not None:
         discussion = {**discussion, 'formation_summary': formation_summary}
+        if brief is not None:
+            discussion[view_key] = brief
     if expand != 'discussion' and data['discussion'] is not None:
         raise ValueError('Unrequested discussion must not be returned')
     active = data['active_operation']

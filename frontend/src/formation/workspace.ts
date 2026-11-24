@@ -14,7 +14,6 @@ import { FormationReadOwner } from './read-owner.ts';
 import { FormationCommandRecovery, FormationUnsentError } from './command-recovery.ts';
 import { FormationDrafts } from './drafts.ts';
 import type { FormationPendingSummary } from './command-store.ts';
-import type { branchView } from '../api/formation-values.ts';
 export type FormationSelection = ReturnType<typeof formationSelection>;
 export type TargetCapture = Readonly<{ selection: FormationSelection; epoch: string }>;
 export type FormationWorkspaceState = Readonly<{
@@ -23,8 +22,14 @@ export type FormationWorkspaceState = Readonly<{
   editor_open: boolean;
   receipt: ReturnType<typeof formationProgramReceipt> | null;
   preference_warning: string | null;
+  brief: DiscussionState['progress_brief'] | null;
+  previousTopics: readonly Pick<
+    DiscussionState['topics'][number],
+    'topic_ref' | 'title' | 'updated_by_message_id'
+  >[];
   mode: 'UNKNOWN' | 'LEGACY' | 'FORMATION';
   loading: boolean;
+  read_error: string | null;
   error: string | null;
   next_target: FormationSelection | null;
   selection_epoch: string;
@@ -66,6 +71,7 @@ export class FormationWorkspace {
   private activeCommand: string | null = null;
   private initializing: Promise<boolean> | null = null;
   private controller: AbortController | null = null;
+  private supportsBrief = true;
   private readonly drafts: FormationDrafts;
   private readonly preferences: FormationPreferences;
   private readonly readRelease: () => void;
@@ -122,6 +128,9 @@ export class FormationWorkspace {
       receipt: null,
       preference_warning: this.preferences.warning,
       mode: 'UNKNOWN',
+      read_error: null,
+      brief: null,
+      previousTopics: [],
       loading: false,
       error: null,
       next_target: restored.target?.selection ?? null,
@@ -148,6 +157,9 @@ export class FormationWorkspace {
   adopt(detail: DetailSnapshot): void {
     if (detail.requirement.id !== this.requirementId || detail.current?.id !== this.documentId)
       throw TypeError('Owned document required');
+    const changed =
+      this.facts.discussion !== detail.requirement.discussion_version ||
+      this.facts.revision !== detail.current.current_revision_id;
     this.facts = {
       discussion: detail.requirement.discussion_version,
       content: detail.current.content_version,
@@ -156,14 +168,31 @@ export class FormationWorkspace {
       archived: detail.current.archived_at !== null,
     };
     if (detail.discussion !== null) this.observeDiscussion(detail.discussion);
+    if (changed && !detail.discussion?.progress_brief && this.value.mode === 'FORMATION')
+      void this.refresh(false);
   }
   observeDiscussion(discussion: DiscussionState): void {
     if (discussion.formation_summary === undefined) {
-      this.publish({ mode: 'LEGACY', loading: false, error: null });
+      this.publish({ mode: 'LEGACY', brief: null, loading: false, read_error: null, error: null });
       return;
     }
     this.read.observeSummary(discussion.formation_summary);
-    this.publish({ mode: 'FORMATION', loading: false, error: null });
+    const previous = this.value.brief;
+    const brief =
+      discussion.progress_brief ??
+      (previous?.discussion_version === this.facts.discussion &&
+      previous.formation_version === discussion.formation_summary.formation_version &&
+      previous.revision_id === this.facts.revision
+        ? previous
+        : null);
+    this.publish({
+      mode: 'FORMATION',
+      brief,
+      previousTopics: discussion.formation_summary.exists ? [] : discussion.topics,
+      read_error: null,
+      loading: false,
+      error: null,
+    });
   }
   setView(blocked: boolean, readOnly: boolean, localLease: string | null = null): void {
     if (this.blocked === blocked && this.readOnly === readOnly && this.localLease === localLease)
@@ -186,13 +215,6 @@ export class FormationWorkspace {
     if (this.blocked) return '当前页面暂不可操作';
     if (this.readOnly) return '正在查看历史内容';
     return this.value.mode === 'FORMATION' ? null : '主线状态尚未就绪';
-  }
-  get busy(): boolean {
-    return (
-      this.facts.workState !== 'IDLE' ||
-      this.localLease !== null ||
-      ['SENDING', 'UNKNOWN'].includes(this.value.phase)
-    );
   }
   get writeReason(): string | null {
     return this.reason(false);
@@ -238,21 +260,48 @@ export class FormationWorkspace {
     this.initializing = pending;
     return pending;
   }
-  async refresh(loadRows = true): Promise<boolean> {
+  private async readDiscussion(signal: AbortSignal, limit: number) {
+    const read = (progressLimit?: number) =>
+      this.api.getRequirementDetail(
+        this.requirementId,
+        signal,
+        true,
+        this.documentId,
+        progressLimit,
+      );
+    if (!this.supportsBrief) return read();
+    try {
+      return await read(limit);
+    } catch (error) {
+      const fields =
+        error instanceof ApiRejected && error.code === 'VALIDATION_FAILED'
+          ? error.details?.field_errors
+          : null;
+      if (
+        !Array.isArray(fields) ||
+        fields.length === 0 ||
+        !fields.every(
+          (field) =>
+            field !== null &&
+            typeof field === 'object' &&
+            !Array.isArray(field) &&
+            (field.field === 'progress_view' || field.field === 'progress_limit') &&
+            field.reason === 'UNKNOWN_FIELD',
+        )
+      )
+        throw error;
+      this.supportsBrief = false;
+      return read();
+    }
+  }
+  async refresh(loadRows = true, progressLimit = 3): Promise<boolean> {
     if (this.closed) return false;
     this.controller?.abort();
     const controller = new AbortController();
     this.controller = controller;
-    this.publish({ loading: true, error: null });
+    this.publish({ loading: true, read_error: null, error: null });
     try {
-      const actual = (
-        await this.api.getRequirementDetail(
-          this.requirementId,
-          controller.signal,
-          true,
-          this.documentId,
-        )
-      ).data;
+      const actual = (await this.readDiscussion(controller.signal, progressLimit)).data;
       if (this.closed || this.controller !== controller) return false;
       if (actual.discussion === null) throw new ApiUnknown(false);
       const document = actual.documents.find((row) => row.id === this.documentId);
@@ -279,10 +328,25 @@ export class FormationWorkspace {
       }
       return true;
     } catch (error) {
-      if (!this.closed && this.controller === controller)
-        this.publish({
-          error: error instanceof ApiRejected ? error.message : '主线状态暂时无法读取',
-        });
+      if (!this.closed && this.controller === controller) {
+        const message = error instanceof ApiRejected ? error.message : '主线状态暂时无法读取';
+        if (error instanceof ApiRejected && error.code === 'NOT_FOUND') {
+          this.read.forgetDocument();
+          this.publish({
+            mode: 'UNKNOWN',
+            brief: null,
+            previousTopics: [],
+            editor_open: false,
+            read_error: message,
+            error: message,
+          });
+        } else {
+          this.publish({
+            read_error: message,
+            error: this.value.brief ? message + '。下方显示上次读取的进展。' : message,
+          });
+        }
+      }
       return false;
     } finally {
       if (this.controller === controller) {
@@ -310,7 +374,11 @@ export class FormationWorkspace {
       const title = this.read
         .getSnapshot()
         .page.data?.data.items.find((row) => row.step_ref === step)?.title;
-      const label = step === null ? '整份文档' : (title ?? '步骤 ' + step);
+      const focus = this.value.brief?.focus;
+      const label =
+        step === null
+          ? '整份文档'
+          : (title ?? (focus?.step_ref === step ? focus.title : '步骤 ' + step));
       return target.discussion_branch_ref === null
         ? label
         : label +
@@ -360,7 +428,11 @@ export class FormationWorkspace {
       }),
     });
   }
-  openPathEditor(proposal?: { message_id: number; card_key: string }, payload?: JsonObject): void {
+  get hasPathDraft(): boolean {
+    return this.drafts.readPath() !== null;
+  }
+  openPathEditor(): void {
+    if (!this.hasPathDraft) return;
     if (this.targetReason !== null) {
       this.publish({ error: this.targetReason });
       return;
@@ -374,13 +446,6 @@ export class FormationWorkspace {
       this.pathEditor = null;
     }
     this.pathEditor ??= new FormationPathEditor(this, this.drafts);
-    if (proposal !== undefined && payload !== undefined) {
-      if (this.pathEditor.getSnapshot().changes.length > 0) {
-        this.publish({ editor_open: true, error: '已有未保存的路线草稿，请先处理该草稿' });
-        return;
-      }
-      this.pathEditor.useProposal(proposal, payload);
-    }
     this.publish({ editor_open: true });
   }
   closePathEditor(): void {
@@ -471,10 +536,6 @@ export class FormationWorkspace {
         target_error: null,
       });
   }
-  beginSelectionEffect(): string {
-    if (this.closed || this.pending !== null) return this.value.selection_epoch;
-    return this.setTarget(this.value.next_target);
-  }
   completedNext(ref: string, epoch: string): void {
     if (epoch !== this.value.selection_epoch) return;
     this.setTarget(
@@ -499,73 +560,7 @@ export class FormationWorkspace {
       },
     });
   }
-  async chooseStep(ref: string | null): Promise<boolean> {
-    if (this.closed || this.blocked || this.readOnly) return false;
-    const summary = this.read.getSnapshot().summary.data;
-    if (summary?.exists === false && ref !== null) {
-      this.publish({ target_error: '主线尚未形成，请先讨论整份文档' });
-      return false;
-    }
-    const selection = formationSelection({
-      discussion_step_ref: ref,
-      discussion_branch_ref: null,
-      branch_intent: null,
-      branch_resume_basis: null,
-    });
-    this.setTarget(selection);
-    if (summary?.exists === false) {
-      this.publish({ notice: '已选择整份文档，发送讨论后建立主线' });
-      return true;
-    }
-    if (this.busy) {
-      this.publish({ notice: '已设置下一轮讨论目标' });
-      return true;
-    }
-    return this.execute({ type: 'FORMATION', action: 'SWITCH_STEP', step_ref: ref });
-  }
-  async chooseBranch(branch: ReturnType<typeof branchView>): Promise<boolean> {
-    if (this.closed || this.blocked || this.readOnly || branch.status === 'DROPPED') return false;
-    const resume = branch.status !== 'OPEN';
-    const selected = formationSelection({
-      discussion_step_ref: branch.return_step_ref,
-      discussion_branch_ref: branch.branch_ref,
-      branch_intent: resume ? 'RESUME' : 'ENTER',
-      branch_resume_basis: resume
-        ? {
-            expected_branch_status: branch.status,
-            expected_branch_event_id: branch.state_event_ref,
-          }
-        : null,
-    });
-    const epoch = this.setTarget(selected);
-    if (this.busy) {
-      this.publish({ notice: '已设置下一轮支线讨论目标' });
-      return true;
-    }
-    const command: JsonObject = resume
-      ? {
-          type: 'FORMATION',
-          action: 'RESUME_BRANCH',
-          step_ref: branch.return_step_ref,
-          branch_ref: branch.branch_ref,
-          expected_branch_status: branch.status,
-          expected_branch_event_id: branch.state_event_ref,
-          enter_after_resume: true,
-        }
-      : {
-          type: 'FORMATION',
-          action: 'ENTER_BRANCH',
-          step_ref: branch.return_step_ref,
-          branch_ref: branch.branch_ref,
-        };
-    return this.execute(
-      command,
-      () =>
-        this.accepted({ ...selected, branch_intent: 'ENTER', branch_resume_basis: null }, epoch),
-      epoch,
-    );
-  }
-  execute(command: JsonObject, accepted?: () => void, intentKey?: string): Promise<boolean> {
+  execute(command: JsonObject): Promise<boolean> {
     const signature = stableJson(command)!;
     if (this.pending !== null)
       return this.activeCommand === signature ? this.pending : Promise.resolve(false);
@@ -580,7 +575,6 @@ export class FormationWorkspace {
           expected_discussion_version: this.facts.discussion,
           discussion_command: command,
         }),
-        intentKey,
       );
     } catch {
       this.publish({ error: '操作内容无法完整核实，请检查后重试' });
@@ -594,7 +588,6 @@ export class FormationWorkspace {
         const receipt = formationProgramReceipt(response.data);
         this.publish({ receipt });
         this.publish({ phase: 'CONFIRMED', notice: '操作已确认' });
-        accepted?.();
         return await this.finish();
       } catch (error) {
         if (error instanceof ApiRejected || error instanceof FormationUnsentError)

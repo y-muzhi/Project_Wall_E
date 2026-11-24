@@ -8,6 +8,7 @@ import { reviewTarget, chapterTargets, nextChapter } from './scope.ts';
 import { instructionFeedback } from './input-feedback.ts';
 import { composerFeedback, composerProgress } from './composer-feedback.ts';
 import { composerShortcut } from './send-shortcut.ts';
+import { FormationPage } from '../formation/page-view.tsx';
 import { SingleSelect } from '../shared/single-select.tsx';
 import { Icon } from '../shared/icon.tsx';
 const names = {
@@ -59,6 +60,9 @@ export function GuideComposer({
   );
   const binding = documents.currentBinding;
   const [composing, setComposing] = useState(false);
+  const [showRoute, setShowRoute] = useState(false);
+  const workspace = owner.formationWorkspace;
+  const route = workspace?.read.getSnapshot().summary.data;
   const help = useId();
   const target = state.target;
   const writing = state.action === 'REVISE';
@@ -155,10 +159,54 @@ export function GuideComposer({
     : state.detail.discussion_summary.focus_title;
   const formationTarget = state.formation_target_label;
   const discussionLabel = formationTarget ?? focusTitle;
+  const routeStatus = state.formation_read_error
+    ? '主线待刷新'
+    : route?.exists === false
+      ? '尚未建立主线'
+      : '正在读取主线';
+  const readError = state.formation_read_error && workspace && (
+    <div role="alert">
+      <p>{state.formation_read_error}</p>
+      <button type="button" className="ui-button" onClick={() => void workspace.refresh(false)}>
+        重新读取主线
+      </button>
+    </div>
+  );
   const readTopics = () => {
     if (!discussionState?.loading && discussion && !topicUpdating) void discussion.load();
   };
 
+  const routeSteps = showRoute && workspace && route?.formation_version != null && (
+    <FormationPage
+      key={workspace.documentId + ':' + route.formation_version}
+      scope={workspace.documentId + ':' + route.formation_version}
+      icon="outline"
+      empty="主线暂无步骤"
+      showTotal={false}
+      compactControls
+      load={(cursor, signal) =>
+        workspace.api.getFormationSteps(
+          workspace.requirementId,
+          workspace.documentId,
+          {
+            limit: 20,
+            known_f: route.formation_version!,
+            include_cancelled: false,
+            ...(cursor ? { cursor } : {}),
+          },
+          signal,
+        )
+      }
+      onPathChanged={() => void workspace.refresh(false)}
+      identity={(row) => row.step_ref}
+      render={(row) => (
+        <span>
+          {row.position}. {row.title}
+          {row.step_ref === route.current_step_ref ? '（当前）' : ''}
+        </span>
+      )}
+    />
+  );
   return (
     <section
       aria-label="AI 消息输入"
@@ -203,6 +251,16 @@ export function GuideComposer({
                 <strong>{chapter?.title ?? target?.label ?? '请选择'}</strong>
               </summary>
               <div className="guide-composer-popover guide-chapter-controls">
+                {formationTarget !== null && (
+                  <details onToggle={(event) => setShowRoute(event.currentTarget.open)}>
+                    <summary>
+                      当前主线 · {state.formation_focus ?? state.formation_goal ?? '查看'}
+                    </summary>
+                    <p>{state.formation_goal ?? routeStatus}</p>
+                    {routeSteps}
+                    {readError}
+                  </details>
+                )}
                 <label>
                   写入范围
                   <SingleSelect
@@ -261,19 +319,37 @@ export function GuideComposer({
               <details
                 className="guide-composer-disclosure guide-target-control"
                 onToggle={(event) => {
-                  if (event.currentTarget.open && latestDiscussion === null) readTopics();
+                  setShowRoute(event.currentTarget.open);
+                  if (
+                    formationTarget === null &&
+                    event.currentTarget.open &&
+                    latestDiscussion === null
+                  )
+                    readTopics();
                 }}
               >
                 <summary title={discussionLabel ?? undefined}>
-                  <span>{formationTarget === null ? '讨论主题' : '讨论目标'}</span>
-                  <strong>{discussionLabel ?? '暂无讨论主题'}</strong>
+                  <span>{formationTarget === null ? '讨论主题' : '主线'}</span>
+                  <strong>
+                    {formationTarget === null
+                      ? (discussionLabel ?? '暂无讨论主题')
+                      : (state.formation_goal ?? routeStatus)}
+                  </strong>
+                  {state.formation_goal && (
+                    <span>
+                      当前：
+                      {state.formation_focus ??
+                        (route?.current_step_ref ? '步骤 ' + route.current_step_ref : '整篇文档')}
+                    </span>
+                  )}
                 </summary>
                 <div className="guide-composer-popover guide-topic-controls">
-                  {formationTarget !== null && (
-                    <p className="field-help">讨论主题 · {focusTitle ?? '暂无讨论主题'}</p>
+                  {routeSteps}
+                  {readError}
+                  {formationTarget === null && discussionState.loading && (
+                    <p role="status">正在读取讨论主题…</p>
                   )}
-                  {discussionState.loading && <p role="status">正在读取讨论主题…</p>}
-                  {topics.length > 0 && (
+                  {formationTarget === null && topics.length > 0 && (
                     <SingleSelect
                       label="切换讨论主题"
                       value={focus ?? ''}
@@ -288,7 +364,8 @@ export function GuideComposer({
                       }}
                     />
                   )}
-                  {(latestDiscussion === null || discussionState.error) &&
+                  {formationTarget === null &&
+                    (latestDiscussion === null || discussionState.error) &&
                     !discussionState.loading &&
                     !topicUpdating && (
                       <button
@@ -488,12 +565,12 @@ export function GuideComposer({
         <button
           className="ui-button primary"
           type="button"
+          aria-label={`发送：${state.parent ? '继续讨论' : names[state.action]}`}
           disabled={!canSend}
           aria-describedby={`${guidanceId} ${help}`}
           onClick={send}
         >
           <Icon name="send" />
-          {state.parent ? '继续讨论' : names[state.action]}
         </button>
       </footer>
     </section>

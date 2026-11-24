@@ -2,10 +2,32 @@ import { useState } from 'react';
 import type { JsonObject } from '../api/client.ts';
 import { stableJson } from '../api/client.ts';
 import type { FormationWorkspace } from './workspace.ts';
-import { sourceLabel } from './evidence-picker.tsx';
+import type { FormationStepDetail } from '../api/formation-values.ts';
 import { SourceReference } from '../requirements/source-reference.tsx';
 import { readSource } from '../requirements/source-reading.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
+
+export function sourceLabel(source: JsonObject): string {
+  if (source.kind === 'MESSAGE') return '讨论消息 #' + source.message_id;
+  if (source.kind === 'CARD_ANSWER')
+    return '正式回答 #' + source.message_id + ' · ' + source.card_key;
+  if (source.kind === 'REVISION')
+    return '文档 #' + source.document_id + ' · 版本 #' + source.revision_id;
+  if (source.kind === 'RUN_RESULT') return '运行 #' + source.guide_run_id + ' · 分析结果';
+  return '运行 #' + source.guide_run_id + ' · 已携带材料 ' + source.material_ref;
+}
+export function stepEvidence(step: FormationStepDetail): readonly JsonObject[] {
+  const sources = [
+    ...step.sources
+      .filter((item) => item.availability === 'AVAILABLE')
+      .map((item) => item.source_ref),
+    ...(step.assessment?.source_refs ?? []),
+    ...(step.assessment === null
+      ? []
+      : [{ kind: 'MESSAGE', message_id: step.assessment.assistant_message_id }]),
+  ];
+  return [...new Map(sources.map((source) => [stableJson(source), source])).values()];
+}
 
 export function FormationReadSources({
   owner,

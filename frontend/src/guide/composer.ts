@@ -33,6 +33,9 @@ export type ComposerState = Readonly<{
     intent: 'ADJUST_WRITE' | 'ADJUST_PATH';
   }> | null;
   formation_target_label: string | null;
+  formation_goal: string | null;
+  formation_focus: string | null;
+  formation_read_error: string | null;
   formation_blocked: string | null;
   draft_warning: string | null;
   available: boolean;
@@ -138,6 +141,9 @@ export class RequirementGuideComposer {
       instruction: draft.instruction,
       formation_proposal: null,
       formation_target_label: null,
+      formation_goal: null,
+      formation_focus: null,
+      formation_read_error: null,
       formation_blocked: null,
       draft_warning: draft.warning,
       available: false,
@@ -174,7 +180,10 @@ export class RequirementGuideComposer {
     this.formation = owner;
     const update = () =>
       this.publish({
-        formation_target_label: owner.getSnapshot().mode === 'FORMATION' ? owner.targetLabel : null,
+        formation_goal: owner.read.getSnapshot().summary.data?.goal?.text ?? null,
+        formation_focus: owner.getSnapshot().brief?.focus?.title ?? null,
+        formation_read_error: owner.getSnapshot().read_error,
+        formation_target_label: owner.getSnapshot().mode === 'LEGACY' ? null : owner.targetLabel,
         formation_blocked:
           owner.getSnapshot().mode === 'FORMATION'
             ? (owner.getSnapshot().target_error ?? owner.composeReason)
@@ -182,6 +191,9 @@ export class RequirementGuideComposer {
       });
     this.formationRelease = owner.subscribe(update);
     update();
+  }
+  get formationWorkspace() {
+    return this.formation;
   }
   get instructionEditable(): boolean {
     return (

@@ -78,10 +78,32 @@ export class FormationReadOwner {
     if (this.value.summary.phase !== 'IDLE') throw TypeError('Initial display restoration only');
     this.publish({ selected_step_ref: selected, show_cancelled: showCancelled });
   }
+  forgetDocument(): void {
+    this.generation++;
+    this.pageEpoch++;
+    this.detailEpoch++;
+    this.summaryController?.abort();
+    this.pageController?.abort();
+    this.detailController?.abort();
+    this.publish({
+      summary: idle<FormationSummary>(),
+      page: idle<StepPage>(),
+      detail: idle<FormationStepDetail>(),
+      selected_step_ref: null,
+      page_cursor: null,
+    });
+  }
   observeSummary(summary: FormationSummary): void {
     if (this.closed) return;
     if (summary.document_id !== this.documentId)
       throw TypeError('Owned formation summary required');
+    if (
+      this.value.summary.phase === 'READY' &&
+      summary.formation_version === this.value.summary.data?.formation_version
+    ) {
+      this.publish({ summary: ready(summary) });
+      return;
+    }
     this.generation++;
     this.pageEpoch++;
     this.detailEpoch++;

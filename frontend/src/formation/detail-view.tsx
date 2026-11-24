@@ -1,3 +1,4 @@
+import { ViewedProgress } from './progress-group.tsx';
 import { FormationReadSources } from './source-list.tsx';
 import {
   assessmentStaleLabels,
@@ -5,30 +6,21 @@ import {
   recommendationActionLabels,
 } from './labels.ts';
 import { FormationAnalysisResults } from './analysis-results.tsx';
-import { FormationResultDispositions } from './result-dispositions.tsx';
-import { resultProblem } from './result-state.ts';
-import type { ResultChoices } from './result-state.ts';
 import { FormationStepRelations } from './step-relations.tsx';
 import { FormationArtifactDetails } from './artifact-view.tsx';
 import { FormationEventChanges } from './history-view.tsx';
-import { FormationCompletionDispositions } from './completion-dispositions.tsx';
-import { remainingProblem } from './completion-state.ts';
-import type { RemainingChoices } from './completion-state.ts';
-import { FormationNextStep } from './next-step-view.tsx';
 import { FormationClosure } from './closure-view.tsx';
 import type { eventView } from '../api/formation-history.ts';
 import { useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { FormationWorkspace } from './workspace.ts';
 import type { FormationStepDetail } from '../api/formation-values.ts';
-import type { JsonObject } from '../api/client.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 import { SourceReference } from '../requirements/source-reference.tsx';
 import { readSource } from '../requirements/source-reading.ts';
-import { Confirmation } from '../shared/confirmation.tsx';
 import { localTime } from '../shared/time.ts';
 import { FormationPage } from './page-view.tsx';
-import { actionReason, branchLabels, issueLabels, stepLabels } from './labels.ts';
+import { branchLabels, issueLabels, stepLabels } from './labels.ts';
 const tabs = ['OVERVIEW', 'RESULTS', 'ISSUES', 'BRANCHES', 'HISTORY'] as const;
 const tabNames = {
   OVERVIEW: '概览',
@@ -38,179 +30,13 @@ const tabNames = {
   HISTORY: '事件记录',
 } as const;
 type Tab = (typeof tabs)[number];
-function NativeAction({
-  owner,
-  step,
-  action,
-  label,
-  command,
-  readReason,
-}: Readonly<{
-  owner: FormationWorkspace;
-  step: FormationStepDetail;
-  action: string;
-  label: string;
-  command: JsonObject;
-  readReason: string | null;
-}>) {
-  const reason = actionReason(step.availability, action, owner.writeReason ?? readReason);
-  return (
-    <span className="formation-action">
-      <button
-        className="ui-button"
-        type="button"
-        disabled={reason !== null}
-        title={reason ?? undefined}
-        onClick={() => void owner.execute(command)}
-      >
-        {label}
-      </button>
-      {reason !== null && <small>{reason}</small>}
-    </span>
-  );
-}
 function Overview({
   owner,
   step,
-  discuss,
-  readReason,
-}: Readonly<{
-  owner: FormationWorkspace;
-  step: FormationStepDetail;
-  discuss: () => void;
-  readReason: string | null;
-}>) {
-  const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot);
-  const [complete, setComplete] = useState(false),
-    [next, setNext] = useState<string | null>(null);
-  const [issues, setIssues] = useState<RemainingChoices>({}),
-    [branches, setBranches] = useState<RemainingChoices>({});
-  const [results, setResults] = useState<ResultChoices>({});
-  const [completionBasis, setCompletionBasis] = useState<string | null>(null);
-  const captureBasis = () => {
-    const summary = owner.read.getSnapshot().summary.data;
-    return [
-      owner.discussionVersion,
-      summary?.formation_version,
-      owner.contentVersion,
-      step.definition_version,
-      summary?.goal?.version,
-    ].join(':');
-  };
-  const resetCompletionChoices = () => {
-    setNext(null);
-    setResults({});
-    setIssues({});
-    setBranches({});
-    setCompletionBasis(captureBasis());
-  };
-  const closeCompletion = () => {
-    if (owner.getSnapshot().phase !== 'SENDING') setComplete(false);
-  };
-  const openCompletion = () => {
-    resetCompletionChoices();
-    setComplete(true);
-  };
-  const stale = complete && completionBasis !== captureBasis();
-  const formProblem = stale
-    ? '主线、目标或正文版本已变化，当前选择已保留；请按当前版本重新核对'
-    : (resultProblem(results, step.expected_results) ??
-      remainingProblem(issues) ??
-      remainingProblem(branches));
-  const actions: Readonly<Record<string, readonly [string, string]>> = {
-    PLANNED: ['START_STEP', '开始步骤'],
-    IN_PROGRESS: ['PAUSE_STEP', '暂停步骤'],
-    PAUSED: ['RESUME_STEP', '恢复步骤'],
-    COMPLETED: ['REOPEN_STEP', '重新打开步骤'],
-  };
-  const action = actions[step.status];
-  const completionReason = actionReason(
-    step.availability,
-    'COMPLETE_STEP',
-    owner.writeReason ?? readReason,
-  );
-  const completeStep = async (nextTarget: string | null, advanced = false) => {
-    const summary = owner.read.getSnapshot().summary.data;
-    if (summary?.goal === null || summary?.goal === undefined || completionReason !== null) return;
-    if (advanced && (formProblem !== null || completionBasis !== captureBasis())) return;
-    const selectionEpoch =
-      nextTarget === null ? owner.getSnapshot().selection_epoch : owner.beginSelectionEffect();
-    const done = await owner.execute(
-      {
-        type: 'FORMATION',
-        action: 'COMPLETE_STEP',
-        step_ref: step.step_ref,
-        expected_definition_version: step.definition_version,
-        expected_goal_version: summary.goal.version,
-        expected_content_version: owner.contentVersion,
-        result_dispositions: advanced
-          ? Object.values(results).map((row) => ({
-              ...row,
-              artifact_refs: [...row.artifact_refs],
-              source_refs: [...row.source_refs],
-            }))
-          : [],
-        issue_dispositions: advanced ? Object.values(issues) : [],
-        branch_dispositions: advanced ? Object.values(branches) : [],
-        next_step_ref: nextTarget,
-      },
-      () => {
-        if (nextTarget !== null) owner.completedNext(nextTarget, selectionEpoch);
-      },
-      nextTarget === null ? undefined : selectionEpoch,
-    );
-    if (done || owner.getSnapshot().phase === 'CONFIRMED') setComplete(false);
-  };
+}: Readonly<{ owner: FormationWorkspace; step: FormationStepDetail }>) {
   return (
     <>
-      <div className="formation-toolbar">
-        <button
-          type="button"
-          className="ui-button primary"
-          disabled={owner.targetReason !== null}
-          title={owner.targetReason ?? undefined}
-          onClick={() =>
-            void owner.chooseStep(step.step_ref).then((ok) => {
-              if (ok) discuss();
-            })
-          }
-        >
-          {owner.busy ? '下一轮讨论此步骤' : '讨论此步骤'}
-        </button>
-        {action && (
-          <NativeAction
-            owner={owner}
-            step={step}
-            action={action[0]}
-            label={action[1]}
-            readReason={readReason}
-            command={{ type: 'FORMATION', action: action[0], step_ref: step.step_ref }}
-          />
-        )}
-        {!['COMPLETED', 'CANCELLED'].includes(step.status) && (
-          <span className="formation-action">
-            <button
-              type="button"
-              className="ui-button"
-              disabled={completionReason !== null}
-              title={completionReason ?? undefined}
-              onClick={() => void completeStep(null)}
-            >
-              结束本步骤
-            </button>
-            {completionReason && <small>{completionReason}</small>}
-            <button
-              type="button"
-              className="ui-button"
-              disabled={completionReason !== null}
-              title={completionReason ?? undefined}
-              onClick={openCompletion}
-            >
-              结束并继续／处理遗留
-            </button>
-          </span>
-        )}
-      </div>
+      {owner.getSnapshot().brief && <ViewedProgress owner={owner} stepRef={step.step_ref} />}
       <h4>预期成果</h4>
       <ul>
         {step.expected_results.map((result) => (
@@ -313,85 +139,6 @@ function Overview({
           ))
         )}
       </details>
-      <Confirmation
-        open={complete}
-        title="结束并继续／处理遗留"
-        description="结束记录会保留当前成果及未处置的问题、支线。此操作不生成或修改文档，也不要求先完成全部成果。"
-        busy={state.phase === 'SENDING'}
-        error={state.error}
-        confirmLabel="确认结束"
-        cancel={closeCompletion}
-        confirmDisabled={completionReason !== null || formProblem !== null}
-        confirm={() => void completeStep(next, true)}
-      >
-        {complete && (
-          <>
-            {readReason !== null && <p role="status">{readReason}</p>}
-            {formProblem !== null && (
-              <p role="alert" className="inline-error">
-                {formProblem}
-              </p>
-            )}
-            <div className="formation-toolbar">
-              <button
-                type="button"
-                className="ui-button"
-                disabled={state.phase !== 'IDLE' || state.loading}
-                title={state.phase !== 'IDLE' ? '请先核实已发送的原操作' : undefined}
-                aria-busy={state.loading}
-                onClick={() => void owner.refresh()}
-              >
-                {state.loading ? '正在读取主线…' : '重新读取主线，保留处置选择'}
-              </button>
-              {stale && (
-                <button
-                  type="button"
-                  className="ui-button"
-                  disabled={state.phase !== 'IDLE' || state.loading || readReason !== null}
-                  onClick={() => setCompletionBasis(captureBasis())}
-                >
-                  已核对当前版本，保留选择
-                </button>
-              )}
-            </div>
-            {stale && (
-              <button
-                type="button"
-                className="ui-button"
-                disabled={state.phase !== 'IDLE' || state.loading || readReason !== null}
-                onClick={resetCompletionChoices}
-              >
-                清除处置选择并按当前版本重新核对
-              </button>
-            )}
-            <fieldset
-              disabled={owner.writeReason !== null || readReason !== null || stale}
-              className="formation-completion-fields"
-            >
-              <FormationResultDispositions
-                owner={owner}
-                step={step}
-                values={results}
-                onChange={setResults}
-              />
-              <FormationNextStep
-                owner={owner}
-                current={step.step_ref}
-                value={next}
-                onChange={setNext}
-              />
-              <FormationCompletionDispositions
-                owner={owner}
-                step={step.step_ref}
-                issues={issues}
-                branches={branches}
-                onIssues={setIssues}
-                onBranches={setBranches}
-              />
-            </fieldset>
-          </>
-        )}
-      </Confirmation>
     </>
   );
 }
@@ -399,12 +146,10 @@ function RelatedTab({
   owner,
   step,
   tab,
-  discuss,
 }: Readonly<{
   owner: FormationWorkspace;
   step: FormationStepDetail;
   tab: Tab;
-  discuss: () => void;
 }>) {
   const [showSuperseded, setShowSuperseded] = useState(false);
   const state = useSyncExternalStore(owner.read.subscribe, owner.read.getSnapshot);
@@ -510,27 +255,6 @@ function RelatedTab({
               {row.blocking ? ' · 阻塞问题' : ''}
             </p>
             {row.disposition_reason && <p>{row.disposition_reason}</p>}
-            {['DEFERRED', 'DROPPED', 'RESOLVED'].includes(row.disposition) && (
-              <button
-                type="button"
-                className="ui-button"
-                disabled={
-                  actionReason(row.availability, 'RESUME_ISSUE', owner.writeReason) !== null
-                }
-                title={
-                  actionReason(row.availability, 'RESUME_ISSUE', owner.writeReason) ?? undefined
-                }
-                onClick={() =>
-                  void owner.execute({
-                    type: 'FORMATION',
-                    action: 'RESUME_ISSUE',
-                    issue_ref: row.issue_ref,
-                  })
-                }
-              >
-                恢复问题
-              </button>
-            )}
           </>
         )}
       />
@@ -559,42 +283,6 @@ function RelatedTab({
             </p>
             <p>{row.relevance}</p>
             {row.result_summary && <p>已有结论：{row.result_summary}</p>}
-            {row.status !== 'DROPPED' && (
-              <button
-                type="button"
-                className="ui-button"
-                disabled={owner.targetReason !== null}
-                title={owner.targetReason ?? undefined}
-                onClick={() =>
-                  void owner.chooseBranch(row).then((ok) => {
-                    if (ok) discuss();
-                  })
-                }
-              >
-                {owner.busy
-                  ? '下一轮讨论支线'
-                  : row.status === 'OPEN'
-                    ? '讨论支线'
-                    : '继续讨论支线'}
-              </button>
-            )}
-            {row.status === 'OPEN' && row.branch_ref === state.summary.data?.active_branch_ref && (
-              <button
-                type="button"
-                className="ui-button"
-                disabled={owner.writeReason !== null}
-                title={owner.writeReason ?? undefined}
-                onClick={() =>
-                  void owner.execute({
-                    type: 'FORMATION',
-                    action: 'RETURN_FROM_BRANCH',
-                    branch_ref: row.branch_ref,
-                  })
-                }
-              >
-                返回步骤
-              </button>
-            )}
           </>
         )}
       />
@@ -634,10 +322,7 @@ function RelatedTab({
     />
   );
 }
-export function FormationStepView({
-  owner,
-  discuss,
-}: Readonly<{ owner: FormationWorkspace; discuss: () => void }>) {
+export function FormationStepView({ owner }: Readonly<{ owner: FormationWorkspace }>) {
   const state = useSyncExternalStore(owner.read.subscribe, owner.read.getSnapshot);
   const { tab } = useSyncExternalStore(owner.subscribe, owner.getSnapshot);
   const tabId = useId();
@@ -678,15 +363,9 @@ export function FormationStepView({
     );
   content =
     tab === 'OVERVIEW' ? (
-      <Overview
-        key={displayed.step_ref}
-        owner={owner}
-        step={displayed}
-        discuss={discuss}
-        readReason={readReason}
-      />
+      <Overview key={displayed.step_ref} owner={owner} step={displayed} />
     ) : (
-      <RelatedTab owner={owner} step={displayed} tab={tab} discuss={discuss} />
+      <RelatedTab owner={owner} step={displayed} tab={tab} />
     );
   return (
     <section

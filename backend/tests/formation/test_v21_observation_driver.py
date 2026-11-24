@@ -49,6 +49,20 @@ def test_single_observation_driver_never_sends_the_second_prepared_case(
 
     monkeypatch.setattr(runner, 'ROOT', tmp_path)
     monkeypatch.setattr(inputs, 'ROOT', tmp_path)
+    # The allowance under test belongs to the archived V2.1 manifest.
+    from backend.app.infrastructure.resources import ResourceCatalog
+
+    historical = ResourceCatalog().for_formation_profile(
+        profile.profile_id, discussion_routes=False
+    )
+    original_selector = ResourceCatalog.for_formation_profile
+
+    def use_archived_profile(catalog, selected, **options):
+        if selected == profile.profile_id and not options:
+            return historical
+        return original_selector(catalog, selected, **options)
+
+    monkeypatch.setattr(ResourceCatalog, 'for_formation_profile', use_archived_profile)
     monkeypatch.setattr(runner, 'verify_metadata', lambda: manifest)
     monkeypatch.setattr(runner, 'recipe_digest', lambda: 'a' * 64)
     monkeypatch.setattr(runner, 'runner_digest', lambda: 'b' * 64)

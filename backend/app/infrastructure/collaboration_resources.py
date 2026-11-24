@@ -5,7 +5,9 @@ and verified bytes. Offline readiness never grants permission to dispatch Chat.
 """
 
 import hashlib
+import os
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
 
@@ -75,6 +77,22 @@ FORMATION_FRAMING_BINDING_LONG_MANIFEST_SHA256 = (
 )
 OPENAI_MANIFEST_SHA256 = '9ddea44727ed60fe6e792708b3f109c7acbd33cb279c5e4e43c446a7dd6a9880'
 OPENAI_ARRAY_MANIFEST_SHA256 = '3b10a730eb5fcd346cec68b163bc4a2ee9ef1023674e513a369616bedaeaa543'
+DISCUSSION_ROUTE_MANIFESTS = frozenset(
+    {
+        'b28a2780c74c050bbf1627c56de37ad3a63f7a151430a6c94aa648ea83cf8cfb',
+        '538fcc450df89b57cdfb8b0168f9bc3e77dabef6c1fcec30549d52aedaeb813b',
+        '317ee70c6bfc5b70f4fdccff794ab50304455ced626fb4ace2569d23a6edef57',
+        '85c756bd5cd3a2ea8da2e0e8de592bd597c4181d93b3cce2a85a8c0f244d15d2',
+        '8aa262654f2ab18ef5f83c1179c0324136003ba56b5a91be98d4a297c637ef4f',
+        '93d6d333c88ac5c1cbdad6d5d59ac83a22e88cbcb41a2077af74cc0039d1ff31',
+        '9b3a9d4f1e1c9087cabf0323c8478d8db69b17d2052c7bcd27c5697c3ed7f2d8',
+        'cfa9e9c1f85e5841ebf9cc6ab3cafd5895908da96cd0737c18e003aa44b02ce7',
+        '25b96b8dcb58e7dd88335003674629443131f1edf3f64c14164181ee4515ba1c',
+        '936c8383da517240d5853d1a7f1e35ace74effe83d7e5d8c29b93ac926ea9631',
+        'd41a94ab0cbc1e2436dc7004d47550a12eed8a8a8bd5c458852954795681dfbb',
+        '68f46f3749b233dda24115d9512c857710ab550e331494279b26e9c5b928547c',
+    }
+)
 OUTPUTS = MappingProxyType(
     {
         'DISCUSS': 'OutputDiscuss',
@@ -100,6 +118,17 @@ def sha256(text: str) -> str:
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
+@lru_cache(maxsize=128)
+def _schema_text(contract, entry):
+    """Cache only immutable derived bytes; each caller receives a detached schema."""
+    return named_schema(strict_json_object(contract), entry).schema_json
+
+
+@lru_cache(maxsize=32)
+def _check_contract(contract):
+    Draft202012Validator.check_schema(strict_json_object(contract))
+
+
 @dataclass(frozen=True)
 class CollaborationResources:
     """Detached projections prevent callers from modifying frozen content."""
@@ -113,8 +142,8 @@ class CollaborationResources:
         try:
             root = root.resolve(strict=True)
             manifest_bytes = (root / 'manifest.json').read_bytes()
-            digest = hashlib.sha256(manifest_bytes).hexdigest()
-            if digest not in (
+            manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+            if manifest_digest not in (
                 MANIFEST_SHA256,
                 LONG_MANIFEST_SHA256,
                 DOCUMENT_MANIFEST_SHA256,
@@ -141,6 +170,7 @@ class CollaborationResources:
                 FORMATION_FRAMING_BINDING_LONG_MANIFEST_SHA256,
                 OPENAI_MANIFEST_SHA256,
                 OPENAI_ARRAY_MANIFEST_SHA256,
+                *DISCUSSION_ROUTE_MANIFESTS,
             ):
                 raise ValueError('Collaboration manifest identity changed')
             manifest = strict_json_object(manifest_bytes)
@@ -162,7 +192,12 @@ class CollaborationResources:
                     raise ValueError('Duplicate resource identity')
                 texts[file['path']] = content.decode('utf-8', errors='strict')
                 references[key] = (file['path'], compact(file['resource_ref']))
-            value = cls(digest, MappingProxyType(texts), MappingProxyType(references))
+            # Earlier audit journals recorded the digest of the last resource in the manifest.
+            # Their frozen identities must still round-trip. New discussion journals bind the manifest itself.
+            audit_manifest = (
+                manifest_digest if manifest_digest in DISCUSSION_ROUTE_MANIFESTS else digest
+            )
+            value = cls(audit_manifest, MappingProxyType(texts), MappingProxyType(references))
             value._check(manifest)
             return value
         except ConfigInvalid:
@@ -182,13 +217,17 @@ class CollaborationResources:
     def release_sha256(self):
         return self.release['admission']['release_sha256']
 
+    def _schema_json(self, entry):
+        contract = self.content(self.reference('collaboration.contract'))
+        return _schema_text(contract, entry)
+
     def schema(self, entry: str) -> dict:
-        return named_schema(self.bundle, entry).schema
+        return strict_json_object(self._schema_json(entry))
 
     def validate(self, entry: str, value):
         # _validate shares the project's strict integer, safe JSON and Unicode
         # checks. Its detached sorted result is not the transport serialization.
-        return _validate(named_schema(self.bundle, entry).schema_json, value)
+        return _validate(self._schema_json(entry), value)
 
     def validate_cards(self, value):
         return self.validate(
@@ -227,6 +266,28 @@ class CollaborationResources:
             return self._texts[path]
         except (KeyError, TypeError, ValueError):
             raise ConfigInvalid('Resource identity or digest does not match') from None
+
+    @property
+    def discussion_routes(self):
+        return self.route_lifecycle or self.reference('collaboration.release')['version'] in (
+            'v39',
+            'v40',
+            'openai-v3',
+        )
+
+    @property
+    def route_lifecycle(self):
+        return self.reference('collaboration.release')['version'] in (
+            'v41',
+            'v42',
+            'openai-v4',
+            'v43',
+            'v44',
+            'openai-v5',
+            'v45',
+            'v46',
+            'openai-v6',
+        )
 
     @property
     def formation_driven(self):
@@ -287,8 +348,8 @@ class CollaborationResources:
     def require_live(self, profile_snapshot: dict, *, admission=None) -> None:
         """Offline schema success cannot be passed off as live admission.
 
-        The initial fixed release is OFFLINE_READY. A future authorized live
-        evidence path must bind the release/profile and actual call receipts.
+        The service can explicitly activate one offline-ready OpenAI release.
+        Its request audits continue to record the actual admission state.
         """
         release = self.release
         if sha256(compact(profile_snapshot)) != release['model_profile_sha256']:
@@ -305,12 +366,20 @@ class CollaborationResources:
                 or effective['profile_sha256'] != release['model_profile_sha256']
             ):
                 raise ConfigInvalid('Admission belongs to another release or profile')
-        if effective['state'] != 'LIVE_VERIFIED':
-            raise ConfigInvalid('Collaboration release has no verified live admission')
+        if effective['state'] == 'LIVE_VERIFIED':
+            return
+        if (
+            admission is not None
+            and effective['state'] == 'OFFLINE_READY'
+            and self.formation_driven
+            and release.get('model_transport', {}).get('mode') == 'openai_responses_v1'
+            and os.environ.get('WALLE_ACTIVATED_OPENAI_RELEASE_SHA256') == self.release_sha256
+        ):
+            return
+        raise ConfigInvalid('Collaboration release has no verified live admission')
 
     def _check(self, manifest):
-        bundle = self.bundle
-        Draft202012Validator.check_schema(bundle)
+        _check_contract(self.content(self.reference('collaboration.contract')))
         expected_files = 20 if self.document_driven else 21
         if len(self._texts) != expected_files:
             raise ValueError('Incomplete collaboration release')
@@ -356,10 +425,10 @@ class CollaborationResources:
             'message_schema': 'MessageStructures',
         }
         for key, entry in expected_schemas.items():
-            if self.content(frozen[key]) != named_schema(bundle, entry).schema_json:
+            if self.content(frozen[key]) != self._schema_json(entry):
                 raise ValueError('Named schema differs from its complete closure')
         if [item['operation'] for item in frozen['output_schemas']] != list(OUTPUTS):
             raise ValueError('Each operation must be defined exactly once')
         for operation, entry in OUTPUTS.items():
-            if self.output_schema(operation) != named_schema(bundle, entry).schema_json:
+            if self.output_schema(operation) != self._schema_json(entry):
                 raise ValueError('Operation schema differs from its complete closure')

@@ -53,24 +53,58 @@ class GetRequirementRequest:
     requirement_id: int
     expand: str | None = None
     document_id: int | None = None
+    progress_view: str | None = None
+    progress_limit: int = 3
+    progress_group: str | None = None
+    progress_cursor: str | None = None
+    progress_step_ref: str | None = None
 
     @classmethod
     def parse(cls, request: Request):
-        query = request_query(request, singles=('expand', 'document_id'))
+        query = request_query(
+            request,
+            singles=(
+                'expand',
+                'document_id',
+                'progress_view',
+                'progress_limit',
+                'progress_group',
+                'progress_cursor',
+                'progress_step_ref',
+            ),
+        )
         expand = (
             strict_enum(query['expand'], 'expand', ('discussion',)) if 'expand' in query else None
         )
+        progress = (
+            strict_enum(query['progress_view'], 'progress_view', ('brief', 'document'))
+            if 'progress_view' in query
+            else None
+        )
+        from backend.app.shared.validation import reject
+
+        if progress and (expand != 'discussion' or 'document_id' not in query):
+            reject('progress_view', 'INVALID_FORMAT', '进展摘要需要文档和讨论范围')
+        if 'progress_limit' in query and progress is None:
+            reject('progress_limit', 'INVALID_FORMAT', '进展条数需要摘要视图')
         return cls(
             decimal_integer(request.path_params['requirement_id'], 'requirement_id'),
             expand,
             None
             if 'document_id' not in query
             else decimal_integer(query['document_id'], 'document_id'),
+            progress,
+            decimal_integer(query['progress_limit'], 'progress_limit', maximum=20)
+            if 'progress_limit' in query
+            else 3,
+            query.get('progress_group'),
+            query.get('progress_cursor'),
+            query.get('progress_step_ref'),
         )
 
 
 class GetRequirementResponse:
-    errors = ListRequirementsResponse.errors | {'NOT_FOUND'}
+    errors = ListRequirementsResponse.errors | {'NOT_FOUND', 'STATE_CONFLICT'}
 
     @staticmethod
     def project(data, request):
@@ -82,6 +116,17 @@ class GetRequirementResponse:
         if value['discussion'] is not None and 'formation_summary' in value['discussion']:
             if value['discussion']['formation_summary']['document_id'] != request.document_id:
                 raise ValueError('Formation summary belongs to another document')
+            view_key = (
+                'view_progress'
+                if request.progress_step_ref is not None or request.progress_view == 'document'
+                else 'progress_brief'
+            )
+            if request.progress_step_ref is not None:
+                focus = (value['discussion'].get(view_key) or {}).get('focus')
+                if not focus or focus['step_ref'] != request.progress_step_ref:
+                    raise ValueError('Viewed step differs from the requested document step')
+            if (view_key in value['discussion']) != (request.progress_view is not None):
+                raise ValueError('Progress view differs from the requested projection')
         return value, None
 
 

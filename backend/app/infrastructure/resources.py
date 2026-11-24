@@ -6,6 +6,7 @@ target freshness, facts, or model quality. Those gates belong to later units.
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -302,43 +303,36 @@ class ResourceCatalog:
 
         from .collaboration_resources import ROOT, CollaborationResources
 
+        # Frozen releases v7–v30 predate the directory naming convention.
+        batches = {f'v{number - 8}': f'v{number}' for number in range(15, 39)}
         for batch in (
-            'v15',
-            'v16',
-            'v17',
-            'v18',
-            'v19',
-            'v20',
-            'v21',
-            'v22',
-            'v23',
-            'v24',
-            'v25',
-            'v26',
-            'v27',
-            'v28',
-            'v29',
-            'v30',
-            'v31',
-            'v32',
-            'v33',
-            'v34',
-            'v35',
-            'v36',
-            'v37',
-            'v38',
+            'v39',
+            'v40',
+            'v41',
+            'v42',
             'openai-v1',
             'openai-v2',
+            'openai-v3',
+            'openai-v4',
+            'v43',
+            'v44',
+            'openai-v5',
+            'v45',
+            'v46',
+            'openai-v6',
         ):
-            resources = CollaborationResources.load(ROOT.parent / batch)
+            batches[batch] = batch
+        version = reference.get('version') if isinstance(reference, dict) else None
+        if isinstance(version, str) and version in batches:
+            resources = CollaborationResources.load(ROOT.parent / batches[version])
             if resources.reference('collaboration.release') == reference:
                 selected = copy(self)
                 selected._collaboration_resources = resources
                 return selected
         raise ConfigInvalid('Unknown frozen collaboration release')
 
-    def for_formation_profile(self, profile_id):
-        """Explicit V2.1 selection; old defaults and historical rounds keep their release."""
+    def for_formation_profile(self, profile_id, *, discussion_routes=True):
+        """Select the active discussion release; pinned V2.1 fixtures may request the predecessor."""
         from copy import copy
 
         from .collaboration_resources import ROOT, CollaborationResources
@@ -357,6 +351,13 @@ class ResourceCatalog:
             if profile_id == LONG_OUTPUT_PROFILE
             else 'v37'
         )
+        if discussion_routes:
+            batch = {'v37': 'v45', 'v38': 'v46', 'openai-v2': 'openai-v6'}[batch]
+            if profile_id == OPENAI_PROFILE:
+                # The application and its startup check must use the same admitted release.
+                batch = os.environ.get('WALLE_OPENAI_FORMATION_RELEASE', batch)
+                if batch not in ('openai-v2', 'openai-v6'):
+                    raise ConfigInvalid('Unknown OpenAI formation release')
         selected._collaboration_resources = CollaborationResources.load(ROOT.parent / batch)
         return selected
 

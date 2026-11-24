@@ -22,6 +22,7 @@ def capture_material(
     previous_branch=None,
     required_steps=(),
     required_entities=(),
+    trigger_id=None,
 ):
     document_id = root['assistant_document_id']
     repository = FormationRepository(connection)
@@ -49,6 +50,17 @@ def capture_material(
         'recommendation': None,
         'coverage': {'limit': 100, 'included': [], 'omitted': []},
     }
+    if catalog.collaboration.discussion_routes:
+        from .discussion_context import route_context
+
+        result['route_context'] = route_context(
+            connection,
+            root,
+            head,
+            required_steps,
+            trigger_id,
+            lifecycle=catalog.collaboration.route_lifecycle,
+        )
     if head is None:
         return result
     result['goal'] = {
@@ -179,10 +191,27 @@ def capture_material(
             (document_id, hard_step),
         ).fetchall()
         for row in issues:
-            if row['blocking']:
+            if (
+                row['blocking']
+                or catalog.collaboration.discussion_routes
+                and hard_step in required_steps
+            ):
                 include('ISSUE', row, hard=True)
+        if catalog.collaboration.discussion_routes and hard_step in required_steps:
+            for branch in connection.execute(
+                "SELECT * FROM formation_branches WHERE document_id=? AND return_step_ref=? AND status='OPEN' "
+                'ORDER BY CAST(substr(branch_ref,2) AS INTEGER) LIMIT 101',
+                (document_id, hard_step),
+            ):
+                include('BRANCH', branch, hard=True)
         for row in artifacts:
             include('ARTIFACT', row, hard=True)
+    if selected_step is None and catalog.collaboration.route_lifecycle:
+        for row in connection.execute(
+            "SELECT i.* FROM formation_issues i JOIN formation_steps s USING(document_id,step_ref) WHERE i.document_id=? AND i.disposition='OPEN' AND s.status<>'CANCELLED' ORDER BY i.blocking DESC,CAST(substr(i.issue_ref,2) AS INTEGER) LIMIT 3",
+            (document_id,),
+        ):
+            include('ISSUE', row, hard=False)
     if selected_step is not None:
         issues = connection.execute(
             "SELECT * FROM formation_issues WHERE document_id=? AND step_ref=? AND disposition='OPEN' AND blocking=0 ORDER BY CAST(substr(issue_ref,2) AS INTEGER) LIMIT 101",

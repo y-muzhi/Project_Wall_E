@@ -27,7 +27,7 @@ __all__ = ['database', 'released', 'base_workspace']
 @pytest.fixture
 def workspace(base_workspace):
     db, executor, catalog = base_workspace
-    return db, executor, catalog.for_formation_profile(DEFAULT_PROFILE)
+    return db, executor, catalog.for_formation_profile(DEFAULT_PROFILE, discussion_routes=False)
 
 
 def request(workspace, target=None, **extra):

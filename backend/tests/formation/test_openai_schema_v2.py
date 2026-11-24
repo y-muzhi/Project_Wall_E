@@ -61,7 +61,7 @@ def test_empty_array_has_exact_membership_and_explicit_items_in_new_projection()
 
 def test_actual_frozen_blank_context_uses_v2_and_legacy_count_request_restores_exactly(tmp_path):
     profile = ModelProfile('offline-grammar-fixture', OPENAI_PROFILE)
-    catalog = ResourceCatalog().for_formation_profile(OPENAI_PROFILE)
+    catalog = ResourceCatalog().for_formation_profile(OPENAI_PROFILE, discussion_routes=False)
     assert catalog.collaboration.release['version'] == 'openai-v2'
     legacy = catalog.for_collaboration_release(
         CollaborationResources.load(ROOT.parent / 'openai-v1').reference('collaboration.release')

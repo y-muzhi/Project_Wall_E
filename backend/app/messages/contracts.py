@@ -100,7 +100,78 @@ def list_messages_input(payload):
 
 
 def message_read_model(data):
-    value = object_fields(data, 'message', MESSAGE_FIELDS, MESSAGE_FIELDS)
+    value = object_fields(
+        data,
+        'message',
+        (*MESSAGE_FIELDS, 'formation_operations', 'initial_route_suggestion'),
+        MESSAGE_FIELDS,
+    )
+    if 'initial_route_suggestion' in value:
+        if (
+            value['role'] != 'ASSISTANT'
+            or value['message_type'] != 'TEXT'
+            or value['guide_run_id'] is None
+            or 'formation_operations' in value
+        ):
+            raise ValueError('An initial suggestion requires its original assistant message')
+        proposal = object_fields(
+            value['initial_route_suggestion'],
+            'initial_route_suggestion',
+            ('goal', 'steps'),
+            ('goal', 'steps'),
+        )
+        raw_text(proposal['goal'], 'goal', 1)
+        if not isinstance(proposal['steps'], list) or not proposal['steps']:
+            raise ValueError('An initial suggestion needs steps')
+        for item in proposal['steps']:
+            step = object_fields(
+                item, 'step', ('title', 'expected_results'), ('title', 'expected_results')
+            )
+            raw_text(step['title'], 'title', 1)
+            if not isinstance(step['expected_results'], list):
+                raise ValueError('Expected results must be a list')
+            for result in step['expected_results']:
+                raw_text(result, 'expected_result', 1)
+    if 'formation_operations' in value:
+        operations = value['formation_operations']
+        if not isinstance(operations, list) or not operations:
+            raise ValueError('Missing formation operations')
+        for item in operations:
+            fields = (
+                'batch_id',
+                'kind',
+                'goal',
+                'steps',
+                'moves',
+                'focus_title',
+                'previous_focus_title',
+                'actions',
+            )
+            operation = object_fields(item, 'formation_operation', fields, fields)
+            strict_integer(operation['batch_id'], 'batch_id')
+            strict_enum(operation['kind'], 'kind', ('CREATED', 'UPDATED', 'FOCUSED'))
+            if operation['goal'] is not None:
+                raw_text(operation['goal'], 'goal', 1, 1000)
+            if not isinstance(operation['steps'], list):
+                raise ValueError('Invalid historical step list')
+            if operation['focus_title'] is not None:
+                raw_text(operation['focus_title'], 'focus_title', 1, 1000)
+            if operation['previous_focus_title'] is not None:
+                raw_text(operation['previous_focus_title'], 'previous_focus_title', 1, 1000)
+            if not isinstance(operation['actions'], list):
+                raise ValueError('Invalid lifecycle actions')
+            for label in operation['actions']:
+                raw_text(label, 'action_label', 1, 120)
+            if not isinstance(operation['moves'], list):
+                raise ValueError('Invalid historical step moves')
+            for move in operation['moves']:
+                fields = ('title', 'before', 'after')
+                object_fields(move, 'move', fields, fields)
+                raw_text(move['title'], 'title', 1, 1000)
+                strict_integer(move['before'], 'before')
+                strict_integer(move['after'], 'after')
+            for title in operation['steps']:
+                raw_text(title, 'step_title', 1, 1000)
     for field in ('id', 'requirement_id', 'sequence_no'):
         strict_integer(value[field], field)
     for field in ('guide_run_id', 'reply_to_message_id', 'document_id'):

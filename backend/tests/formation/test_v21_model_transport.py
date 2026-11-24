@@ -290,13 +290,19 @@ def test_unknown_count_text_strategy_or_changed_frozen_counting_fails_closed(con
         counting_system_text(canonical, context.system, context.response_format)
 
 
-def test_new_count_text_preserves_sdk_bytes_and_historical_v31_receipt(tmp_path, contexts):
+def test_new_count_text_preserves_sdk_bytes_and_historical_v31_receipt(tmp_path):
     previous = CollaborationResources.load(ROOT.parent / 'v31')
     catalog = ResourceCatalog().for_collaboration_release(
         previous.reference('collaboration.release')
     )
     historical, _ = prepare_sample(tmp_path, catalog, Sample('fbase', 3, 'assess'))
     assert historical.texts[0] == historical.system
-    current = contexts['fbase']
+    # This byte comparison addresses the frozen V2.1 counting-only change.
+    counting_only = ResourceCatalog().for_formation_profile(
+        PROFILE.profile_id, discussion_routes=False
+    )
+    comparison = tmp_path / 'counting-only'
+    comparison.mkdir()
+    current, _ = prepare_sample(comparison, counting_only, Sample('fbase', 3, 'assess'))
     assert PROFILE.request(current) == PROFILE.request(historical)
     assert current.texts[0] != historical.texts[0]

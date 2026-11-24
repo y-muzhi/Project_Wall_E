@@ -72,7 +72,9 @@ async def list_guide_runs_http(request: Request):
         request,
         ListGuideRunsRequest,
         ListGuideRunsResponse,
-        lambda runtime, parsed: queries.list_guide_runs(runtime.database, parsed.payload),
+        lambda runtime, parsed: queries.list_guide_runs(
+            runtime.database, parsed.payload, catalog=runtime.catalog
+        ),
     )
 
 

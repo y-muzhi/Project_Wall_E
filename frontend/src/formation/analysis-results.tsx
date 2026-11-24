@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { FormationStepDetail } from '../api/formation-values.ts';
 import type { FormationWorkspace } from './workspace.ts';
 import { stableJson } from '../api/client.ts';
-import { stepEvidence, sourceLabel } from './evidence-picker.tsx';
+import { stepEvidence, sourceLabel } from './source-list.tsx';
 import { FormationClosureResults } from './closure-view.tsx';
 import { SourceReference } from '../requirements/source-reference.tsx';
 import { readSource } from '../requirements/source-reading.ts';

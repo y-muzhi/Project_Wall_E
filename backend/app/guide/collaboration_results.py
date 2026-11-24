@@ -35,11 +35,12 @@ def persist_collaboration_result(
             catalog=catalog,
             at=at,
             recovery_updated_at=recovery_updated_at,
+            database=database,
         )
 
 
 def _persist_in_transaction(
-    connection, identity, *, profile, catalog, at, recovery_updated_at=None
+    connection, identity, *, database, profile, catalog, at, recovery_updated_at=None
 ):
     from backend.app.infrastructure.identifiers import require_write_transaction
 
@@ -73,7 +74,8 @@ def _persist_in_transaction(
     if catalog.collaboration.formation_driven and run['operation'] == 'DISCUSS':
         from backend.app.formation.model_results import persist_unit
 
-        return persist_unit(connection, row, run, root, context, profile, catalog, at)
+        with database.reversible(connection) as attempt:
+            return persist_unit(connection, row, run, root, context, profile, catalog, at, attempt)
     from backend.app.formation.transaction import capture_transaction
 
     formation_transaction = capture_transaction(
@@ -299,6 +301,22 @@ def _persist_in_transaction(
         'analysis': analysis,
         'validation_error': validation_error,
     }
+    if header_valid and resources.formation_driven and run['operation'] == 'REVISE':
+        from backend.app.formation.decision_writing import record_writes
+
+        writes = record_writes(
+            connection,
+            root,
+            run,
+            context,
+            catalog,
+            parsed.get('document_result'),
+            effect,
+            application,
+            reference_map.values(),
+        )
+        if writes:
+            effects['decision_writes'] = writes
     if row['parse_status'] == 'SUCCEEDED':
         connection.execute(
             'UPDATE llm_uses SET validation_status=?,validation_error=?,trusted_output_json=?,error_code=?,error_message=? WHERE id=?',

@@ -30,7 +30,7 @@ def test_real_observation_audit_then_normal_case_stays_offline_and_bounded(
     tmp_path, transport_fails
 ):
     profile = ModelProfile('offline-only-execution-fixture', 'deepseek-v2')
-    catalog = ResourceCatalog().for_formation_profile('deepseek-v2')
+    catalog = ResourceCatalog().for_formation_profile('deepseek-v2', discussion_routes=False)
     manifest = Path('docs/verification/v2.1/evaluation-inputs-default-2026-11-19-v6.md')
     frozen = manifest_rows(manifest.read_text(encoding='utf-8'))
     report = tmp_path / 'events.md'

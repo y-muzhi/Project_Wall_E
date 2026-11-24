@@ -255,7 +255,19 @@ def start(args):
     proof = admission_for(database, ProcessLock.for_database(database.path), catalog).current(
         profile.snapshot
     )
+    activated = args.activate_release
+    os.environ.pop('WALLE_ACTIVATED_OPENAI_RELEASE_SHA256', None)
+    if activated is not None:
+        if activated != catalog.collaboration.release_sha256:
+            raise ValueError('Activation digest differs from selected OpenAI release')
+        os.environ['WALLE_ACTIVATED_OPENAI_RELEASE_SHA256'] = activated
     catalog.collaboration.require_live(profile.snapshot, admission=proof)
+    print(
+        'OPENAI_START release=' + catalog.collaboration.release_sha256
+        + ' admission=' + proof.value['state']
+        + ' activation=' + ('explicit' if activated else 'verified'),
+        flush=True,
+    )
     key = read_local_credential(args.credential_file, name='OPENAI_API_KEY')
     ModelProfile(key, OPENAI_PROFILE)
     os.environ.update(
@@ -278,6 +290,7 @@ def main(argv=None):
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--observe', action='store_true')
     action.add_argument('--start', action='store_true')
+    parser.add_argument('--activate-release', metavar='SHA256', help='Start the selected offline-ready OpenAI release by its exact digest')
     parser.add_argument('--database', type=Path)
     parser.add_argument('--credential-file', type=Path, default=ROOT / '.env.openai.local')
     parser.add_argument('--slot', type=Path)
@@ -286,6 +299,8 @@ def main(argv=None):
     parser.add_argument('--count-limit', type=int, choices=(1, 2, 3), default=3)
     parser.add_argument('--proxy', help='Explicit credential-free local HTTP proxy for OpenAI only')
     args = parser.parse_args(argv)
+    if args.activate_release is not None and not args.start:
+        parser.error('--activate-release only applies to service startup')
     if not 1024 <= args.port <= 65535:
         parser.error('A valid local HTTP port is required')
     from backend.app.infrastructure.openai_transport import configured_proxy, validate_proxy

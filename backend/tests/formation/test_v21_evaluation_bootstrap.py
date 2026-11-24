@@ -34,7 +34,7 @@ def test_first_frozen_sample_checks_observation_without_count_chat_or_live_admis
     tmp_path, profile_id, manifest_name
 ):
     profile = ModelProfile('explicit-offline-observation-check', profile_id)
-    catalog = ResourceCatalog().for_formation_profile(profile.profile_id)
+    catalog = ResourceCatalog().for_formation_profile(profile.profile_id, discussion_routes=False)
     first = samples()[0]
     context, facts = prepare_sample(tmp_path, catalog, first)
     frozen = manifest_rows(

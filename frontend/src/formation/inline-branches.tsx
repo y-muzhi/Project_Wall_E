@@ -11,7 +11,6 @@ export function FormationInlineBranches({
   formationVersion,
   locating,
   locate,
-  discuss,
 }: Readonly<{
   owner: FormationWorkspace;
   stepRef: string;
@@ -20,7 +19,6 @@ export function FormationInlineBranches({
   formationVersion: number;
   locating: boolean;
   locate: (ref: string) => void;
-  discuss: () => void;
 }>) {
   const scope = [owner.documentId, stepRef, formationVersion, 'inline-branches'].join(':');
   return (
@@ -73,25 +71,6 @@ export function FormationInlineBranches({
                     ? '返回位置 · ' + stepTitles.get(row.return_step_ref)
                     : '查看返回位置'}
                 </button>
-                {row.status !== 'DROPPED' && (
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={owner.targetReason !== null}
-                    title={owner.targetReason ?? undefined}
-                    onClick={() =>
-                      void owner.chooseBranch(row).then((ok) => {
-                        if (ok) discuss();
-                      })
-                    }
-                  >
-                    {owner.busy
-                      ? '下一轮讨论支线'
-                      : row.status === 'OPEN'
-                        ? '讨论支线'
-                        : '继续讨论支线'}
-                  </button>
-                )}
               </div>
             </div>
           </details>

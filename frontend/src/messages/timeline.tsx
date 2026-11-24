@@ -321,6 +321,65 @@ export function MessageTimeline({
                     <p role="status">历史问题结构无法读取，保留可读内容。</p>
                   )}
                 {message.structured_content !== null && structured?.(message)}
+                {message.initial_route_suggestion && (
+                  <details className="message-route-proposal">
+                    <summary>建议新建主线 · {message.initial_route_suggestion.goal}</summary>
+                    <ol>
+                      {message.initial_route_suggestion.steps.map((step, index) => (
+                        <li key={index}>
+                          <strong>{step.title}</strong>
+                          {step.expected_results.length > 0 && (
+                            <ul>
+                              {step.expected_results.map((item, i) => (
+                                <li key={i}>{item}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+                {message.formation_operations?.map((operation) => (
+                  <div className="message-route-operation" key={operation.batch_id}>
+                    <strong>
+                      {operation.kind === 'CREATED'
+                        ? '已新建主线'
+                        : operation.kind === 'UPDATED'
+                          ? '已修改主线'
+                          : '已切换讨论步骤'}
+                    </strong>
+                    {operation.goal && <span>{operation.goal}</span>}
+                    {operation.moves.length > 0 && (
+                      <span>
+                        {operation.moves
+                          .map(
+                            (move) =>
+                              move.title + '（第' + move.before + '步 → 第' + move.after + '步）',
+                          )
+                          .join('、')}
+                      </span>
+                    )}
+                    {operation.actions.length > 0 && <span>{operation.actions.join('、')}</span>}
+                    {operation.kind === 'FOCUSED' ? (
+                      <span>
+                        {operation.previous_focus_title ?? '整份文档'} →{' '}
+                        {operation.focus_title ?? '整份文档'}
+                      </span>
+                    ) : (
+                      operation.focus_title && <span>当前讨论：{operation.focus_title}</span>
+                    )}
+                    {operation.moves.length === 0 &&
+                      operation.kind !== 'FOCUSED' &&
+                      operation.steps.length > 0 && (
+                        <span>
+                          {operation.kind === 'CREATED'
+                            ? operation.steps.join(' → ')
+                            : '涉及步骤：' + operation.steps.join('、')}
+                        </span>
+                      )}
+                  </div>
+                ))}
                 {resultNotice?.(message)}
               </div>
               {requestRecord?.(message)}

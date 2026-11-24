@@ -216,18 +216,98 @@ const discussionCore = (value: unknown) => {
     counters: shape({ topic: id, evidence: id }),
   })(value);
 };
+export const progressBrief = checked(
+  shape({
+    document_id: id,
+    discussion_version: id,
+    formation_version: nullable(id),
+    revision_id: id,
+    goal: nullable(nonempty),
+    focus: nullable(shape({ step_ref: nonempty, title: nonempty, purpose: array(nonempty, 3) })),
+    next: nullable(
+      shape({
+        kind: choices(['ISSUE', 'RECOMMENDATION']),
+        ref: nonempty,
+        reason: nonempty,
+        source_refs: array(sourceRef, 1000),
+      }),
+    ),
+    decisions: array(
+      shape({
+        evidence_ref: nonempty,
+        text: nonempty,
+        step_ref: nullable(nonempty),
+        writing: nullable(
+          shape({
+            state: choices(['CURRENT', 'HISTORICAL', 'FAILED']),
+            version: nullable(id),
+            source_refs: array(sourceRef, 100, 1),
+          }),
+        ),
+        source_refs: array(sourceRef, 1000, 1),
+      }),
+      20,
+    ),
+    decision_total: count,
+    decision_next_cursor: nullable(nonempty),
+    issue_next_cursor: nullable(nonempty),
+    issues: array(
+      shape({
+        issue_ref: nonempty,
+        step_ref: nonempty,
+        question: nonempty,
+        source_refs: array(sourceRef, 1000),
+      }),
+      20,
+    ),
+    issue_total: count,
+  }),
+  (value) => {
+    require(
+      value.decisions.length <= value.decision_total && value.issues.length <= value.issue_total,
+    );
+  },
+);
+export type ProgressBrief = ReturnType<typeof progressBrief>;
 type DiscussionRead = ReturnType<typeof discussionCore> &
   Readonly<{
     formation_summary?: ReturnType<typeof formationSummary>;
+    progress_brief?: ProgressBrief;
+    view_progress?: ProgressBrief;
   }>;
 export const discussionState = (value: unknown): DiscussionRead => {
   const row = object(value);
   if (!Object.hasOwn(row, 'formation_summary')) return discussionCore(row);
   const summary = formationSummary(row.formation_summary);
+  const brief = Object.hasOwn(row, 'progress_brief')
+    ? progressBrief(row.progress_brief)
+    : undefined;
+  const stepProgress = Object.hasOwn(row, 'view_progress')
+    ? progressBrief(row.view_progress)
+    : undefined;
+  if (stepProgress)
+    require(
+      !brief &&
+        stepProgress.document_id === summary.document_id &&
+        stepProgress.formation_version === summary.formation_version,
+    );
+  if (brief)
+    require(
+      brief.document_id === summary.document_id &&
+        brief.formation_version === summary.formation_version &&
+        (brief.focus?.step_ref ?? null) === summary.current_step_ref,
+    );
   const core = Object.fromEntries(
-    Object.entries(row).filter(([key]) => key !== 'formation_summary'),
+    Object.entries(row).filter(
+      ([key]) => key !== 'formation_summary' && key !== 'progress_brief' && key !== 'view_progress',
+    ),
   );
-  return Object.freeze({ ...discussionCore(core), formation_summary: summary });
+  return Object.freeze({
+    ...discussionCore(core),
+    formation_summary: summary,
+    ...(brief ? { progress_brief: brief } : {}),
+    ...(stepProgress ? { view_progress: stepProgress } : {}),
+  });
 };
 export type DiscussionState = ReturnType<typeof discussionState>;
 export const resourceRef = shape({
@@ -833,24 +913,58 @@ export const programReceipt = (value: unknown) =>
 export const receiptPurpose = (value: ReturnType<typeof programReceipt>) =>
   'operation' in value ? value.operation : value.purpose;
 export const message = (value: unknown) => {
-  const row = exact(value, [
-    'id',
-    'requirement_id',
-    'document_id',
-    'guide_run_id',
-    'sequence_no',
-    'role',
-    'content',
-    'message_type',
-    'structured_content',
-    'reply_to_message_id',
-    'created_at',
-    'card_state',
-    'phase_ref',
-    'topic_refs',
-    'document_ids',
-    'program_receipt',
-  ]);
+  const data = object(value);
+  const suggestion = Object.hasOwn(data, 'initial_route_suggestion')
+    ? shape({
+        goal: nonempty,
+        steps: array(
+          shape({ title: nonempty, expected_results: array(nonempty, Number.MAX_SAFE_INTEGER) }),
+          Number.MAX_SAFE_INTEGER,
+          1,
+        ),
+      })(data.initial_route_suggestion)
+    : null;
+  const operations = Object.hasOwn(data, 'formation_operations')
+    ? array(
+        shape({
+          batch_id: id,
+          kind: choices(['CREATED', 'UPDATED', 'FOCUSED']),
+          goal: nullable(nonempty),
+          steps: array(nonempty, Number.MAX_SAFE_INTEGER),
+          moves: array(shape({ title: nonempty, before: id, after: id }), Number.MAX_SAFE_INTEGER),
+          focus_title: nullable(nonempty),
+          previous_focus_title: nullable(nonempty),
+          actions: array(nonempty, 20),
+        }),
+        Number.MAX_SAFE_INTEGER,
+        1,
+      )(data.formation_operations)
+    : [];
+  const row = exact(
+    Object.fromEntries(
+      Object.entries(data).filter(
+        ([key]) => key !== 'formation_operations' && key !== 'initial_route_suggestion',
+      ),
+    ),
+    [
+      'id',
+      'requirement_id',
+      'document_id',
+      'guide_run_id',
+      'sequence_no',
+      'role',
+      'content',
+      'message_type',
+      'structured_content',
+      'reply_to_message_id',
+      'created_at',
+      'card_state',
+      'phase_ref',
+      'topic_refs',
+      'document_ids',
+      'program_receipt',
+    ],
+  );
   const base = shape({
     id,
     requirement_id: id,
@@ -868,6 +982,13 @@ export const message = (value: unknown) => {
     document_ids: array(id, 1000),
     program_receipt: nullable(programReceipt),
   })(Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'structured_content')));
+  if (suggestion)
+    require(
+      base.role === 'ASSISTANT' &&
+        base.message_type === 'TEXT' &&
+        base.guide_run_id !== null &&
+        operations.length === 0,
+    );
   distinct(base.topic_refs);
   distinct(base.document_ids);
   const structured =
@@ -893,7 +1014,12 @@ export const message = (value: unknown) => {
         base.program_receipt.user_message_id === base.id &&
         base.program_receipt.requirement_id === base.requirement_id,
     );
-  return Object.freeze({ ...base, structured_content: structured });
+  return Object.freeze({
+    ...base,
+    structured_content: structured,
+    ...(suggestion ? { initial_route_suggestion: suggestion } : {}),
+    ...(operations.length ? { formation_operations: operations } : {}),
+  });
 };
 export type Message = Model<typeof message>;
 

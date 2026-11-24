@@ -228,17 +228,13 @@ def record_state_event(
     version_before,
     version_after,
     command,
+    source_run_id=None,
+    source=None,
 ):
     require_write_transaction(connection)
     if not mutation.changed or mutation.action not in EVENT_ACTIONS:
         raise ValueError('Only a real registered transition can create a native event')
     document_id = root['assistant_document_id']
-    message = connection.execute(
-        'SELECT * FROM conversation_messages WHERE id=? AND requirement_id=? AND document_id=?',
-        (message_id, root['id'], document_id),
-    ).fetchone()
-    if message is None or message['role'] != 'USER' or message['guide_run_id'] is not None:
-        raise ValueError('Native formation event requires its actual user action message')
     changes = []
     references = set()
     for kind, identity, previous, current in (
@@ -272,53 +268,40 @@ def record_state_event(
             references.add(('STEP', head['current_step_ref']))
         if head['active_branch_ref'] is not None:
             references.add(('BRANCH', head['active_branch_ref']))
-    public = {
-        'event_id': event_id,
-        'action': mutation.action,
-        'actor': 'USER',
-        'reason': reason,
-        'created_at': at,
-        'schema': 'formation_event_v1',
-        'document_id': document_id,
-        'batch_ref': event_id,
-        'ordinal': 1,
-        'batch_size': 1,
-        'version_before': version_before,
-        'version_after': version_after,
-        'change_count': len(changes),
-        'closure': None,
-    }
-    payload = {
-        'formation_event_type': mutation.action,
-        'command': command,
-        'event': public,
-        'command_message_id': message_id,
-        'idempotency_key': key,
-        'focus_before': {
-            name: before[0][name] for name in ('current_step_ref', 'active_branch_ref')
-        },
-        'focus_after': {
-            name: mutation.head[name] for name in ('current_step_ref', 'active_branch_ref')
-        },
-    }
-    connection.execute(
-        'INSERT INTO document_change_audits(id,requirement_id,document_id,source_type,source_id,reason_code,'
-        'before_content_version,after_content_version,created_at,event_type,revision_id,guide_run_id,payload_json) '
-        "VALUES(?,?,?,'USER_ACTION',?,?,NULL,NULL,?,'DISCUSSION_UPDATED',NULL,NULL,?)",
-        (
-            event_id,
-            root['id'],
-            document_id,
-            message_id,
-            mutation.action,
-            at,
-            canonical_input(payload),
-        ),
+    from .path_events import write_headers, write_facts
+    from .path_facts import RouteFact
+
+    event_key = (mutation.action, str(event_id))
+    event_ids = {event_key: event_id}
+    facts = [
+        RouteFact(kind, ref, old, new, event_key, members)
+        for kind, ref, old, new, members in changes
+    ]
+    views = write_headers(
+        connection,
+        root=root,
+        command=command,
+        event_ids=event_ids,
+        facts=facts,
+        extra_counts={},
+        message_id=message_id,
+        key=key,
+        at=at,
+        reason=reason,
+        version_before=version_before,
+        version_after=version_after,
+        head_before=before[0],
+        head_after=mutation.head,
+        actor='AI' if source_run_id is not None else 'USER',
+        source_run_id=source_run_id,
+        sources={event_key: [source]} if source is not None else None,
     )
-    for ordinal, (kind, ref, old, new, members) in enumerate(changes, 1):
-        record_change(connection, document_id, event_id, ordinal, kind, ref, old, new, members)
-    connection.executemany(
-        'INSERT INTO formation_event_refs(document_id,event_id,kind,ref) VALUES(?,?,?,?)',
-        [(document_id, event_id, kind, ref) for kind, ref in sorted(references)],
+    write_facts(
+        connection,
+        document_id,
+        event_ids,
+        views,
+        facts,
+        references=[(event_id, kind, ref) for kind, ref in references],
     )
-    return public
+    return views[0]

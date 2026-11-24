@@ -1,4 +1,4 @@
-import { FORMATION_PREVIEW_ERRORS } from './formation-errors.ts';
+import { FORMATION_PREVIEW_ERRORS, FORMATION_READ_ERRORS } from './formation-errors.ts';
 import { pathPreview } from './formation-preview.ts';
 import type { PreviewOptions } from './formation-preview.ts';
 import { commandSha256 } from './code-command-snapshot.ts';
@@ -831,8 +831,9 @@ export class WalleApi {
     decode: Decoder<T>,
     signal?: AbortSignal,
     parameters: readonly (readonly [string, string])[] = [],
+    errorPolicy?: ApiErrorPolicy,
   ) {
-    const response = await this.client.read(path, decode, parameters, signal);
+    const response = await this.client.read(path, decode, parameters, signal, errorPolicy);
     if (response.meta.pagination !== undefined) throw new ApiUnknown(false);
     return response;
   }
@@ -878,21 +879,62 @@ export class WalleApi {
     signal?: AbortSignal,
     expandDiscussion = false,
     documentId: number | null = this.assistantDocumentId,
+    progressLimit?: number,
+    progressPage?: Readonly<{
+      group: 'decisions' | 'issues';
+      cursor: string | null;
+      stepRef?: string | null;
+    }>,
   ) {
     const decode = checked(models.requirementDetail, (value) => {
       require(value.requirement.id === identity);
       require(expandDiscussion === (value.discussion !== null));
       if (value.discussion !== null && value.discussion.formation_summary !== undefined)
         require(value.discussion.formation_summary.document_id === documentId);
+      if (progressLimit !== undefined && value.discussion?.formation_summary) {
+        const brief =
+          progressPage?.stepRef !== undefined
+            ? value.discussion.view_progress
+            : value.discussion.progress_brief;
+        if (progressPage?.stepRef !== undefined)
+          require((brief?.focus?.step_ref ?? null) === progressPage.stepRef);
+        require(
+          brief !== undefined && brief.discussion_version === value.requirement.discussion_version,
+        );
+        require(
+          value.documents.some(
+            (doc) => doc.id === documentId && doc.current_revision_id === brief.revision_id,
+          ),
+        );
+      }
     });
     return this.readTogether(
-      `requirement:${identity}:${documentId}:${expandDiscussion}`,
+      `requirement:${identity}:${documentId}:${expandDiscussion}:${progressLimit ?? ''}:${progressPage?.group ?? ''}:${progressPage?.cursor ?? ''}:${progressPage?.stepRef === null ? 'document' : (progressPage?.stepRef ?? '')}`,
       signal,
       (owned) =>
-        this.single(target('requirements', identity), decode, owned, [
-          ...(expandDiscussion ? [['expand', 'discussion'] as const] : []),
-          ...(documentId === null ? [] : [['document_id', String(id(documentId))] as const]),
-        ]),
+        this.single(
+          target('requirements', identity),
+          decode,
+          owned,
+          [
+            ...(expandDiscussion ? [['expand', 'discussion'] as const] : []),
+            ...(progressLimit === undefined
+              ? []
+              : [
+                  ['progress_view', progressPage?.stepRef === null ? 'document' : 'brief'] as const,
+                  ['progress_limit', String(progressLimit)] as const,
+                  ...(progressPage?.stepRef
+                    ? [['progress_step_ref', progressPage.stepRef] as const]
+                    : []),
+                  ...(progressPage ? [['progress_group', progressPage.group] as const] : []),
+                  ...(progressPage?.cursor
+                    ? [['progress_cursor', progressPage.cursor] as const]
+                    : []),
+                ]),
+            ...(documentId === null ? [] : [['document_id', String(id(documentId))] as const]),
+          ],
+          progressPage ? FORMATION_READ_ERRORS : undefined,
+        ),
     );
   }
   async getFormationSummary(requirementId: number, documentId: number, signal?: AbortSignal) {

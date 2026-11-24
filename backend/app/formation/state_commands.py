@@ -68,18 +68,30 @@ def version_basis(root, head, document):
     }
 
 
-def apply(connection, root, command, key, at):
+def apply(
+    connection,
+    root,
+    command,
+    key,
+    at,
+    *,
+    transaction=None,
+    assistant_id=None,
+    run_id=None,
+    source=None,
+):
     """Called inside the existing command executor; this function never commits or claims."""
     require_write_transaction(connection)
     if command['action'] not in STATE_ACTIONS:
         raise ValueError('State handler requires its registered command subset')
     if at < root['updated_at']:
         raise ValueError('Native activity cannot precede the current stored activity')
-    assert_idle(
-        connection,
-        root,
-        remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
-    )
+    if transaction is None:
+        assert_idle(
+            connection,
+            root,
+            remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
+        )
     document_id = root['assistant_document_id']
     document = connection.execute(
         'SELECT d.content_version,r.id AS revision_id FROM requirement_documents d JOIN revisions r '
@@ -110,20 +122,26 @@ def apply(connection, root, command, key, at):
     if not mutation.changed:
         return receipt(root, head, document, None, (), changed=False)
     event_id = event_identity()
-    message_id = entity_id(connection, EntityKind.MESSAGE)
-    MessageRepository(connection).create_user_text(
-        message_id,
-        root['id'],
-        None,
-        action_text(command, steps, branches, issues),
-        key,
-        at,
-        document_id=document_id,
-        topic_refs=(),
-        document_ids=(document_id,),
-    )
+    message_id = assistant_id
+    if transaction is None:
+        message_id = entity_id(connection, EntityKind.MESSAGE)
+        MessageRepository(connection).create_user_text(
+            message_id,
+            root['id'],
+            None,
+            action_text(command, steps, branches, issues),
+            key,
+            at,
+            document_id=document_id,
+            topic_refs=(),
+            document_ids=(document_id,),
+        )
     repository.save_state(document_id, before, mutation)
-    updated = RequirementRepository(connection).advance_discussion(root, at)
+    if transaction is None:
+        updated = RequirementRepository(connection).advance_discussion(root, at)
+    else:
+        transaction.touch(at)
+        updated = transaction.root()
     current_head = repository.head(document_id, required=True)
     record_state_event(
         connection,
@@ -135,7 +153,11 @@ def apply(connection, root, command, key, at):
         key=key,
         at=at,
         reason=command.get('reason', ACTION_LABELS[command['action']]),
-        version_before=version_basis(root, head, document),
+        version_before=version_basis(root, head, document)
+        if transaction is None
+        else transaction.before,
+        source_run_id=run_id,
+        source=source,
         version_after=version_basis(updated, current_head, document),
         command=command,
     )

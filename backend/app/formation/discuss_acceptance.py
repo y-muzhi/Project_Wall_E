@@ -35,6 +35,14 @@ def accept_discussion(connection, request, catalog, at, **continuation):
     if document is None:
         raise Rejected('SOURCE_INVALID')
     refs = list(request.source_refs)
+    if catalog.collaboration.route_lifecycle:
+        from .discussion_context import clarification_source
+
+        previous = clarification_source(connection, root)
+        if previous:
+            prior_ref = {'kind': 'MESSAGE', 'message_id': previous['id']}
+            if prior_ref not in refs:
+                refs.append(prior_ref)
     if request.proposal_ref is not None:
         purpose = (
             'STAGED_WRITE' if request.proposal_intent == 'ADJUST_WRITE' else 'FORMATION_PATH_CHANGE'
@@ -87,7 +95,7 @@ def prepare_acceptance(connection, root_before, run_id, message, request, catalo
     previous_branch = (
         None if plan.before is None else plan.before[2].get(request.target['discussion_branch_ref'])
     )
-    required_steps = ()
+    required_steps = []
     required_entities = ()
     if request.proposal_ref is not None:
         from .proposal_binding import scope_for
@@ -120,6 +128,46 @@ def prepare_acceptance(connection, root_before, run_id, message, request, catalo
                     raise Rejected('SOURCE_INVALID')
                 if value[0] not in required_steps:
                     required_steps.append(value[0])
+    # Resolve explicitly named steps within the bound document before freezing
+    # the counted input. Matching supplies context only; it never executes a command.
+    if original_head is not None:
+        rows = connection.execute(
+            "SELECT step_ref,title,position FROM formation_steps WHERE document_id=? AND status<>'CANCELLED' ORDER BY position",
+            (request.document_id,),
+        ).fetchall()
+        context_text = request.instruction
+        if catalog.collaboration.route_lifecycle:
+            from .discussion_context import clarification_source
+
+            previous = clarification_source(connection, root_before, before_message=message['id'])
+            if previous:
+                context_text += '\n' + previous['content']
+        for row in rows:
+            if row['title'] in context_text and row['step_ref'] not in required_steps:
+                required_steps.append(row['step_ref'])
+        if catalog.collaboration.discussion_routes:
+            from .discussion_context import positional_targets
+
+            if catalog.collaboration.route_lifecycle:
+                # A named deferred issue or closed branch is still available to a user who asks to resume it.
+                entities = connection.execute(
+                    "SELECT 'ISSUE',issue_ref,step_ref FROM formation_issues WHERE document_id=? AND instr(?,description)>0 UNION ALL SELECT 'BRANCH',branch_ref,return_step_ref FROM formation_branches WHERE document_id=? AND instr(?,question)>0 LIMIT 101",
+                    (
+                        request.document_id,
+                        request.instruction,
+                        request.document_id,
+                        request.instruction,
+                    ),
+                ).fetchall()
+                for kind, ref, owner in entities:
+                    if owner not in required_steps:
+                        required_steps.append(owner)
+                    entry = {'kind': kind, 'ref': ref}
+                    if entry not in required_entities:
+                        required_entities = [*required_entities, entry]
+            for ref in positional_targets(rows, context_text):
+                if ref not in required_steps:
+                    required_steps.append(ref)
     material = capture_material(
         connection,
         current,
@@ -128,6 +176,7 @@ def prepare_acceptance(connection, root_before, run_id, message, request, catalo
         previous_branch=previous_branch,
         required_steps=required_steps,
         required_entities=required_entities,
+        trigger_id=message['id'],
     )
     refs = material_sources(material)
     verify_source_refs(connection, current['id'], refs, resources=catalog.collaboration)

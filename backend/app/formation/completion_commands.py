@@ -67,17 +67,30 @@ def remaining_changes(steps, branches, issues, command):
     return tuple(changes)
 
 
-def apply(connection, root, command, key, at, *, resources):
+def apply(
+    connection,
+    root,
+    command,
+    key,
+    at,
+    *,
+    resources,
+    transaction=None,
+    assistant_id=None,
+    run_id=None,
+    source=None,
+):
     require_write_transaction(connection)
     if command['action'] != 'COMPLETE_STEP':
         raise ValueError('Completion handler requires its strict native action')
     if at < root['updated_at']:
         raise ValueError('Completion cannot precede the stored activity')
-    assert_idle(
-        connection,
-        root,
-        remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
-    )
+    if transaction is None:
+        assert_idle(
+            connection,
+            root,
+            remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
+        )
     repository = FormationRepository(connection)
     head, steps, branches, issues, edges = repository.graph(root['assistant_document_id'])
     ref = command['step_ref']
@@ -166,21 +179,23 @@ def apply(connection, root, command, key, at, *, resources):
         dependencies=edges['DEPENDENCY'],
         replacements=edges['REPLACES'],
     )
-    message_id = entity_id(connection, EntityKind.MESSAGE)
     text = '结束步骤：' + step['title']
     if next_step is not None:
         text += '；继续讨论：' + steps[next_step]['title']
-    MessageRepository(connection).create_user_text(
-        message_id,
-        root['id'],
-        None,
-        text,
-        key,
-        at,
-        document_id=root['assistant_document_id'],
-        topic_refs=(),
-        document_ids=(root['assistant_document_id'],),
-    )
+    message_id = assistant_id
+    if transaction is None:
+        message_id = entity_id(connection, EntityKind.MESSAGE)
+        MessageRepository(connection).create_user_text(
+            message_id,
+            root['id'],
+            None,
+            text,
+            key,
+            at,
+            document_id=root['assistant_document_id'],
+            topic_refs=(),
+            document_ids=(root['assistant_document_id'],),
+        )
     current_blocks = None
     try:
         current_blocks = validate_snapshot(
@@ -216,7 +231,9 @@ def apply(connection, root, command, key, at, *, resources):
             )
         )
         reasons[(event, action['ref'])] = action['reason'] or text
-    before_basis = version_basis(root, head, document)
+    before_basis = (
+        version_basis(root, head, document) if transaction is None else transaction.before
+    )
     after_basis = {
         **before_basis,
         'discussion_version': increment(root['discussion_version']),
@@ -251,6 +268,9 @@ def apply(connection, root, command, key, at, *, resources):
             head_after=new_head,
             closures={('STEP_COMPLETED', ref): plan.head},
             reasons=reasons,
+            actor='AI' if transaction else 'USER',
+            source_run_id=run_id,
+            sources={key: [source] for key in ids} if transaction else None,
         )
         write_closure(connection, root['assistant_document_id'], plan)
         repository.save_state(
@@ -258,7 +278,11 @@ def apply(connection, root, command, key, at, *, resources):
             (head, steps, branches, issues),
             StateMutation('STEP_COMPLETED', new_head, new_steps, new_branches, new_issues, True),
         )
-        updated = RequirementRepository(connection).advance_discussion(root, at)
+        if transaction is None:
+            updated = RequirementRepository(connection).advance_discussion(root, at)
+        else:
+            transaction.touch(at)
+            updated = transaction.root()
         references = [(completion_id, 'STEP', ref)]
         for selected in (head['current_step_ref'], new_head['current_step_ref']):
             if selected is not None:
