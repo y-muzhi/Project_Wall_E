@@ -19,6 +19,7 @@ export interface DetailFrameProps {
   actions: ReactNode;
   outline: ReactNode;
   outlineActions?: ReactNode;
+  documentFullscreen?: boolean;
   document(navigation: ReactNode): ReactNode;
   ai: ReactNode;
   progress: ReactNode;
@@ -47,10 +48,11 @@ export function DetailFrame(props: DetailFrameProps) {
   const columns = useRef<HTMLDivElement>(null),
     callbacks = useRef(props);
   callbacks.current = props;
+  const documentOpen = props.documentFullscreen || state.document_open;
   const motion = useLayoutMotion(),
     leftPresent = useMotionPresence(state.left_open, motionTiming.layout),
     rightPresent = useMotionPresence(state.right_open, motionTiming.layout),
-    documentPresent = useMotionPresence(state.document_open, motionTiming.layout);
+    documentPresent = useMotionPresence(documentOpen, motionTiming.layout);
   const transition = (change: () => void) =>
     motion.run(
       [{ element: columns.current, properties: ['grid-template-columns'] }],
@@ -71,6 +73,12 @@ export function DetailFrame(props: DetailFrameProps) {
         ?.focus({ preventScroll: true });
   }, [state.right_tab, state.right_open]);
   const documentView = useRef<HTMLButtonElement>(null);
+  const wasFullscreen = useRef(props.documentFullscreen);
+  useLayoutEffect(() => {
+    if (wasFullscreen.current && !props.documentFullscreen && !documentOpen)
+      documentView.current?.focus({ preventScroll: true });
+    wasFullscreen.current = props.documentFullscreen;
+  }, [props.documentFullscreen, documentOpen]);
   const outlineOpen = useRef<HTMLButtonElement>(null),
     outlineClose = useRef<HTMLButtonElement>(null),
     outlineFocus = useRef(false);
@@ -154,7 +162,7 @@ export function DetailFrame(props: DetailFrameProps) {
     COMMENTS: props.comments,
     REVISIONS: props.revisions,
   };
-  const navigation = (
+  const navigation = !props.documentFullscreen && (
     <button
       ref={outlineOpen}
       className="ui-button icon-button document-navigation-toggle"
@@ -362,10 +370,11 @@ export function DetailFrame(props: DetailFrameProps) {
         <div className="detail-left-divider" hidden={!leftPresent || state.left_drawer} />
         <section
           className="detail-document-region"
+          data-document-fullscreen={props.documentFullscreen}
           hidden={!documentPresent}
-          inert={!state.document_open}
-          aria-hidden={!state.document_open}
-          data-motion-open={state.document_open}
+          inert={!documentOpen}
+          aria-hidden={!documentOpen}
+          data-motion-open={documentOpen}
           aria-label="需求正文"
         >
           <div className="detail-document-content">{props.document(navigation)}</div>

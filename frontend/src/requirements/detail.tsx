@@ -24,6 +24,7 @@ import { DocumentRecords } from './document-records.tsx';
 import { FormationProgress } from '../formation/progress-view.tsx';
 import { DocumentAssociations } from './document-associations.tsx';
 import { activeModal } from '../shared/modal.ts';
+import { Icon } from '../shared/icon.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
 import type { EmptyStateContent } from '../shared/empty-state.tsx';
 
@@ -130,6 +131,10 @@ function LoadedDetail({
   choosingCodeDocument: boolean;
 }>) {
   const [documentActionHost, setDocumentActionHost] = useState<HTMLDivElement | null>(null);
+  const [fullscreenActionHost, setFullscreenActionHost] = useState<HTMLDivElement | null>(null);
+  const [fullscreenDrawing, setFullscreenDrawing] = useState<number | null>(null);
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
+  const previousFullscreen = useRef(false);
   const product = useRef<HTMLDivElement>(null);
   const composerFocus = useRef(false);
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
@@ -172,6 +177,51 @@ function LoadedDetail({
     return () => window.removeEventListener('beforeunload', protect);
   }, [owner]);
   const selectedDocument = actual.selected_document_id;
+  const drawingId = actual.current?.document_kind === 'DRAWING' ? actual.current.id : null;
+  const fullscreen = supported && drawingId !== null && fullscreenDrawing === drawingId;
+
+  useLayoutEffect(() => {
+    if (previousFullscreen.current !== fullscreen) {
+      previousFullscreen.current = fullscreen;
+      fullscreenButton.current?.focus({ preventScroll: true });
+    }
+    if (!fullscreen && fullscreenDrawing !== null) setFullscreenDrawing(null);
+  }, [fullscreen, fullscreenDrawing]);
+  useEffect(() => {
+    if (!fullscreen) return;
+    function exitOnEscape(event: KeyboardEvent) {
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        activeModal() ||
+        (event.target instanceof Element && event.target.closest('[role="dialog"]'))
+      )
+        return;
+      event.preventDefault();
+      setFullscreenDrawing(null);
+    }
+    window.addEventListener('keydown', exitOnEscape);
+    return () => window.removeEventListener('keydown', exitOnEscape);
+  }, [fullscreen]);
+
+  const fullscreenLabel = fullscreen ? '退出全屏' : '全屏';
+  const fullscreenControls = drawingId !== null && (
+    <>
+      {fullscreen && <div className="drawing-fullscreen-actions" ref={setFullscreenActionHost} />}
+      <button
+        ref={fullscreenButton}
+        className="ui-button drawing-fullscreen-toggle"
+        type="button"
+        aria-pressed={fullscreen}
+        title={fullscreen ? '退出全屏（Esc）' : '全屏查看画板'}
+        onClick={() => setFullscreenDrawing(fullscreen ? null : drawingId)}
+      >
+        <Icon name={fullscreen ? 'minimize' : 'maximize'} />
+        {fullscreenLabel}
+      </button>
+    </>
+  );
   useEffect(() => {
     if (handoff && handoff !== 'INVALID' && supported) regions.layout.openTab('AI');
   }, [handoff, regions.layout, supported]);
@@ -233,6 +283,7 @@ function LoadedDetail({
         <DetailFrame
           layout={regions.layout}
           viewport={regions.viewport}
+          documentFullscreen={fullscreen}
           title={actual.requirement.title}
           titleEditor={
             <RequirementPropertyControl
@@ -258,6 +309,7 @@ function LoadedDetail({
               documentActions={
                 <div className="requirement-document-actions" ref={setDocumentActionHost} />
               }
+              manualActionHost={fullscreen ? fullscreenActionHost : null}
               toolHint={openCodeTasks && selectedDocument === null ? '请先选择文档' : undefined}
               commands={regions.header}
               ready={state.ready}
@@ -320,10 +372,14 @@ function LoadedDetail({
           outlineActions={<NewDocumentButton owner={owner} iconOnly />}
           document={(navigation) => (
             <>
-              <DocumentMetadataBar owner={owner} navigation={navigation} />
+              <DocumentMetadataBar
+                owner={owner}
+                navigation={navigation}
+                viewActions={fullscreenControls}
+              />
               <OwnedDocumentControls
-                actionHost={documentActionHost}
-                showSaveStatus={false}
+                actionHost={fullscreen ? fullscreenActionHost : documentActionHost}
+                showSaveStatus={fullscreen}
                 owner={owner.documents}
                 blocked={blocked}
                 auxiliary={document.mode !== 'CURRENT' || !owner.documents.currentBinding}

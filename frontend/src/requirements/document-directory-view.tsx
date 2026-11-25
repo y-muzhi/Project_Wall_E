@@ -462,9 +462,11 @@ export function NewDocumentButton({
 export function DocumentMetadataBar({
   owner,
   navigation,
+  viewActions,
 }: {
   owner: RequirementDetailOwner;
   navigation?: import('react').ReactNode;
+  viewActions?: import('react').ReactNode;
 }) {
   const detail = useSyncExternalStore(owner.subscribe, owner.getSnapshot).detail,
     flow = owner.regions!.directory,
@@ -573,49 +575,53 @@ export function DocumentMetadataBar({
               正在进行人工编辑
             </p>
           )}
-          {current && !editing && (
-            <span className="document-metadata-actions">
-              {current.archived_at === null ? (
-                <>
-                  <button
-                    className="ui-button"
-                    disabled={
-                      !flow.allowed || current.confirmed_revision_id === current.current_revision_id
-                    }
-                    onClick={() =>
-                      void execute(
-                        () =>
-                          flow.metadata(current, {
-                            type: 'CONFIRM',
-                            expected_content_version: current.content_version,
-                            revision_id: current.current_revision_id,
-                          }),
-                        '当前版本已确认',
-                      )
-                    }
-                  >
-                    确认当前版本
-                  </button>
+          {((current && !editing) || viewActions) && (
+            <div className="document-metadata-actions">
+              {current &&
+                !editing &&
+                (current.archived_at === null ? (
+                  <>
+                    <button
+                      className="ui-button"
+                      disabled={
+                        !flow.allowed ||
+                        current.confirmed_revision_id === current.current_revision_id
+                      }
+                      onClick={() =>
+                        void execute(
+                          () =>
+                            flow.metadata(current, {
+                              type: 'CONFIRM',
+                              expected_content_version: current.content_version,
+                              revision_id: current.current_revision_id,
+                            }),
+                          '当前版本已确认',
+                        )
+                      }
+                    >
+                      确认当前版本
+                    </button>
+                    <button
+                      className="ui-button"
+                      disabled={!flow.allowed}
+                      onClick={() => setArchive(current)}
+                    >
+                      归档
+                    </button>
+                  </>
+                ) : (
                   <button
                     className="ui-button"
                     disabled={!flow.allowed}
-                    onClick={() => setArchive(current)}
+                    onClick={() =>
+                      void execute(() => flow.metadata(current, { type: 'RESTORE' }), '文档已恢复')
+                    }
                   >
-                    归档
+                    恢复文档
                   </button>
-                </>
-              ) : (
-                <button
-                  className="ui-button"
-                  disabled={!flow.allowed}
-                  onClick={() =>
-                    void execute(() => flow.metadata(current, { type: 'RESTORE' }), '文档已恢复')
-                  }
-                >
-                  恢复文档
-                </button>
-              )}
-            </span>
+                ))}
+              {viewActions}
+            </div>
           )}
         </div>
       )}
