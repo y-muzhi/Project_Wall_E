@@ -42,13 +42,11 @@ class OriginalDraft:
 
 def _allowed_grant(connection, task):
     grant = connection.execute(
-        """SELECT budget_limit_cny FROM testing_authorizations WHERE id=? AND profile_version_id=?
+        """SELECT 1 FROM testing_authorizations WHERE id=? AND profile_version_id=?
            AND testing_task_id=? AND scope_kind='TASK' AND status='EFFECTIVE'""",
         (task['authorization_id'], task['profile_version_id'], task['id']),
     ).fetchone()
-    return grant is not None and (
-        parse_money(task['budget_limit_cny']) <= parse_money(grant['budget_limit_cny'])
-    )
+    return grant is not None
 
 
 def _reservation(frozen):
@@ -99,9 +97,7 @@ def draft_inputs(connection, catalog, task, at):
     ).fetchone()
     if held is not None or budget.unresolved:
         return None, 'MODEL_NOT_READY'
-    if budget.requests >= profile['limits'][
-        'max_model_requests'
-    ] or budget.available < _reservation(frozen):
+    if budget.requests >= profile['limits']['max_model_requests']:
         return None, 'BUDGET_NOT_READY'
     return frozen, None
 

@@ -281,7 +281,6 @@ function checkInput(value: JsonObject, original: CommandIdentity) {
   distinct([documentId, ...materials.map((item) => item.document_id)]);
   const branch = localBranchRef(row.target_branch);
   const amount = moneyMicro(money(row.budget_limit_cny));
-  require(amount > 0n);
   return { documentId, row, materials, branch, budget: formatCnyBalance(amount) };
 }
 
@@ -651,7 +650,7 @@ export function decodeTaskView(value: unknown) {
         (observed.evidence_result !== 'VERIFIED' || observed.difference_kinds.length === 0),
     );
   }
-  require(task.created_at <= task.updated_at && moneyMicro(task.budget.limit_cny) > 0n);
+  require(task.created_at <= task.updated_at);
   const waiting = task.status === 'WAITING';
   require(task.resume_phase === (waiting ? task.phase : null));
   require(

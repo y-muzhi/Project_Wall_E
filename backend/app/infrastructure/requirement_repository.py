@@ -253,11 +253,16 @@ class RequirementRepository:
             (draft_id, at, at, identity),
         )
         if result.rowcount != 1:
-            raise ValueError('Manual occupancy changed inside shared transaction')
+            result = self.connection.execute(
+                "UPDATE requirements SET updated_at=? WHERE id=? AND document_work_state='MANUAL_EDITING' AND active_operation_type='MANUAL_DRAFT'",
+                (at, identity),
+            )
+            if result.rowcount != 1:
+                raise ValueError('Manual occupancy changed inside shared transaction')
         row = self.get(identity)
         if row is None:
             raise ValueError('Occupied requirement is missing')
-        return row
+        return {**row, 'active_operation_id': draft_id, 'state_started_at': at}
 
     def occupy_guide(self, identity: int, guide_id: int, at: str) -> dict:
         require_write_transaction(self.connection)
@@ -274,12 +279,26 @@ class RequirementRepository:
 
     def release_manual_draft(self, identity: int, draft_id: int, at: str) -> dict:
         require_write_transaction(self.connection)
-        result = self.connection.execute(
-            "UPDATE requirements SET document_work_state='IDLE',active_operation_type=NULL,active_operation_id=NULL,state_started_at=NULL,updated_at=? WHERE id=? AND document_work_state='MANUAL_EDITING' AND active_operation_type='MANUAL_DRAFT' AND active_operation_id=?",
-            (at, identity, draft_id),
-        )
-        if result.rowcount != 1:
+        root = self.get(identity)
+        if root is None or root['active_operation_type'] != 'MANUAL_DRAFT':
             raise ValueError('Manual occupancy changed inside shared transaction')
+        remaining = self.connection.execute(
+            "SELECT id,created_at FROM requirement_documents WHERE requirement_id=? AND document_type='MANUAL_DRAFT' ORDER BY id=? DESC,created_at,id LIMIT 1",
+            (identity, root['active_operation_id']),
+        ).fetchone()
+        if remaining is None and root['active_operation_id'] != draft_id:
+            raise ValueError('Manual occupancy changed inside shared transaction')
+        self.connection.execute(
+            'UPDATE requirements SET document_work_state=?,active_operation_type=?,active_operation_id=?,state_started_at=?,updated_at=? WHERE id=?',
+            (
+                'IDLE' if remaining is None else 'MANUAL_EDITING',
+                None if remaining is None else 'MANUAL_DRAFT',
+                None if remaining is None else remaining['id'],
+                None if remaining is None else remaining['created_at'],
+                at,
+                identity,
+            ),
+        )
         row = self.get(identity)
         if row is None:
             raise ValueError('Released requirement is missing')

@@ -53,6 +53,7 @@ async def get_requirement_http(request: Request):
             progress_step_ref=parsed.progress_step_ref,
             catalog=runtime.catalog,
             document_id=parsed.document_id,
+            include_document_runs=parsed.include_document_runs,
         ),
     )
 

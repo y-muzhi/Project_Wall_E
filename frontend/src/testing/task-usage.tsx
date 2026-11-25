@@ -1,10 +1,11 @@
+import { Pagination } from '../shared/pagination.tsx';
 import { useCallback, useEffect, useState } from 'react';
 import type { TestingTaskView } from '../api/testing-tasks.ts';
 import type { WalleApi } from '../api/walle.ts';
 import { useSettingsVisibility } from '../code-tasks/settings/read.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 import { localTime } from '../shared/time.ts';
-import { meta, Pager, ReadState, useTestingRead } from './plans/read.tsx';
+import { ReadState, useTestingRead } from './plans/read.tsx';
 
 const calls = { RUNNING: '调用中', SUCCEEDED: '已响应', FAILED: '调用失败', CANCELLED: '已取消' };
 const usage = {
@@ -170,11 +171,11 @@ export function TaskUsage({ api, task }: Readonly<{ api: WalleApi; task: Testing
         </ul>
       )}
       {read.data && (
-        <Pager
-          meta={meta(read.data.meta.pagination)}
-          page={page}
-          busy={read.loading}
-          select={(next) => {
+        <Pagination
+          value={read.data.meta.pagination}
+          loading={read.loading}
+          showLoadingStatus={false}
+          change={(next) => {
             select(null);
             setPage(next);
           }}

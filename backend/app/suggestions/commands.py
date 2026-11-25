@@ -1,7 +1,7 @@
 """Actual batch discard; retained decisions and source, no document adoption."""
 
 from backend.app.documents.guards import assert_idle
-from backend.app.infrastructure.batch_repository import BatchRepository
+from backend.app.infrastructure.batch_repository import BatchRepository, has_independent_review
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.infrastructure.idempotency import Idempotency, Success
 from backend.app.shared.command_execution import Rejected, execute_idempotent, operation_time
@@ -31,7 +31,8 @@ from backend.app.documents.patch_application import Adoption, apply_adoptions
 from backend.app.documents.patch_errors import TargetStale
 from backend.app.documents.patch_errors import PATCH_MESSAGES
 from .contracts import metadata_from_row
-from .contracts import accept_pending_input, get_batch_result
+from .contracts import accept_pending_input, decide_group_input, get_batch_result
+from .review import GROUP_DECISION, check_decision_version, review_groups, stored_groups
 from backend.app.documents.content import commit_content
 import json
 
@@ -56,6 +57,8 @@ def _pending_owned_batch(connection, repository, row):
         or parent['target_document_id'] != batch['target_document_id']
     ):
         raise Rejected('WORK_STATE_INCONSISTENT')
+    if has_independent_review(parent):
+        return batch, root
     try:
         assert_idle(connection, root, remaining_conflicts=frozenset())
     except Rejected as error:
@@ -68,6 +71,14 @@ def _pending_owned_batch(connection, repository, row):
     ):
         raise Rejected('WORK_STATE_CONFLICT')
     return batch, root
+
+
+def _release_batch_occupancy(connection, root, batch_id, at):
+    if (
+        root['active_operation_type'] == 'SUGGESTION_BATCH'
+        and root['active_operation_id'] == batch_id
+    ):
+        RequirementRepository(connection).recover_occupancy(root, None, None, at)
 
 
 def _target_snapshot(connection, repository, row, batch, resources, expected_version=None):
@@ -136,6 +147,8 @@ def decide_suggestion(executor: Idempotency, payload: object, *, catalog=None, c
         if stored_batch is None:
             raise Rejected('NOT_FOUND')
         batch, root = _pending_owned_batch(connection, repository, stored_batch)
+        if stored_groups(repository.parent(stored_batch)) is not None:
+            raise Rejected('STATE_CONFLICT')
         resources = catalog if catalog is not None else ResourceCatalog()
         protocol = resources.collaboration
         current, sources, snapshot, authority = _target_snapshot(
@@ -213,6 +226,8 @@ def accept_pending_suggestions(
         if stored is None:
             raise Rejected('NOT_FOUND')
         batch, root = _pending_owned_batch(connection, repository, stored)
+        if stored_groups(repository.parent(stored)) is not None:
+            raise Rejected('STATE_CONFLICT')
         resources = catalog if catalog is not None else ResourceCatalog()
         current, _, snapshot, authority = _target_snapshot(
             connection, repository, stored, batch, resources
@@ -274,6 +289,85 @@ def accept_pending_suggestions(
     )
 
 
+def decide_group(executor: Idempotency, payload: object, *, catalog=None, clock=None) -> dict:
+    try:
+        request = decide_group_input(payload)
+    except InvalidInput as error:
+        return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
+
+    def operation(connection):
+        repository = BatchRepository(connection)
+        stored = repository.get(request.batch_id)
+        if stored is None:
+            raise Rejected('NOT_FOUND')
+        batch, root = _pending_owned_batch(connection, repository, stored)
+        version = check_decision_version(connection, batch['id'], request.expected_decision_version)
+        members = repository.suggestions(batch['id'])
+        parent = repository.parent(stored)
+        group = next(
+            (
+                item
+                for item in review_groups(parent, members)
+                if item['group_id'] == request.group_id
+            ),
+            None,
+        )
+        if group is None:
+            raise Rejected('NOT_FOUND')
+        resources = catalog if catalog is not None else ResourceCatalog()
+        _, _, snapshot, authority = _target_snapshot(
+            connection, repository, stored, batch, resources
+        )
+        member_ids = set(group['suggestion_ids'])
+        selected = [row for row in members if row['id'] in member_ids]
+        if request.decision == 'ACCEPTED':
+            for row in selected:
+                item = suggestion_from_row(row, protocol=resources.collaboration)
+                try:
+                    validate_patch(snapshot, stored_patch(item), authority)
+                except (PatchInvalid, TargetStale) as error:
+                    raise Rejected(error.code) from None
+        at = operation_time(clock)
+        if at < max(
+            batch['updated_at'], root['updated_at'], *(row['updated_at'] for row in members)
+        ):
+            raise ValueError('Group decision cannot predate aggregate activity')
+        for row in selected:
+            repository.decide(row, request.decision, None, at)
+        return Success(
+            {
+                'code': 'GROUP_DECIDED',
+                'data': {
+                    'batch_id': batch['id'],
+                    'group': {**group, 'status': request.decision},
+                    'decision_version': version + 1,
+                },
+                'details': None,
+            },
+            200,
+        )
+
+    return execute_idempotent(
+        executor,
+        GROUP_DECISION,
+        request,
+        operation,
+        target_identity=f'Batch:{request.batch_id}',
+        allowed_failures=frozenset(
+            {
+                'NOT_FOUND',
+                'STATE_CONFLICT',
+                'WORK_STATE_CONFLICT',
+                'WORK_STATE_INCONSISTENT',
+                'DECISION_VERSION_CONFLICT',
+                'CONTENT_VERSION_CONFLICT',
+                'TARGET_STALE',
+                'PATCH_INVALID',
+            }
+        ),
+    )
+
+
 def discard_batch(executor: Idempotency, payload: object, *, clock=None) -> dict:
     try:
         request = discard_batch_input(payload)
@@ -286,6 +380,14 @@ def discard_batch(executor: Idempotency, payload: object, *, clock=None) -> dict
         if row is None:
             raise Rejected('NOT_FOUND')
         batch, root = _pending_owned_batch(connection, repository, row)
+        if stored_groups(repository.parent(row)) is not None:
+            current = DocumentRepository(connection).get_current(
+                root['id'], batch['target_document_id']
+            )
+            if current is None or current['archived_at'] is not None:
+                raise Rejected('STATE_CONFLICT')
+            if current['content_version'] != batch['base_content_version']:
+                raise Rejected('CONTENT_VERSION_CONFLICT')
         items = repository.suggestions(batch['id'])
         for item in items:
             strict_enum(item['status'], 'status', DECISIONS)
@@ -298,7 +400,7 @@ def discard_batch(executor: Idempotency, payload: object, *, clock=None) -> dict
         ):
             raise ValueError('Discard cannot precede persisted aggregate activity')
         discarded = repository.discard(batch['id'], at)
-        RequirementRepository(connection).recover_occupancy(root, None, None, at)
+        _release_batch_occupancy(connection, root, batch['id'], at)
         return Success(discard_batch_result(discarded, items), 200)
 
     return execute_idempotent(
@@ -308,7 +410,13 @@ def discard_batch(executor: Idempotency, payload: object, *, clock=None) -> dict
         operation,
         target_identity=f'SuggestionBatch:{request.batch_id}',
         allowed_failures=frozenset(
-            {'NOT_FOUND', 'STATE_CONFLICT', 'WORK_STATE_CONFLICT', 'WORK_STATE_INCONSISTENT'}
+            {
+                'NOT_FOUND',
+                'STATE_CONFLICT',
+                'WORK_STATE_CONFLICT',
+                'WORK_STATE_INCONSISTENT',
+                'CONTENT_VERSION_CONFLICT',
+            }
         ),
     )
 
@@ -326,6 +434,10 @@ def complete_batch(executor: Idempotency, payload: object, *, catalog=None, cloc
             raise Rejected('NOT_FOUND')
         batch, root = _pending_owned_batch(connection, repository, row)
         resources = catalog if catalog is not None else ResourceCatalog()
+        if request.expected_decision_version is not None:
+            check_decision_version(connection, batch['id'], request.expected_decision_version)
+        elif stored_groups(repository.parent(row)) is not None:
+            raise Rejected('STATE_CONFLICT')
         current, sources, snapshot, authority = _target_snapshot(
             connection, repository, row, batch, resources, request.expected_content_version
         )
@@ -398,7 +510,7 @@ def complete_batch(executor: Idempotency, payload: object, *, catalog=None, cloc
         completed = repository.complete(
             batch['id'], current['content_version'] if changed else None, at
         )
-        RequirementRepository(connection).recover_occupancy(root, None, None, at)
+        _release_batch_occupancy(connection, root, batch['id'], at)
         return Success(complete_batch_result(completed, items, current, sources, effect), 200)
 
     return execute_idempotent(
@@ -415,6 +527,7 @@ def complete_batch(executor: Idempotency, payload: object, *, catalog=None, cloc
                 'WORK_STATE_INCONSISTENT',
                 'CONTENT_VERSION_CONFLICT',
                 'BATCH_PENDING',
+                'DECISION_VERSION_CONFLICT',
                 'TARGET_STALE',
                 'PATCH_INVALID',
                 'DOCUMENT_INVALID',

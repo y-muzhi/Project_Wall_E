@@ -885,6 +885,7 @@ export class WalleApi {
       cursor: string | null;
       stepRef?: string | null;
     }>,
+    includeDocumentRuns = false,
   ) {
     const decode = checked(models.requirementDetail, (value) => {
       require(value.requirement.id === identity);
@@ -909,7 +910,7 @@ export class WalleApi {
       }
     });
     return this.readTogether(
-      `requirement:${identity}:${documentId}:${expandDiscussion}:${progressLimit ?? ''}:${progressPage?.group ?? ''}:${progressPage?.cursor ?? ''}:${progressPage?.stepRef === null ? 'document' : (progressPage?.stepRef ?? '')}`,
+      `requirement:${identity}:${documentId}:${expandDiscussion}:${progressLimit ?? ''}:${progressPage?.group ?? ''}:${progressPage?.cursor ?? ''}:${progressPage?.stepRef === null ? 'document' : (progressPage?.stepRef ?? '')}:${includeDocumentRuns}`,
       signal,
       (owned) =>
         this.single(
@@ -932,6 +933,7 @@ export class WalleApi {
                     : []),
                 ]),
             ...(documentId === null ? [] : [['document_id', String(id(documentId))] as const]),
+            ...(includeDocumentRuns ? [['include_document_runs', '1'] as const] : []),
           ],
           progressPage ? FORMATION_READ_ERRORS : undefined,
         ),
@@ -1161,6 +1163,26 @@ export class WalleApi {
         ),
     );
   }
+  async getRequirementDetailWithDocumentRuns(
+    identity: number,
+    signal: AbortSignal,
+    documentId?: number | null,
+  ) {
+    try {
+      return await this.getRequirementDetail(
+        identity,
+        signal,
+        false,
+        documentId,
+        undefined,
+        undefined,
+        true,
+      );
+    } catch (error) {
+      if (!(error instanceof ApiRejected) || error.code !== 'INVALID_INPUT') throw error;
+      return this.getRequirementDetail(identity, signal, false, documentId);
+    }
+  }
   async getRequirement(identity: number, signal?: AbortSignal) {
     const response = await this.getRequirementDetail(identity, signal);
     return { ...response, data: response.data.requirement };
@@ -1253,6 +1275,7 @@ export class WalleApi {
         target('guide-runs', identity, '/model-calls'),
         identified(modelCalls, identity),
         owned,
+        [['include_input_limit', '1']],
       ),
     );
   }
@@ -1281,6 +1304,14 @@ export class WalleApi {
       signal,
     );
   }
+  getBatchReview(identity: number, signal?: AbortSignal) {
+    return this.single(
+      target('suggestion-batches', identity),
+      checked(models.batchReview, (value) => require(value.batch.id === identity)),
+      signal,
+      [['include_review', '1']],
+    );
+  }
   getCommentIndex(identity: number, documentId: number, signal?: AbortSignal) {
     return this.readTogether(`comment-index:${identity}:${documentId}`, signal, (signal) =>
       this.single(
@@ -1301,12 +1332,18 @@ export class WalleApi {
       [['requirement_id', String(id(requirement))]],
     );
   }
-  async listMessages(identity: number, before: number | null = null, signal?: AbortSignal) {
+  async listMessages(
+    identity: number,
+    before: number | null = null,
+    signal?: AbortSignal,
+    operations = false,
+  ) {
     const parameters: [string, string][] =
       before === null ? [] : [['before_sequence_no', String(id(before))]];
     parameters.push(['document_id', String(this.assistantOwner())]);
+    if (operations) parameters.push(['include_operations', '1']);
     const response = await this.readTogether(
-      `messages:${identity}:${this.assistantDocumentId}:${before}`,
+      `messages:${identity}:${this.assistantDocumentId}:${before}:${operations}`,
       signal,
       (ownedSignal) =>
         this.client.read(
@@ -1938,11 +1975,37 @@ export class WalleApi {
       },
     );
   }
-  prepareCompleteBatch(identity: number, version: number) {
+  prepareDecideGroup(
+    identity: number,
+    group: number,
+    decision: 'ACCEPTED' | 'REJECTED',
+    version: number,
+  ) {
+    return this.action(
+      'PUT',
+      target('suggestion-batches', identity, '/groups/' + id(group) + '/decision'),
+      { decision, expected_decision_version: id(version) },
+      () =>
+        checked(shape({ batch_id: id, group: models.reviewGroup, decision_version: id }), (value) =>
+          require(
+            value.batch_id === identity &&
+              value.group.group_id === group &&
+              value.group.status === decision &&
+              value.decision_version === version + 1,
+          ),
+        ),
+    );
+  }
+  prepareCompleteBatch(identity: number, version: number, decisionVersion?: number) {
     return this.action(
       'POST',
       target('suggestion-batches', identity, '/complete'),
-      { expected_content_version: id(version) },
+      {
+        expected_content_version: id(version),
+        ...(decisionVersion === undefined
+          ? {}
+          : { expected_decision_version: id(decisionVersion) }),
+      },
       (original) =>
         checked(
           shape({

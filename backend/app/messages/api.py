@@ -18,7 +18,10 @@ async def list_messages_http(request: Request):
         ListMessagesRequest,
         ListMessagesResponse,
         lambda runtime, parsed: queries.list_messages(
-            runtime.database, parsed.payload, catalog=runtime.catalog
+            runtime.database,
+            parsed.payload,
+            catalog=runtime.catalog,
+            include_operations=parsed.include_operations,
         ),
     )
 

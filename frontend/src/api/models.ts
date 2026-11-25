@@ -359,7 +359,7 @@ export const discussionSummary = checked(
     require((value.focus_topic_ref === null) === (value.focus_title === null));
   },
 );
-export const requirementDetail = checked(
+const requirementDetailBase = checked(
   shape({
     requirement,
     documents: array(documentSummary, Number.MAX_SAFE_INTEGER),
@@ -394,6 +394,26 @@ export const requirementDetail = checked(
       require(value.active_operation.target_document_id !== null);
   },
 );
+export const requirementDetail = (value: unknown) => {
+  const row = snapshotObject(value);
+  const { document_runs: rawRuns, document_drafts: rawDrafts, ...base } = row;
+  const detail = requirementDetailBase(base);
+  function readActivity(value: unknown) {
+    const entries = array(
+      shape({ id, document_id: id, created_at: time }),
+      Number.MAX_SAFE_INTEGER,
+    )(value);
+    distinct(entries.map((entry) => entry.document_id));
+    distinct(entries.map((entry) => entry.id));
+    require(entries.every((entry) => detail.documents.some((doc) => doc.id === entry.document_id)));
+    return entries;
+  }
+  return Object.freeze({
+    ...detail,
+    ...(Object.hasOwn(row, 'document_runs') ? { document_runs: readActivity(rawRuns) } : {}),
+    ...(Object.hasOwn(row, 'document_drafts') ? { document_drafts: readActivity(rawDrafts) } : {}),
+  });
+};
 export type RequirementDetail = Model<typeof requirementDetail>;
 
 export const revisionSummaryFields = {
@@ -913,8 +933,47 @@ export const programReceipt = (value: unknown) =>
     : legacyProgramReceipt(value);
 export const receiptPurpose = (value: ReturnType<typeof programReceipt>) =>
   'operation' in value ? value.operation : value.purpose;
+const guideOperation = checked(
+  shape({
+    run_id: id,
+    operation: choices(['GENERATE', 'REVISE', 'PROPOSE_CHANGES', 'DISCUSS']),
+    state: choices([
+      'RUNNING',
+      'FAILED',
+      'CANCELLED',
+      'SAVED',
+      'PENDING_REVIEW',
+      'OUTDATED',
+      'APPLIED',
+      'DISCARDED',
+      'NO_CHANGE',
+      'NOT_APPLIED',
+      'PROGRESS_UPDATED',
+    ]),
+    document_id: nullable(id),
+    document_name: nullable(nonempty),
+    scope_type: nullable(choices(['DOCUMENT', 'SECTION', 'BLOCK', 'SELECTION'])),
+    scope_label: nullable(nonempty),
+    base_content_version: nullable(id),
+    saved_content_version: nullable(id),
+    batch_id: nullable(id),
+    reason: nullable(nonempty),
+  }),
+  (value) => {
+    if (value.state === 'SAVED' || value.state === 'APPLIED')
+      require(value.document_id !== null && value.saved_content_version !== null);
+    if (['PENDING_REVIEW', 'OUTDATED', 'APPLIED', 'DISCARDED'].includes(value.state))
+      require(value.batch_id !== null);
+  },
+);
+export type GuideOperationReceipt = Model<typeof guideOperation>;
+
 export const message = (value: unknown) => {
   const data = object(value);
+  const guideOperations = Object.hasOwn(data, 'guide_operations')
+    ? array(guideOperation, Number.MAX_SAFE_INTEGER, 1)(data.guide_operations)
+    : [];
+  const auditedDocument = Object.hasOwn(data, 'audited_document_output');
   const suggestion = Object.hasOwn(data, 'initial_route_suggestion')
     ? shape({
         goal: nonempty,
@@ -944,7 +1003,13 @@ export const message = (value: unknown) => {
   const row = exact(
     Object.fromEntries(
       Object.entries(data).filter(
-        ([key]) => key !== 'formation_operations' && key !== 'initial_route_suggestion',
+        ([key]) =>
+          ![
+            'formation_operations',
+            'initial_route_suggestion',
+            'guide_operations',
+            'audited_document_output',
+          ].includes(key),
       ),
     ),
     [
@@ -983,6 +1048,17 @@ export const message = (value: unknown) => {
     document_ids: array(id, 1000),
     program_receipt: nullable(programReceipt),
   })(Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'structured_content')));
+  if (guideOperations.length) {
+    require(base.role === 'USER');
+    distinct(guideOperations.map((row) => row.run_id));
+  }
+  if (auditedDocument)
+    require(
+      data.audited_document_output === true &&
+        base.role === 'ASSISTANT' &&
+        base.message_type === 'TEXT' &&
+        base.guide_run_id !== null,
+    );
   if (suggestion)
     require(
       base.role === 'ASSISTANT' &&
@@ -1020,6 +1096,8 @@ export const message = (value: unknown) => {
     structured_content: structured,
     ...(suggestion ? { initial_route_suggestion: suggestion } : {}),
     ...(operations.length ? { formation_operations: operations } : {}),
+    ...(guideOperations.length ? { guide_operations: guideOperations } : {}),
+    ...(auditedDocument ? { audited_document_output: true as const } : {}),
   });
 };
 export type Message = Model<typeof message>;
@@ -1253,4 +1331,40 @@ export const batch = (value: unknown) => {
   return Object.freeze({ ...metadata, suggestions: items, counts: totals });
 };
 export type Batch = Model<typeof batch>;
+
+export const reviewGroup = checked(
+  shape({
+    group_id: id,
+    title: nonempty,
+    reason: nonempty,
+    suggestion_ids: array(id, 100, 1),
+    status: choices(['PENDING', 'ACCEPTED', 'REJECTED', 'EDITED']),
+  }),
+  (group) => distinct(group.suggestion_ids),
+);
+export type ReviewGroup = Model<typeof reviewGroup>;
+const reviewDetails = shape({
+  base_revision_id: nullable(id),
+  applied_revision_id: nullable(id),
+  decision_version: id,
+  independent: bool,
+  grouped: bool,
+  groups: array(reviewGroup, 100, 1),
+});
+export type ReviewDetails = Model<typeof reviewDetails>;
+export const batchReview = checked(shape({ batch, review: reviewDetails }), (value) => {
+  const items = new Map(value.batch.suggestions.map((item) => [item.id, item.status]));
+  distinct(value.review.groups.map((group) => group.group_id));
+  require(
+    value.batch.applied_content_version !== null || value.review.applied_revision_id === null,
+  );
+  for (const group of value.review.groups) {
+    require(value.review.grouped ? group.status !== 'EDITED' : group.suggestion_ids.length === 1);
+    for (const identity of group.suggestion_ids) {
+      require(items.get(identity) === group.status);
+      items.delete(identity);
+    }
+  }
+  require(items.size === 0);
+});
 export type Suggestion = Model<typeof suggestion>;

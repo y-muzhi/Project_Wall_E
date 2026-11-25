@@ -14,6 +14,7 @@ export type ConversationState = Readonly<{
   detail: DetailSnapshot;
   visible: boolean;
   suggestions_visible: boolean;
+  review_read_only: boolean;
   enabled: boolean;
   active: boolean;
   lease: string | null;
@@ -51,6 +52,7 @@ export class RequirementConversation {
   private runSignature = '';
   private batchVisibility = 0;
   private batchRead = '';
+  private selectedBatch: number | null = null;
   constructor(
     detail: DetailSnapshot,
     api: WalleApi,
@@ -79,6 +81,7 @@ export class RequirementConversation {
       detail: snapshotObject(detail) as unknown as DetailSnapshot,
       visible: false,
       suggestions_visible: false,
+      review_read_only: false,
       enabled: true,
       active: true,
       lease: null,
@@ -146,8 +149,9 @@ export class RequirementConversation {
   private permitted(key: string): boolean {
     return (
       !this.closed &&
-      (key.startsWith('BATCH:') ? this.value.suggestions_visible : this.value.visible) &&
-      this.value.enabled &&
+      (key.startsWith('BATCH:')
+        ? this.value.suggestions_visible && (this.value.enabled || this.value.review_read_only)
+        : this.value.visible && this.value.enabled) &&
       (this.value.lease === null || this.value.lease === key)
     );
   }
@@ -163,6 +167,11 @@ export class RequirementConversation {
         .filter(([, entry]) => retained(entry.owner.getSnapshot().phase))
         .map(([id]) => 'BATCH:' + id),
     ].filter((key): key is string => key !== null);
+  }
+  openBatch(identity: number): void {
+    if (this.closed || !Number.isSafeInteger(identity) || identity < 1) return;
+    this.selectedBatch = identity;
+    this.reconcile();
   }
   private batchOwner(id: number): RequirementSuggestionBatch {
     const retained = this.batches.get(id);
@@ -208,24 +217,28 @@ export class RequirementConversation {
           previous = this.value.batch?.getSnapshot().batch,
           selected = lease?.startsWith('BATCH:')
             ? Number(lease.slice(6))
-            : active.kind === 'BATCH' &&
-                active.batch.target_document_id === this.value.detail.selected_document_id
-              ? active.batch.id
-              : (parent.run?.suggestion_batch_id ??
-                (parent.run === null && parent.selected === previous?.guide_run_id
-                  ? previous.id
-                  : null));
+            : (this.selectedBatch ??
+              (active.kind === 'BATCH' &&
+              active.batch.target_document_id === this.value.detail.selected_document_id
+                ? active.batch.id
+                : (parent.run?.suggestion_batch_id ??
+                  (parent.run === null && parent.selected === previous?.guide_run_id
+                    ? previous.id
+                    : null))));
         const batch = selected === null ? null : this.batchOwner(selected);
         if (batch !== this.value.batch) this.publish({ batch });
         const view = this.value.visible && this.value.enabled,
-          batchView = this.value.suggestions_visible && this.value.enabled;
+          batchView =
+            this.value.suggestions_visible && (this.value.enabled || this.value.review_read_only);
         this.read.setVisible(view);
         this.composer.setAvailable(this.permitted('COMPOSER'));
         this.runs.setAvailable(this.permitted('RUN'));
         this.cards.setAvailable(view);
         this.cards.reconcilePermissions();
-        for (const [id, entry] of this.batches)
+        for (const [id, entry] of this.batches) {
+          entry.owner.setReadOnly(this.value.review_read_only);
           entry.owner.setAvailable(entry.owner === batch && this.permitted('BATCH:' + id));
+        }
         // A newly arrived batch may still be excluded by the original send lease.
         // Do not consume its first read until that actual owner can perform it.
         const key = selected === null ? '' : selected + ':' + this.batchVisibility;
@@ -241,17 +254,30 @@ export class RequirementConversation {
   }
   /** Transient document-adoption busy does not invalidate a command's own
    * confirmed reconciliation. The view may separately disable busy inputs. */
-  setView(visible: boolean, enabled = this.value.enabled, suggestionsVisible = false): void {
+  setView(
+    visible: boolean,
+    enabled = this.value.enabled,
+    suggestionsVisible = false,
+    reviewReadOnly = false,
+  ): void {
     if (
       this.closed ||
       (visible === this.value.visible &&
         enabled === this.value.enabled &&
-        suggestionsVisible === this.value.suggestions_visible)
+        suggestionsVisible === this.value.suggestions_visible &&
+        reviewReadOnly === this.value.review_read_only)
     )
       return;
-    if (suggestionsVisible !== this.value.suggestions_visible || enabled !== this.value.enabled)
+    const mayReadReview = enabled || reviewReadOnly;
+    const didReadReview = this.value.enabled || this.value.review_read_only;
+    if (suggestionsVisible !== this.value.suggestions_visible || mayReadReview !== didReadReview)
       this.batchVisibility++;
-    this.publish({ visible, enabled, suggestions_visible: suggestionsVisible });
+    this.publish({
+      visible,
+      enabled,
+      suggestions_visible: suggestionsVisible,
+      review_read_only: reviewReadOnly,
+    });
     this.reconcile();
   }
   adopt(actual: DetailSnapshot): void {

@@ -13,7 +13,11 @@ export function errorText(error: unknown, fallback: string) {
     : fallback;
 }
 
-export function useTestingRead<T>(key: string, load: ((signal: AbortSignal) => Promise<T>) | null) {
+export function useTestingRead<T>(
+  key: string,
+  load: ((signal: AbortSignal) => Promise<T>) | null,
+  keepPrevious = false,
+) {
   const [snapshot, setSnapshot] = useState<Readonly<{ key: string; value: T }> | null>(null);
   const [status, setStatus] = useState<Readonly<{
     key: string;
@@ -41,7 +45,11 @@ export function useTestingRead<T>(key: string, load: ((signal: AbortSignal) => P
     return () => request.abort();
   }, [key, load, attempt, visible]);
   return {
-    data: snapshot?.key === key && load !== null ? snapshot.value : null,
+    data:
+      snapshot !== null && load !== null && (keepPrevious || snapshot.key === key)
+        ? snapshot.value
+        : null,
+    stale: keepPrevious && snapshot !== null && load !== null && snapshot.key !== key,
     loading: load !== null && (status?.key !== key || status.busy),
     error: load !== null && status?.key === key ? status.error : null,
     reload,

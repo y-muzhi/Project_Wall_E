@@ -1,3 +1,4 @@
+import { Pagination } from '../../shared/pagination.tsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { positiveInteger } from '../../api/client.ts';
 import { testingPackListPath } from '../../api/testing-assets.ts';
@@ -9,7 +10,7 @@ import { EmptyState } from '../../shared/empty-state.tsx';
 import { localTime } from '../../shared/time.ts';
 import { PackSeal } from './pack-seal.tsx';
 import { PackLifecycle } from './pack-lifecycle.tsx';
-import { errorText, meta, Pager, ReadState, useTestingRead } from './read.tsx';
+import { errorText, ReadState, useTestingRead } from './read.tsx';
 
 const statuses = {
   DRAFT: '草稿',
@@ -190,11 +191,11 @@ export function PlanPacks({
               </li>
             ))}
           </ol>
-          <Pager
-            meta={meta(list.data.meta.pagination)}
-            page={page}
-            busy={list.loading}
-            select={setPage}
+          <Pagination
+            value={list.data.meta.pagination}
+            loading={list.loading}
+            showLoadingStatus={false}
+            change={setPage}
           />
         </>
       )}

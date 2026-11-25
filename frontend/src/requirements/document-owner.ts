@@ -43,6 +43,10 @@ type LiveDocument = {
   release: () => void;
   binding: CurrentDocumentBinding;
 };
+export type HistoryDocumentBinding = Readonly<{
+  viewer: RevisionViewer;
+  navigation: DocumentNavigation;
+}>;
 type HistoryDocument = {
   host: HTMLElement;
   viewer: RevisionViewer;
@@ -81,7 +85,7 @@ export class RequirementDocumentOwner {
   private readonly readActual: () => Promise<DetailSnapshot>;
   private live: LiveDocument | undefined;
   private history: HistoryDocument | undefined;
-  private parkedManual: LiveDocument | undefined;
+  private readonly parkedDrafts = new Map<number, LiveDocument>();
   private readonly positions: ReadingPositions | null;
   private readonly listeners = new Set<() => void>();
   private tail: Promise<unknown> = Promise.resolve();
@@ -157,6 +161,9 @@ export class RequirementDocumentOwner {
       !this.live.editor.isDrawing
       ? this.live.binding
       : null;
+  }
+  get historyBinding(): HistoryDocumentBinding | null {
+    return this.value.mode === 'HISTORY' ? (this.history ?? null) : null;
   }
   previewMarkdown(markdown: string, columns?: number): DocumentFragment {
     if (this.closed) throw Error('Actual parser is unavailable');
@@ -277,6 +284,10 @@ export class RequirementDocumentOwner {
       throw error;
     }
   }
+  private legacyParkedSession(actual = this.value.detail): ManualDraftSession | null {
+    if (actual?.document_drafts !== undefined || actual?.activity.kind !== 'MANUAL') return null;
+    return this.parkedDrafts.get(actual.activity.target.id)?.session ?? null;
+  }
   private async adoptLive(actual: DetailSnapshot): Promise<void> {
     this.owned(actual);
     this.positions?.capture();
@@ -291,11 +302,12 @@ export class RequirementDocumentOwner {
       previous.host.hidden = true;
       previous.host.inert = true;
       previous.navigation.setVisible(false);
-      this.parkedManual = previous;
+      this.parkedDrafts.set(previous.session.endingTargetId, previous);
       this.live = undefined;
       previous = undefined;
     }
-    const parked = this.parkedManual;
+    const selected = actual.current?.id;
+    const parked = selected === undefined ? undefined : this.parkedDrafts.get(selected);
     if (
       parked?.session &&
       actual.activity.kind === 'MANUAL' &&
@@ -305,18 +317,18 @@ export class RequirementDocumentOwner {
       if (!parked.session.revalidate(actual)) throw Error('实际编辑会话已变化，保留草稿等待核实');
       if (previous) await this.retireLive(previous);
       this.live = parked;
-      this.parkedManual = undefined;
+      this.parkedDrafts.delete(parked.session.endingTargetId);
       this.publish({ detail: actual, manual: parked.session, error: null });
       return;
     }
     if (parked?.session?.ending.getSnapshot().phase === 'CLOSED') {
       await this.retireLive(parked);
-      this.parkedManual = undefined;
+      this.parkedDrafts.delete(parked.session.endingTargetId);
     }
     if (actual.current === null) {
       if (previous) await this.retireLive(previous);
       this.live = undefined;
-      this.publish({ detail: actual, manual: this.parkedManual?.session ?? null, error: null });
+      this.publish({ detail: actual, manual: this.legacyParkedSession(actual), error: null });
       return;
     }
     const choice = previous?.session?.recovery.getSnapshot();
@@ -353,7 +365,7 @@ export class RequirementDocumentOwner {
       actual.activity.kind !== 'MANUAL' &&
       same(previous.document, actual.current)
     ) {
-      this.publish({ detail: actual, error: null, manual: this.parkedManual?.session ?? null });
+      this.publish({ detail: actual, error: null, manual: this.legacyParkedSession(actual) });
       return;
     }
     const created = await this.makeLive(actual);
@@ -367,7 +379,7 @@ export class RequirementDocumentOwner {
     if (previous) await this.retireLive(previous);
     this.publish({
       detail: actual,
-      manual: created.session ?? this.parkedManual?.session ?? null,
+      manual: created.session ?? this.legacyParkedSession(actual),
       error: null,
     });
   }
@@ -442,7 +454,7 @@ export class RequirementDocumentOwner {
     this.refreshing = pending;
     return pending;
   }
-  openHistory(summary: RevisionSummary): Promise<boolean> {
+  openHistory(summary: RevisionSummary, known?: Revision): Promise<boolean> {
     return this.enqueue(async () => {
       if (summary.requirement_id !== this.identity) throw TypeError('Owned revision required');
       const live = this.live;
@@ -462,7 +474,7 @@ export class RequirementDocumentOwner {
         save_warning: !saved,
         selection: null,
       });
-      if (!(await this.revisions.open(summary))) {
+      if (!(await this.revisions.open(summary, known))) {
         this.publish({ error: '历史读取失败，草稿和原正文仍保留' });
         return false;
       }
@@ -536,7 +548,7 @@ export class RequirementDocumentOwner {
   }
   async blockAndSave(): Promise<void> {
     this.value.navigation?.setVisible(false);
-    const session = this.live?.session ?? this.parkedManual?.session;
+    const session = this.live?.session ?? this.legacyParkedSession();
     if (session && !(await session.blockAndSave('VIEWPORT'))) throw Error('草稿尚未同步');
   }
   async restoreHistory(): Promise<boolean> {
@@ -589,12 +601,12 @@ export class RequirementDocumentOwner {
   }
   prepareLeave() {
     return (
-      (this.live?.session ?? this.parkedManual?.session)?.prepareLeave() ??
+      (this.live?.session ?? this.legacyParkedSession())?.prepareLeave() ??
       Promise.resolve(Object.freeze({ saved: true, local_protected: true }))
     );
   }
   continueAfterFailedLeave(): boolean {
-    return (this.live?.session ?? this.parkedManual?.session)?.continueAfterFailedLeave() ?? true;
+    return (this.live?.session ?? this.legacyParkedSession())?.continueAfterFailedLeave() ?? true;
   }
   retire(): Promise<void> {
     if (this.retiring) return this.retiring;
@@ -609,10 +621,10 @@ export class RequirementDocumentOwner {
       await this.tail;
       if (this.history) await this.retireHistory(this.history);
       if (this.live) await this.retireLive(this.live);
-      if (this.parkedManual) await this.retireLive(this.parkedManual);
+      for (const draft of this.parkedDrafts.values()) await this.retireLive(draft);
+      this.parkedDrafts.clear();
       this.history = undefined;
       this.live = undefined;
-      this.parkedManual = undefined;
     })();
     this.retiring = pending;
     return pending;

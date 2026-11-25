@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from backend.app.shared.http_boundary import request_query
-from backend.app.shared.validation import decimal_integer
+from backend.app.shared.validation import decimal_integer, strict_enum
 from .contracts import guide_run_read_model
 from backend.app.shared.http_boundary import idempotency_header
 from .contracts import cancel_guide_run_input, guide_run_accepted
@@ -35,6 +35,21 @@ class GetGuideRunResponse:
         if value['id'] != request.guide_run_id:
             raise ValueError('Run status response belongs to another request')
         return value, None
+
+
+@dataclass(frozen=True)
+class ListModelCallsRequest:
+    guide_run_id: int
+    include_input_limit: bool
+
+    @classmethod
+    def parse(cls, request):
+        query = request_query(request, singles=('include_input_limit',))
+        flag = query.get('include_input_limit')
+        if flag is not None:
+            strict_enum(flag, 'include_input_limit', ('1',))
+        identity = decimal_integer(request.path_params['guide_run_id'], 'guide_run_id')
+        return cls(identity, flag is not None)
 
 
 class ListModelCallsResponse:
@@ -225,6 +240,7 @@ class CreateGuideRunResponse:
             'DISCUSSION_VERSION_CONFLICT',
             'CONTENT_VERSION_CONFLICT',
             'SOURCE_VERSION_CONFLICT',
+            'BATCH_PENDING',
             'SOURCE_INVALID',
             'SCOPE_INVALID',
             'CONFIG_INVALID',

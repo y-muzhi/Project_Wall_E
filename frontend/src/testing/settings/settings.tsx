@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ApiRejected, ApiUnknown, positiveInteger } from '../../api/client.ts';
-import { money } from '../../api/code-values.ts';
 import { normalizedName } from '../../api/code-configuration-identities.ts';
 import { testingAuthorizationPath, testingProfilePath } from '../../api/testing-policy.ts';
 import type {
@@ -10,7 +9,7 @@ import type {
 } from '../../api/testing-policy.ts';
 import type { WalleApi } from '../../api/walle.ts';
 import { TEST_PLAN_RECOVERY_KINDS } from '../../api/testing-plans.ts';
-import { PageHeader } from '../../application/header.tsx';
+import { SectionPageHeader } from '../../application/header.tsx';
 import {
   CommandRecoveryStore,
   CommandStorageError,
@@ -123,7 +122,6 @@ export function TestingSettings({
   const [listError, setListError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [scope, setScope] = useState<TestingAuthorizationScope>('TASK');
-  const [budget, setBudget] = useState('');
   const [authorizationId, setAuthorizationId] = useState<number | null>(() =>
     savedIdentity(selectedAuthorizationKey),
   );
@@ -251,13 +249,7 @@ export function TestingSettings({
   const matchingProfile = profile?.id === profileId ? profile : null;
   const matchingAuthorization = authorization?.id === authorizationId ? authorization : null;
   const pending = recovery.records?.some((record) => record.path === testingAuthorizationPath);
-  const effectiveBudget = scope === 'PACK_VALIDATION' ? '0' : budget;
-  let budgetValid = true;
-  try {
-    money(effectiveBudget);
-  } catch {
-    budgetValid = false;
-  }
+
   const disabledReason = saving
     ? '正在保存批准'
     : recovery.records === null || recovery.error !== null
@@ -268,9 +260,7 @@ export function TestingSettings({
           ? '请先核实所选测试配置'
           : matchingProfile === null
             ? '请选择测试配置版本'
-            : !budgetValid
-              ? '请输入非负预算，最多六位小数'
-              : null;
+            : null;
   const pagination = profiles?.meta.pagination;
   const totalPages = pagination && 'total_pages' in pagination ? pagination.total_pages : 0;
 
@@ -293,8 +283,6 @@ export function TestingSettings({
         setAuthorizationId(id);
         setAuthorizationAttempt((current) => current + 1);
         setNotice('已保存独立测试授权');
-        if (fixed.scope_kind === 'TASK')
-          setBudget((current) => (current === fixed.budget_limit_cny ? '' : current));
       }
     } catch (error) {
       if (!disposed.current) setActionError(failure(error, '暂时无法核实授权结果，请检查原请求'));
@@ -321,20 +309,15 @@ export function TestingSettings({
   }
 
   return (
-    <main className="code-settings">
-      <PageHeader>
-        <header className="code-settings-heading">
-          <h1>测试配置与恢复</h1>
-        </header>
-      </PageHeader>
-      <div className="code-settings-form-actions testing-settings-nav">
+    <main className="testing-page">
+      <SectionPageHeader title="测试配置与恢复">
         <button type="button" className="ui-button" onClick={openCoding}>
           代码设置
         </button>
         <button type="button" className="ui-button" onClick={() => openPlans()}>
           测试计划与资源管理
         </button>
-      </div>
+      </SectionPageHeader>
       <section
         className="code-settings-recovery"
         aria-label="待核对操作"
@@ -568,7 +551,7 @@ export function TestingSettings({
           <h2>独立测试授权</h2>
           <p>
             {matchingProfile
-              ? '批准所选固定配置及预算。授权保存后待绑定。'
+              ? '批准所选固定配置。授权保存后待绑定。'
               : '请选择要批准的测试配置版本。'}
           </p>
           <label>
@@ -587,20 +570,6 @@ export function TestingSettings({
               <option value="PACK_VALIDATION">{labels.PACK_VALIDATION}</option>
             </select>
           </label>
-          {scope === 'PACK_VALIDATION' ? (
-            <p>测试包验证预算固定为 0 元。</p>
-          ) : (
-            <label>
-              批准预算（元）
-              <input
-                className="ui-input"
-                inputMode="decimal"
-                value={budget}
-                disabled={saving}
-                onChange={(event) => setBudget(event.currentTarget.value)}
-              />
-            </label>
-          )}
           <div className="code-settings-form-actions">
             <button
               type="button"
@@ -613,7 +582,7 @@ export function TestingSettings({
                 setConfirmation({
                   profile_version_id: matchingProfile.id,
                   scope_kind: scope,
-                  budget_limit_cny: effectiveBudget,
+                  budget_limit_cny: '0.000000',
                 });
               }}
             >
@@ -671,8 +640,7 @@ export function TestingSettings({
                   ? '待绑定'
                   : matchingAuthorization.status === 'EFFECTIVE'
                     ? '已绑定'
-                    : '已退役'}{' '}
-                · {matchingAuthorization.budget_limit_cny} 元
+                    : '已退役'}
               </p>
               <p>批准时间 {localTime(matchingAuthorization.approved_at)}</p>
               <Readiness value={matchingAuthorization} />
@@ -690,9 +658,7 @@ export function TestingSettings({
               confirmation.profile_version_id +
               '，范围为' +
               labels[confirmation.scope_kind] +
-              '，预算 ' +
-              confirmation.budget_limit_cny +
-              ' 元。'
+              '。'
         }
         busy={saving}
         confirmLabel="确认批准"

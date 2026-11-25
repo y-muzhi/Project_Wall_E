@@ -1,12 +1,13 @@
+import { Pagination } from '../shared/pagination.tsx';
 import { useCallback, useEffect, useState } from 'react';
 import type { TestingTaskOperation } from '../api/testing-task-operations.ts';
 import type { TestingTaskView } from '../api/testing-tasks.ts';
 import type { WalleApi } from '../api/walle.ts';
-import { PageHeader } from '../application/header.tsx';
+import { SectionPageHeader } from '../application/header.tsx';
 import { useSettingsVisibility } from '../code-tasks/settings/read.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 import { localTime } from '../shared/time.ts';
-import { meta, Pager, ReadState, useTestingRead } from './plans/read.tsx';
+import { ReadState, useTestingRead } from './plans/read.tsx';
 import { TaskReport } from './report/task-report.tsx';
 import { TaskResults } from './report/task-results.tsx';
 import { TaskControls, textId } from './task-controls.tsx';
@@ -208,11 +209,11 @@ function TaskOperations({
                 </li>
               ))}
             </ol>
-            <Pager
-              meta={meta(rows.data.meta.pagination)}
-              page={page}
-              busy={rows.loading}
-              select={setPage}
+            <Pagination
+              value={rows.data.meta.pagination}
+              loading={rows.loading}
+              showLoadingStatus={false}
+              change={setPage}
             />
           </>
         )}
@@ -298,13 +299,8 @@ export function TestingTaskWorkspace({
     ((selected.report !== null && selected.report !== task.report_id) ||
       (selected.verification !== null && selected.verification !== task.current_verification_id));
   return (
-    <main className="code-settings testing-plans">
-      <PageHeader>
-        <header className="code-settings-heading">
-          <h1>独立测试任务 #{identity}</h1>
-        </header>
-      </PageHeader>
-      <div className="code-settings-form-actions">
+    <main className="testing-page testing-plans">
+      <SectionPageHeader title={`独立测试任务 #${identity}`}>
         <button type="button" className="ui-button" onClick={back}>
           返回测试任务列表
         </button>
@@ -320,7 +316,7 @@ export function TestingTaskWorkspace({
         >
           核对任务状态
         </button>
-      </div>
+      </SectionPageHeader>
       <OriginalTaskRequests access={recovery} />
       {selected === null ? (
         <p role="alert" className="inline-error">

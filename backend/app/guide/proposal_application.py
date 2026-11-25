@@ -21,15 +21,29 @@ def prepare_proposal_batch(connection, run, context, patches, catalog, at):
     current = DocumentRepository(connection).get_current(
         run['requirement_id'], target['document_id']
     )
-    if (
-        current is None
-        or current['content_version'] != target['expected_content_version']
-        or current['archived_at'] is not None
-    ):
+    if current is None or current['archived_at'] is not None:
         raise Rejected('CONTENT_VERSION_CONFLICT')
+    base_version = target['expected_content_version']
+    markdown = current['markdown_content']
+    block_state = json.loads(current['block_state_json'])
+    if current['content_version'] != base_version:
+        if not catalog.collaboration.grouped_reviews or current['content_version'] < base_version:
+            raise Rejected('CONTENT_VERSION_CONFLICT')
+        frozen = next(
+            (
+                document
+                for document in canonical['documents']
+                if document['document_id'] == current['id']
+                and document['content_version'] == base_version
+            ),
+            None,
+        )
+        if frozen is None:
+            raise Rejected('SOURCE_INVALID')
+        markdown, block_state = frozen['markdown_content'], frozen['block_state']
     snapshot = validate_snapshot(
-        current['markdown_content'],
-        json.loads(current['block_state_json']),
+        markdown,
+        block_state,
         DocumentSources(connection, run['requirement_id'], catalog, document_id=current['id']),
     )
     reference = scope['scope_ref']
@@ -70,7 +84,7 @@ def prepare_proposal_batch(connection, run, context, patches, catalog, at):
             'status': 'PENDING',
             'completion_result': None,
             'error_message': None,
-            'base_content_version': current['content_version'],
+            'base_content_version': base_version,
             'applied_content_version': None,
             'created_at': at,
             'completed_at': None,

@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { RequirementConversation } from './conversation-owner.ts';
 import type { RequirementDiscussion } from '../requirements/discussion.ts';
 import type { RequirementDocumentOwner } from '../requirements/document-owner.ts';
+import type { DetailLayout } from '../requirements/detail-layout.ts';
 import type { ToastStore } from '../shared/toast-store.ts';
 import { AiReadPanel } from './read-view.tsx';
 import { RunControls } from './run-controls.tsx';
@@ -16,17 +17,68 @@ import { EmptyState } from '../shared/empty-state.tsx';
 function BatchView({
   owner,
   documents,
+  layout,
   toasts,
 }: Readonly<{
   owner: NonNullable<ReturnType<RequirementConversation['getSnapshot']>['batch']>;
   documents: RequirementDocumentOwner;
+  layout: DetailLayout;
   toasts: ToastStore;
 }>) {
+  const [selectedMark, selectMark] = useState<Readonly<{ identity: number }> | null>(null);
   const locator = useMemo(
-    () => new SuggestionTargetLocator(owner, () => documents.currentBinding),
-    [owner, documents],
+    () =>
+      new SuggestionTargetLocator(
+        owner,
+        () => documents.currentBinding,
+        () => documents.historyBinding,
+        (identity) => {
+          if (!layout.getSnapshot().right_open) layout.openTab('SUGGESTIONS');
+          selectMark({ identity });
+        },
+        () => {
+          const view = layout.getSnapshot();
+          return !view.split_view && view.document_open && view.right_tab === 'SUGGESTIONS';
+        },
+      ),
+    [owner, documents, layout],
   );
-  useEffect(() => () => locator.dispose(), [locator]);
+  const viewing = useSyncExternalStore(documents.subscribe, documents.getSnapshot);
+  const versionRequest = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      versionRequest.current?.abort();
+      locator.dispose();
+    },
+    [locator],
+  );
+  const revealDocument = async () => {
+    if (layout.getSnapshot().document_open) return;
+    layout.showDocument();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  };
+  const locate = async (identity: number) => {
+    await revealDocument();
+    const view = layout.getSnapshot();
+    const located = locator.locate(identity, !view.split_view && view.document_open);
+    if (!located && !view.right_open && view.document_open) layout.openTab('SUGGESTIONS');
+    return located;
+  };
+  const openVersion = async (kind: 'BASE' | 'APPLIED') => {
+    versionRequest.current?.abort();
+    const controller = new AbortController();
+    versionRequest.current = controller;
+    try {
+      const revision = await owner.readReviewRevision(kind, controller.signal);
+      if (controller.signal.aborted) return false;
+      const { markdown_content: _markdown, block_state_json: _blocks, ...summary } = revision;
+      const opened = await documents.openHistory(summary, revision);
+      if (opened) await revealDocument();
+      return opened;
+    } finally {
+      if (versionRequest.current === controller) versionRequest.current = null;
+    }
+  };
   const render = useCallback(
     (markdown: string, columns?: number) => {
       return documents.previewMarkdown(markdown, columns);
@@ -37,7 +89,15 @@ function BatchView({
     <SuggestionPanel
       owner={owner}
       render={render}
-      locate={(identity) => locator.locate(identity)}
+      locate={locate}
+      openVersion={openVersion}
+      closeVersion={async () => {
+        const closed = await documents.exitHistory();
+        if (closed) await revealDocument();
+        return closed;
+      }}
+      viewingVersion={viewing.revision?.id ?? null}
+      selectedMark={selectedMark}
       notify={(message) => toasts.push('success', message)}
     />
   );
@@ -47,10 +107,12 @@ function BatchView({
 export function ConversationSuggestions({
   owner,
   documents,
+  layout,
   toasts,
 }: Readonly<{
   owner: RequirementConversation;
   documents: RequirementDocumentOwner;
+  layout: DetailLayout;
   toasts: ToastStore;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
@@ -58,7 +120,13 @@ export function ConversationSuggestions({
   return (
     <div className="conversation-suggestions">
       {batch ? (
-        <BatchView key={batch.batchId} owner={batch} documents={documents} toasts={toasts} />
+        <BatchView
+          key={batch.batchId}
+          owner={batch}
+          documents={documents}
+          layout={layout}
+          toasts={toasts}
+        />
       ) : (
         <EmptyState icon="suggestion" message="暂无修改建议" fill />
       )}
@@ -73,12 +141,16 @@ export function GuideConversation({
   associations,
   handoff,
   discussion,
+  openSuggestions,
+  openDocument,
 }: Readonly<{
   owner: RequirementConversation;
   documents: RequirementDocumentOwner;
   associations?: ReactNode;
   handoff?: ReactNode;
   discussion: RequirementDiscussion;
+  openSuggestions: () => void;
+  openDocument?: (id: number) => void;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     read = useSyncExternalStore(owner.read.subscribe, owner.read.getSnapshot),
@@ -114,6 +186,11 @@ export function GuideConversation({
                   scrollPort={scrollPort}
                   scrollContent={scrollContent}
                   owner={owner.read}
+                  openSuggestions={(id) => {
+                    owner.openBatch(id);
+                    openSuggestions();
+                  }}
+                  {...(openDocument ? { openDocument } : {})}
                   structured={(message) => (
                     <CardMessage
                       groups={owner.cards}

@@ -79,6 +79,14 @@ def test_eight_saved_wire_sections_actual_count_measurements_and_read_only_http(
     with TestClient(app) as client:
         response = client.get('/api/v1/model-calls/1');assert response.status_code == 200, response.text
         assert response.json()['data'] == detail
+        url = '/api/v1/guide-runs/1/model-calls'
+        assert client.get(url).json()['data']['items'][0] == detail['call']
+        extended = client.get(url + '?include_input_limit=1')
+        assert extended.status_code == 200, extended.text
+        assert extended.json()['data']['items'][0] == detail['call'] | {
+            'input_token_limit': detail['preflight']['budget']['input_tokens'],
+        }
+        assert client.get(url + '?include_input_limit=0').status_code == 422
     assert counts(workspace[0]) == before
 
 

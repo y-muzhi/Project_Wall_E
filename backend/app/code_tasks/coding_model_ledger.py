@@ -191,7 +191,7 @@ def reserve_call(connection, catalog, admissions, credential_ref, proof, request
         max([prices.input_micro, *(item.price_micro for item in prices.cache)]),
         prices.output_micro,
     )
-    if budget.requests >= binding.max_requests or budget.available < reserved:
+    if budget.requests >= binding.max_requests:
         hold_coding_model(connection, window, credential_ref, kind='BUDGET')
         return None
     latest = connection.execute(
@@ -494,12 +494,12 @@ def finish_call(connection, call, usage, *, complete, finish_reason, duration_ms
             call.reservation_id,
         ),
     )
-    if settlement is None or settlement > call.reserved_micro:
+    if settlement is None:
         hold_coding_model(
             connection,
             call.window,
             call.credential_ref,
-            kind='MODEL_RESULT' if settlement is None else 'BUDGET',
+            kind='MODEL_RESULT',
             llm_use_id=call.llm_use_id,
         )
     return status != 'CANCELLED'

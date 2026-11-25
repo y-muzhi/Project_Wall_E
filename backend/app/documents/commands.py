@@ -19,9 +19,9 @@ from .contracts import (
     cancel_manual_draft_input,
     cancel_manual_draft_result,
 )
-from .design_profiles import DESIGN_PROFILES, DRAWING_KIND
+from .design_profiles import DESIGN_PROFILES, DRAWING_KIND, design_framework_markdown
 from .drawing import empty_drawing
-from .guards import active_manual_draft, assert_idle, current_at_version
+from .guards import active_manual_draft, assert_document_idle, current_at_version
 from .sources import DocumentSources, close_edit_session, register_edit_session
 
 from backend.app.infrastructure.database import Database, StorageUnavailable
@@ -46,9 +46,10 @@ def _editing_target(connection, request, *, start=False):
     if current['archived_at'] is not None:
         raise Rejected('STATE_CONFLICT')
     if start:
-        assert_idle(
+        assert_document_idle(
             connection,
             root,
+            current['id'],
             remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
         )
         if current['content_version'] != request.expected_version:
@@ -214,6 +215,8 @@ def save_manual_draft(executor: Idempotency, payload: object, *, catalog=None, c
         from .content import validate_structure
 
         root, current, draft = _editing_target(connection, request)
+        if draft['base_content_version'] != current['content_version']:
+            raise Rejected('CONTENT_VERSION_CONFLICT')
         resources = catalog if catalog is not None else ResourceCatalog()
         sources = DocumentSources(connection, root['id'], resources, document_id=current['id'])
         persisted = get_manual_draft_result(draft, sources)
@@ -338,9 +341,10 @@ def create_document(executor, payload, *, catalog=None, clock=None):
         root = RequirementRepository(connection).get(request.requirement_id)
         if root is None:
             raise Rejected('NOT_FOUND')
-        assert_idle(
+        assert_document_idle(
             connection,
             root,
+            None,
             remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
         )
         resources = catalog if catalog is not None else ResourceCatalog()
@@ -353,7 +357,7 @@ def create_document(executor, payload, *, catalog=None, clock=None):
             if request.document_kind == DRAWING_KIND:
                 markdown = empty_drawing()
             elif request.initial_content == 'FRAMEWORK':
-                markdown = '\n\n'.join('# ' + heading for heading in profile['headings']) + '\n'
+                markdown = design_framework_markdown(reference)
         elif reference is not None:
             kind = {
                 'REQUIREMENT_BRIEF': 'brief',
@@ -497,9 +501,10 @@ def update_document_metadata(executor, payload, *, catalog=None, clock=None):
                     'resource_id': document['id'],
                 },
             )
-        assert_idle(
+        assert_document_idle(
             connection,
             root,
+            document['id'],
             remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
         )
         kind = request.change['type']

@@ -134,7 +134,7 @@ def _capabilities(
     except ConfigurationNotReady as error:
         codes.update(error.details['capability_codes'])
     budget = parse_money(task['budget_limit_cny'], 'budget_limit_cny')
-    if budget <= 0 or format_money(budget) != task['budget_limit_cny']:
+    if format_money(budget) != task['budget_limit_cny']:
         codes.add('Q20-CONFIG')
     if (
         connection.execute(

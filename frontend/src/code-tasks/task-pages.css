@@ -64,12 +64,6 @@
   max-width: min(18rem, 65vw);
   min-height: 34px;
 }
-.code-task-result {
-  display: flex;
-  flex-direction: column;
-  min-height: 14rem;
-  margin-block: 16px;
-}
 .code-task-controls {
   display: flex;
   flex-direction: column;
@@ -87,22 +81,6 @@
   max-inline-size: 100%;
   white-space: normal;
 }
-.code-task-result > .empty-state {
-  flex: 1;
-}
-.code-task-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.code-task-rows > li {
-  display: grid;
-  grid-template-columns: minmax(9rem, 2fr) minmax(6rem, 1fr) repeat(2, minmax(5rem, 1fr)) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-  border-block-end: 1px solid var(--ui-border, #d7dce1);
-}
 .code-task-facts {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -111,12 +89,6 @@
 .code-task-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
-}
-@media (max-width: 720px) {
-  .code-task-rows > li {
-    display: flex;
-    flex-wrap: wrap;
-  }
 }
 
 .code-task-drawer {
@@ -316,4 +288,156 @@
 .code-task-execution-records p {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.code-task-list-page {
+  width: 100%;
+  min-height: calc(100dvh - var(--application-header-height));
+  padding: 24px;
+  background: var(--surface-base);
+}
+.code-task-list-page > .record-list {
+  margin-block-start: 24px;
+}
+.code-task-list-page > .pagination {
+  justify-content: flex-end;
+}
+.code-task-list-page [hidden] {
+  display: none;
+}
+.code-list-filters {
+  gap: 8px;
+}
+.code-list-filters .ui-button {
+  min-height: 38px;
+}
+.code-list-version {
+  width: min(210px, 100%);
+  min-width: 0;
+}
+.code-drawer-field > label {
+  font-size: 13px;
+  color: var(--muted);
+}
+.code-list-version-pages > .pagination {
+  margin-block: 8px;
+}
+.section-page-actions .code-task-create[aria-disabled='true'] {
+  background: var(--surface);
+  color: var(--text-disabled);
+  border-color: var(--border-light);
+  cursor: default;
+}
+.code-task-drawer.is-coding {
+  width: min(760px, calc(100vw - 32px));
+  height: calc(100dvh - 32px);
+  max-height: calc(100dvh - 32px);
+  margin: 16px 16px 16px auto;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+}
+.code-task-drawer.is-coding > form {
+  max-height: none;
+}
+.code-drawer-identity {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.code-task-drawer.is-coding .code-drawer-identity p {
+  margin: 2px 0 0;
+}
+.code-task-drawer.is-coding .code-task-drawer-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  background: var(--surface);
+}
+.code-drawer-section {
+  display: grid;
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--surface-base);
+  overflow-wrap: anywhere;
+}
+.code-task-drawer.is-coding .read-status {
+  text-align: start;
+}
+.code-drawer-section h3,
+.code-drawer-section p,
+.code-drawer-section dl {
+  margin: 0;
+}
+.code-drawer-section h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.code-drawer-section > .ui-button {
+  justify-self: start;
+}
+.code-drawer-section pre {
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+.code-drawer-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.code-drawer-field .ui-input {
+  width: 100%;
+  min-width: 0;
+}
+.code-drawer-field p,
+.code-drawer-field .pagination {
+  margin: 0;
+}
+.code-drawer-field .pagination {
+  justify-content: flex-end;
+}
+.code-choice-empty > .empty-state.is-compact {
+  min-height: 0;
+  padding: 8px;
+  gap: 6px;
+}
+.code-choice-empty > .empty-state > p {
+  white-space: normal;
+}
+.code-choice-empty > .empty-state.is-compact > .ui-icon {
+  width: 20px;
+  height: 20px;
+}
+.ui-button.code-drawer-secondary {
+  border-color: var(--border);
+}
+.code-task-drawer.is-coding footer {
+  justify-content: space-between;
+  gap: 8px;
+}
+.code-drawer-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+@media (max-width: 1279px) {
+  .code-task-list-page {
+    padding: 16px;
+  }
+}
+@media (max-width: 600px), (max-height: 620px) {
+  .code-task-drawer.is-coding > form > :is(header, footer) {
+    padding: 12px 16px;
+  }
+  .code-drawer-section {
+    padding: 12px;
+  }
 }

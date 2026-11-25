@@ -297,6 +297,7 @@ export class RequirementDetailOwner {
           this.supported && geometry.right_open && geometry.right_tab === 'AI',
           !historical && actual?.current !== null,
           this.supported && geometry.right_open && geometry.right_tab === 'SUGGESTIONS',
+          historical && actual?.current !== null,
         );
         regions.comments.setView(
           historical ? 'HISTORY' : document.mode === 'MANUAL' ? 'MANUAL' : 'CURRENT',

@@ -22,6 +22,9 @@ LEGACY_PROFILE = 'doubao-v1'
 DEFAULT_PROFILE = 'deepseek-v2'
 LONG_OUTPUT_PROFILE = 'deepseek-long-v3'
 OPENAI_PROFILE = 'openai-sol-v1'
+OPENAI_DOCUMENT_PROFILE = 'openai-sol-document-v1'
+OPENAI_PROFILES = (OPENAI_PROFILE, OPENAI_DOCUMENT_PROFILE)
+OPENAI_DOCUMENT_OUTPUT_LIMIT = 100_000
 OPENAI_MODEL_ID = 'gpt-6.2-sol'
 PROFILES = MappingProxyType(
     {
@@ -29,6 +32,7 @@ PROFILES = MappingProxyType(
         DEFAULT_PROFILE: (DEEPSEEK_MODEL_ID, DEEPSEEK_MODEL_VERSION),
         LONG_OUTPUT_PROFILE: (DEEPSEEK_MODEL_ID, DEEPSEEK_MODEL_VERSION),
         OPENAI_PROFILE: (OPENAI_MODEL_ID, OPENAI_MODEL_ID),
+        OPENAI_DOCUMENT_PROFILE: (OPENAI_MODEL_ID, OPENAI_MODEL_ID),
     }
 )
 BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
@@ -88,7 +92,7 @@ class ModelProfile:
     def from_environment(cls, environment=None):
         values = os.environ if environment is None else environment
         selected = cls.selected_profile(values)
-        if selected == OPENAI_PROFILE:
+        if selected in OPENAI_PROFILES:
             from .openai_protocol import BASE_URL as OPENAI_URL
 
             url = values.get('WALLE_MODEL_BASE_URL', OPENAI_URL)
@@ -114,7 +118,7 @@ class ModelProfile:
 
     @property
     def provider(self):
-        return 'openai' if self.profile_id == OPENAI_PROFILE else 'volcengine'
+        return 'openai' if self.profile_id in OPENAI_PROFILES else 'volcengine'
 
     @property
     def model_name(self):
@@ -142,11 +146,13 @@ class ModelProfile:
 
     @property
     def output_limit(self):
+        if self.profile_id == OPENAI_DOCUMENT_PROFILE:
+            return OPENAI_DOCUMENT_OUTPUT_LIMIT
         return 32768 if self.profile_id == LONG_OUTPUT_PROFILE else 8192
 
     @property
     def snapshot(self):
-        if self.profile_id == OPENAI_PROFILE:
+        if self.provider == 'openai':
             from .openai_protocol import snapshot
 
             return snapshot(self.output_limit)
@@ -164,7 +170,7 @@ class ModelProfile:
         }
 
     def request(self, context):
-        if self.profile_id == OPENAI_PROFILE:
+        if self.provider == 'openai':
             from .openai_protocol import request
 
             return request(context, self.output_limit)
@@ -188,7 +194,7 @@ class ModelProfile:
         return body
 
     def testing_request(self, context, *, output_cap):
-        if self.profile_id == OPENAI_PROFILE:
+        if self.provider == 'openai':
             raise ConfigInvalid('OpenAI currently supports document collaboration only')
         if type(output_cap) is not int or not 1 <= output_cap <= self.output_limit:
             raise ConfigInvalid('Original Testing output bound differs')

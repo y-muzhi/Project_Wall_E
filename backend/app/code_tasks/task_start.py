@@ -180,7 +180,7 @@ def accept_task_start(runtime, request, *, workspace_available):
             ).fetchone():
                 return start_conflict('EXECUTION_NOT_STOPPED', task)
         budget = parse_money(task['budget_limit_cny'], 'budget_limit_cny')
-        if budget <= 0 or format_money(budget) != task['budget_limit_cny']:
+        if format_money(budget) != task['budget_limit_cny']:
             raise StorageUnavailable('Invalid stored START budget')
         _check_start_readiness(connection, runtime.catalog, task, workspace_available)
         return _new_start(connection, task, request)

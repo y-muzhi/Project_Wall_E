@@ -21,7 +21,7 @@ type ReadApi = Pick<
   | 'getBatch'
   | 'getCommentIndex'
 > &
-  Partial<Pick<WalleApi, 'detailReadEpoch'>>;
+  Partial<Pick<WalleApi, 'detailReadEpoch' | 'getRequirementDetailWithDocumentRuns'>>;
 export type DetailActivity = Readonly<
   | { kind: 'IDLE' }
   | { kind: 'MANUAL'; draft: ManualDraft; target: DocumentView }
@@ -79,6 +79,74 @@ const occupancy = (value: Requirement) =>
     value.active_operation_type,
     value.active_operation_id,
   ]);
+
+function projectDocumentActivity(
+  detail: RequirementDetail,
+  documentId: number | null,
+): RequirementDetail {
+  const draft = detail.document_drafts?.find((item) => item.document_id === documentId);
+  if (draft) {
+    return {
+      ...detail,
+      requirement: {
+        ...detail.requirement,
+        document_work_state: 'MANUAL_EDITING',
+        active_operation_type: 'MANUAL_DRAFT',
+        active_operation_id: draft.id,
+        state_started_at: draft.created_at,
+      },
+      active_operation: {
+        type: 'MANUAL_DRAFT',
+        id: draft.id,
+        target_document_id: draft.document_id,
+        summary: '人工编辑中',
+      },
+    };
+  }
+  const running = detail.document_runs?.find((item) => item.document_id === documentId);
+  const elsewhere =
+    detail.document_drafts !== undefined && detail.active_operation?.type === 'MANUAL_DRAFT';
+  if (!running) {
+    if (!elsewhere) return detail;
+    return {
+      ...detail,
+      requirement: {
+        ...detail.requirement,
+        document_work_state: 'IDLE',
+        active_operation_type: null,
+        active_operation_id: null,
+        state_started_at: null,
+      },
+      active_operation: null,
+    };
+  }
+  if (
+    !elsewhere &&
+    detail.active_operation?.type === 'MANUAL_DRAFT' &&
+    detail.active_operation.target_document_id === documentId
+  )
+    return detail;
+  return {
+    ...detail,
+    requirement: {
+      ...detail.requirement,
+      document_work_state: 'GUIDE_ACTIVE',
+      active_operation_type: 'GUIDE_RUN',
+      active_operation_id: running.id,
+      state_started_at: running.created_at,
+      updated_at:
+        running.created_at > detail.requirement.updated_at
+          ? running.created_at
+          : detail.requirement.updated_at,
+    },
+    active_operation: {
+      type: 'GUIDE_RUN',
+      id: running.id,
+      target_document_id: running.document_id,
+      summary: 'AI工作进行中',
+    },
+  };
+}
 
 /** Complete read bundle owned by one detail lifetime. Each API has its own
  * real transaction; matching references/versions are checks, not a claimed
@@ -170,6 +238,11 @@ export class RequirementDetailRead {
   observe(): Promise<boolean> {
     return this.refresh(false, true);
   }
+  private detail(signal: AbortSignal, documentId?: number | null) {
+    return this.api.getRequirementDetailWithDocumentRuns
+      ? this.api.getRequirementDetailWithDocumentRuns(this.identity, signal, documentId)
+      : this.api.getRequirementDetail(this.identity, signal, false, documentId);
+  }
   refresh(force = false, reuseContent = false): Promise<boolean> {
     if (this.closed) return Promise.resolve(false);
     const epoch = this.api.detailReadEpoch ?? 0;
@@ -191,13 +264,10 @@ export class RequirementDetailRead {
       .then(async () => {
         if (this.closed || generation !== this.generation) return false;
         try {
-          const detail = captured(
-              (await this.api.getRequirementDetail(this.identity, controller.signal)).data,
-            ),
-            root = detail.requirement;
+          const overview = captured((await this.detail(controller.signal)).data);
           if (this.closed || generation !== this.generation) return false;
           rootConfirmed = true;
-          requireRelation(root.id === this.identity);
+          requireRelation(overview.requirement.id === this.identity);
           const initialOrEmpty =
             this.value.confirmed === null || this.value.confirmed.documents.length === 0;
           if (
@@ -205,11 +275,13 @@ export class RequirementDetailRead {
             (initialOrEmpty &&
               !this.explicitInitialDocument &&
               (this.selected === null ||
-                !detail.documents.some((document) => document.id === this.selected)))
+                !overview.documents.some((document) => document.id === this.selected)))
           )
             this.selected =
-              detail.documents.find((document) => document.archived_at === null)?.id ?? null;
+              overview.documents.find((document) => document.archived_at === null)?.id ?? null;
           const documentId = this.selected;
+          const detail = projectDocumentActivity(overview, documentId);
+          const root = detail.requirement;
           if (documentId !== null)
             requireRelation(detail.documents.some((document) => document.id === documentId));
           let current: DocumentView | null = null,
@@ -274,8 +346,7 @@ export class RequirementDetailRead {
                   draft.target_document_id === target.id &&
                   target.requirement_id === this.identity,
               );
-              if (draft.base_content_version !== target.content_version)
-                throw new ReadMismatch('CHANGED');
+              requireRelation(draft.base_content_version <= target.content_version);
               activity = Object.freeze({ kind: 'MANUAL', draft, target });
               break;
             }
@@ -307,15 +378,9 @@ export class RequirementDetailRead {
             }
           }
           if (this.closed || generation !== this.generation) return false;
-          const latest = captured(
-            (
-              await this.api.getRequirementDetail(
-                this.identity,
-                controller.signal,
-                false,
-                documentId,
-              )
-            ).data,
+          const latest = projectDocumentActivity(
+            captured((await this.detail(controller.signal, documentId)).data),
+            documentId,
           );
           if (occupancy(root) !== occupancy(latest.requirement)) throw new ReadMismatch('CHANGED');
           if (

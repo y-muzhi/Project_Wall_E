@@ -12,7 +12,8 @@ import sqlite3
 from backend.app.infrastructure.audit_repository import AuditRepository
 from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
-from backend.app.infrastructure.model_profile import ModelProfile
+from backend.app.infrastructure.model_profile import OPENAI_DOCUMENT_PROFILE, ModelProfile
+from backend.app.infrastructure.batch_repository import INDEPENDENT_REVIEW_RELEASES
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.infrastructure.tokenization import ExactCountUnavailable
@@ -35,7 +36,8 @@ SAFE_MESSAGES = {key: value[2] for key, value in ERRORS.items()} | {
     'OUTPUT_INVALID': '模型输出未能通过程序校验',
     'CONTEXT_LIMIT_EXCEEDED': '必要上下文超出已批准预算',
 }
-COUNT_FAILURE_MESSAGE = 'Token 计数未完成，请检查计数服务配置或缩小输入范围。'
+COUNT_FAILURE_MESSAGE = 'Token 计数未完成，请查看计数服务状态。'
+COUNT_CONNECTION_MESSAGE = '无法连接 Token 计数服务，本次未发送模型请求。连接恢复后可重新发送。'
 COUNT_PROVIDER_LIMIT_MESSAGE = '计数文本超过当前服务的 800,000 字节容量上限，请缩小所选范围。当前计数批次未发送，模型请求已停止。'
 
 
@@ -188,7 +190,12 @@ async def execute_guide_run(
         import json
 
         accepted_basis = json.loads(row['execution_basis_json'])
-        resources = resources.for_collaboration_release(accepted_basis['resources']['release'])
+        release = accepted_basis['resources']['release']
+        resources = resources.for_collaboration_release(release)
+        if release['version'] in INDEPENDENT_REVIEW_RELEASES:
+            if frozen_profile.provider != 'openai':
+                raise ConfigInvalid('OpenAI document release needs the OpenAI credential')
+            frozen_profile = ModelProfile(frozen_profile.api_key, OPENAI_DOCUMENT_PROFILE)
         from .collaboration_execution import execute_collaboration
 
         return await execute_collaboration(
@@ -210,12 +217,11 @@ async def execute_guide_run(
     except ContextLimitExceeded:
         return await fail('CONTEXT_LIMIT_EXCEEDED')
     except ExactCountUnavailable as error:
-        return await fail(
-            'CONFIG_INVALID',
-            COUNT_PROVIDER_LIMIT_MESSAGE
-            if error.reason == 'PROVIDER_INPUT_LIMIT'
-            else COUNT_FAILURE_MESSAGE,
-        )
+        message = {
+            'PROVIDER_INPUT_LIMIT': COUNT_PROVIDER_LIMIT_MESSAGE,
+            'TRANSPORT_ERROR': COUNT_CONNECTION_MESSAGE,
+        }.get(error.reason, COUNT_FAILURE_MESSAGE)
+        return await fail('CONFIG_INVALID', message)
     except (ConfigInvalid, ProtocolInvalid):
         return await fail('CONFIG_INVALID')
     except Rejected as error:

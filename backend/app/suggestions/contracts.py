@@ -320,25 +320,62 @@ def decide_suggestion_result(row, items, *, protocol) -> dict:
 
 
 @dataclass(frozen=True)
+class DecideGroupInput:
+    batch_id: int
+    group_id: int
+    expected_decision_version: int
+    decision: str
+    idempotency_key: str
+
+    def business_input(self):
+        return {
+            'batch_id': self.batch_id,
+            'group_id': self.group_id,
+            'expected_decision_version': self.expected_decision_version,
+            'decision': self.decision,
+        }
+
+
+def decide_group_input(payload):
+    fields = ('batch_id', 'group_id', 'expected_decision_version', 'decision', 'idempotency_key')
+    value = object_fields(payload, 'body', fields, fields)
+    return DecideGroupInput(
+        strict_integer(value['batch_id'], 'batch_id'),
+        strict_integer(value['group_id'], 'group_id'),
+        strict_integer(value['expected_decision_version'], 'expected_decision_version'),
+        strict_enum(value['decision'], 'decision', ('ACCEPTED', 'REJECTED')),
+        request_key(value['idempotency_key'], 'idempotency_key'),
+    )
+
+
+@dataclass(frozen=True)
 class CompleteBatchInput:
     batch_id: int
     expected_content_version: int
     idempotency_key: str
+    expected_decision_version: int | None
 
     def business_input(self) -> dict:
         return {
             'batch_id': self.batch_id,
             'expected_content_version': self.expected_content_version,
-        }
+        } | (
+            {'expected_decision_version': self.expected_decision_version}
+            if self.expected_decision_version is not None
+            else {}
+        )
 
 
 def complete_batch_input(payload: object) -> CompleteBatchInput:
-    fields = ('batch_id', 'expected_content_version', 'idempotency_key')
-    value = object_fields(payload, 'body', fields, fields)
+    required = ('batch_id', 'expected_content_version', 'idempotency_key')
+    value = object_fields(payload, 'body', (*required, 'expected_decision_version'), required)
     return CompleteBatchInput(
         strict_integer(value['batch_id'], 'batch_id'),
         strict_integer(value['expected_content_version'], 'expected_content_version'),
         request_key(value['idempotency_key'], 'idempotency_key'),
+        strict_integer(value['expected_decision_version'], 'expected_decision_version')
+        if 'expected_decision_version' in value
+        else None,
     )
 
 

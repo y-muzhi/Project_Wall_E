@@ -5,10 +5,15 @@ from backend.app.infrastructure.batch_repository import BatchRepository
 from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.shared.validation import MISSING, InvalidInput
 from .contracts import get_batch_input, get_batch_result
+from .review import review_projection
 
 
 def get_batch(
-    database: Database, batch_id: object = MISSING, *, catalog: ResourceCatalog | None = None
+    database: Database,
+    batch_id: object = MISSING,
+    *,
+    catalog: ResourceCatalog | None = None,
+    include_review: bool = False,
 ) -> dict:
     try:
         identity = get_batch_input(batch_id)
@@ -56,13 +61,13 @@ def get_batch(
                 protocol = resources.collaboration
                 if parent['function_type'] != 'collaboration_v1':
                     raise ValueError('Batch source must match its parent frozen Function')
-                result = {
-                    'code': 'READ_OK',
-                    'data': get_batch_result(
-                        row, repository.suggestions(identity), protocol=protocol
-                    ),
-                    'details': None,
-                }
+                batch = get_batch_result(row, repository.suggestions(identity), protocol=protocol)
+                projection = (
+                    {'batch': batch, 'review': review_projection(connection, batch, parent)}
+                    if include_review
+                    else batch
+                )
+                result = {'code': 'READ_OK', 'data': projection, 'details': None}
         return result
     except StorageUnavailable:
         code = 'STORAGE_UNAVAILABLE'

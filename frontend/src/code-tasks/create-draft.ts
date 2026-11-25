@@ -2,7 +2,6 @@ import { exact } from '../api/client.ts';
 import { authorizationScope } from '../api/code-authorizations.ts';
 import type { AuthorizationScope } from '../api/code-authorizations.ts';
 import type { ExecutionProfileVersion } from '../api/code-execution-profiles.ts';
-import { moneyMicro } from '../api/code-values.ts';
 import { safeId } from './list-model.ts';
 
 type Material = Readonly<{ document_id: number; revision_id: number }>;
@@ -113,14 +112,6 @@ export function restoreCreateDraft(raw: string | null, requirementId: number, do
     original_key: row.original_key,
     original_path: typeof row.original_path === 'string' ? row.original_path : null,
   } satisfies CreateTaskDraft;
-}
-
-export function positiveBudget(text: string): boolean {
-  try {
-    return moneyMicro(text) > 0n;
-  } catch {
-    return false;
-  }
 }
 
 export function proposedScope(

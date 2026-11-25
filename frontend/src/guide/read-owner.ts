@@ -220,7 +220,7 @@ export class RequirementAiRead {
     this.setVisible(true);
     if (resume) this.poll?.refresh();
   };
-  open(summary: GuideSummary): void {
+  open(summary: Pick<GuideSummary, 'id' | 'requirement_id'>): void {
     if (this.closed || !this.value.visible) return;
     this.select(summary, 'HISTORY');
   }

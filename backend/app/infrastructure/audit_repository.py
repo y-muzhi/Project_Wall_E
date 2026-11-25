@@ -21,7 +21,7 @@ from backend.app.shared.json_canonical import canonical_input
 from backend.app.shared.validation import MAX_SAFE_INTEGER, strict_integer, strict_json_object
 
 from .audit_data import audit_json
-from .guide_repository import GuideRepository
+from .guide_repository import GuideRepository, is_document_scoped
 from .identifiers import EntityKind, entity_id, increment, require_write_transaction
 from .message_repository import MessageRepository
 from .model_profile import ModelProfile
@@ -36,6 +36,11 @@ def _owned(connection, run):
     root = RequirementRepository(connection).get_for_document(
         run['requirement_id'], run['document_id']
     )
+    if root is not None and is_document_scoped(run):
+        active = GuideRepository(connection).scoped_running(root['id'], run['document_id'])
+        if [row['id'] for row in active] != [run['id']]:
+            raise Rejected('WORK_STATE_INCONSISTENT')
+        return root
     if (
         root is None
         or root['document_work_state'] != 'GUIDE_ACTIVE'

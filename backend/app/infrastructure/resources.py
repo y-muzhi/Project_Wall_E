@@ -281,14 +281,21 @@ class ResourceCatalog:
 
         if not hasattr(self, '_collaboration_resources'):
             from .collaboration_resources import ROOT
-            from .model_profile import LONG_OUTPUT_PROFILE, ModelProfile
+            from .model_profile import (
+                LONG_OUTPUT_PROFILE,
+                OPENAI_DOCUMENT_PROFILE,
+                OPENAI_PROFILE,
+                ModelProfile,
+            )
 
             selected = (
                 getattr(self, '_collaboration_profile', None) or ModelProfile.selected_profile()
             )
             self._collaboration_resources = CollaborationResources.load(
                 ROOT.parent / 'openai-v2'
-                if selected == 'openai-sol-v1'
+                if selected == OPENAI_PROFILE
+                else ROOT.parent / 'openai-v8'
+                if selected == OPENAI_DOCUMENT_PROFILE
                 else ROOT.parent / 'v18'
                 if selected == LONG_OUTPUT_PROFILE
                 else ROOT
@@ -320,6 +327,8 @@ class ResourceCatalog:
             'v45',
             'v46',
             'openai-v6',
+            'openai-v7',
+            'openai-v8',
         ):
             batches[batch] = batch
         version = reference.get('version') if isinstance(reference, dict) else None
@@ -330,6 +339,20 @@ class ResourceCatalog:
                 selected._collaboration_resources = resources
                 return selected
         raise ConfigInvalid('Unknown frozen collaboration release')
+
+    def for_document_operation(self, operation):
+        from copy import copy
+
+        from .collaboration_resources import ROOT, CollaborationResources
+
+        if (
+            operation not in ('GENERATE', 'REVISE', 'PROPOSE_CHANGES')
+            or self.collaboration.reference('collaboration.release')['version'] != 'openai-v6'
+        ):
+            return self
+        selected = copy(self)
+        selected._collaboration_resources = CollaborationResources.load(ROOT.parent / 'openai-v8')
+        return selected
 
     def for_formation_profile(self, profile_id, *, discussion_routes=True):
         """Select the active discussion release; pinned V2.1 fixtures may request the predecessor."""
@@ -342,8 +365,13 @@ class ResourceCatalog:
             raise ConfigInvalid('Unknown model profile')
         selected = copy(self)
         selected._collaboration_profile = profile_id
-        from .model_profile import OPENAI_PROFILE
+        from .model_profile import OPENAI_DOCUMENT_PROFILE, OPENAI_PROFILE
 
+        if profile_id == OPENAI_DOCUMENT_PROFILE:
+            selected._collaboration_resources = CollaborationResources.load(
+                ROOT.parent / 'openai-v8'
+            )
+            return selected
         batch = (
             'openai-v2'
             if profile_id == OPENAI_PROFILE

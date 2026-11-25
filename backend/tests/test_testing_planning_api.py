@@ -181,7 +181,8 @@ def test_explicit_draft_at_most_once_with_original_usage(repository_service, mod
             body['usage'] = {'prompt_tokens': 99, 'completion_tokens': 30}
         return httpx.Response(200, json=body)
 
-    basis, model = _configure(repository_service, handler)
+    budget = '0.000000' if mode == 'valid' else '0.500000'
+    basis, model = _configure(repository_service, handler, budget=budget)
     initial = client.get(TASKS + '/1')
     assert initial.status_code == 200, initial.text
     assert {'action': 'DRAFT_PLAN', 'enabled': True, 'reason_code': None} in initial.json()['data'][
@@ -216,6 +217,7 @@ def test_explicit_draft_at_most_once_with_original_usage(repository_service, mod
         'budget_limit_cny',
         'output_cap_tokens',
     }
+    assert fixed['budget_limit_cny'] == budget
     task = client.get(TASKS + '/1').json()['data']
     assert task['plan_version_id'] is None and task['test_pack_version_id'] is None
     assert task['status'] == ('WAITING' if mode == 'unknown' else 'DRAFT')
@@ -256,19 +258,15 @@ def test_explicit_draft_at_most_once_with_original_usage(repository_service, mod
             )
 
 
-@pytest.mark.parametrize('installed', [False, True])
-def test_missing_draft_admission_and_budget_issue_no_model_use(repository_service, installed):  # noqa: F811
+def test_missing_draft_admission_rejects_before_model_use(repository_service):  # noqa: F811
     database, _, client = repository_service
     _configure(
         repository_service,
         lambda _: pytest.fail('No provider call authorized'),
-        installed=installed,
-        budget='0.000000' if installed else '0.500000',
+        installed=False,
     )
     failed = post(client, _DRAFT, {'expected_state_version': 1})
-    assert (failed.status_code, failed.json()['error']['code']) == (
-        (409, 'INVALID_STATE') if installed else (503, 'CONFIG_NOT_READY')
-    )
+    assert (failed.status_code, failed.json()['error']['code']) == (503, 'CONFIG_NOT_READY')
     with database.transaction() as connection:
         assert connection.execute('SELECT count(*) FROM llm_uses').fetchone()[0] == 0
 

@@ -32,7 +32,7 @@ from backend.tests.formation.test_v21_live_fix_examples import task_output
 PROFILE = ModelProfile('offline-openai-c07-only', OPENAI_PROFILE)
 
 
-def adapters(sample, *, defect=None, make=None):
+def adapters(sample, *, defect=None, make=None, output_tokens=100, input_tokens=2000):
     seen = []
 
     def count(req):
@@ -42,7 +42,7 @@ def adapters(sample, *, defect=None, make=None):
         seen.append(('count', body))
         return httpx.Response(
             200,
-            json={'object': 'response.input_tokens', 'input_tokens': 2000},
+            json={'object': 'response.input_tokens', 'input_tokens': input_tokens},
             headers={'x-request-id': 'offline_count'},
         )
 
@@ -51,6 +51,9 @@ def adapters(sample, *, defect=None, make=None):
         body = json.loads(req.content)
         seen.append(('model', body))
         assert 'messages' not in body and body['store'] is False
+        assert req.extensions['timeout']['read'] == (
+            1800 if body['max_output_tokens'] == 100_000 else 180
+        )
         from types import SimpleNamespace
 
         ctx = SimpleNamespace(input=json.loads(body['input'][1]['content']))
@@ -79,9 +82,9 @@ def adapters(sample, *, defect=None, make=None):
                 }
             ],
             'usage': {
-                'input_tokens': 2001 if defect == 'usage' else 2000,
-                'output_tokens': 100,
-                'total_tokens': 2101 if defect == 'usage' else 2100,
+                'input_tokens': input_tokens + (1 if defect == 'usage' else 0),
+                'output_tokens': output_tokens,
+                'total_tokens': input_tokens + (1 if defect == 'usage' else 0) + output_tokens,
                 'input_tokens_details': {'cached_tokens': 0},
                 'output_tokens_details': {'reasoning_tokens': 20},
             },
@@ -192,10 +195,15 @@ def test_native_openai_output_uses_existing_five_c07_tasks(tmp_path, technical_s
             json.loads(detail['data']['raw_request_json'])['input'][1]['content']
             == original.input_json
         )
-        calls = list_model_calls(db, 1)
+        calls = list_model_calls(db, 1, include_input_limit=True, catalog=catalog)
         assert calls['code'] == 'READ_OK'
         assert calls['data']['items'][0]['user_message_id'] is not None
         assert calls['data']['items'][0]['total_tokens'] == 2100
+        assert (
+            calls['data']['items'][0]['input_token_limit']
+            == detail['data']['preflight']['budget']['input_tokens']
+            == 131072
+        )
     assert [kind for kind, _ in seen] == ['count', 'model']
 
 

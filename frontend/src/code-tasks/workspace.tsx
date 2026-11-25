@@ -4,8 +4,8 @@ import type { WalleApi } from '../api/walle.ts';
 import type { CodeTaskView } from '../api/code-task-creation.ts';
 import { TaskStartControl } from './start-control.tsx';
 import { TaskStopControl } from './stop-control.tsx';
-import { TaskBudgetControl } from './budget-control.tsx';
 import { TaskConfigurationControl } from './configuration-control.tsx';
+import { LegacyTaskBudgetRecovery } from './budget-control.tsx';
 import { TaskResumeControl } from './resume-control.tsx';
 import { CodeTaskUsage } from './usage.tsx';
 import { CandidateHistory } from './candidate-history.tsx';
@@ -317,11 +317,10 @@ export function CodeTaskWorkspace(props: Props) {
                 ready={!result.loading && !result.error}
                 changed={changed}
               />
-              <TaskBudgetControl
-                key={task.id}
+              <LegacyTaskBudgetRecovery
+                key={task.id + ':legacy-budget'}
                 api={api}
-                task={task}
-                ready={!result.loading && !result.error}
+                taskId={task.id}
                 changed={changed}
               />
               <TaskResumeControl

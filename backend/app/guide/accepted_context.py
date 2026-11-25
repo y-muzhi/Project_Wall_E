@@ -7,6 +7,7 @@ Canonical selection and Wire compilation consume these captured source values.
 import json
 
 from backend.app.infrastructure.idempotency import canonical_input
+from backend.app.infrastructure.batch_repository import INDEPENDENT_REVIEW_RELEASES
 from backend.app.infrastructure.document_repository import DocumentRepository
 from backend.app.documents.design_profiles import DESIGN_KINDS
 from backend.app.documents.queries import current_document_view
@@ -38,7 +39,12 @@ def check_proposal(connection, root, request, resources):
     ).fetchone():
         raise Rejected('SOURCE_INVALID')
     payload, binding = cards['action_payload'], cards['program_binding']
-    if payload['operation'] != request.operation:
+    converted_to_review = (
+        payload['operation'] == 'REVISE'
+        and request.operation == 'PROPOSE_CHANGES'
+        and resources.reference('collaboration.release')['version'] in INDEPENDENT_REVIEW_RELEASES
+    )
+    if payload['operation'] != request.operation and not converted_to_review:
         raise Rejected('SOURCE_INVALID')
     if binding['discussion_version'] != root['discussion_version']:
         raise Rejected(

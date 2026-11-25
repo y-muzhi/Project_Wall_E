@@ -273,121 +273,128 @@ export function MessageTimeline({
           {state.items?.length === 0 && !state.loading && !state.error && (
             <EmptyState icon="robot" message="我们要构建什么？" fill />
           )}
-          {state.items?.map((message) => (
-            <article
-              key={message.id}
-              tabIndex={-1}
-              data-message-id={message.id}
-              data-message-sequence={message.sequence_no}
-              className={
-                'conversation-message ' +
-                (message.role === 'USER' ? 'from-user' : 'from-assistant') +
-                (selectedReply?.phase === 'LOCATED' &&
-                selectedReply.target.message_id === message.id
-                  ? ' is-reply-target'
-                  : '')
-              }
-            >
-              {message.role === 'USER' ? (
-                <span className="sr-only">用户消息</span>
-              ) : (
-                <header>
-                  <span className="ai-message-avatar" role="img" aria-label="Ai助手">
-                    <Icon name="robot" />
-                  </span>
-                </header>
-              )}
-              <div className="message-body">
-                {message.message_type === 'TEXT' ? (
-                  message.role === 'ASSISTANT' ? (
-                    <ModelReturnContent
-                      content={message.content}
-                      {...(renderMarkdown ? { render: renderMarkdown } : {})}
-                    />
-                  ) : (
-                    <MessageContent
-                      content={message.content}
-                      {...(renderMarkdown ? { render: renderMarkdown } : {})}
-                    />
-                  )
+          {state.items
+            ?.filter((message) => !message.audited_document_output)
+            .map((message) => (
+              <article
+                key={message.id}
+                tabIndex={-1}
+                data-message-id={message.id}
+                data-message-sequence={message.sequence_no}
+                className={
+                  'conversation-message ' +
+                  (message.role === 'USER' ? 'from-user' : 'from-assistant') +
+                  (selectedReply?.phase === 'LOCATED' &&
+                  selectedReply.target.message_id === message.id
+                    ? ' is-reply-target'
+                    : '')
+                }
+              >
+                {message.role === 'USER' ? (
+                  <span className="sr-only">用户消息</span>
                 ) : (
-                  (message.message_type !== 'INTERACTION_CARDS' ||
-                    message.structured_content === null ||
-                    message.card_state === null ||
-                    !structured) && <p className="message-content">{message.content}</p>
+                  <header>
+                    <span className="ai-message-avatar" role="img" aria-label="Ai助手">
+                      <Icon name="robot" />
+                    </span>
+                  </header>
                 )}
-                {message.message_type === 'INTERACTION_CARDS' &&
-                  message.structured_content === null && (
-                    <p role="status">历史问题结构无法读取，保留可读内容。</p>
-                  )}
-                {message.structured_content !== null && structured?.(message)}
-                {message.initial_route_suggestion && (
-                  <details className="message-route-proposal">
-                    <summary>建议新建主线 · {message.initial_route_suggestion.goal}</summary>
-                    <ol>
-                      {message.initial_route_suggestion.steps.map((step, index) => (
-                        <li key={index}>
-                          <strong>{step.title}</strong>
-                          {step.expected_results.length > 0 && (
-                            <ul>
-                              {step.expected_results.map((item, i) => (
-                                <li key={i}>{item}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  </details>
-                )}
-                {message.formation_operations?.map((operation) => (
-                  <div className="message-route-operation" key={operation.batch_id}>
-                    <strong>
-                      {operation.kind === 'CREATED'
-                        ? '已新建主线'
-                        : operation.kind === 'UPDATED'
-                          ? '已修改主线'
-                          : '已切换讨论步骤'}
-                    </strong>
-                    {operation.goal && <span>{operation.goal}</span>}
-                    {operation.moves.length > 0 && (
-                      <span>
-                        {operation.moves
-                          .map(
-                            (move) =>
-                              move.title + '（第' + move.before + '步 → 第' + move.after + '步）',
-                          )
-                          .join('、')}
-                      </span>
-                    )}
-                    {operation.actions.length > 0 && <span>{operation.actions.join('、')}</span>}
-                    {operation.kind === 'FOCUSED' ? (
-                      <span>
-                        {operation.previous_focus_title ?? '整份文档'} →{' '}
-                        {operation.focus_title ?? '整份文档'}
-                      </span>
+                <div className="message-body">
+                  {message.message_type === 'TEXT' ? (
+                    message.role === 'ASSISTANT' ? (
+                      <ModelReturnContent
+                        content={message.content}
+                        {...(renderMarkdown ? { render: renderMarkdown } : {})}
+                      />
                     ) : (
-                      operation.focus_title && <span>当前讨论：{operation.focus_title}</span>
+                      <MessageContent
+                        content={message.content}
+                        {...(renderMarkdown ? { render: renderMarkdown } : {})}
+                      />
+                    )
+                  ) : (
+                    (message.message_type !== 'INTERACTION_CARDS' ||
+                      message.structured_content === null ||
+                      message.card_state === null ||
+                      !structured) && <p className="message-content">{message.content}</p>
+                  )}
+                  {message.message_type === 'INTERACTION_CARDS' &&
+                    message.structured_content === null && (
+                      <p role="status">历史问题结构无法读取，保留可读内容。</p>
                     )}
-                    {operation.moves.length === 0 &&
-                      operation.kind !== 'FOCUSED' &&
-                      operation.steps.length > 0 && (
-                        <span>
+                  {message.structured_content !== null && structured?.(message)}
+                  {message.initial_route_suggestion && (
+                    <details className="message-route-proposal">
+                      <summary>建议新建主线 · {message.initial_route_suggestion.goal}</summary>
+                      <ol>
+                        {message.initial_route_suggestion.steps.map((step, index) => (
+                          <li key={index}>
+                            <strong>{step.title}</strong>
+                            {step.expected_results.length > 0 && (
+                              <ul>
+                                {step.expected_results.map((item, i) => (
+                                  <li key={i}>{item}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
+                  {message.formation_operations?.map((operation) => (
+                    <details
+                      className="message-route-operation guide-operation-card"
+                      key={operation.batch_id}
+                    >
+                      <summary>
+                        <strong>
                           {operation.kind === 'CREATED'
-                            ? operation.steps.join(' → ')
-                            : '涉及步骤：' + operation.steps.join('、')}
+                            ? '已新建主线'
+                            : operation.kind === 'UPDATED'
+                              ? '已修改主线'
+                              : '已切换讨论步骤'}
+                        </strong>
+                      </summary>
+                      {operation.goal && <span>{operation.goal}</span>}
+                      {operation.moves.length > 0 && (
+                        <span>
+                          {operation.moves
+                            .map(
+                              (move) =>
+                                move.title + '（第' + move.before + '步 → 第' + move.after + '步）',
+                            )
+                            .join('、')}
                         </span>
                       )}
-                  </div>
-                ))}
-                {resultNotice?.(message)}
-              </div>
-              {requestRecord?.(message)}
-              <footer className="message-time">
-                <time dateTime={message.created_at}>{conversationTime(message.created_at)}</time>
-              </footer>
-            </article>
-          ))}
+                      {operation.actions.length > 0 && <span>{operation.actions.join('、')}</span>}
+                      {operation.kind === 'FOCUSED' ? (
+                        <span>
+                          {operation.previous_focus_title ?? '整份文档'} →{' '}
+                          {operation.focus_title ?? '整份文档'}
+                        </span>
+                      ) : (
+                        operation.focus_title && <span>当前讨论：{operation.focus_title}</span>
+                      )}
+                      {operation.moves.length === 0 &&
+                        operation.kind !== 'FOCUSED' &&
+                        operation.steps.length > 0 && (
+                          <span>
+                            {operation.kind === 'CREATED'
+                              ? operation.steps.join(' → ')
+                              : '涉及步骤：' + operation.steps.join('、')}
+                          </span>
+                        )}
+                    </details>
+                  ))}
+                  {resultNotice?.(message)}
+                </div>
+                {requestRecord?.(message)}
+                <footer className="message-time">
+                  <time dateTime={message.created_at}>{conversationTime(message.created_at)}</time>
+                </footer>
+              </article>
+            ))}
         </div>
       </div>
     </section>

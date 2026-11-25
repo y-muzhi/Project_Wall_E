@@ -15,8 +15,9 @@ from backend.app.documents.sources import DocumentSources
 from backend.app.infrastructure.audit_data import MAX_AUDIT_BYTES, AuditCapacityExceeded
 from backend.app.infrastructure.collaboration_resources import sha256
 from backend.app.infrastructure.document_repository import DocumentRepository
-from backend.app.infrastructure.guide_repository import GuideRepository
+from backend.app.infrastructure.guide_repository import GuideRepository, is_document_scoped
 from backend.app.infrastructure.idempotency import canonical_input
+from backend.app.infrastructure.revision_repository import RevisionRepository
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.infrastructure.schema_transport import compact
 from backend.app.requirements.discussion import validate_discussion
@@ -66,7 +67,11 @@ def read_canonical(connection, identity, catalog, *, require_current=True):
     if root is None:
         raise Rejected('SOURCE_INVALID')
     if run['status'] == 'RUNNING' and require_current:
-        if (
+        if is_document_scoped(run):
+            active = GuideRepository(connection).scoped_running(root['id'], run['document_id'])
+            if [row['id'] for row in active] != [identity]:
+                raise Rejected('WORK_STATE_CONFLICT')
+        elif (
             root['document_work_state'],
             root['active_operation_type'],
             root['active_operation_id'],
@@ -195,8 +200,26 @@ def read_canonical(connection, identity, catalog, *, require_current=True):
     if target is not None:
         if run['status'] == 'RUNNING' and require_current:
             head = DocumentRepository(connection).get_current(root['id'], target['id'])
-            if head is None or head['content_version'] != target['content_version']:
+            if head is None:
                 raise Rejected('CONTENT_VERSION_CONFLICT')
+            base = target['content_version']
+            if head['content_version'] != base:
+                if (
+                    request['operation'] != 'PROPOSE_CHANGES'
+                    or not resources.grouped_reviews
+                    or head['content_version'] < base
+                ):
+                    raise Rejected('CONTENT_VERSION_CONFLICT')
+                revision = RevisionRepository(connection).current(target['id'], base)
+                if (
+                    revision is None
+                    or revision['requirement_id'] != root['id']
+                    or revision['id'] != target['current_revision_id']
+                    or revision['markdown_snapshot'] != target['markdown_content']
+                    or json.loads(revision['block_state_snapshot_json'])
+                    != target['block_state_json']
+                ):
+                    raise Rejected('SOURCE_INVALID')
             if (
                 request['operation'] in ('REVISE', 'PROPOSE_CHANGES')
                 and head['archived_at'] is not None

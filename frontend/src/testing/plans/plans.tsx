@@ -1,3 +1,4 @@
+import { Pagination } from '../../shared/pagination.tsx';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
 import { positiveInteger } from '../../api/client.ts';
@@ -15,10 +16,10 @@ import type { TestingSealReceipt } from '../../api/testing-assets.ts';
 import { PlanDraftEditor } from '../plan-editor/editor.tsx';
 import { draftPath, importanceLabels, modeLabels, stageLabels } from '../plan-editor/draft.ts';
 import type { DraftReceipt } from '../plan-editor/draft.ts';
-import { errorText, meta, Pager, ReadState, useTestingRead } from './read.tsx';
+import { errorText, ReadState, useTestingRead } from './read.tsx';
 import type { TestPlanVersion } from '../../api/testing-plans.ts';
 import type { WalleApi } from '../../api/walle.ts';
-import { PageHeader } from '../../application/header.tsx';
+import { SectionPageHeader } from '../../application/header.tsx';
 import { CommandRecoveryStore } from '../../code-tasks/command-recovery-store.ts';
 import type { RecoveryLookup } from '../../code-tasks/command-recovery.ts';
 import type { PendingSummary } from '../../code-tasks/command-recovery-model.ts';
@@ -407,17 +408,12 @@ export function TestingPlans({
   }
 
   return (
-    <main className="code-settings testing-plans">
-      <PageHeader>
-        <header className="code-settings-heading">
-          <h1>测试计划与资源管理</h1>
-        </header>
-      </PageHeader>
-      <div className="code-settings-form-actions testing-settings-nav">
+    <main className="testing-page testing-plans">
+      <SectionPageHeader title="测试计划与资源管理">
         <button type="button" className="ui-button" onClick={settings}>
           测试配置与恢复
         </button>
-      </div>
+      </SectionPageHeader>
       {selected === null ? (
         <div className="code-settings-form-actions">
           <p className="inline-error" role="alert">
@@ -529,11 +525,11 @@ export function TestingPlans({
                     message={page === 1 ? '当前没有测试计划' : '此页没有测试计划'}
                   />
                 )}
-                <Pager
-                  meta={meta(plans.data.meta.pagination)}
-                  page={page}
-                  busy={plans.loading}
-                  select={setPage}
+                <Pagination
+                  value={plans.data.meta.pagination}
+                  loading={plans.loading}
+                  showLoadingStatus={false}
+                  change={setPage}
                 />
               </>
             )}
@@ -579,11 +575,11 @@ export function TestingPlans({
                           message={currentVersionPage === 1 ? '此计划尚无版本' : '此页没有计划版本'}
                         />
                       )}
-                    <Pager
-                      meta={meta(versions.data.meta.pagination)}
-                      page={currentVersionPage}
-                      busy={versions.loading}
-                      select={(page) => setVersionPage({ plan: planId, page })}
+                    <Pagination
+                      value={versions.data.meta.pagination}
+                      loading={versions.loading}
+                      showLoadingStatus={false}
+                      change={(page) => setVersionPage({ plan: planId, page })}
                     />
                   </>
                 )}

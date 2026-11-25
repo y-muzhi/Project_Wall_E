@@ -143,7 +143,7 @@ export class RequirementRevisions {
     this.publish({ page, loading: true, error: null, active: true });
     return pending;
   }
-  open(summary: RevisionSummary): Promise<boolean> {
+  open(summary: RevisionSummary, known?: Revision): Promise<boolean> {
     if (this.closed || this.exitPending || this.value.history.phase === 'RESTORING')
       return Promise.resolve(false);
     if (summary.requirement_id !== this.identity || summary.document_id !== this.documentId)
@@ -157,7 +157,8 @@ export class RequirementRevisions {
       .then(async () => {
         if (this.closed || generation !== this.historyGeneration) return false;
         try {
-          const revision = (await this.api.getRevision(selected.id, controller.signal)).data;
+          const revision =
+            known ?? (await this.api.getRevision(selected.id, controller.signal)).data;
           if (this.closed || generation !== this.historyGeneration) return false;
           if (
             revision.requirement_id !== this.identity ||

@@ -57,6 +57,7 @@ def get_requirement(
     progress_cursor=None,
     progress_step_ref=None,
     catalog=None,
+    include_document_runs=False,
 ) -> dict:
     from backend.app.shared.validation import reject, strict_enum, strict_integer
 
@@ -191,6 +192,29 @@ def get_requirement(
             'discussion': expanded_discussion,
             'active_operation': active,
         }
+        if include_document_runs:
+            from backend.app.infrastructure.guide_repository import GuideRepository
+
+            result['document_runs'] = [
+                dict(row) for row in GuideRepository(repository.connection).scoped_running(identity)
+            ]
+            from backend.app.infrastructure.review_schema import supports_review_layout
+            from backend.app.documents.guards import validate_manual_occupancy
+
+            if supports_review_layout(repository.connection):
+                drafts = DocumentRepository(repository.connection).by_requirement(
+                    identity, 'MANUAL_DRAFT'
+                )
+                if drafts or root['active_operation_type'] == 'MANUAL_DRAFT':
+                    validate_manual_occupancy(repository.connection, root, drafts)
+                result['document_drafts'] = [
+                    {
+                        'id': row['id'],
+                        'document_id': row['target_document_id'],
+                        'created_at': row['created_at'],
+                    }
+                    for row in drafts
+                ]
         return project_detail(result, expand)
 
     return _query(database, validate, read, not_found=True)
@@ -204,7 +228,12 @@ def project_detail(value, expand):
     from .discussion import validate_discussion
 
     data = exact(
-        value, ('requirement', 'documents', 'discussion_summary', 'discussion', 'active_operation')
+        {
+            key: item
+            for key, item in value.items()
+            if key not in ('document_runs', 'document_drafts')
+        },
+        ('requirement', 'documents', 'discussion_summary', 'discussion', 'active_operation'),
     )
     root = requirement(data['requirement'])
     if type(data['documents']) is not list:
@@ -306,6 +335,26 @@ def project_detail(value, expand):
             raise ValueError('Active edit and batch targets cannot be missing')
     elif root['active_operation_id'] is not None:
         raise ValueError('Active operation summary is missing')
+    from backend.app.documents.snapshot import _time
+
+    owned = {document['id'] for document in documents}
+    for field in ('document_runs', 'document_drafts'):
+        if field not in value:
+            continue
+        rows = value[field]
+        if type(rows) is not list:
+            raise ValueError('Document activities must be a list')
+        seen_docs, seen_ids = set(), set()
+        for row in rows:
+            exact(row, ('id', 'document_id', 'created_at'))
+            target = strict_integer(row['document_id'], 'document_id')
+            identity = strict_integer(row['id'], 'activity_id')
+            _time(row['created_at'])
+            if target not in owned or target in seen_docs or identity in seen_ids:
+                raise ValueError('Each document activity must have one owned target')
+            seen_docs.add(target)
+            seen_ids.add(identity)
+        data[field] = rows
     return {
         **data,
         'requirement': root,

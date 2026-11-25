@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRejected } from '../api/client.ts';
 import type { WalleApi } from '../api/walle.ts';
 import type { CodeTaskSummary } from '../api/code-task-list.ts';
-import { EmptyState } from '../shared/empty-state.tsx';
+import { SectionPageHeader } from '../application/header.tsx';
+import { RecordList } from '../shared/record-list.tsx';
+import { SingleSelect } from '../shared/single-select.tsx';
+import { Icon } from '../shared/icon.tsx';
+import { localTime } from '../shared/time.ts';
 import { MultiFilter } from '../shared/filter.tsx';
 import { Pagination } from '../shared/pagination.tsx';
 import { useSettingsRead, useSettingsVisibility } from './settings/read.ts';
@@ -91,22 +95,8 @@ export function DocumentCodeTasks(props: Props) {
   );
   const owner = useSettingsRead(load, visible, '暂时无法读取所属文档');
   return (
-    <main className="code-task-page" aria-busy={owner.loading}>
-      <header className="code-task-heading">
-        <div>
-          <h1>代码任务</h1>
-          {owner.value && <p>{owner.value.name}</p>}
-        </div>
-        {owner.value && (
-          <button
-            type="button"
-            className="ui-button"
-            onClick={() => props.back(requirementId, documentId)}
-          >
-            返回文档
-          </button>
-        )}
-      </header>
+    <main className="code-task-page code-task-list-page" aria-busy={owner.loading}>
+      {!owner.value && <SectionPageHeader title="代码任务" />}
       {owner.loading && <p role="status">正在核对所属文档…</p>}
       {owner.error && (
         <p role="alert" className="inline-error">
@@ -142,6 +132,7 @@ function OwnedTaskList({
   restoreScroll,
   update,
   openTask,
+  back,
   revisionId,
   documentTitle,
   settings,
@@ -153,9 +144,14 @@ function OwnedTaskList({
   const [drawer, setDrawer] = useState(false);
   const [conflictId, setConflictId] = useState<number | null>(null);
   const [openingDrawer, setOpeningDrawer] = useState(false);
+  const drawerOpener = useRef<HTMLButtonElement | null>(null);
   const openDrawerRequest = useRef<AbortController | null>(null);
   const [revisionPage, setRevisionPage] = useState(1);
-  const [selectedRevisionLabel, setSelectedRevisionLabel] = useState<string | null>(null);
+  const [revisionRetry, retryRevisions] = useState(0);
+  const filters = useRef<HTMLDivElement>(null);
+  const [selectedRevision, setSelectedRevision] = useState<{ id: number; label: string } | null>(
+    null,
+  );
   const [opening, setOpening] = useState<number | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const openRequest = useRef<AbortController | null>(null);
@@ -178,8 +174,11 @@ function OwnedTaskList({
     [api, documentId, query, readRetry],
   );
   const loadChoices = useCallback(
-    (signal: AbortSignal) => api.listRevisions(requirementId, documentId, revisionPage, signal),
-    [api, requirementId, documentId, revisionPage],
+    (signal: AbortSignal) => {
+      void revisionRetry;
+      return api.listRevisions(requirementId, documentId, revisionPage, signal);
+    },
+    [api, requirementId, documentId, revisionPage, revisionRetry],
   );
   const loadActive = useCallback(
     (signal: AbortSignal) => {
@@ -305,15 +304,58 @@ function OwnedTaskList({
     retryActive((value) => value + 1);
     retryList((value) => value + 1);
   }
-  const inPage = revisions.value?.data.items.some((item) => item.id === query.revisionId);
+  const versionOptions = [
+    { value: '', label: '固定版本：全部' },
+    ...(revisions.value?.data.items.map((item) => ({
+      value: String(item.id),
+      label: '版本 ' + item.version_no + ' · #' + item.id,
+    })) ?? []),
+  ];
+  if (
+    query.revisionId !== null &&
+    !versionOptions.some((option) => option.value === String(query.revisionId))
+  )
+    versionOptions.push({
+      value: String(query.revisionId),
+      label:
+        selectedRevision?.id === query.revisionId
+          ? selectedRevision.label
+          : '原选版本 #' + query.revisionId,
+    });
   const activeHint = !ownerReady
     ? '等待核对所属文档'
     : active.loading || openingDrawer
       ? '正在核对活动任务名额…'
       : (active.error ?? (activeTaskId !== null ? '当前文档已有活动任务' : null));
+  const createReason = activeHint ?? (recovery.loading ? '正在核对原请求记录…' : null);
+  const outOfRange = page !== null && page.page > Math.max(1, page.total_pages);
+  const filtered = query.statuses.length > 0 || query.revisionId !== null;
   return (
     <>
-      <div className="code-task-toolbar">
+      <SectionPageHeader title="代码任务" subtitle={documentTitle}>
+        <button type="button" className="ui-button" onClick={() => back(requirementId, documentId)}>
+          <Icon name="left" /> 返回文档
+        </button>
+        <button
+          type="button"
+          className="ui-button primary code-task-create"
+          aria-describedby={createReason ? 'create-code-task-reason' : undefined}
+          aria-disabled={createReason !== null}
+          onClick={(event) => {
+            if (createReason !== null) return;
+            drawerOpener.current = event.currentTarget;
+            void openCreate();
+          }}
+        >
+          创建任务
+        </button>
+      </SectionPageHeader>
+      <div
+        ref={filters}
+        className="code-task-toolbar code-list-filters"
+        role="group"
+        aria-label="代码任务筛选"
+      >
         <MultiFilter
           name="状态"
           options={statuses}
@@ -321,70 +363,71 @@ function OwnedTaskList({
           disabled={!ownerReady}
           change={(values, all) => change({ ...query, page: 1, statuses: all ? [] : values })}
         />
-        <label>
-          固定版本{' '}
-          <select
-            value={query.revisionId ?? ''}
-            disabled={!ownerReady || !revisions.value}
-            onChange={(event) => {
-              const revisionId = event.target.value === '' ? null : Number(event.target.value);
-              setSelectedRevisionLabel(event.target.selectedOptions[0]?.text ?? null);
+        <div className="code-list-version">
+          <label className="sr-only" htmlFor="code-list-versions">
+            固定版本
+          </label>
+          <SingleSelect
+            id="code-list-versions"
+            label="固定版本"
+            options={versionOptions}
+            value={query.revisionId === null ? '' : String(query.revisionId)}
+            disabled={
+              !ownerReady || revisions.loading || revisions.error !== null || !revisions.value
+            }
+            describedBy={
+              revisions.error
+                ? 'code-list-version-error'
+                : revisions.loading
+                  ? 'code-list-version-loading'
+                  : undefined
+            }
+            change={(value) => {
+              const option = versionOptions.find((item) => item.value === value);
+              const revisionId = value ? Number(value) : null;
+              setSelectedRevision(
+                revisionId !== null && option ? { id: revisionId, label: option.label } : null,
+              );
               change({ ...query, page: 1, revisionId });
             }}
+          />
+        </div>
+        {filtered && (
+          <button
+            type="button"
+            className="ui-button"
+            disabled={!ownerReady}
+            onClick={() => {
+              change(DEFAULT_TASK_QUERY);
+              filters.current?.querySelector('button')?.focus();
+            }}
           >
-            <option value="">全部版本</option>
-            {query.revisionId !== null && !inPage && (
-              <option value={query.revisionId}>
-                {selectedRevisionLabel ?? '原选版本 #' + query.revisionId}
-              </option>
-            )}
-            {revisions.value?.data.items.map((item) => (
-              <option key={item.id} value={item.id}>
-                版本 {item.version_no} · #{item.id}
-              </option>
-            ))}
-          </select>
-        </label>
-        {versionPage && versionPage.total_pages > 1 && (
-          <div className="code-task-toolbar" aria-label="版本选项分页">
-            <button
-              type="button"
-              className="ui-button"
-              disabled={revisions.loading || revisionPage <= 1}
-              onClick={() => setRevisionPage(revisionPage - 1)}
-            >
-              上一页版本
-            </button>
-            <button
-              type="button"
-              className="ui-button"
-              disabled={revisions.loading || revisionPage >= versionPage.total_pages}
-              onClick={() => setRevisionPage(revisionPage + 1)}
-            >
-              下一页版本
-            </button>
-          </div>
+            清除筛选
+          </button>
         )}
-        <button
-          type="button"
-          className="ui-button"
-          disabled={!ownerReady}
-          onClick={() => change(DEFAULT_TASK_QUERY)}
-        >
-          清除筛选
-        </button>
-        <button
-          type="button"
-          className="ui-button"
-          aria-describedby={activeHint ? 'create-code-task-reason' : undefined}
-          disabled={activeHint !== null || recovery.loading}
-          onClick={() => void openCreate()}
-        >
-          创建任务
-        </button>
       </div>
-      <p id="create-code-task-reason" className="read-status" role="status">
-        {activeHint}{' '}
+      {revisions.loading && (
+        <p id="code-list-version-loading" className="read-status" role="status">
+          正在读取固定版本选项…
+        </p>
+      )}
+      {versionPage && (versionPage.total_pages > 1 || versionPage.page > 1) && (
+        <div className="code-list-version-pages" aria-label="版本选项分页" role="group">
+          <Pagination
+            value={versionPage}
+            loading={revisions.loading}
+            change={setRevisionPage}
+            showLoadingStatus={false}
+          />
+        </div>
+      )}
+      <div
+        id="create-code-task-reason"
+        className="code-task-toolbar read-status"
+        role="status"
+        hidden={!createReason}
+      >
+        {createReason}{' '}
         {active.error && (
           <button
             type="button"
@@ -405,13 +448,16 @@ function OwnedTaskList({
             查看活动任务 #{activeTaskId}
           </button>
         )}
-      </p>
+      </div>
       {recovery.value && activeTaskId !== null && (
         <button
           type="button"
           className="ui-button"
           disabled={!ownerReady}
-          onClick={() => setDrawer(true)}
+          onClick={(event) => {
+            drawerOpener.current = event.currentTarget;
+            setDrawer(true);
+          }}
         >
           核对原创建请求
         </button>
@@ -426,39 +472,52 @@ function OwnedTaskList({
           visible={activeReader}
           activeTaskId={activeTaskId}
           close={closeDrawer}
+          returnFocus={drawerOpener}
           created={(id) => openTask(id, requirementId, documentId)}
           conflict={taskConflict}
           settings={settings}
         />
       )}
-      {revisions.error && <p role="alert">{revisions.error}</p>}
+      {revisions.error && (
+        <div className="code-task-toolbar">
+          <span id="code-list-version-error" className="inline-error" role="alert">
+            {revisions.error}
+          </span>
+          <button
+            type="button"
+            className="ui-button"
+            disabled={!ownerReady}
+            onClick={() => retryRevisions((value) => value + 1)}
+          >
+            重试读取版本
+          </button>
+        </div>
+      )}
       {openError && (
         <p className="inline-error" role="alert">
           {openError}
         </p>
       )}
-      <section className="code-task-result" aria-label="文档任务列表" aria-busy={rows.loading}>
-        {rows.loading && <p role="status">正在读取任务…</p>}
-        {rows.error && (
-          <p role="alert" className="inline-error">
-            {rows.error}{' '}
-            <button
-              type="button"
-              className="ui-button"
-              disabled={!ownerReady}
-              onClick={() => retryList((value) => value + 1)}
-            >
-              重试读取
-            </button>
-          </p>
-        )}
-        {rows.value?.data.items.length ? (
-          <ol className="code-task-rows">
-            {rows.value.data.items.map((row) => (
-              <li key={row.id}>
-                <time dateTime={row.created_at}>
-                  {new Date(row.created_at).toLocaleString('zh-CN')}
-                </time>
+      <RecordList
+        title="任务列表"
+        headingLevel={2}
+        showCount={false}
+        total={page?.total ?? null}
+        loading={rows.loading}
+        error={rows.error}
+        retry={() => retryList((value) => value + 1)}
+        retryDisabled={!ownerReady || rows.loading}
+        items={
+          rows.value?.data.items.map((row) => ({
+            id: row.id,
+            title: (
+              <>
+                代码任务 #{row.id} <span className="record-status">{TASK_STATUS[row.status]}</span>
+              </>
+            ),
+            metadata: (
+              <>
+                <time dateTime={row.created_at}>{localTime(row.created_at)}</time>
                 <TaskRevision
                   api={api}
                   row={row}
@@ -466,48 +525,32 @@ function OwnedTaskList({
                   visible={activeReader}
                 />
                 <span>{TASK_PHASE[row.phase]}</span>
-                <span>{TASK_STATUS[row.status]}</span>
-                <button
-                  type="button"
-                  className="ui-button"
-                  disabled={!ownerReady || opening !== null}
-                  onClick={() => void inspectTask(row.id)}
-                >
-                  {opening === row.id ? '正在读取任务…' : '查看任务 #' + row.id}
-                </button>
-              </li>
-            ))}
-          </ol>
-        ) : !rows.loading && !rows.error && page ? (
-          <EmptyState
-            icon="outline"
-            message={
-              page.page > Math.max(page.total_pages, 1)
-                ? '当前页超出任务列表范围'
-                : query.statuses.length || query.revisionId !== null
-                  ? '没有符合筛选条件的任务'
-                  : '当前文档尚无代码任务'
-            }
-          />
-        ) : null}
-        {page && (
-          <Pagination
-            value={page}
-            loading={rows.loading}
-            showLoadingStatus={false}
-            change={(number) => change({ ...query, page: number })}
-          />
-        )}
-        {page && page.total === 0 && page.page > 1 && (
-          <button
-            type="button"
-            className="ui-button"
-            onClick={() => change({ ...query, page: page.page - 1 })}
-          >
-            上一页
-          </button>
-        )}
-      </section>
+                {opening === row.id && <span role="status">正在读取任务…</span>}
+              </>
+            ),
+            selected: false,
+            disabled: !ownerReady || opening !== null,
+            label: '查看任务 #' + row.id + '，' + TASK_STATUS[row.status],
+            open: () => void inspectTask(row.id),
+          })) ?? []
+        }
+        empty={{
+          icon: outOfRange ? 'outline' : filtered ? 'search' : 'workbench',
+          message: outOfRange
+            ? '当前页超出任务列表范围'
+            : filtered
+              ? '没有符合筛选条件的任务'
+              : '当前文档尚无代码任务',
+        }}
+      />
+      {page && (
+        <Pagination
+          value={page}
+          loading={rows.loading}
+          showLoadingStatus={false}
+          change={(number) => change({ ...query, page: number })}
+        />
+      )}
     </>
   );
 }

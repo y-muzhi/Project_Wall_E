@@ -346,7 +346,7 @@ def test_owned_stop_retires_runtime_but_preserves_unknown_resume(waiting, ready,
     assert len(driver.sends) == 1
 
 
-def test_resume_rechecks_budget_before_registering_native_dispatch(waiting):
+def test_local_amount_does_not_block_reopening_the_original_window(waiting):
     db, runtime, client, previous, credential, admissions, path, data = waiting
     with db.transaction(write=True) as connection:
         connection.execute(
@@ -360,12 +360,13 @@ def test_resume_rechecks_budget_before_registering_native_dispatch(waiting):
         runtime, driver, admissions, cancelled=lambda: False
     )
     result = original_operation(client, identity)
-    assert result['status'] == 'FAILED' and result['failure_code'] == 'CONFIG_NOT_READY'
-    assert [step['status'] for step in result['steps']] == ['SUCCEEDED', 'FAILED', 'PENDING']
-    assert not driver.sends and not driver.reads
+    assert result['status'] == 'SUCCEEDED'
+    assert [step['status'] for step in result['steps']] == ['SUCCEEDED'] * 3
+    assert len(driver.sends) == 1
     with db.transaction() as connection:
-        assert read_original_window_state(connection, previous, credential) == 'HELD'
-    assert client.get(path).json()['data']['status'] == 'WAITING'
+        assert read_original_window_state(connection, previous, credential) is None
+        assert read_original_window_state(connection, driver.sends[0], credential) == 'OPEN'
+    assert client.get(path).json()['data']['status'] == 'RUNNING'
 
 
 @pytest.mark.parametrize('invalid', [None, 'extra_child', 'incomplete', 'closed', 'changed_owner'])

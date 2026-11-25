@@ -58,6 +58,7 @@ class GetRequirementRequest:
     progress_group: str | None = None
     progress_cursor: str | None = None
     progress_step_ref: str | None = None
+    include_document_runs: bool = False
 
     @classmethod
     def parse(cls, request: Request):
@@ -71,6 +72,7 @@ class GetRequirementRequest:
                 'progress_group',
                 'progress_cursor',
                 'progress_step_ref',
+                'include_document_runs',
             ),
         )
         expand = (
@@ -83,6 +85,9 @@ class GetRequirementRequest:
         )
         from backend.app.shared.validation import reject
 
+        include_runs = query.get('include_document_runs')
+        if include_runs not in (None, '1'):
+            reject('include_document_runs', 'INVALID_FORMAT', '如需文档运行状态，请使用 1')
         if progress and (expand != 'discussion' or 'document_id' not in query):
             reject('progress_view', 'INVALID_FORMAT', '进展摘要需要文档和讨论范围')
         if 'progress_limit' in query and progress is None:
@@ -100,6 +105,7 @@ class GetRequirementRequest:
             query.get('progress_group'),
             query.get('progress_cursor'),
             query.get('progress_step_ref'),
+            include_runs == '1',
         )
 
 

@@ -16,7 +16,6 @@ from .coding_model_admission import effective_coding_binding
 from .coding_model_ledger import _consecutive_failures, budget_facts
 from .coding_model_listener import CodingGatewayError
 from .coding_model_wait import read_task_waits
-from .costs import reserve_cost
 from .task_model_ingress import ModelWindow, read_original_window_state
 from .task_resume import ACTIVE, model_resume_window, model_waits_cleared, original_resume_steps
 from .task_start_session import StartSessionScope, original_active_session_scope
@@ -160,16 +159,8 @@ def _model_capacity_available(connection, catalog, admissions, previous, at):
     except CodingGatewayError:
         return False
     budget = budget_facts(connection, previous.task_id, binding.budget_micro)
-    prices = binding.prices
-    required = reserve_cost(
-        binding.contract.input_cap,
-        binding.contract.permitted_output,
-        max([prices.input_micro, *(item.price_micro for item in prices.cache)]),
-        prices.output_micro,
-    )
     return (
         budget.requests < binding.max_requests
-        and budget.available >= required
         and _consecutive_failures(connection, previous.task_id, binding.max_consecutive_failures)
         < binding.max_consecutive_failures
     )

@@ -45,11 +45,11 @@ def check(args):
     if args.database is not None:
         from backend.app.infrastructure.collaboration_provider import admission_for
         from backend.app.infrastructure.formation_database import FormationDatabase
-        from backend.app.infrastructure.formation_schema_release import load_release
         from backend.app.infrastructure.process_lock import ProcessLock
+        from backend.app.infrastructure.review_schema import load_configured_release
 
         database = FormationDatabase(
-            args.database.resolve(), formation_release=load_release(), read_only=True
+            args.database.resolve(), formation_release=load_configured_release(), read_only=True
         )
         with database.transaction():
             pass
@@ -241,15 +241,19 @@ def start(args):
     runtime()
     from backend.app.infrastructure.collaboration_provider import admission_for
     from backend.app.infrastructure.formation_database import FormationDatabase
-    from backend.app.infrastructure.formation_schema_release import load_release
+    from backend.app.infrastructure.review_schema import load_configured_release
     from backend.app.infrastructure.local_credentials import read_local_credential
-    from backend.app.infrastructure.model_profile import OPENAI_PROFILE, ModelProfile
+    from backend.app.infrastructure.model_profile import (
+        OPENAI_DOCUMENT_PROFILE,
+        OPENAI_PROFILE,
+        ModelProfile,
+    )
     from backend.app.infrastructure.openai_protocol import BASE_URL
     from backend.app.infrastructure.process_lock import ProcessLock
 
     profile, catalog = profile_and_catalog()
     database = FormationDatabase(
-        args.database.resolve(), formation_release=load_release(), read_only=True
+        args.database.resolve(), formation_release=load_configured_release(), read_only=True
     )
     with database.transaction():
         pass
@@ -263,10 +267,29 @@ def start(args):
             raise ValueError('Activation digest differs from selected OpenAI release')
         os.environ['WALLE_ACTIVATED_OPENAI_RELEASE_SHA256'] = activated
     catalog.collaboration.require_live(profile.snapshot, admission=proof)
+    os.environ.pop('WALLE_ACTIVATED_OPENAI_DOCUMENT_RELEASE_SHA256', None)
+    document_catalog = catalog.for_document_operation('GENERATE')
+    document_activation = args.activate_document_release
+    if document_catalog is not catalog:
+        document_profile = ModelProfile(profile.api_key, OPENAI_DOCUMENT_PROFILE)
+        document_release = document_catalog.collaboration
+        if document_activation is not None:
+            if document_activation != document_release.release_sha256:
+                raise ValueError('Activation digest differs from the document release')
+            os.environ['WALLE_ACTIVATED_OPENAI_DOCUMENT_RELEASE_SHA256'] = document_activation
+        document_proof = admission_for(
+            database, ProcessLock.for_database(database.path), document_catalog
+        ).current(document_profile.snapshot)
+        document_release.require_live(document_profile.snapshot, admission=document_proof)
+    elif document_activation is not None:
+        raise ValueError('Selected OpenAI service has no separate document release')
     print(
-        'OPENAI_START release=' + catalog.collaboration.release_sha256
-        + ' admission=' + proof.value['state']
-        + ' activation=' + ('explicit' if activated else 'verified'),
+        'OPENAI_START release='
+        + catalog.collaboration.release_sha256
+        + ' admission='
+        + proof.value['state']
+        + ' activation='
+        + ('explicit' if activated else 'verified'),
         flush=True,
     )
     key = read_local_credential(args.credential_file, name='OPENAI_API_KEY')
@@ -281,9 +304,36 @@ def start(args):
     )
     os.environ.pop('WALLE_MODEL_API_KEY', None)
     from backend.app.__main__ import main as native
+    from backend.app.infrastructure.review_schema import LAYOUT_NAME
 
     add_type('font/woff2', '.woff2')
-    native(port=args.port, schema_version=210)
+    if database.formation_release.release_id != LAYOUT_NAME:
+        native(port=args.port, schema_version=210)
+        return 0
+
+    import uvicorn
+    from backend.app.code_tasks.local_deployment import hold_configured_deployment
+    from backend.app.service import create_app
+
+    local_database = FormationDatabase(
+        args.database.resolve(), formation_release=database.formation_release
+    )
+    frontend = Path(os.environ.get('WALLE_FRONTEND_DIST', str(ROOT / 'frontend' / 'dist')))
+    with hold_configured_deployment() as installation:
+        uvicorn.run(
+            create_app(
+                database=local_database,
+                frontend_directory=frontend,
+                registration_installation=installation,
+                schema_version=210,
+            ),
+            host='127.0.0.1',
+            port=args.port,
+            workers=1,
+            reload=False,
+            timeout_graceful_shutdown=10,
+            log_level='info',
+        )
     return 0
 
 
@@ -292,7 +342,16 @@ def main(argv=None):
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--observe', action='store_true')
     action.add_argument('--start', action='store_true')
-    parser.add_argument('--activate-release', metavar='SHA256', help='Start the selected offline-ready OpenAI release by its exact digest')
+    parser.add_argument(
+        '--activate-release',
+        metavar='SHA256',
+        help='Start the selected offline-ready OpenAI release by its exact digest',
+    )
+    parser.add_argument(
+        '--activate-document-release',
+        metavar='SHA256',
+        help='Explicitly activate the offline-ready OpenAI document release',
+    )
     parser.add_argument('--database', type=Path)
     parser.add_argument('--credential-file', type=Path, default=ROOT / '.env.openai.local')
     parser.add_argument('--slot', type=Path)
@@ -301,8 +360,10 @@ def main(argv=None):
     parser.add_argument('--count-limit', type=int, choices=(1, 2, 3), default=3)
     parser.add_argument('--proxy', help='Explicit credential-free local HTTP proxy for OpenAI only')
     args = parser.parse_args(argv)
-    if args.activate_release is not None and not args.start:
-        parser.error('--activate-release only applies to service startup')
+    if (
+        args.activate_release is not None or args.activate_document_release is not None
+    ) and not args.start:
+        parser.error('Release activation only applies to service startup')
     if not 1024 <= args.port <= 65535:
         parser.error('A valid local HTTP port is required')
     from backend.app.infrastructure.openai_transport import configured_proxy, validate_proxy

@@ -271,6 +271,7 @@ def submit(executor, payload, *, catalog=None, clock=None):
                 'DISCUSSION_VERSION_CONFLICT',
                 'CONTENT_VERSION_CONFLICT',
                 'SOURCE_VERSION_CONFLICT',
+                'BATCH_PENDING',
                 'TARGET_STALE',
                 'DOCUMENT_INVALID',
                 'CONFIG_INVALID',

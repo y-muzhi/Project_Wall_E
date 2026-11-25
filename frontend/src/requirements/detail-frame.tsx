@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { ReactNode, CSSProperties } from 'react';
+import type { ReactNode, CSSProperties, MouseEvent } from 'react';
 import { DetailLayout, DetailViewportGuard, minimumDetailWidth } from './detail-layout.ts';
 import type { DetailTab } from './detail-layout.ts';
 import { Icon } from '../shared/icon.tsx';
@@ -60,6 +60,7 @@ export function DetailFrame(props: DetailFrameProps) {
       supported,
     );
   const rightToggle = useRef<HTMLButtonElement>(null),
+    rightOpener = useRef<HTMLButtonElement>(null),
     recordsBack = useRef<HTMLButtonElement>(null),
     previousTab = useRef(state.right_tab);
   useLayoutEffect(() => {
@@ -87,6 +88,23 @@ export function DetailFrame(props: DetailFrameProps) {
   const [panelError, setPanelError] = useState(false),
     [panelRetry, setPanelRetry] = useState(0);
   const supported = state.mode !== 'BLOCKED' && guard.phase === 'SUPPORTED';
+  const openConversation = (event: MouseEvent<HTMLButtonElement>) => {
+    rightOpener.current = event.currentTarget;
+    transition(() => props.layout.openTab('AI'));
+  };
+  const closePanel = () => {
+    const opener = rightOpener.current;
+    rightOpener.current = null;
+    transition(() => props.layout.toggleRight());
+    const target = opener?.getClientRects().length ? opener : rightToggle.current;
+    target?.focus({ preventScroll: true });
+  };
+  const expandPanel = state.right_width < state.right_max - 1;
+  const resizeUnavailable = !supported
+    ? '状态同步完成后可调整面板宽度'
+    : state.right_max < 380
+      ? '当前窗口没有足够的调宽空间'
+      : undefined;
   // Revalidation gates interaction, not the last confirmed picture. Hiding
   // columns on every focus return collapses their geometry and flashes the page.
   const visible = state.mode !== 'BLOCKED';
@@ -220,9 +238,16 @@ export function DetailFrame(props: DetailFrameProps) {
                       type="button"
                       disabled={!supported}
                       aria-pressed={state.right_open}
-                      onClick={() => transition(() => props.layout.openTab('AI'))}
+                      onClick={(event) => {
+                        if (state.right_tab !== 'SUGGESTIONS') {
+                          openConversation(event);
+                          return;
+                        }
+                        rightOpener.current = event.currentTarget;
+                        transition(() => props.layout.openTab('SUGGESTIONS'));
+                      }}
                     >
-                      Ai对话
+                      {state.right_tab === 'SUGGESTIONS' ? '修改建议' : 'Ai对话'}
                     </button>
                   </div>
                 )}
@@ -250,7 +275,7 @@ export function DetailFrame(props: DetailFrameProps) {
                   title="Ai助手"
                   aria-expanded={state.right_open && state.right_tab === 'AI'}
                   aria-controls="detail-panel-AI"
-                  onClick={() => transition(() => props.layout.openTab('AI'))}
+                  onClick={openConversation}
                 >
                   <Icon name="robot" />
                   Ai助手
@@ -442,30 +467,23 @@ export function DetailFrame(props: DetailFrameProps) {
           aria-label="辅助面板"
         >
           <div className="detail-panel-heading">
-            <button
-              className="ui-button icon-button detail-panel-width"
-              type="button"
-              disabled={!supported || !state.split_view || state.right_max < 380}
-              aria-label={
-                state.right_width < state.right_max - 1 ? '展开辅助面板宽度' : '收窄辅助面板宽度'
-              }
-              title={
-                state.right_max < 380
-                  ? '当前窗口没有足够的调宽空间'
-                  : state.right_width < state.right_max - 1
-                    ? '展开至当前可用最大宽度'
-                    : '收窄至360px'
-              }
-              onClick={() =>
-                transition(() =>
-                  props.layout.resizeRight(
-                    state.right_width < state.right_max - 1 ? state.right_max : 360,
-                  ),
-                )
-              }
-            >
-              <Icon name="panel" />
-            </button>
+            {state.split_view && (
+              <button
+                className="ui-button icon-button detail-panel-width"
+                type="button"
+                disabled={resizeUnavailable !== undefined}
+                aria-label={expandPanel ? '展开辅助面板宽度' : '收窄辅助面板宽度'}
+                aria-description={resizeUnavailable}
+                title={
+                  resizeUnavailable ?? (expandPanel ? '展开至当前可用最大宽度' : '收窄至360px')
+                }
+                onClick={() =>
+                  transition(() => props.layout.resizeRight(expandPanel ? state.right_max : 360))
+                }
+              >
+                <Icon name="panel" />
+              </button>
+            )}
             <div className="detail-panel-record-heading" hidden={state.right_tab !== 'REVISIONS'}>
               <button
                 ref={recordsBack}
@@ -528,10 +546,7 @@ export function DetailFrame(props: DetailFrameProps) {
               disabled={!supported}
               aria-label="关闭辅助面板"
               title="关闭辅助面板"
-              onClick={() => {
-                transition(() => props.layout.toggleRight());
-                rightToggle.current?.focus({ preventScroll: true });
-              }}
+              onClick={closePanel}
             >
               <Icon name="close" />
             </button>
