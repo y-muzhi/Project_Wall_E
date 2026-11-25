@@ -9,6 +9,7 @@ import asyncio
 import os
 import sys
 from hashlib import sha256
+from mimetypes import add_type
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -281,6 +282,7 @@ def start(args):
     os.environ.pop('WALLE_MODEL_API_KEY', None)
     from backend.app.__main__ import main as native
 
+    add_type('font/woff2', '.woff2')
     native(port=args.port, schema_version=210)
     return 0
 
