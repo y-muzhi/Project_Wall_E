@@ -7,6 +7,8 @@ import { snapshotObject } from '../api/client.ts';
 import { installSourceNodes } from '../documents/source-nodes.ts';
 import { installIdentityAttributes, installIdentityState } from '../documents/identity.ts';
 import type { Revision } from './read.ts';
+import { loadDrawingCanvas } from '../documents/drawing-assets.ts';
+import type { DrawingCanvas } from '../documents/drawing-canvas.tsx';
 
 /** Actual RevisionReadModel viewer. No fake document_type/content_version or
  * editing ledger is created to masquerade this snapshot as CURRENT/draft. */
@@ -15,6 +17,7 @@ export class RevisionViewer {
   private readonly crepe: Crepe;
   private readonly host: HTMLElement;
   private readonly initial: Node;
+  private drawing: DrawingCanvas | null = null;
   private retiring: Promise<void> | undefined;
   private constructor(crepe: Crepe, host: HTMLElement, snapshot: Revision) {
     this.crepe = crepe;
@@ -39,10 +42,16 @@ export class RevisionViewer {
     });
     crepe.setReadonly(true);
   }
-  static async create(root: HTMLElement, input: Revision): Promise<RevisionViewer> {
+  static async create(
+    root: HTMLElement,
+    input: Revision,
+    drawing = false,
+  ): Promise<RevisionViewer> {
     input = snapshotObject(input) as unknown as Revision;
     const host = document.createElement('div');
     host.className = 'revision-document-view';
+    host.hidden = drawing;
+    host.inert = drawing;
     root.append(host);
     const crepe = new Crepe({
       root: host,
@@ -72,7 +81,12 @@ export class RevisionViewer {
       );
       await crepe.create();
       const actual = crepe.editor.action((ctx) => revisionDecoder(ctx)(input));
-      return new RevisionViewer(crepe, host, actual);
+      const viewer = new RevisionViewer(crepe, host, actual);
+      if (drawing) {
+        const { mountDrawingCanvas } = await loadDrawingCanvas();
+        viewer.drawing = mountDrawingCanvas(root, actual.markdown_content);
+      }
+      return viewer;
     } catch (error) {
       await crepe.destroy();
       host.remove();
@@ -95,6 +109,7 @@ export class RevisionViewer {
   }
   destroy(): Promise<void> {
     if (this.retiring) return this.retiring;
+    this.drawing?.destroy();
     const promise = this.crepe.destroy().then(() => {
       this.host.remove();
     });

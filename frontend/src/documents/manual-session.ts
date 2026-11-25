@@ -120,6 +120,7 @@ export class ManualDraftSession {
         },
       },
       target.document_kind === 'SPECIFICATION' && target.template_ref !== null ? target : null,
+      target.document_kind === 'DRAWING',
     );
     try {
       const id = initial.requirement.id;

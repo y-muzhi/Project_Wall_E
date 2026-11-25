@@ -1,6 +1,8 @@
 """Historical reads; never substitute current body, comments or source versions."""
 
 from backend.app.documents.sources import DocumentSources
+from backend.app.documents.drawing import is_drawing, validate_drawing
+from backend.app.infrastructure.document_repository import DocumentRepository
 from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.infrastructure.revision_repository import RevisionRepository
@@ -40,6 +42,11 @@ def get_revision(
             if row is None:
                 result = {'code': 'NOT_FOUND', 'data': None, 'details': None}
             else:
+                document = DocumentRepository(connection).get_current(
+                    row['requirement_id'], row['document_id']
+                )
+                if document is not None and is_drawing(document):
+                    validate_drawing(row['markdown_snapshot'])
                 sources = DocumentSources(
                     connection,
                     row['requirement_id'],

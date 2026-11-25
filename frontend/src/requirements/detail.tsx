@@ -187,7 +187,12 @@ function LoadedDetail({
     };
   }
   function visitDocumentCodeTasks(documentId: number) {
-    if (!openCodeTasks || codeTasksBlocked) return;
+    if (
+      !openCodeTasks ||
+      codeTasksBlocked ||
+      actual.documents.find((item) => item.id === documentId)?.document_kind === 'DRAWING'
+    )
+      return;
     openCodeTasks(
       actual.requirement.id,
       readCodeDocument(documentId),
@@ -270,7 +275,16 @@ function LoadedDetail({
                     <button
                       className="ui-button"
                       type="button"
-                      disabled={selectedDocument === null || codeTasksBlocked}
+                      disabled={
+                        selectedDocument === null ||
+                        codeTasksBlocked ||
+                        actual.current?.document_kind === 'DRAWING'
+                      }
+                      title={
+                        actual.current?.document_kind === 'DRAWING'
+                          ? '画板不能作为文字设计依据'
+                          : undefined
+                      }
                       onClick={visitSelectedCodeTasks}
                     >
                       代码任务

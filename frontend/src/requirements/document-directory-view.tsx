@@ -91,6 +91,7 @@ function CreateDocumentDialog({
     pending = useRef(false);
   const id = useId();
   const locked = !open || ['SUBMITTING', 'UNKNOWN', 'CONFIRMED'].includes(state.phase);
+  const drawing = kind === 'DRAWING';
   const requestClose = () => {
     if (locked) return;
     if (name.length > 0 || kind !== 'REQUIREMENT_BRIEF' || framework) setDiscard(true);
@@ -161,7 +162,7 @@ function CreateDocumentDialog({
                   framework && kind === 'REQUIREMENT_BRIEF' ? documentStructureRefs[kind]! : null,
                 ...(kind === 'REQUIREMENT_BRIEF'
                   ? {}
-                  : { initial_content: framework ? 'FRAMEWORK' : 'EMPTY' }),
+                  : { initial_content: framework && !drawing ? 'FRAMEWORK' : 'EMPTY' }),
               });
       if (done) {
         owner.toasts.push('success', '文档已创建');
@@ -248,24 +249,28 @@ function CreateDocumentDialog({
                   change={(value) => setKind(value as typeof kind)}
                 />
               </div>
-              <div>
-                <label htmlFor={id + '-content'}>初始内容</label>
-                <SingleSelect
-                  id={id + '-content'}
-                  label="初始内容"
-                  value={framework ? 'FRAMEWORK' : 'EMPTY'}
-                  disabled={locked}
-                  options={[
-                    { value: 'EMPTY', label: '空白文档' },
-                    { value: 'FRAMEWORK', label: '固定框架' },
-                  ]}
-                  change={(value) => setFramework(value === 'FRAMEWORK')}
-                />
-              </div>
+              {!drawing && (
+                <div>
+                  <label htmlFor={id + '-content'}>初始内容</label>
+                  <SingleSelect
+                    id={id + '-content'}
+                    label="初始内容"
+                    value={framework ? 'FRAMEWORK' : 'EMPTY'}
+                    disabled={locked}
+                    options={[
+                      { value: 'EMPTY', label: '空白文档' },
+                      { value: 'FRAMEWORK', label: '固定框架' },
+                    ]}
+                    change={(value) => setFramework(value === 'FRAMEWORK')}
+                  />
+                </div>
+              )}
               <p className="field-help">
-                {framework
-                  ? '预置所选类型的章节，创建后可继续填写正文。'
-                  : '从空白正文开始，创建后可直接编辑。'}
+                {drawing
+                  ? '创建空白画板。'
+                  : framework
+                    ? '预置所选类型的章节，创建后可继续填写正文。'
+                    : '从空白正文开始，创建后可直接编辑。'}
                 此操作不调用 AI。
               </p>
               {(error || state.error) && (
@@ -362,7 +367,8 @@ export function DocumentDirectory({
             className="ui-button document-directory-code-action"
             type="button"
             aria-label={document.name + '的代码任务'}
-            disabled={codeTasksBlocked}
+            disabled={codeTasksBlocked || document.document_kind === 'DRAWING'}
+            title={document.document_kind === 'DRAWING' ? '画板不能作为文字设计依据' : undefined}
             onClick={() => codeTasks(document.id)}
           >
             代码任务

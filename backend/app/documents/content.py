@@ -18,6 +18,7 @@ from backend.app.shared.command_execution import Rejected
 from backend.app.shared.validation import strict_json_object
 from .contracts import document_effect
 from .design_profiles import DESIGN_KEYS
+from .drawing import is_drawing, validate_drawing
 from .snapshot import validate_snapshot, validate_creation_inheritance
 from .sources import DocumentSources
 
@@ -28,6 +29,9 @@ def validate_structure(candidate, prior, current, resources):
     The subset is the actual document's template headings, so omitted conditional
     sections are not silently manufactured from the full source template.
     """
+    if is_drawing(current):
+        validate_drawing(candidate.parsed.markdown)
+        return
     if current['document_kind'] != 'SPECIFICATION' or current['template_ref'] is None:
         return
     reference = strict_json_object(current['template_ref'])
@@ -81,6 +85,8 @@ def commit_content(
         raise Rejected('CONTENT_VERSION_CONFLICT')
     if actual['archived_at'] is not None:
         raise Rejected('STATE_CONFLICT')
+    if is_drawing(actual) and source_type != 'MANUAL_EDIT':
+        raise Rejected('DOCUMENT_INVALID')
     root = RequirementRepository(connection).get(current['requirement_id'])
     kinds = {
         'MANUAL_EDIT': ('MANUAL_EDITING', 'MANUAL_DRAFT'),

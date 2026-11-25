@@ -14,7 +14,12 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": false,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@excalidraw/math": ["./node_modules/@excalidraw/excalidraw/dist/types/math/index.d.ts"],
+      "@excalidraw/utils/*": ["./node_modules/@excalidraw/excalidraw/dist/types/utils/*.d.ts"],
+      "browser-fs-access": ["./node_modules/browser-fs-access/index.d.ts"]
+    }
   },
   "include": ["src", "tests/browser"]
 }

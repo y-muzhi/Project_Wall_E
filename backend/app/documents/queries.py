@@ -12,6 +12,7 @@ from .contracts import (
     get_manual_draft_result,
 )
 from .sources import DocumentSources
+from .drawing import is_drawing, validate_drawing
 
 
 def current_document_view(connection, row, catalog):
@@ -22,6 +23,8 @@ def current_document_view(connection, row, catalog):
     source = DocumentSources(connection, row['requirement_id'], catalog, document_id=row['id'])
     state = strict_json_object(row['block_state_json'])
     validate_snapshot(row['markdown_content'], state, source)
+    if is_drawing(row):
+        validate_drawing(row['markdown_content'])
     summary = next(
         item
         for item in DocumentRepository(connection).list_current_summaries(row['requirement_id'])

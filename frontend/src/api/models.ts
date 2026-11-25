@@ -319,6 +319,7 @@ export const creatableDocumentKinds = [
   'REQUIREMENT_BRIEF',
   'FRONTEND_DESIGN',
   'BACKEND_DESIGN',
+  'DRAWING',
 ] as const;
 export const documentKinds = [...creatableDocumentKinds, 'DESIGN', 'SPECIFICATION'] as const;
 export const documentSummaryFields = {
