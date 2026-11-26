@@ -14,7 +14,7 @@ from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.model_profile import OPENAI_DOCUMENT_PROFILE, ModelProfile
 from backend.app.infrastructure.batch_repository import INDEPENDENT_REVIEW_RELEASES
-from backend.app.infrastructure.process_lock import ProcessLock, matches_database
+from backend.app.infrastructure.process_lock import matches_database
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.infrastructure.tokenization import ExactCountUnavailable
 from backend.app.shared.command_execution import Rejected, operation_time
