@@ -367,13 +367,15 @@ def test_fenced_unsent_preserves_call_number_and_releases_only_its_reserve(opene
         assert [tuple(row) for row in rows] == [(1, None, 'RELEASED_UNSENT'), (2, None, 'SETTLED')]
 
 
-def test_budget_and_credential_reject_before_supplier_or_llm_use(opened):
+def test_local_amount_does_not_block_and_invalid_credentials_still_stop_the_call(opened):
     db, runtime, client, proof, reference, admission = opened
 
-    def never(_):
-        pytest.fail('Supplier transport should not have been invoked')
-
-    gateway = _build(runtime, admission, never)
+    requests = []
+    gateway = _build(
+        runtime,
+        admission,
+        lambda request: requests.append(request) or _reply(admission.model.model_name, 'complete'),
+    )
     with pytest.raises(CodingModelProtocolError):
         _invoke(
             gateway,
@@ -386,27 +388,17 @@ def test_budget_and_credential_reject_before_supplier_or_llm_use(opened):
         connection.execute(
             "UPDATE code_tasks SET budget_limit_cny='0.000001' WHERE id=?", (proof.window.task_id,)
         )
-    with pytest.raises(CodingGatewayError, match='budget'):
-        _invoke(gateway, reference, proof, lambda _: None)
+    assert not requests
     with db.transaction() as connection:
         assert connection.execute('SELECT COUNT(*) FROM llm_uses').fetchone()[0] == 0
-
-    with pytest.raises(CodingGatewayError, match='hold'):
-        _invoke(gateway, reference, proof, lambda _: None)
+    _invoke(gateway, reference, proof, lambda _: None)
+    assert len(requests) == 1
     response = client.get(f'/api/v1/code-tasks/{proof.window.task_id}')
     assert response.status_code == 200, response.text
     detail = response.json()['data']
-    assert detail['status'] == 'WAITING' and detail['state_version'] == 5
-    assert detail['budget']['reserved_cny'] == '0.000000'
-    (waiting,) = detail['waiting_items']
-    assert (waiting['kind'], waiting['source_kind'], waiting['source_id']) == (
-        'BUDGET',
-        'OPERATION',
-        proof.window.operation_id,
-    )
-    assert client.get(f'/api/v1/code-tasks/{proof.window.task_id}/model-calls').json()['data'] == {
-        'items': []
-    }
+    assert detail['status'] == 'RUNNING' and not detail['waiting_items']
+    assert detail['budget']['settled_cny'] == '0.000118'
+    assert detail['budget']['available_cny'] == '-0.000117'
 
 
 @pytest.mark.parametrize('state', ['unsent', 'sending'])

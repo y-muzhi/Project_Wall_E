@@ -269,7 +269,6 @@ def _create(connection, data, *, catalog, runtime_resources):
         or grant['testing_task_id'] is not None
         or grant['validation_id'] is not None
         or grant['profile_version_id'] != data['profile_version_id']
-        or parse_money(grant['budget_limit_cny']) < parse_money(data['budget_limit_cny'])
     ):
         return grant_rejection(data['authorization_id'])
     asset_error = matching_product_assets(connection, data)

@@ -61,6 +61,7 @@ export class ManualDraftEnd {
   private readonly cache: Cache;
   private readonly current: DocumentReadModel;
   private readonly draft: DocumentReadModel;
+  readonly stale: boolean;
   private readonly listeners = new Set<() => void>();
   private pending: Promise<boolean> | undefined;
   private pendingOperation: 'COMPLETE' | 'CANCEL' | undefined;
@@ -81,6 +82,7 @@ export class ManualDraftEnd {
     editor: Editor,
     autosave: Autosave,
     cache: Cache,
+    baseContentVersion = current.content_version,
   ) {
     if (
       current.document_type !== 'CURRENT' ||
@@ -92,6 +94,7 @@ export class ManualDraftEnd {
       throw new TypeError('Actual current/draft session required');
     this.current = capture(current);
     this.draft = capture(draft);
+    this.stale = baseContentVersion !== current.content_version;
     this.api = api;
     this.editor = editor;
     this.autosave = autosave;
@@ -141,7 +144,7 @@ export class ManualDraftEnd {
     return pending;
   }
   complete(): Promise<boolean> {
-    if (this.value.phase === 'UNKNOWN' || this.value.phase === 'CHECKING')
+    if (this.stale || this.value.phase === 'UNKNOWN' || this.value.phase === 'CHECKING')
       return Promise.resolve(false);
     return this.run('COMPLETE', async () => {
       this.publish({ phase: 'PREPARING', operation: 'COMPLETE', error: null });
@@ -190,7 +193,8 @@ export class ManualDraftEnd {
       if (this.disposed) return false;
       if (
         root.data.document_work_state !== 'MANUAL_EDITING' ||
-        root.data.active_operation_id !== this.draft.id ||
+        (root.data.active_operation_id !== this.draft.id &&
+          draft.data.target_document_id !== this.current.id) ||
         draft.data.id !== this.draft.id
       )
         throw Error('Manual occupancy changed');
@@ -300,11 +304,16 @@ export class ManualDraftEnd {
       return false;
     }
   }
+  async waitForEnding(): Promise<void> {
+    await this.pending;
+  }
   continueEditing(): boolean {
     if (this.disposed || this.pending || this.value.phase !== 'ERROR') return false;
     this.action = undefined;
-    this.autosave.resumeEditing();
-    this.editor.setReadonly(false);
+    if (!this.stale) {
+      this.autosave.resumeEditing();
+      this.editor.setReadonly(false);
+    }
     this.publish({ phase: 'EDITING', operation: null, error: null });
     return true;
   }

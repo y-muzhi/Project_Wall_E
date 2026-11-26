@@ -151,6 +151,15 @@ class DocumentRepository:
             raise ValueError('Document metadata changed inside shared transaction')
         return self.get_current(current['requirement_id'], current['id'])
 
+    def _stored_manual_draft(self, requirement_id: int, draft_id: int) -> sqlite3.Row:
+        row = self.connection.execute(
+            "SELECT d.*,c.base_content_version FROM requirement_documents d JOIN manual_draft_context c ON c.draft_id=d.id WHERE d.id=? AND d.requirement_id=? AND d.document_type='MANUAL_DRAFT'",
+            (draft_id, requirement_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError('Owned draft disappeared inside shared transaction')
+        return row
+
     def create_manual_draft(self, identity: int, current: sqlite3.Row, at: str) -> sqlite3.Row:
         require_write_transaction(self.connection)
         if current['document_type'] != 'CURRENT' or identity == current['id']:
@@ -175,10 +184,7 @@ class DocumentRepository:
             "INSERT INTO manual_draft_context(draft_id,current_document_id,base_content_version,baseline_block_state_json,operation_time,source_refs_json) VALUES (?,?,?,?,?,'[]')",
             (identity, current['id'], current['content_version'], current['block_state_json'], at),
         )
-        rows = self.by_requirement(current['requirement_id'], 'MANUAL_DRAFT')
-        if len(rows) != 1 or rows[0]['id'] != identity:
-            raise ValueError('Inserted draft is not unique')
-        return rows[0]
+        return self._stored_manual_draft(current['requirement_id'], identity)
 
     def delete_manual_draft(self, draft: sqlite3.Row) -> None:
         require_write_transaction(self.connection)
@@ -214,10 +220,7 @@ class DocumentRepository:
         )
         if result.rowcount != 1:
             raise ValueError('Draft version changed within the shared write transaction')
-        rows = self.by_requirement(draft['requirement_id'], 'MANUAL_DRAFT')
-        if len(rows) != 1 or rows[0]['id'] != draft['id']:
-            raise ValueError('Updated draft is not unique')
-        return rows[0]
+        return self._stored_manual_draft(draft['requirement_id'], draft['id'])
 
     def replace_current(self, current: sqlite3.Row, snapshot, version: int, at: str) -> sqlite3.Row:
         require_write_transaction(self.connection)

@@ -1,5 +1,6 @@
 import { Icon } from './icon.tsx';
 import { useLayoutEffect, useId, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { normalizeOrdinary } from './text.ts';
 import { useMotionPresence } from './motion-react.ts';
 
@@ -201,6 +202,7 @@ export function SearchInput({
   disabled = false,
   draft,
   submit,
+  inputRef,
 }: Readonly<{
   value: string;
   submitted: string;
@@ -208,9 +210,12 @@ export function SearchInput({
   disabled?: boolean;
   draft(value: string): void;
   submit(value: string): void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }>) {
-  const composing = useRef(false),
-    input = useRef<HTMLInputElement>(null);
+  const composing = useRef(false);
+  const localInput = useRef<HTMLInputElement>(null);
+  const input = inputRef ?? localInput;
+  const canClear = value !== '' || submitted !== '';
   const search = () => {
     if (!disabled && !composing.current) {
       let normalized = value;
@@ -253,10 +258,9 @@ export function SearchInput({
       />
       <button
         type="button"
-        className={'ui-button ' + ('icon-button search-clear' + (!value ? ' hidden-control' : ''))}
-        disabled={disabled || !value}
-        tabIndex={value ? 0 : -1}
-        aria-hidden={!value}
+        className={'ui-button icon-button search-clear' + (canClear ? '' : ' hidden-control')}
+        disabled={disabled || !canClear}
+        aria-hidden={!canClear}
         aria-label="清除"
         title="清除"
         onClick={clear}

@@ -201,7 +201,7 @@ def project_message(
     return message_read_model(data)
 
 
-def list_messages(database, payload, *, catalog=None):
+def list_messages(database, payload, *, catalog=None, include_operations=False):
     try:
         request = list_messages_input(payload)
     except InvalidInput as error:
@@ -254,6 +254,22 @@ def list_messages(database, payload, *, catalog=None):
                     )
                     for row in rows
                 ]
+                if include_operations:
+                    from .operation_receipts import read_guide_operations
+
+                    receipts, audited_runs = read_guide_operations(
+                        connection, root['id'], request.document_id, {item['id'] for item in items}
+                    )
+                    for item in items:
+                        if item['role'] == 'USER' and item['id'] in receipts:
+                            item['guide_operations'] = receipts[item['id']]
+                        if (
+                            item['role'] == 'ASSISTANT'
+                            and item['message_type'] == 'TEXT'
+                            and item['guide_run_id'] in audited_runs
+                        ):
+                            item['audited_document_output'] = True
+                            item['content'] = '文档操作结果已记录。'
                 more = bool(rows) and repository.older_exists(
                     root['id'], rows[0]['sequence_no'], request.document_id
                 )

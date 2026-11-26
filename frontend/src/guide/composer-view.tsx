@@ -13,7 +13,8 @@ import { SingleSelect } from '../shared/single-select.tsx';
 import { Icon } from '../shared/icon.tsx';
 const names = {
   DISCUSS: '讨论',
-  REVISE: '写入当前文档',
+  REVISE: '修订当前文档',
+  PROPOSE_CHANGES: '仅提出建议',
 } as const;
 
 const quietSubscribe = () => () => {};
@@ -65,7 +66,7 @@ export function GuideComposer({
   const route = workspace?.read.getSnapshot().summary.data;
   const help = useId();
   const target = state.target;
-  const writing = state.action === 'REVISE';
+  const writing = state.action !== 'DISCUSS';
   const available = state.available && !document.busy && document.mode === 'CURRENT';
   const disabled = !available || !owner.editable || state.refreshing;
   const inputDisabled = !available || !owner.instructionEditable;
@@ -236,7 +237,7 @@ export function GuideComposer({
                 key={mode}
                 className="ui-button"
                 type="button"
-                aria-pressed={state.action === mode}
+                aria-pressed={mode === 'REVISE' ? writing : !writing}
                 onClick={() => owner.choose(mode)}
               >
                 {names[mode]}
@@ -281,6 +282,21 @@ export function GuideComposer({
                       })),
                     ]}
                     change={chooseScope}
+                  />
+                </label>
+                <label>
+                  处理方式
+                  <SingleSelect
+                    label="处理方式"
+                    value={state.action}
+                    disabled={
+                      disabled || topicUpdating || current === null || current.archived_at !== null
+                    }
+                    options={[
+                      { value: 'REVISE', label: '按文档状态处理' },
+                      { value: 'PROPOSE_CHANGES', label: '仅提出建议' },
+                    ]}
+                    change={(value) => owner.chooseReviewOnly(value === 'PROPOSE_CHANGES')}
                   />
                 </label>
                 <p className="field-help">

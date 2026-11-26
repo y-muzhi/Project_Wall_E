@@ -1,6 +1,6 @@
 import { ApiRejected, positiveInteger, snapshotObject } from '../api/client.ts';
 import { batch as decodeBatch } from '../api/models.ts';
-import type { Batch, Suggestion, DocumentView } from '../api/models.ts';
+import type { Batch, Suggestion, DocumentView, ReviewDetails, ReviewGroup } from '../api/models.ts';
 import type { ApiAction, WalleApi } from '../api/walle.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import type { DocumentReadModel } from '../documents/contracts.ts';
@@ -8,7 +8,7 @@ import { readSource } from '../requirements/source-reading.ts';
 import type { SourceReadApi } from '../requirements/source-reading.ts';
 
 export type Decision = 'ACCEPTED' | 'REJECTED' | 'EDITED';
-type Operation = 'DECIDE' | 'ACCEPT_PENDING' | 'COMPLETE' | 'DISCARD';
+type Operation = 'DECIDE' | 'DECIDE_GROUP' | 'ACCEPT_PENDING' | 'COMPLETE' | 'DISCARD';
 type DecisionReceipt = Awaited<
   ReturnType<ReturnType<WalleApi['prepareDecideSuggestion']>['submit']>
 >['data'];
@@ -21,7 +21,11 @@ type DiscardReceipt = Awaited<
 type AcceptPendingReceipt = Awaited<
   ReturnType<ReturnType<WalleApi['prepareAcceptPendingBatch']>['submit']>
 >['data'];
-type Receipt = DecisionReceipt | CompleteReceipt | DiscardReceipt | AcceptPendingReceipt;
+type GroupReceipt = Awaited<
+  ReturnType<ReturnType<WalleApi['prepareDecideGroup']>['submit']>
+>['data'];
+type Receipt =
+  DecisionReceipt | GroupReceipt | CompleteReceipt | DiscardReceipt | AcceptPendingReceipt;
 type Intent = Readonly<{
   operation: Operation;
   batch: Batch;
@@ -29,6 +33,8 @@ type Intent = Readonly<{
   suggestion: Suggestion | null;
   decision: Decision | null;
   content: string | null;
+  group?: ReviewGroup;
+  decisionVersion?: number;
 }>;
 type Api = Pick<
   WalleApi,
@@ -39,12 +45,15 @@ type Api = Pick<
   | 'prepareDiscardBatch'
   | 'getCurrentDocument'
 > &
-  SourceReadApi;
+  SourceReadApi &
+  Partial<Pick<WalleApi, 'getBatchReview' | 'prepareDecideGroup'>>;
 export type SuggestionBatchState = Readonly<{
   detail: DetailSnapshot;
   target: DocumentView | null;
   batch: Batch | null;
+  review: ReviewDetails | null;
   available: boolean;
+  readOnly: boolean;
   active: boolean;
   phase: 'READY' | 'ERROR' | 'SUBMITTING' | 'UNKNOWN' | 'READING' | 'CONFIRMED';
   loading: boolean;
@@ -134,7 +143,9 @@ export class RequirementSuggestionBatch {
       detail: capture(detail),
       target: null,
       batch: null,
+      review: null,
       available: false,
+      readOnly: false,
       active: true,
       phase: 'READY',
       loading: false,
@@ -206,23 +217,36 @@ export class RequirementSuggestionBatch {
     this.publish({ available });
     if (!available) this.controller?.abort();
   }
+  setReadOnly(readOnly: boolean): void {
+    if (!this.closed && this.value.readOnly !== readOnly) this.publish({ readOnly });
+  }
   private ownedPending(): boolean {
-    const { detail, batch, available } = this.value,
-      root = detail.requirement;
-    return (
-      !this.closed &&
-      available &&
-      batch?.status === 'PENDING' &&
-      root.document_work_state === 'SUGGESTION_REVIEWING' &&
-      root.active_operation_type === 'SUGGESTION_BATCH' &&
-      root.active_operation_id === this.identity &&
-      detail.activity.kind === 'BATCH' &&
-      detail.activity.batch.id === this.identity
-    );
+    const { detail, batch, available } = this.value;
+    const root = detail.requirement;
+    if (
+      this.closed ||
+      !available ||
+      this.value.readOnly ||
+      batch?.status !== 'PENDING' ||
+      batch.id !== this.identity ||
+      batch.requirement_id !== root.id
+    )
+      return false;
+    if (this.value.review?.independent)
+      return batch.target_document_id === detail.selected_document_id;
+    if (root.document_work_state === 'SUGGESTION_REVIEWING')
+      return (
+        root.active_operation_type === 'SUGGESTION_BATCH' &&
+        root.active_operation_id === this.identity &&
+        detail.activity.kind === 'BATCH' &&
+        detail.activity.batch.id === this.identity
+      );
+    return false;
   }
   get editable(): boolean {
     return (
       this.ownedPending() &&
+      this.value.target?.archived_at == null &&
       !this.value.loading &&
       !this.value.needs_refresh &&
       !this.value.stale &&
@@ -238,14 +262,23 @@ export class RequirementSuggestionBatch {
     );
   }
   get canAcceptPending(): boolean {
-    return this.editable && this.value.batch!.counts.pending > 0 && !this.hasPendingDrafts;
+    return (
+      !this.value.review?.grouped &&
+      this.editable &&
+      this.value.batch!.counts.pending > 0 &&
+      !this.hasPendingDrafts
+    );
   }
   get canComplete(): boolean {
     return this.editable && this.value.batch!.counts.pending === 0;
   }
   get canDiscard(): boolean {
     return (
-      this.ownedPending() && !this.value.loading && ['READY', 'ERROR'].includes(this.value.phase)
+      this.ownedPending() &&
+      (!this.value.review?.grouped ||
+        (!this.value.stale && this.value.target?.archived_at == null)) &&
+      !this.value.loading &&
+      ['READY', 'ERROR'].includes(this.value.phase)
     );
   }
   draft(identity: number, content: string): void {
@@ -278,7 +311,12 @@ export class RequirementSuggestionBatch {
     return pending;
   }
   private async observe(): Promise<
-    Readonly<{ detail: DetailSnapshot; batch: Batch; target: DocumentView }>
+    Readonly<{
+      detail: DetailSnapshot;
+      batch: Batch;
+      target: DocumentView;
+      review: ReviewDetails | null;
+    }>
   > {
     const epoch = this.visibility,
       alive = () => !this.closed && this.value.available && epoch === this.visibility;
@@ -290,7 +328,15 @@ export class RequirementSuggestionBatch {
       if (!alive()) throw Error('Read hidden');
       this.checkDetail(detail);
       if (detail.requirement.id !== this.value.detail.requirement.id) throw Error('Ownership');
-      const input = (await this.api.getBatch(this.identity, controller.signal)).data;
+      let reviewResponse;
+      try {
+        reviewResponse = (await this.api.getBatchReview?.(this.identity, controller.signal))?.data;
+      } catch (error) {
+        if (!(error instanceof ApiRejected) || error.code !== 'INVALID_INPUT') throw error;
+      }
+      if (!alive()) throw Error('Read hidden');
+      const input =
+        reviewResponse?.batch ?? (await this.api.getBatch(this.identity, controller.signal)).data;
       if (!alive()) throw Error('Read hidden');
       const batch = this.checked(input, detail);
       const target = (
@@ -306,7 +352,12 @@ export class RequirementSuggestionBatch {
         target.requirement_id !== batch.requirement_id
       )
         throw Error('Target read hidden or changed');
-      return { detail: capture(detail), batch, target: capture(target) };
+      return {
+        detail: capture(detail),
+        batch,
+        target: capture(target),
+        review: reviewResponse ? capture(reviewResponse.review) : null,
+      };
     } finally {
       if (this.controller === controller) this.controller = undefined;
     }
@@ -326,6 +377,7 @@ export class RequirementSuggestionBatch {
           detail: actual.detail,
           target: actual.target,
           batch: actual.batch,
+          review: actual.review,
           loading: false,
           error: null,
           error_code: null,
@@ -350,7 +402,7 @@ export class RequirementSuggestionBatch {
     positiveInteger(identity);
     if (!['ACCEPTED', 'REJECTED', 'EDITED'].includes(decision))
       throw TypeError('Actual decision required');
-    if (!this.editable) return Promise.resolve(false);
+    if (!this.editable || this.value.review?.grouped) return Promise.resolve(false);
     const item = this.value.batch!.suggestions.find((item) => item.id === identity);
     if (!item) return Promise.resolve(false);
     let content: string | null = null;
@@ -399,6 +451,39 @@ export class RequirementSuggestionBatch {
       content,
     });
   }
+  decideGroup(identity: number, decision: 'ACCEPTED' | 'REJECTED'): Promise<boolean> {
+    const { batch, review } = this.value;
+    const group = review?.groups.find((item) => item.group_id === identity);
+    if (!this.editable || !review?.grouped || !group || !batch || !this.api.prepareDecideGroup)
+      return Promise.resolve(false);
+    return this.start({
+      operation: 'DECIDE_GROUP',
+      batch,
+      current: this.value.target,
+      suggestion: null,
+      decision,
+      content: null,
+      group,
+      decisionVersion: review.decision_version,
+    });
+  }
+  async readReviewRevision(kind: 'BASE' | 'APPLIED', signal?: AbortSignal) {
+    const { batch, review } = this.value;
+    if (!batch || !review) throw Error('审阅基准尚未读取');
+    const identity = kind === 'BASE' ? review.base_revision_id : review.applied_revision_id;
+    const version = kind === 'BASE' ? batch.base_content_version : batch.applied_content_version;
+    if (identity === null || version === null) throw Error('指定的文档版本不可读');
+    const revision = (await this.api.getRevision(identity, signal)).data;
+    if (
+      this.closed ||
+      revision.id !== identity ||
+      revision.requirement_id !== batch.requirement_id ||
+      revision.document_id !== batch.target_document_id ||
+      revision.source_content_version !== version
+    )
+      throw Error('版本与本批次目标不一致');
+    return revision;
+  }
   acceptPending(expectedIds?: readonly number[]): Promise<boolean> {
     if (!this.canAcceptPending) return Promise.resolve(false);
     const ids = this.value
@@ -425,6 +510,7 @@ export class RequirementSuggestionBatch {
     return this.canComplete
       ? this.start({
           operation: 'COMPLETE',
+          ...(this.value.review ? { decisionVersion: this.value.review.decision_version } : {}),
           batch: this.value.batch!,
           current: this.value.target,
           suggestion: null,
@@ -480,17 +566,28 @@ export class RequirementSuggestionBatch {
                 decision: intent.decision!,
                 ...(intent.decision === 'EDITED' ? { edited_content: intent.content! } : {}),
               })
-            : intent.operation === 'ACCEPT_PENDING'
-              ? this.api.prepareAcceptPendingBatch(
+            : intent.operation === 'DECIDE_GROUP'
+              ? this.api.prepareDecideGroup!(
                   this.identity,
-                  intent.batch.base_content_version,
-                  intent.batch.suggestions
-                    .filter((item) => item.status === 'PENDING')
-                    .map((item) => item.id),
+                  intent.group!.group_id,
+                  intent.decision as 'ACCEPTED' | 'REJECTED',
+                  intent.decisionVersion!,
                 )
-              : intent.operation === 'COMPLETE'
-                ? this.api.prepareCompleteBatch(this.identity, intent.batch.base_content_version)
-                : this.api.prepareDiscardBatch(this.identity);
+              : intent.operation === 'ACCEPT_PENDING'
+                ? this.api.prepareAcceptPendingBatch(
+                    this.identity,
+                    intent.batch.base_content_version,
+                    intent.batch.suggestions
+                      .filter((item) => item.status === 'PENDING')
+                      .map((item) => item.id),
+                  )
+                : intent.operation === 'COMPLETE'
+                  ? this.api.prepareCompleteBatch(
+                      this.identity,
+                      intent.batch.base_content_version,
+                      intent.decisionVersion,
+                    )
+                  : this.api.prepareDiscardBatch(this.identity);
       } catch {
         this.publish({
           phase: 'ERROR',
@@ -518,6 +615,15 @@ export class RequirementSuggestionBatch {
           result.suggestion.user_edited_content !== intent.content
         )
           throw Error('Invalid decision receipt');
+      } else if (intent.operation === 'DECIDE_GROUP') {
+        const result = receipt as GroupReceipt;
+        if (
+          result.batch_id !== this.identity ||
+          result.decision_version !== intent.decisionVersion! + 1 ||
+          JSON.stringify(result.group) !==
+            JSON.stringify({ ...intent.group!, status: intent.decision })
+        )
+          throw Error('Invalid group decision receipt');
       } else if (intent.operation === 'ACCEPT_PENDING') {
         const result = receipt as AcceptPendingReceipt,
           batch = this.checked(result.batch, this.value.detail),
@@ -568,8 +674,9 @@ export class RequirementSuggestionBatch {
         }
       }
       if (
+        !('group' in receipt) &&
         ('counts' in receipt ? receipt.counts.total : receipt.batch.counts.total) !==
-        intent.batch.counts.total
+          intent.batch.counts.total
       )
         throw Error('Invalid receipt membership');
       this.publish({ phase: 'CONFIRMED', receipt: capture(receipt), needs_refresh: false });
@@ -656,6 +763,7 @@ export class RequirementSuggestionBatch {
         detail: actual.detail,
         target: actual.target,
         batch: actual.batch,
+        review: actual.review,
         phase: 'READY',
         intent: null,
         receipt: null,

@@ -116,7 +116,7 @@ def test_fixed_task_binds_only_its_own_approval_and_replays_original(repository_
             assert connection.execute(f'SELECT count(*) FROM {table}').fetchone()[0] == 0
 
 
-def test_creation_checks_fixed_revision_scope_and_budget_before_consuming_approval(
+def test_creation_checks_fixed_revision_and_scope_before_consuming_approval(
     repository_service,  # noqa: F811
 ):
     _, _, client = repository_service
@@ -125,7 +125,6 @@ def test_creation_checks_fixed_revision_scope_and_budget_before_consuming_approv
     assert post(client, TASKS, {**draft, 'snapshot_id': None}).status_code == 422
     assert post(client, TASKS, {**draft, 'plan_version_id': 1}).status_code == 422
     assert post(client, TASKS, {**draft, 'snapshot_id': 999}).status_code == 404
-    assert post(client, TASKS, {**draft, 'budget_limit_cny': '1.500001'}).status_code == 403
     assert (
         post(client, TASKS, {**draft, 'requirement_id': 999}).json()['error']['code']
         == 'BASIS_REF_INVALID'
@@ -138,7 +137,11 @@ def test_creation_checks_fixed_revision_scope_and_budget_before_consuming_approv
         == 403
     )
     with ThreadPoolExecutor(max_workers=3) as pool:
-        results = list(pool.map(lambda _: post(client, TASKS, draft), range(3)))
+        results = list(
+            pool.map(
+                lambda _: post(client, TASKS, {**draft, 'budget_limit_cny': '1.500001'}), range(3)
+            )
+        )
     assert sorted(result.status_code for result in results) == [201, 403, 403]
     repeated = post(
         client,

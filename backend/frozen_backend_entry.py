@@ -11,9 +11,9 @@ def verify_runtime(schema_version):
     from backend.app.infrastructure.resources import ResourceCatalog
 
     if schema_version == 210:
-        from backend.app.infrastructure.formation_schema_release import load_release
+        from backend.app.infrastructure.review_schema import load_configured_release
 
-        release = load_release()
+        release = load_configured_release()
     else:
         from backend.app.infrastructure.schema_v20_release import load_release
 
@@ -44,9 +44,16 @@ def main():
         return verify_runtime(values.schema_version)
     if not 1024 <= values.port <= 65535:
         parser.error('The local HTTP port must be between 1024 and 65535')
-    from backend.app.__main__ import main as run_backend
+    import os
 
-    run_backend(port=values.port, schema_version=values.schema_version)
+    if values.schema_version == 210 and 'WALLE_FORMATION_SCHEMA_LAYOUT' in os.environ:
+        from backend.app.review_service import serve_review
+
+        serve_review(port=values.port)
+    else:
+        from backend.app.__main__ import main as run_backend
+
+        run_backend(port=values.port, schema_version=values.schema_version)
     return 0
 
 

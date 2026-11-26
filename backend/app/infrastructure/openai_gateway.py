@@ -10,6 +10,7 @@ from backend.app.shared.validation import strict_json_object
 
 from .audit_data import MAX_AUDIT_BYTES, AuditCapacityExceeded, audit_json
 from .model_gateway import TransportResult
+from .model_profile import OPENAI_DOCUMENT_PROFILE
 from .openai_protocol import ENDPOINT, MODEL, output_text, usage
 from .openai_transport import create_transport, report_transport_error
 
@@ -42,6 +43,7 @@ class OpenAIGateway:
         if profile.provider != 'openai':
             raise ValueError('An OpenAI profile is required')
         body = profile.request(context)
+        read_timeout = 1800 if profile.profile_id == OPENAI_DOCUMENT_PROFILE else 180
         started = monotonic()
         status = None
         raw = trace = finish = code = cache = None
@@ -71,7 +73,7 @@ class OpenAIGateway:
                 transport=transport,
                 trust_env=False,
                 follow_redirects=False,
-                timeout=httpx.Timeout(connect=10, read=180, write=10, pool=10),
+                timeout=httpx.Timeout(connect=10, read=read_timeout, write=10, pool=10),
             ) as client:
                 async with client.stream(
                     'POST',
@@ -145,4 +147,5 @@ class OpenAIGateway:
             return result(False, 'RESPONSE_PROTOCOL')
         except httpx.HTTPError as error:
             report_transport_error('responses', error)
-            return result(False, 'TRANSPORT_ERROR')
+            failure = 'READ_TIMEOUT' if isinstance(error, httpx.ReadTimeout) else 'TRANSPORT_ERROR'
+            return result(False, failure)

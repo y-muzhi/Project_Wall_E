@@ -256,10 +256,17 @@ class CreateDocumentResponse:
     @staticmethod
     def project(data, request):
         from .contracts import create_document_input, document_view
+        from .design_profiles import matches_design_framework
 
         creation = create_document_input(request.payload)
         value = exact(data, ('document', 'revision_id'))
         current = document_view(value['document'])
+        reference = current['template_ref']
+        if creation.initial_content == 'FRAMEWORK':
+            # A stored idempotent result retains the framework active at creation.
+            template_matches = matches_design_framework(creation.document_kind, reference)
+        else:
+            template_matches = reference == creation.resolved_template_ref
         strict_integer(value['revision_id'], 'revision_id')
         if (
             current['requirement_id'] != request.payload['requirement_id']
@@ -267,7 +274,7 @@ class CreateDocumentResponse:
             or current['document_kind'] != request.payload['document_kind']
             or current['content_version'] != 1
             or current['current_revision_id'] != value['revision_id']
-            or current['template_ref'] != creation.resolved_template_ref
+            or not template_matches
         ):
             raise ValueError('Created document contradicts the submitted target')
         return {'document': current, 'revision_id': value['revision_id']}, None

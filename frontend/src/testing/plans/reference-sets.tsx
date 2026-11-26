@@ -1,8 +1,9 @@
+import { Pagination } from '../../shared/pagination.tsx';
 import { useCallback, useState } from 'react';
 import type { WalleApi } from '../../api/walle.ts';
 import type { TestingReferenceSet } from '../../api/testing-assets.ts';
 import { EmptyState } from '../../shared/empty-state.tsx';
-import { meta, Pager, ReadState, useTestingRead } from './read.tsx';
+import { ReadState, useTestingRead } from './read.tsx';
 
 export function ReferenceSets({
   api,
@@ -69,11 +70,11 @@ export function ReferenceSets({
               ))}
             </ul>
           )}
-          <Pager
-            meta={meta(result.meta.pagination)}
-            page={page}
-            busy={read.loading}
-            select={setPage}
+          <Pagination
+            value={result.meta.pagination}
+            loading={read.loading}
+            showLoadingStatus={false}
+            change={setPage}
           />
         </>
       )}

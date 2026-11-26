@@ -1,11 +1,13 @@
 """APP-GUIDE-CMD-C09: deterministic recovery under the actual OS process lock."""
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 import sqlite3
-from backend.app.documents.guards import active_manual_draft, assert_idle
+from backend.app.documents.guards import active_manual_draft, assert_guide_available, assert_idle
+from backend.app.infrastructure.batch_repository import BatchRepository, INDEPENDENT_REVIEW_RELEASES
 from backend.app.documents.snapshot import _time
 from backend.app.infrastructure.database import Database, StorageUnavailable
-from backend.app.infrastructure.guide_repository import GuideRepository
+from backend.app.infrastructure.guide_repository import GuideRepository, is_document_scoped
 from backend.app.infrastructure.process_lock import ProcessLock
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.shared.command_execution import Rejected, execute_idempotent, operation_time
@@ -118,6 +120,41 @@ def _review_source(connection, resources, request):
         raise Rejected('SOURCE_INVALID') from None
 
 
+def _document_write_request(connection, request, catalog):
+    if (
+        request.operation != 'REVISE'
+        or catalog.collaboration.reference('collaboration.release')['version']
+        not in INDEPENDENT_REVIEW_RELEASES
+    ):
+        return request
+    target = request.target
+    current = current_at_version(
+        connection,
+        request.requirement_id,
+        target['expected_content_version'],
+        document_id=target['document_id'],
+    )
+    if current['content_version'] == 1:
+        creation = connection.execute(
+            """SELECT 1 FROM document_change_audits a
+               JOIN revisions r ON r.id=a.revision_id AND r.document_id=a.document_id
+               WHERE a.requirement_id=? AND a.document_id=? AND a.event_type='CONTENT_COMMITTED'
+                 AND a.source_type='USER_ACTION' AND a.before_content_version IS NULL
+                 AND a.after_content_version=1 AND r.source_content_version=1
+                 AND json_type(a.payload_json,'$.creation_message_id')='integer'
+                 AND r.markdown_snapshot=? AND r.block_state_snapshot_json=?""",
+            (
+                request.requirement_id,
+                current['id'],
+                current['markdown_content'],
+                current['block_state_json'],
+            ),
+        ).fetchone()
+        if creation is not None:
+            return request
+    return replace(request, operation='PROPOSE_CHANGES')
+
+
 def _accept_collaboration(
     connection,
     request,
@@ -163,6 +200,7 @@ def _accept_collaboration(
     from .accepted_context import capture_inputs
     from backend.app.requirements.contracts import requirement_read_model
 
+    catalog = catalog.for_document_operation(request.operation)
     requirements = RequirementRepository(connection)
     root = requirements.get_for_document(request.requirement_id, request.document_id)
     if root is None:
@@ -177,14 +215,22 @@ def _accept_collaboration(
                 'resource_id': root['id'],
             },
         )
-    assert_idle(
-        connection,
-        root,
-        remaining_conflicts=frozenset({'MANUAL_DRAFT', 'GUIDE_RUN', 'SUGGESTION_BATCH'}),
+    document_scoped = catalog.collaboration.grouped_reviews and request.operation in (
+        'GENERATE',
+        'REVISE',
+        'PROPOSE_CHANGES',
     )
+    assert_guide_available(connection, root, request.document_id, document_scoped=document_scoped)
     if at < root['updated_at']:
         raise ValueError('Acceptance cannot precede persisted activity')
+    request = _document_write_request(connection, request, catalog)
     inputs = capture_inputs(connection, root, request, catalog)
+    if document_scoped and request.operation == 'PROPOSE_CHANGES':
+        target = inputs['authorization']
+        if BatchRepository(connection).active_for_version(
+            root['id'], target['target_document_id'], target['expected_content_version']
+        ):
+            raise Rejected('BATCH_PENDING')
     run_id = entity_id(connection, EntityKind.GUIDE_RUN)
     discussion = deepcopy(root['discussion_state_json'])
     if reuse_message is None:
@@ -229,7 +275,8 @@ def _accept_collaboration(
         if discussion != root['discussion_state_json']
         else root
     )
-    requirements.occupy_guide(root['id'], run_id, at)
+    if not document_scoped:
+        requirements.occupy_guide(root['id'], run_id, at)
     occupied = requirements.get_for_document(root['id'], request.document_id)
     user_message = {key: message[key] for key in message.keys() if key != 'idempotency_key'}
     basis = {
@@ -317,6 +364,7 @@ def create_guide_run(executor: Idempotency, payload: object, *, catalog=None, cl
                 'DISCUSSION_VERSION_CONFLICT',
                 'CONTENT_VERSION_CONFLICT',
                 'SOURCE_VERSION_CONFLICT',
+                'BATCH_PENDING',
                 'SOURCE_INVALID',
                 'SCOPE_INVALID',
                 'CONFIG_INVALID',
@@ -549,6 +597,7 @@ def modify_from_comment(
                 'DISCUSSION_VERSION_CONFLICT',
                 'CONTENT_VERSION_CONFLICT',
                 'COMMENT_ORPHANED',
+                'BATCH_PENDING',
                 'SOURCE_INVALID',
                 'SCOPE_INVALID',
                 'CONFIG_INVALID',
@@ -636,6 +685,7 @@ def retry_guide_run(executor: Idempotency, payload: object, *, catalog=None, clo
                 'WORK_STATE_CONFLICT',
                 'WORK_STATE_INCONSISTENT',
                 'CONTENT_VERSION_CONFLICT',
+                'BATCH_PENDING',
                 'SOURCE_INVALID',
                 'SCOPE_INVALID',
                 'CONFIG_INVALID',
@@ -646,8 +696,8 @@ def retry_guide_run(executor: Idempotency, payload: object, *, catalog=None, clo
 
 def _pending_batches(connection, requirement_id):
     rows = connection.execute(
-        "SELECT b.id,b.requirement_id,b.guide_run_id,b.source_type,b.source_id,b.created_at,g.requirement_id AS run_requirement_id,g.action_type,g.status AS run_status,g.source_type AS run_source_type,g.source_id AS run_source_id FROM suggestion_batches b LEFT JOIN guide_runs g ON g.id=b.guide_run_id WHERE b.requirement_id=? AND b.status='PENDING' ORDER BY b.id",
-        (requirement_id,),
+        "SELECT b.id,b.requirement_id,b.guide_run_id,b.source_type,b.source_id,b.created_at,g.requirement_id AS run_requirement_id,g.action_type,g.status AS run_status,g.source_type AS run_source_type,g.source_id AS run_source_id FROM suggestion_batches b LEFT JOIN guide_runs g ON g.id=b.guide_run_id WHERE b.requirement_id=? AND b.status='PENDING' AND coalesce(json_extract(g.execution_basis_json,'$.resources.release.version'), '') NOT IN (?,?) ORDER BY b.id",
+        (requirement_id, *INDEPENDENT_REVIEW_RELEASES),
     ).fetchall()
     for row in rows:
         if (
@@ -722,16 +772,10 @@ def _recover_root(connection, repository, root, at):
     else:
         raise Rejected('WORK_STATE_INCONSISTENT')
     # A terminal pointer alone cannot prove ownership of another live activity.
-    if (
-        connection.execute(
-            "SELECT 1 FROM requirement_documents WHERE requirement_id=? AND document_type='MANUAL_DRAFT'",
-            (root['id'],),
-        ).fetchone()
-        or connection.execute(
-            "SELECT 1 FROM guide_runs WHERE requirement_id=? AND status IN ('RUNNING','WAITING_USER')",
-            (root['id'],),
-        ).fetchone()
-    ):
+    if connection.execute(
+        "SELECT 1 FROM requirement_documents WHERE requirement_id=? AND document_type='MANUAL_DRAFT'",
+        (root['id'],),
+    ).fetchone() or GuideRepository(connection).occupying_runs(root['id'], waiting=True):
         raise Rejected('WORK_STATE_INCONSISTENT')
     candidate = batches[0] if batches else None
     repository.recover_occupancy(
@@ -832,20 +876,27 @@ def cancel_guide_run(executor: Idempotency, payload: object, *, clock=None) -> d
             raise Rejected('STATE_CONFLICT')
         requirements = RequirementRepository(connection)
         root = requirements.get(run['requirement_id'])
-        if (
-            root is None
-            or root['document_work_state'] != 'GUIDE_ACTIVE'
-            or root['active_operation_type'] != 'GUIDE_RUN'
-            or root['active_operation_id'] != run['id']
-        ):
+        if root is None:
             raise Rejected('WORK_STATE_INCONSISTENT')
-        try:
-            assert_idle(connection, root, remaining_conflicts=frozenset())
-        except Rejected as error:
-            if error.code != 'WORK_STATE_CONFLICT':
-                raise
+        scoped = is_document_scoped(guides.get(run['id']))
+        if scoped:
+            active = guides.scoped_running(root['id'], run['document_id'])
+            if [row['id'] for row in active] != [run['id']]:
+                raise Rejected('WORK_STATE_INCONSISTENT')
         else:
-            raise Rejected('WORK_STATE_INCONSISTENT')
+            if (
+                root['document_work_state'] != 'GUIDE_ACTIVE'
+                or root['active_operation_type'] != 'GUIDE_RUN'
+                or root['active_operation_id'] != run['id']
+            ):
+                raise Rejected('WORK_STATE_INCONSISTENT')
+            try:
+                assert_idle(connection, root, remaining_conflicts=frozenset())
+            except Rejected as error:
+                if error.code != 'WORK_STATE_CONFLICT':
+                    raise
+            else:
+                raise Rejected('WORK_STATE_INCONSISTENT')
         at = operation_time(clock)
         if (
             _time(run['created_at']) > _time(run['updated_at'])
@@ -854,7 +905,8 @@ def cancel_guide_run(executor: Idempotency, payload: object, *, clock=None) -> d
         ):
             raise ValueError('Cancellation cannot precede persisted activity')
         cancelled = guides.cancel(run['id'], at)
-        requirements.recover_occupancy(root, None, None, at)
+        if not scoped:
+            requirements.recover_occupancy(root, None, None, at)
         return Success(cancel_guide_run_result(cancelled), 200)
 
     return execute_idempotent(

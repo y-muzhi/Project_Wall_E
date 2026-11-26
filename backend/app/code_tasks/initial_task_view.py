@@ -121,7 +121,7 @@ def _validate_fixed_view(data, document_id):
     branch_ref(data['target_branch'])
     limit = data['budget']['limit_cny']
     amount = parse_money(limit, 'budget_limit_cny')
-    if amount == 0 or limit != format_money(amount):
+    if limit != format_money(amount):
         raise ValueError('Original task budget is not canonical')
     materials = data['material_refs']
     differences = data['current_basis_difference']

@@ -11,7 +11,7 @@ type Editor = Pick<RequirementEditor, 'restoreLocal' | 'setReadonly'>;
 type Autosave = Pick<ManualDraftAutosave, 'state' | 'restoreLocal' | 'localSnapshot'>;
 type Cache = Pick<DraftRecoveryStore, 'get' | 'clearIfRevision'>;
 export type ManualRecoveryState = Readonly<{
-  phase: 'LOADING' | 'AVAILABLE' | 'COMPARE' | 'ERROR' | 'RESTORED' | 'SERVER_SELECTED';
+  phase: 'LOADING' | 'AVAILABLE' | 'COMPARE' | 'ERROR' | 'RESTORED' | 'SERVER_SELECTED' | 'STALE';
   checking: boolean;
   local: LocalDraftSnapshot | null;
   server: DocumentReadModel | null;
@@ -33,6 +33,7 @@ const pairSame = (
 export class ManualDraftRecovery {
   private readonly current: DocumentReadModel;
   private readonly draft: DocumentReadModel;
+  readonly staleBasis: Readonly<{ base: number; current: DocumentReadModel }> | null;
   private readonly api: Api;
   private readonly editor: Editor;
   private readonly autosave: Autosave;
@@ -58,6 +59,7 @@ export class ManualDraftRecovery {
     editor: Editor,
     autosave: Autosave,
     cache: Cache,
+    baseContentVersion = current.content_version,
   ) {
     if (
       root.document_work_state !== 'MANUAL_EDITING' ||
@@ -75,6 +77,10 @@ export class ManualDraftRecovery {
       throw new TypeError('Fresh actual manual session required');
     this.current = capture(current);
     this.draft = capture(draft);
+    this.staleBasis =
+      baseContentVersion === current.content_version
+        ? null
+        : Object.freeze({ base: baseContentVersion, current: this.current });
     this.api = api;
     this.editor = editor;
     this.autosave = autosave;
@@ -150,7 +156,7 @@ export class ManualDraftRecovery {
       r.id !== id ||
       r.document_work_state !== 'MANUAL_EDITING' ||
       r.active_operation_type !== 'MANUAL_DRAFT' ||
-      r.active_operation_id !== this.draft.id ||
+      (r.active_operation_id !== this.draft.id && d.target_document_id !== this.current.id) ||
       c.document_type !== 'CURRENT' ||
       c.id !== this.current.id ||
       c.requirement_id !== id ||
@@ -181,6 +187,17 @@ export class ManualDraftRecovery {
     }
     const cached = local.value === null ? null : capture(local.value),
       same = this.sameLoaded(saved);
+    if (this.staleBasis) {
+      this.publish({
+        phase: 'STALE',
+        checking: false,
+        local: cached,
+        server: saved,
+        storage_error: false,
+        error: null,
+      });
+      return true;
+    }
     // Once local recovery content was discovered, its disappearance during a
     // recheck is a change to reconcile, not proof that no choice was needed.
     if (cached === null && this.value.local !== null) {
@@ -252,7 +269,7 @@ export class ManualDraftRecovery {
   /** Caller obtains explicit discard confirmation. Revision CAS prevents
    * erasing a newer cache written while the confirmation was open. */
   discardLocalConfirmed(): Promise<boolean> {
-    if (!this.value.local) return Promise.resolve(false);
+    if (this.staleBasis || !this.value.local) return Promise.resolve(false);
     const chosen = this.value.local;
     return this.run('DISCARD', async () => {
       if (!(await this.read()) || this.disposed) return false;
@@ -293,6 +310,7 @@ export class ManualDraftRecovery {
   get canContinueServer(): boolean {
     return (
       !this.disposed &&
+      !this.staleBasis &&
       !this.pending &&
       this.confirmedFacts &&
       this.value.local === null &&

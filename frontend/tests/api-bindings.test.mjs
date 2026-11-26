@@ -44,6 +44,7 @@ const cases = [
   ['I19', 'listGuideRuns', [1, {}], 'GET', '/requirements/1/guide-runs', null, false],
   ['I20', 'getBatch', [8], 'GET', '/suggestion-batches/8', null, false],
   ['I21', 'prepareDecideSuggestion', [9, { decision: 'ACCEPTED' }], 'PUT', '/suggestions/9/decision', { decision: 'ACCEPTED' }, true],
+  ['I20 group decide', 'prepareDecideGroup', [8, 2, 'ACCEPTED', 3], 'PUT', '/suggestion-batches/8/groups/2/decision', {decision:'ACCEPTED',expected_decision_version:3}, true],
   ['I22', 'prepareCompleteBatch', [8, 7], 'POST', '/suggestion-batches/8/complete', {expected_content_version:7}, true],
   ['I23', 'prepareDiscardBatch', [8], 'POST', '/suggestion-batches/8/discard', null, true],
   ['I24', 'listRevisions', [1,2], 'GET', '/requirements/1/revisions', null, false],
@@ -84,7 +85,16 @@ test('all active client bindings reach exact public method/path/body/key policy;
   }
   const serverOnly=['POST /requirements/:id/complete-initialization','POST /requirements/:id/complete','POST /requirements/:id/reactivate'];
   const bindings = cases.map(([, , , method, path]) => method + ' ' + path.replace(/\/[0-9]+(?=\/|$)/g, '/:id'));
-  assert.equal(registered.length,43);assert.equal(cases.length,40);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
+  assert.equal(registered.length,44);assert.equal(cases.length,41);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
+});
+test('the extended batch review stays on the same read path with an explicit query', async () => {
+  let sent;
+  const service = api(async (url, options) => { sent = { url, ...options }; return rejected(); });
+  await assert.rejects(service.getBatchReview(8), ApiRejected);
+  const url = new URL(sent.url, 'http://local');
+  assert.equal(url.pathname, '/api/v1/suggestion-batches/8');
+  assert.equal(url.searchParams.get('include_review'), '1');
+  assert.equal(sent.method, 'GET');
 });
 test('one creation captures body and response expectations once; loss/replay retains key while next action gets a new key', async () => {
   const calls = []; let attempt = 0, keys = 0, getters = 0;

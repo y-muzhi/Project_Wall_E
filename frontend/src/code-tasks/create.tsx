@@ -9,17 +9,15 @@ import { gitObjectId } from '../api/code-repository-observations.ts';
 import { registerModal, trapModalTab } from '../shared/modal.ts';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
+import { Icon } from '../shared/icon.tsx';
+import { Pagination } from '../shared/pagination.tsx';
+import { SingleSelect } from '../shared/single-select.tsx';
+import type { RefObject } from 'react';
 import { useSettingsRead } from './settings/read.ts';
 import { RecoveryActions } from './settings/recovery-actions.tsx';
 import { optionPage, PagedTaskSelect } from './create-selection.tsx';
 import { useCreationCommands } from './create-commands.ts';
-import {
-  createTaskPath,
-  freshDraft,
-  positiveBudget,
-  proposedScope,
-  restoreCreateDraft,
-} from './create-draft.ts';
+import { createTaskPath, freshDraft, proposedScope, restoreCreateDraft } from './create-draft.ts';
 import type { CreateTaskDraft } from './create-draft.ts';
 import { ACTIVE_TASK_STATUSES } from './list-model.ts';
 
@@ -32,6 +30,7 @@ type Props = Readonly<{
   visible: boolean;
   activeTaskId: number | null;
   close(): void;
+  returnFocus: RefObject<HTMLButtonElement | null>;
   created(taskId: number): void;
   conflict(taskId: number): void;
   settings(): void;
@@ -155,6 +154,7 @@ function MaterialChoices({
   disabled: boolean;
   visible: boolean;
 }>) {
+  const materialInput = useId();
   const [documentId, setDocumentId] = useState<number | null>(null);
   const [preview, setPreview] = useState(false);
   const selected = draft.material_refs.find((item) => item.document_id === documentId);
@@ -172,24 +172,28 @@ function MaterialChoices({
   }
   return (
     <>
-      <label>
-        材料文档{' '}
-        <select
-          value={documentId ?? ''}
+      <div className="code-drawer-field">
+        <label htmlFor={materialInput}>材料文档（可选）</label>
+        <SingleSelect
+          id={materialInput}
+          label="材料文档"
+          value={documentId === null ? '' : String(documentId)}
           disabled={disabled || materials.length === 0}
-          onChange={(event) => {
-            setDocumentId(event.target.value ? Number(event.target.value) : null);
+          placeholder={materials.length === 0 ? '暂无可选材料文档' : '选择材料文档'}
+          options={
+            materials.length === 0
+              ? []
+              : [
+                  { value: '', label: '暂不选择' },
+                  ...materials.map((doc) => ({ value: String(doc.id), label: doc.name })),
+                ]
+          }
+          change={(value) => {
+            setDocumentId(value ? Number(value) : null);
             setPreview(false);
           }}
-        >
-          <option value="">可选</option>
-          {materials.map((doc) => (
-            <option key={doc.id} value={doc.id}>
-              {doc.name}
-            </option>
-          ))}
-        </select>
-      </label>
+        />
+      </div>
       {documentId !== null && (
         <RevisionSelect
           key={documentId}
@@ -371,6 +375,8 @@ export function CreateCodeTaskDrawer(props: Props) {
   const [activeError, setActiveError] = useState<string | null>(null);
   const heading = useId();
   const dialog = useRef<HTMLDialogElement>(null);
+  const configurationHeading = useRef<HTMLHeadingElement>(null);
+  const returnFocus = props.returnFocus;
   const preflight = useRef<AbortController | null>(null);
   const [submitting, setSubmitting] = useState(false);
   useEffect(() => () => preflight.current?.abort(), []);
@@ -400,7 +406,7 @@ export function CreateCodeTaskDrawer(props: Props) {
     submitting || commands.busy || !commands.ledgerReady || draft.original_key !== null;
   useLayoutEffect(() => {
     const element = dialog.current!;
-    const focus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focus = returnFocus.current;
     element.showModal();
     const release = registerModal(element);
     element.querySelector<HTMLElement>('h2')?.focus();
@@ -409,7 +415,7 @@ export function CreateCodeTaskDrawer(props: Props) {
       release();
       if (focus?.isConnected && !focus.closest('[inert]')) focus.focus({ preventScroll: true });
     };
-  }, []);
+  }, [returnFocus]);
 
   useEffect(() => {
     if (
@@ -638,9 +644,21 @@ export function CreateCodeTaskDrawer(props: Props) {
               ? '请选择原观察中未检出的目标分支'
               : !selectedProfile || !selectedGrant
                 ? '请核实执行配置和未绑定授权'
-                : !positiveBudget(draft.budget_text)
-                  ? '请输入大于零且最多六位小数的人民币预算'
-                  : null;
+                : null;
+
+  const closeLocked = commands.busy || submitting;
+  const submitStatus = submitting
+    ? '正在核对并创建任务…'
+    : commands.busy
+      ? '正在处理原操作…'
+      : reason;
+  const registerReason = !selectedRepository
+    ? '请先选择并核对仓库'
+    : !selectedProfile
+      ? '登记前请选择执行配置版本'
+      : !validCommit
+        ? '请输入完整的 Git 提交标识'
+        : null;
 
   async function submit() {
     if (
@@ -684,7 +702,7 @@ export function CreateCodeTaskDrawer(props: Props) {
           target_branch: draft.target_branch,
           execution_profile_version_id: selectedProfile.id,
           authorization_id: selectedGrant.id,
-          budget_limit_cny: draft.budget_text,
+          budget_limit_cny: '0.000000',
         }),
       );
     } catch {
@@ -707,12 +725,12 @@ export function CreateCodeTaskDrawer(props: Props) {
   return createPortal(
     <dialog
       ref={dialog}
-      className="create-drawer code-task-drawer"
+      className="create-drawer code-task-drawer is-coding"
       aria-labelledby={heading}
       onKeyDown={trapModalTab}
       onCancel={(event) => {
         event.preventDefault();
-        if (!commands.busy && !submitting) props.close();
+        if (!closeLocked) props.close();
       }}
     >
       <form
@@ -722,10 +740,22 @@ export function CreateCodeTaskDrawer(props: Props) {
         }}
       >
         <header>
-          <h2 id={heading} tabIndex={-1}>
-            创建代码任务
-          </h2>
-          <p>{props.documentTitle}</p>
+          <div className="code-drawer-identity">
+            <h2 id={heading} tabIndex={-1}>
+              创建代码任务
+            </h2>
+            <p className="read-status">{props.documentTitle}</p>
+          </div>
+          <button
+            type="button"
+            className="ui-button icon-button"
+            aria-label="关闭创建代码任务"
+            title="关闭"
+            disabled={closeLocked}
+            onClick={props.close}
+          >
+            <Icon name="close" />
+          </button>
         </header>
         <div className="code-task-drawer-fields">
           {warning && <p role="status">{warning}</p>}
@@ -743,8 +773,8 @@ export function CreateCodeTaskDrawer(props: Props) {
               </button>
             </div>
           )}
-          <fieldset>
-            <legend>固定设计</legend>
+          <section className="code-drawer-section" aria-labelledby={heading + '-design-title'}>
+            <h3 id={heading + '-design-title'}>固定设计</h3>
             <RevisionSelect
               api={api}
               requirementId={requirementId}
@@ -786,11 +816,12 @@ export function CreateCodeTaskDrawer(props: Props) {
               disabled={locked || directory.loading || !!directory.error}
               visible={visible}
             />
-          </fieldset>
-          <fieldset>
-            <legend>固定代码起点</legend>
+          </section>
+          <section className="code-drawer-section" aria-labelledby={heading + '-source-title'}>
+            <h3 id={heading + '-source-title'}>固定代码起点</h3>
             <PagedTaskSelect
               label="仓库"
+              emptyMessage="尚未登记代码仓库"
               value={draft.repository_id}
               visible={visible}
               load={loadRepositoryOptions}
@@ -806,77 +837,108 @@ export function CreateCodeTaskDrawer(props: Props) {
                 setOpenFiles(false);
               }}
             />
-            <button type="button" className="ui-button" disabled={locked} onClick={props.settings}>
-              打开代码设置
-            </button>
-            <button
-              type="button"
-              className="ui-button"
-              disabled={locked || !selectedRepository}
-              onClick={() =>
-                selectedRepository &&
-                void commands.submit(
-                  '/api/v1/code-repositories/' + selectedRepository.id + '/refresh',
-                  {},
-                )
-              }
-            >
-              读取仓库信息
-            </button>
+            <div className="code-task-toolbar">
+              <button
+                type="button"
+                className="ui-button"
+                disabled={locked}
+                onClick={props.settings}
+              >
+                打开代码设置
+              </button>
+              <button
+                type="button"
+                className="ui-button"
+                disabled={locked || !selectedRepository}
+                title={!selectedRepository ? '请先选择并核对仓库' : undefined}
+                onClick={() =>
+                  selectedRepository &&
+                  void commands.submit(
+                    '/api/v1/code-repositories/' + selectedRepository.id + '/refresh',
+                    {},
+                  )
+                }
+              >
+                读取仓库信息
+              </button>
+            </div>
             {selectedObservation && (
               <p>
                 本次仓库观察 {new Date(selectedObservation.observed_at).toLocaleString('zh-CN')}
               </p>
             )}
-            <label>
-              来源提交
+            <div className="code-drawer-field">
+              <label htmlFor={heading + '-commit'}>来源提交</label>
               <input
-                aria-label="来源提交"
+                id={heading + '-commit'}
+                className="ui-input code-commit-input"
                 value={draft.commit_oid}
                 spellCheck={false}
+                autoComplete="off"
                 disabled={locked || !selectedRepository}
+                aria-describedby={heading + '-commit-help'}
                 onChange={(event) =>
                   update({ commit_oid: event.target.value, base_snapshot_id: null })
                 }
               />
-            </label>
+              <p className="read-status" id={heading + '-commit-help'}>
+                仅使用所选 Git 提交。未提交的修改不纳入。登记后原仓库需保持可读。
+              </p>
+            </div>
             {selectedObservation?.status === 'READABLE' && (
-              <label>
-                从本次观察填入提交{' '}
-                <select
+              <div className="code-drawer-field">
+                <label htmlFor={heading + '-branch-source'}>从本次观察填入提交</label>
+                <SingleSelect
+                  id={heading + '-branch-source'}
+                  label="从本次观察填入提交"
                   value=""
                   disabled={locked}
-                  onChange={(event) => {
-                    if (event.target.value)
-                      update({ commit_oid: event.target.value, base_snapshot_id: null });
+                  placeholder="选择分支提交"
+                  options={selectedObservation.local_branches.map((row) => ({
+                    value: row.full_ref,
+                    label: row.full_ref,
+                  }))}
+                  change={(ref) => {
+                    const branch = selectedObservation.local_branches.find(
+                      (row) => row.full_ref === ref,
+                    );
+                    if (branch) update({ commit_oid: branch.commit_oid, base_snapshot_id: null });
                   }}
-                >
-                  <option value="">请选择分支提交</option>
-                  {selectedObservation.local_branches.map((row) => (
-                    <option key={row.full_ref} value={row.commit_oid}>
-                      {row.full_ref}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
             )}
-            <p>仅使用所选 Git 提交。未提交的修改不纳入。登记后原仓库需保持可读。</p>
-            <button
-              type="button"
-              className="ui-button"
-              disabled={locked || !selectedRepository || !selectedProfile || !validCommit}
-              onClick={() =>
-                selectedRepository &&
-                selectedProfile &&
-                void commands.submit(
-                  '/api/v1/code-repositories/' + selectedRepository.id + '/snapshots',
-                  { commit_oid: commit, execution_profile_version_id: selectedProfile.id },
-                )
-              }
-            >
-              登记代码起点
-            </button>
-            {!selectedProfile && <p className="read-status">登记前请先选择执行配置版本。</p>}
+            <div className="code-task-toolbar">
+              <button
+                type="button"
+                className="ui-button code-drawer-secondary"
+                disabled={locked || registerReason !== null}
+                aria-describedby={registerReason ? heading + '-register-help' : undefined}
+                onClick={() =>
+                  selectedRepository &&
+                  selectedProfile &&
+                  void commands.submit(
+                    '/api/v1/code-repositories/' + selectedRepository.id + '/snapshots',
+                    { commit_oid: commit, execution_profile_version_id: selectedProfile.id },
+                  )
+                }
+              >
+                登记代码起点
+              </button>
+              {selectedRepository && !selectedProfile && !locked && (
+                <button
+                  type="button"
+                  className="ui-button"
+                  onClick={() => configurationHeading.current?.focus()}
+                >
+                  选择执行配置
+                </button>
+              )}
+            </div>
+            {registerReason && (
+              <p className="read-status" id={heading + '-register-help'}>
+                {registerReason}
+              </p>
+            )}
             {commands.operation && commands.operation.idempotency_key === draft.original_key && (
               <ol aria-label="原仓库操作步骤">
                 {commands.operation.steps.map((step) => (
@@ -921,58 +983,63 @@ export function CreateCodeTaskDrawer(props: Props) {
                       <EmptyState icon="outline" message="当前页没有固定文件" compact />
                     ) : null}
                     {files.value?.meta.pagination && 'page' in files.value.meta.pagination && (
-                      <div className="code-task-toolbar">
-                        <button
-                          type="button"
-                          className="ui-button"
-                          disabled={files.loading || filePage <= 1}
-                          onClick={() => setFilePage(filePage - 1)}
-                        >
-                          上一页文件
-                        </button>
-                        <button
-                          type="button"
-                          className="ui-button"
-                          disabled={
-                            files.loading || filePage >= files.value.meta.pagination.total_pages
-                          }
-                          onClick={() => setFilePage(filePage + 1)}
-                        >
-                          下一页文件
-                        </button>
-                      </div>
+                      <Pagination
+                        value={files.value.meta.pagination}
+                        loading={files.loading}
+                        change={setFilePage}
+                        compactSingle
+                        showLoadingStatus={false}
+                      />
                     )}
                   </section>
                 )}
               </>
             )}
-          </fieldset>
-          <fieldset>
-            <legend>目标与配置</legend>
-            <label>
-              目标分支{' '}
-              <select
+          </section>
+          <section
+            className="code-drawer-section"
+            aria-labelledby={heading + '-configuration-title'}
+          >
+            <h3 id={heading + '-configuration-title'} tabIndex={-1} ref={configurationHeading}>
+              目标与配置
+            </h3>
+            <div className="code-drawer-field">
+              <label htmlFor={heading + '-target-branch'}>目标分支</label>
+              <SingleSelect
+                id={heading + '-target-branch'}
+                label="目标分支"
                 value={draft.target_branch ?? ''}
                 disabled={locked || selectedObservation?.status !== 'READABLE'}
-                onChange={(event) => update({ target_branch: event.target.value || null })}
-              >
-                <option value="">请选择</option>
-                {draft.target_branch &&
+                placeholder={
+                  selectedObservation?.status === 'READABLE' ? '请选择' : '请先读取仓库信息'
+                }
+                options={[
+                  {
+                    value: '',
+                    label:
+                      selectedObservation?.status === 'READABLE' ? '请选择' : '请先读取仓库信息',
+                  },
+                  ...(draft.target_branch &&
                   !selectedObservation?.local_branches.some(
                     (row) => row.full_ref === draft.target_branch,
-                  ) && <option value={draft.target_branch}>{draft.target_branch} · 待核对</option>}
-                {selectedObservation?.local_branches.map((row) => (
-                  <option
-                    key={row.full_ref}
-                    value={row.full_ref}
-                    disabled={checkedOut.has(row.full_ref)}
-                  >
-                    {row.full_ref}
-                    {checkedOut.has(row.full_ref) ? ' · 已检出' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+                  )
+                    ? [
+                        {
+                          value: draft.target_branch,
+                          label: draft.target_branch + ' · 待核对',
+                          disabled: true,
+                        },
+                      ]
+                    : []),
+                  ...(selectedObservation?.local_branches.map((row) => ({
+                    value: row.full_ref,
+                    label: row.full_ref + (checkedOut.has(row.full_ref) ? ' · 已检出' : ''),
+                    disabled: checkedOut.has(row.full_ref),
+                  })) ?? []),
+                ]}
+                change={(value) => update({ target_branch: value || null })}
+              />
+            </div>
             <PagedTaskSelect
               label="执行配置"
               value={draft.execution_profile_id}
@@ -1011,9 +1078,12 @@ export function CreateCodeTaskDrawer(props: Props) {
                 {selectedProfile.ready ? '可开始' : '执行条件未就绪'}
               </p>
             )}
-          </fieldset>
-          <fieldset>
-            <legend>授权与预算</legend>
+          </section>
+          <section
+            className="code-drawer-section"
+            aria-labelledby={heading + '-authorization-title'}
+          >
+            <h3 id={heading + '-authorization-title'}>执行授权</h3>
             {selectedProfile && (
               <>
                 <PagedTaskSelect
@@ -1038,24 +1108,25 @@ export function CreateCodeTaskDrawer(props: Props) {
                 />
               </>
             )}
-            <label>
-              人民币预算{' '}
-              <input
-                inputMode="decimal"
-                value={draft.budget_text}
-                disabled={locked}
-                onChange={(event) => update({ budget_text: event.target.value })}
-              />
-            </label>
-          </fieldset>
-          <fieldset>
-            <legend>创建摘要</legend>
-            <p>
-              设计版本 {draft.design_revision_id ?? '未选'} · 材料 {draft.material_refs.length} 份 ·
-              起点 {selectedSnapshot?.id ?? '未核实'} · 授权 {selectedGrant?.id ?? '未核实'}
-            </p>
-            <p>创建后任务保持未开始。</p>
-          </fieldset>
+          </section>
+          <section className="code-drawer-section" aria-labelledby={heading + '-review-title'}>
+            <h3 id={heading + '-review-title'}>创建摘要</h3>
+            <dl className="code-task-facts">
+              <dt>设计版本</dt>
+              <dd>
+                {draft.design_revision_id === null ? '未选择' : '#' + draft.design_revision_id}
+              </dd>
+              <dt>固定材料</dt>
+              <dd>{draft.material_refs.length} 份</dd>
+              <dt>代码起点</dt>
+              <dd>{selectedSnapshot === null ? '未核实' : '#' + selectedSnapshot.id}</dd>
+              <dt>目标分支</dt>
+              <dd>{draft.target_branch ?? '未选择'}</dd>
+              <dt>授权</dt>
+              <dd>{selectedGrant === null ? '未核实' : '#' + selectedGrant.id}</dd>
+            </dl>
+            <p className="read-status">创建后任务保持未开始。</p>
+          </section>
           {commands.message && <p role="status">{commands.message}</p>}
           {activeError && <p role="alert">{activeError}</p>}
           {draft.original_key && (
@@ -1090,27 +1161,29 @@ export function CreateCodeTaskDrawer(props: Props) {
           )}
         </div>
         <footer>
-          {reason && (
-            <span id={heading + '-reason'} className="read-status">
-              {reason}
+          {submitStatus && (
+            <span id={heading + '-reason'} className="read-status" role="status">
+              {submitStatus}
             </span>
           )}
-          <button
-            type="button"
-            className="ui-button"
-            disabled={commands.busy}
-            onClick={props.close}
-          >
-            取消
-          </button>
-          <button
-            type="submit"
-            className="ui-button"
-            disabled={reason !== null || commands.busy || submitting}
-            aria-describedby={reason ? heading + '-reason' : undefined}
-          >
-            创建任务
-          </button>
+          <div className="code-drawer-footer-actions">
+            <button
+              type="button"
+              className="ui-button"
+              disabled={closeLocked}
+              onClick={props.close}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="ui-button primary"
+              disabled={submitStatus !== null}
+              aria-describedby={submitStatus ? heading + '-reason' : undefined}
+            >
+              创建任务
+            </button>
+          </div>
         </footer>
       </form>
     </dialog>,

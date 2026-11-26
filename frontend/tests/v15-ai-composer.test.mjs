@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {ApiUnknown,ApiClient} from '../src/api/client.ts';
 import {WalleApi} from '../src/api/walle.ts';
+import {wireScope} from '../src/api/models.ts';
 import {RequirementGuideComposer} from '../src/guide/composer.ts';
 import {ComposerDrafts} from '../src/guide/composer-drafts.ts';
 import {nextChapter} from '../src/guide/scope.ts';
@@ -24,11 +25,53 @@ test('H06 selecting a chapter requires explicit send and binds the current versi
  assert.equal(rig.owner.allowed,false);assert.equal(rig.owner.selectChapter(target),false);
  assert(rig.owner.selectChapter({...target,content_version:4,scope:{scope_type:'SECTION',scope_ref:{block_id:9}}}));assert.equal(rig.counts.sends,1);rig.owner.dispose();
 });
+test('an accepted revision can route to proposals only for the same document, version and scope', async () => {
+  const scope = wireScope({scope_type:'SECTION',scope_ref:{heading_block_id:8}});
+  const target = {kind:'EXISTING',document_id:2,expected_content_version:3};
+  const cases = [
+    {target,scope,matches:true},
+    {target:{...target,document_id:3},scope,matches:false},
+    {target:{...target,expected_content_version:4},scope,matches:false},
+    {target,scope:wireScope({scope_type:'SECTION',scope_ref:{heading_block_id:9}}),matches:false},
+  ];
+  for (const actual of cases) {
+    const {owner,counts} = fixture(detail(), {
+      async getGuideRun() {
+        return {data:{id:41,requirement_id:1,operation:'PROPOSE_CHANGES',scope:actual.scope,target:actual.target}};
+      }
+    });
+    assert(owner.selectChapter({
+      document_id:2,content_version:3,label:'第一章',selection:null,
+      scope:{scope_type:'SECTION',scope_ref:{block_id:8}},
+    }));
+    owner.change('完成本章');
+    assert.equal(await owner.submit(), actual.matches);
+    assert.equal(counts.sends,1);
+    assert.equal(counts.receives,actual.matches ? 1 : 0);
+    assert.equal(owner.getSnapshot().phase,actual.matches ? 'READY' : 'CONFIRMED');
+    owner.dispose();
+  }
+});
 test('H06 chapter configuration remains frozen while a send result is unknown',async()=>{
  const actual={...detail([doc(2)]),current:doc(2)},rig=fixture(actual,{prepareCreateGuide:()=>({submit:async()=>{throw new ApiUnknown(true);}})});
  const target={document_id:2,content_version:3,label:'章节甲',selection:null,scope:{scope_type:'SECTION',scope_ref:{block_id:8}}};
  assert(rig.owner.selectChapter(target));rig.owner.change('完成本章');assert.equal(await rig.owner.submit(),false);
  assert.equal(rig.owner.selectChapter({...target,scope:{scope_type:'SECTION',scope_ref:{block_id:9}}}),false);assert.equal(rig.owner.getSnapshot().target.scope.scope_ref.block_id,8);rig.owner.dispose();
+});
+test('review-only uses the explicit proposal operation, even on a blank first version', async () => {
+  const blank = { ...doc(2), content_version: 1, markdown_content: '' };
+  const { owner, bodies, counts } = fixture(detail([blank]));
+  owner.choose('REVISE');
+  owner.selectDocument(2);
+  owner.chooseReviewOnly(true);
+  owner.change('仅提出建议');
+  assert.equal(counts.sends, 0);
+  assert.equal(await owner.submit(), true);
+  assert.equal(bodies[0].operation, 'PROPOSE_CHANGES');
+  assert.deepEqual(bodies[0].target, {
+    kind: 'EXISTING', document_id: 2, expected_content_version: 1,
+  });
+  owner.dispose();
 });
 function fixture(actual=detail(),overrides={}){
  const counts={prepares:0,sends:0,reads:0,receives:0},bodies=[],values=new Map();

@@ -13,6 +13,7 @@ import { RecordList } from '../shared/record-list.tsx';
 import { ModelReturnContent } from '../messages/model-return.tsx';
 import { RequestCallRecord } from './model-call-view.tsx';
 import { AnalysisResult } from './analysis-result.tsx';
+import { GuideOperationCard } from './operation-receipt.tsx';
 export const statuses = {
   RUNNING: '运行中',
   COMPLETED: '已完成',
@@ -133,12 +134,23 @@ export function RunHistory({
     />
   );
 }
+function isDocumentOperation(run: GuideRun) {
+  return ['GENERATE', 'REVISE', 'PROPOSE_CHANGES'].includes(run.operation);
+}
+
 export function RunRecordSummary({ run }: Readonly<{ run: GuideRun }>) {
+  const awaitingReview = run.suggestion_batch_id !== null && run.application_result === 'APPLIED';
+  const notApplied = run.status === 'COMPLETED' && run.application_result === 'NOT_APPLIED';
+  const visibleStatus = awaitingReview
+    ? '建议已生成'
+    : notApplied
+      ? '未应用'
+      : statuses[run.status];
   return (
     <>
       <p className="run-task-summary" data-state={run.status}>
         <strong>
-          {operationNames[run.operation]} · {statuses[run.status]}
+          {operationNames[run.operation]} · {visibleStatus}
         </strong>{' '}
         · {run.scope === null ? '未指定范围' : scopeNames[run.scope.scope_type]}
       </p>
@@ -153,7 +165,7 @@ export function RunRecordSummary({ run }: Readonly<{ run: GuideRun }>) {
       {run.application_result === 'APPLIED' && (
         <p>
           {run.suggestion_batch_id !== null
-            ? '修改建议已生成，等待审阅。'
+            ? '本轮已生成修改建议。'
             : `文档已保存为 V${run.document_effect!.after_content_version}。`}
         </p>
       )}
@@ -222,6 +234,8 @@ export function AiReadPanel({
   structured,
   commands,
   renderMarkdown,
+  openSuggestions,
+  openDocument,
   scrollPort,
   scrollContent,
 }: Readonly<{
@@ -230,11 +244,17 @@ export function AiReadPanel({
   owner: RequirementAiRead;
   structured?: (message: Message) => ReactNode;
   commands?: (run: GuideRun) => ReactNode;
+  openSuggestions?: (id: number) => void;
+  openDocument?: (id: number) => void;
   renderMarkdown?: MessageMarkdownRenderer;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     run = state.run;
   const messages = useSyncExternalStore(owner.messages.subscribe, owner.messages.getSnapshot);
+  const inTimeline =
+    messages.items?.some((message) =>
+      message.guide_operations?.some((receipt) => receipt.run_id === state.selected),
+    ) ?? false;
   return (
     <section className="ai-read-panel" aria-label="Ai对话">
       <header className="read-section-heading conversation-read-status">
@@ -256,46 +276,61 @@ export function AiReadPanel({
           </button>
         </p>
       )}
-      {state.selected !== null && (
-        <section aria-label="当前查看的 AI 运行" className="run-status" aria-busy={state.querying}>
-          <div className="run-status-context">
-            <strong>{state.selection === 'HISTORY' ? '历史运行详情' : '当前任务'}</strong>
-            <span>#{state.selected}</span>
-          </div>
-          {!run && <p role="status">正在读取运行状态…</p>}
-          {run && (
-            <>
-              <RunRecordSummary run={run} />
-              {commands?.(run)}
-              {run.status !== 'FAILED' && run.returned_responses.length > 0 && (
-                <ReturnedResponses run={run} />
-              )}{' '}
-              {!messages.items?.some(
-                (message) => message.role === 'USER' && message.guide_run_id === run.id,
-              ) && <RequestCallRecord runId={run.id} />}
-            </>
-          )}
-          {state.connection_error && (
-            <p role="alert" className="inline-error">
-              运行连接异常，保留最后确认状态。
-              <button
-                className="ui-button"
-                type="button"
-                disabled={!state.visible || state.querying}
-                onClick={() => owner.readRun()}
-              >
-                重读运行
-              </button>
-            </p>
-          )}
-        </section>
-      )}
+      {state.selected !== null &&
+        (state.selection === 'HISTORY' || !inTimeline || state.connection_error) && (
+          <section
+            aria-label="当前查看的 AI 运行"
+            className="run-status"
+            aria-busy={state.querying}
+          >
+            <div className="run-status-context">
+              <strong>{state.selection === 'HISTORY' ? '历史运行详情' : '当前任务'}</strong>
+              <span>#{state.selected}</span>
+            </div>
+            {!run && <p role="status">正在读取运行状态…</p>}
+            {run && (
+              <>
+                <RunRecordSummary run={run} />
+                {commands?.(run)}
+                {openSuggestions && run.suggestion_batch_id !== null && (
+                  <button
+                    className="ui-button"
+                    type="button"
+                    onClick={() => openSuggestions(run.suggestion_batch_id!)}
+                  >
+                    查看修改建议
+                  </button>
+                )}
+                {!isDocumentOperation(run) &&
+                  run.status !== 'FAILED' &&
+                  run.returned_responses.length > 0 && <ReturnedResponses run={run} />}
+                {!messages.items?.some(
+                  (message) => message.role === 'USER' && message.guide_run_id === run.id,
+                ) && <RequestCallRecord runId={run.id} />}
+              </>
+            )}
+            {state.connection_error && (
+              <p role="alert" className="inline-error">
+                运行连接异常，保留最后确认状态。
+                <button
+                  className="ui-button"
+                  type="button"
+                  disabled={!state.visible || state.querying}
+                  onClick={() => owner.readRun()}
+                >
+                  重读运行
+                </button>
+              </p>
+            )}
+          </section>
+        )}
       <MessageTimeline
         {...(scrollPort !== undefined ? { scrollPort } : {})}
         {...(scrollContent !== undefined ? { scrollContent } : {})}
         messages={owner.messages}
         resultNotice={(message) =>
           run &&
+          !inTimeline &&
           message.role === 'ASSISTANT' &&
           message.id === run.latest_assistant_message_id &&
           message.guide_run_id === run.id ? (
@@ -303,21 +338,36 @@ export function AiReadPanel({
           ) : null
         }
         requestRecord={(message) =>
-          message.role === 'USER' && message.guide_run_id !== null ? (
+          message.guide_operations?.length ? (
+            message.guide_operations.map((receipt) => (
+              <GuideOperationCard
+                key={receipt.run_id}
+                receipt={receipt}
+                commands={
+                  run?.id === receipt.run_id && state.selection !== 'HISTORY' && commands?.(run)
+                }
+                {...(openSuggestions ? { review: openSuggestions } : {})}
+                {...(openDocument ? { openDocument } : {})}
+                openRun={(id) => owner.open({ id, requirement_id: message.requirement_id })}
+              />
+            ))
+          ) : message.role === 'USER' && message.guide_run_id !== null ? (
             <RequestCallRecord runId={message.guide_run_id} messageId={message.id} />
           ) : null
         }
-        {...(run?.latest_assistant_message_id
+        {...(run?.latest_assistant_message_id && !isDocumentOperation(run)
           ? { reply: { message_id: run.latest_assistant_message_id, guide_run_id: run.id } }
           : {})}
         {...(structured ? { structured } : {})}
         {...(renderMarkdown ? { renderMarkdown } : {})}
       />
-      {run && run.latest_assistant_message_id === null && <ProposalResultNotice run={run} />}
-      {run?.status === 'FAILED' && (
+      {run && !inTimeline && run.latest_assistant_message_id === null && (
+        <ProposalResultNotice run={run} />
+      )}
+      {run?.status === 'FAILED' && !inTimeline && (
         <section role="status" className="run-response-notice">
           <p className="inline-error">本次运行失败：{failure(run)}</p>
-          <ReturnedResponses run={run} />
+          {!isDocumentOperation(run) && <ReturnedResponses run={run} />}
         </section>
       )}
     </section>

@@ -4,7 +4,8 @@ import json
 
 from backend.app.infrastructure.audit_repository import AuditRepository, _owned
 from backend.app.infrastructure.audit_data import audit_json
-from backend.app.infrastructure.guide_repository import GuideRepository
+from backend.app.infrastructure.batch_repository import has_independent_review
+from backend.app.infrastructure.guide_repository import GuideRepository, is_document_scoped
 from backend.app.infrastructure.identifiers import EntityKind, entity_id
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.message_repository import MessageRepository
@@ -100,6 +101,7 @@ def _persist_in_transaction(
     )
     effect = None
     batch_id = None
+    groups = None
     analysis = None
     try:
         validate_collaboration_usage(
@@ -128,6 +130,8 @@ def _persist_in_transaction(
             'suggestions',
             'analysis',
         }
+        if resources.grouped_reviews and run['operation'] == 'PROPOSE_CHANGES':
+            keys.add('suggestion_groups')
         if (
             set(parsed) != keys
             or type(parsed['schema_version']) is not int
@@ -236,12 +240,15 @@ def _persist_in_transaction(
         from backend.app.documents.markdown import DocumentInvalid
         from backend.app.documents.patch_errors import PatchInvalid, TargetStale
         from backend.app.documents.scopes import ScopeInvalid
+        from backend.app.suggestions.review import validate_groups
 
         try:
+            if resources.grouped_reviews:
+                groups = validate_groups(primary['suggestion_groups'], len(primary['suggestions']))
             commit_batch = prepare_proposal_batch(
                 connection, run, context, primary['suggestions'], catalog, at
             )
-        except (Rejected, DocumentInvalid, PatchInvalid, TargetStale, ScopeInvalid):
+        except (Rejected, DocumentInvalid, PatchInvalid, TargetStale, ScopeInvalid, ValueError):
             application = 'NOT_APPLIED'
             validation_error = '候选修改未通过固定目标和补丁校验，未建立审阅批次。'
         else:
@@ -264,7 +271,17 @@ def _persist_in_transaction(
             )
         except (Rejected, ValueError):
             validation_error = '卡片未通过用途、范围或引用校验，保留原始返回供阅读。'
+    document_operation = run['operation'] in ('GENERATE', 'REVISE', 'PROPOSE_CHANGES')
     content = original if primary is None else primary['message']
+    if document_operation:
+        if batch_id is not None:
+            content = '文档修改建议已生成，等待审阅。'
+        elif effect is not None and application == 'APPLIED':
+            content = f'文档已保存为 V{effect["after_content_version"]}。'
+        elif application == 'NO_CHANGE':
+            content = '本轮正文无变化。'
+        else:
+            content = validation_error or '本轮未生成可应用的文档结果。'
     MessageRepository(connection).create_assistant(
         assistant_id,
         root['id'],
@@ -284,7 +301,9 @@ def _persist_in_transaction(
     # Preserve the actual return separately whenever a component was
     # rejected; the readable message must not masquerade as an applied one.
     summary = (
-        primary['message'][:10000]
+        content
+        if document_operation
+        else primary['message'][:10000]
         if primary is not None
         else validation_error
         if row['finish_reason'] == 'length'
@@ -301,6 +320,8 @@ def _persist_in_transaction(
         'analysis': analysis,
         'validation_error': validation_error,
     }
+    if batch_id is not None and groups is not None:
+        effects['review_groups'] = groups
     if header_valid and resources.formation_driven and run['operation'] == 'REVISE':
         from backend.app.formation.decision_writing import record_writes
 
@@ -341,9 +362,11 @@ def _persist_in_transaction(
         "UPDATE guide_runs SET status='COMPLETED',current_step='FINISHED',final_result_json=?,ended_at=?,updated_at=? WHERE id=? AND status='RUNNING' AND current_step='PERSISTING'",
         (canonical_input(effects), at, at, run['id']),
     )
-    RequirementRepository(connection).recover_occupancy(
-        root, batch_id, at if batch_id is not None else None, at
-    )
+    if not is_document_scoped(run):
+        occupying_batch = None if has_independent_review(run) else batch_id
+        RequirementRepository(connection).recover_occupancy(
+            root, occupying_batch, at if occupying_batch is not None else None, at
+        )
     return {
         'code': 'AI_RESULT_PERSISTED',
         'data': {

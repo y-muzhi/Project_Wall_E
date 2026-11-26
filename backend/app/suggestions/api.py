@@ -10,6 +10,7 @@ from . import commands
 from .http_models import DecideSuggestionRequest, DecideSuggestionResponse
 from .http_models import CompleteBatchRequest, CompleteBatchResponse
 from .http_models import AcceptPendingRequest, AcceptPendingResponse
+from .http_models import DecideGroupRequest, DecideGroupResponse
 
 batch_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 
@@ -33,7 +34,10 @@ async def get_batch_http(request: Request):
         GetBatchRequest,
         GetBatchResponse,
         lambda runtime, parsed: queries.get_batch(
-            runtime.database, parsed.batch_id, catalog=runtime.catalog
+            runtime.database,
+            parsed.batch_id,
+            catalog=runtime.catalog,
+            include_review=parsed.include_review,
         ),
     )
 
@@ -55,6 +59,18 @@ async def decide_suggestion_http(request: Request):
         DecideSuggestionRequest,
         DecideSuggestionResponse,
         lambda runtime, parsed: commands.decide_suggestion(
+            runtime.commands(), parsed.payload, catalog=runtime.catalog
+        ),
+    )
+
+
+@batch_router.put('/suggestion-batches/{batch_id}/groups/{group_id}/decision')
+async def decide_group_http(request: Request):
+    return await handle_http(
+        request,
+        DecideGroupRequest,
+        DecideGroupResponse,
+        lambda runtime, parsed: commands.decide_group(
             runtime.commands(), parsed.payload, catalog=runtime.catalog
         ),
     )

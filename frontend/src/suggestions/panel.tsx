@@ -1,6 +1,14 @@
 import './panel.css';
 import { SourceReference } from '../requirements/source-reference.tsx';
-import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { Suggestion } from '../api/models.ts';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
@@ -151,11 +159,19 @@ export function SuggestionPanel({
   owner,
   render,
   locate,
+  openVersion,
+  closeVersion,
+  viewingVersion,
+  selectedMark,
   notify,
 }: Readonly<{
   owner: RequirementSuggestionBatch;
   render: Render;
-  locate: (identity: number) => boolean;
+  locate: (identity: number) => boolean | Promise<boolean>;
+  openVersion?: (kind: 'BASE' | 'APPLIED') => Promise<boolean>;
+  closeVersion?: () => Promise<boolean>;
+  viewingVersion?: number | null;
+  selectedMark?: Readonly<{ identity: number }> | null;
   notify: (message: string) => void;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
@@ -165,7 +181,8 @@ export function SuggestionPanel({
     [bulkIds, setBulkIds] = useState<readonly number[]>([]),
     [locationError, setLocationError] = useState<string | null>(null),
     prefix = useId(),
-    batch = state.batch;
+    batch = state.batch,
+    review = state.review;
   const busy = state.loading || ['SUBMITTING', 'READING'].includes(state.phase),
     protectedIntent = ['UNKNOWN', 'READING', 'SUBMITTING', 'CONFIRMED'].includes(state.phase),
     [pendingOnly, setPendingOnly] = useState(false),
@@ -175,12 +192,17 @@ export function SuggestionPanel({
     state.receipt && 'batch' in state.receipt && 'suggestions' in state.receipt.batch
       ? state.receipt.batch
       : batch;
-  const totals = state.receipt
-      ? 'counts' in state.receipt
-        ? state.receipt.counts
-        : state.receipt.batch.counts
-      : batch?.counts,
+  const totals =
+      state.receipt && !('group' in state.receipt)
+        ? 'counts' in state.receipt
+          ? state.receipt.counts
+          : state.receipt.batch.counts
+        : batch?.counts,
     metadata = state.receipt && 'batch' in state.receipt ? state.receipt.batch : batch;
+  const outdated =
+    metadata?.status === 'PENDING' &&
+    (state.stale ||
+      (state.target !== null && state.target.content_version !== metadata.base_content_version));
   const confirmedItem =
     state.receipt && 'suggestion' in state.receipt ? state.receipt.suggestion : null;
   const items =
@@ -188,24 +210,56 @@ export function SuggestionPanel({
         confirmedItem?.id === item.id ? confirmedItem : item,
       ) ?? [],
     visible = visibleSuggestions(items, pendingOnly, editing, state.intent?.suggestion?.id ?? null);
-  const indicate = (identity: number) => {
-    cursor.current = identity;
-    setLocationError(
-      locate(identity) ? null : '当前正文或目标无法定位，请重新读取；建议尚未应用。',
-    );
+  const [openingVersion, setOpeningVersion] = useState(false);
+  const preview = async (kind: 'BASE' | 'APPLIED') => {
+    if (!openVersion || openingVersion) return false;
+    setOpeningVersion(true);
+    try {
+      const opened = await openVersion(kind);
+      setLocationError(opened ? null : '此版本暂时无法读取，请重试。');
+      return opened;
+    } catch {
+      setLocationError('此版本暂时无法读取，请重试。');
+      return false;
+    } finally {
+      setOpeningVersion(false);
+    }
   };
-  const next = () => {
-    const id = nextPendingSuggestion(items, cursor.current);
-    if (id === null || composing.size > 0) return;
-    setPendingOnly(true);
-    indicate(id);
-    requestAnimationFrame(() => {
+  const indicate = async (identity: number) => {
+    cursor.current = identity;
+    const baseRevision = review?.base_revision_id;
+    const shouldOpenBase =
+      baseRevision != null &&
+      (viewingVersion != null
+        ? viewingVersion !== baseRevision
+        : state.target?.content_version !== batch?.base_content_version);
+    if (shouldOpenBase && !(await preview('BASE'))) return;
+    const located = await locate(identity);
+    setLocationError(located ? null : '当前正文或目标无法定位，可打开本批基准版本核对。');
+  };
+  const focusSuggestion = useCallback((id: number) => {
+    return requestAnimationFrame(() => {
       const element = listRoot.current?.querySelector<HTMLElement>(`[data-suggestion-id="${id}"]`);
       if (!element) return;
+      const group = element.closest('details.review-group-members');
+      if (group instanceof HTMLDetailsElement) group.open = true;
       listRoot.current!.scrollTop +=
         element.getBoundingClientRect().top - listRoot.current!.getBoundingClientRect().top;
       element.focus({ preventScroll: true });
     });
+  }, []);
+  useEffect(() => {
+    if (!selectedMark) return;
+    setPendingOnly(false);
+    const frame = focusSuggestion(selectedMark.identity);
+    return () => cancelAnimationFrame(frame);
+  }, [selectedMark, focusSuggestion]);
+  const next = () => {
+    const id = nextPendingSuggestion(items, cursor.current);
+    if (id === null || composing.size > 0) return;
+    setPendingOnly(true);
+    void indicate(id);
+    focusSuggestion(id);
   };
   const decidedNotice = (operation: string | undefined) =>
     operation === 'ACCEPT_PENDING'
@@ -260,20 +314,310 @@ export function SuggestionPanel({
   };
   const pending = totals?.pending ?? 0,
     processed = totals ? totals.total - pending : 0;
+  const renderItem = (item: Suggestion) => {
+    const content = state.drafts[item.id] ?? proposed(item),
+      rowInvalid =
+        item.patch_operation === 'REPLACE_TABLE_ROW' &&
+        (!tableRowCells(content, item.proposed_data!.cells.length) || [...content].length > 100000);
+    return (
+      <article
+        key={item.id}
+        tabIndex={-1}
+        hidden={!visible.includes(item.id)}
+        data-suggestion-id={item.id}
+        className="suggestion-card"
+        data-state={item.status}
+        onClick={(event) => {
+          if (
+            !(event.target instanceof Element) ||
+            event.target.closest('button,a,input,textarea,label,select,fieldset,details') ||
+            window.getSelection()?.isCollapsed === false
+          )
+            return;
+          void indicate(item.id);
+        }}
+      >
+        <header className="review-card-heading">
+          <span className="review-order">{String(item.order_no).padStart(2, '0')}</span>
+          <h3>{item.title}</h3>
+          <span className="review-decision-status" data-state={item.status}>
+            {statuses[item.status]}
+          </span>
+        </header>
+        <div className="review-card-body">
+          <p className="review-explanation">{item.explanation}</p>
+          {item.impact && (
+            <p className="review-impact">
+              <span>影响</span>
+              {item.impact}
+            </p>
+          )}
+          {item.patch_operation === 'INSERT_BEFORE' || item.patch_operation === 'INSERT_AFTER' ? (
+            <p className="review-impact">
+              在目标区块{item.patch_operation === 'INSERT_BEFORE' ? '之前' : '之后'}插入
+            </p>
+          ) : null}
+          <details className="review-preview-details" open={editing.has(item.id) || undefined}>
+            <summary>查看修改内容</summary>
+            <div
+              className={
+                'review-diff' +
+                (item.patch_operation === 'DELETE_BLOCK' ? ' review-diff-delete' : '')
+              }
+            >
+              <section
+                className="review-diff-pane review-before"
+                aria-label={item.patch_operation === 'DELETE_BLOCK' ? '待删除内容' : '原内容'}
+              >
+                <h4>
+                  {item.patch_operation === 'DELETE_BLOCK'
+                    ? '待删除内容'
+                    : item.patch_operation === 'REPLACE_TABLE_ROW'
+                      ? '原表格行'
+                      : '原内容'}
+                </h4>
+                <Preview
+                  markdown={item.original_content}
+                  {...(item.patch_operation === 'REPLACE_TABLE_ROW'
+                    ? { columns: item.proposed_data!.cells.length }
+                    : {})}
+                  render={render}
+                />
+              </section>
+              {item.patch_operation !== 'DELETE_BLOCK' && (
+                <section className="review-diff-pane review-after" aria-label="建议内容">
+                  <h4>
+                    {item.patch_operation.startsWith('INSERT_')
+                      ? '新增内容'
+                      : item.patch_operation === 'REPLACE_TABLE_ROW'
+                        ? '建议表格行'
+                        : '建议内容'}
+                  </h4>
+                  {editing.has(item.id) ? (
+                    item.patch_operation === 'REPLACE_TABLE_ROW' ? (
+                      <RowEdit
+                        item={item}
+                        content={content}
+                        disabled={!owner.editable}
+                        change={(value) => owner.draft(item.id, value)}
+                        composition={(active) =>
+                          setComposing((previous) =>
+                            active
+                              ? new Set([...previous, item.id])
+                              : new Set([...previous].filter((id) => id !== item.id)),
+                          )
+                        }
+                      />
+                    ) : (
+                      <label htmlFor={prefix + item.id}>
+                        编辑建议内容
+                        <textarea
+                          className="ui-input"
+                          aria-label="编辑建议内容"
+                          id={prefix + item.id}
+                          value={content}
+                          disabled={!owner.editable}
+                          onChange={(event) => owner.draft(item.id, event.target.value)}
+                          onCompositionStart={() =>
+                            setComposing((previous) => new Set([...previous, item.id]))
+                          }
+                          onCompositionEnd={(event) => {
+                            owner.draft(item.id, event.currentTarget.value);
+                            setComposing(
+                              (previous) => new Set([...previous].filter((id) => id !== item.id)),
+                            );
+                          }}
+                        />
+                        <span>只编辑建议正文，目标和操作保持不变。</span>
+                      </label>
+                    )
+                  ) : item.patch_operation === 'REPLACE_TABLE_ROW' ? (
+                    <RowProposal item={item} />
+                  ) : (
+                    <Preview
+                      markdown={
+                        item.status === 'EDITED'
+                          ? item.user_edited_content!
+                          : item.proposed_markdown!
+                      }
+                      render={render}
+                    />
+                  )}
+                </section>
+              )}
+            </div>
+          </details>
+          {item.validation_status === 'INVALID' && (
+            <p role="alert" className="inline-error">
+              {item.validation_error}
+            </p>
+          )}
+          {state.item_errors[item.id] && (
+            <p role="alert" className="inline-error">
+              {state.item_errors[item.id]}
+            </p>
+          )}
+          {state.intent?.suggestion?.id === item.id && busy && (
+            <p role="status">正在保存此项决定…</p>
+          )}
+        </div>
+        <footer className="suggestion-actions">
+          <button
+            className="ui-button review-locate"
+            type="button"
+            disabled={busy || !state.available}
+            onClick={() => void indicate(item.id)}
+          >
+            定位正文
+          </button>
+          {batch?.status === 'PENDING' && !review?.grouped && (
+            <div className="suggestion-decisions" aria-label="建议决定">
+              {editing.has(item.id) ? (
+                <>
+                  <button
+                    className="ui-button primary"
+                    type="button"
+                    disabled={!owner.editable || composing.has(item.id) || rowInvalid}
+                    onClick={() => void decide(item.id, 'EDITED')}
+                  >
+                    保存编辑并接受
+                  </button>
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={!owner.editable || composing.has(item.id)}
+                    onClick={() => {
+                      owner.cancelDraft(item.id);
+                      setEditing(
+                        (previous) => new Set([...previous].filter((id) => id !== item.id)),
+                      );
+                    }}
+                  >
+                    取消编辑
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="ui-button review-accept"
+                    type="button"
+                    disabled={
+                      !owner.editable || composing.has(item.id) || item.status === 'ACCEPTED'
+                    }
+                    onClick={() => void decide(item.id, 'ACCEPTED')}
+                  >
+                    {item.status === 'ACCEPTED' ? '已接受' : '接受'}
+                  </button>
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={
+                      !owner.editable || composing.has(item.id) || item.status === 'REJECTED'
+                    }
+                    onClick={() => void decide(item.id, 'REJECTED')}
+                  >
+                    {item.status === 'REJECTED' ? '已拒绝' : '拒绝'}
+                  </button>
+                  {item.patch_operation !== 'DELETE_BLOCK' && (
+                    <button
+                      className="ui-button"
+                      type="button"
+                      disabled={!owner.editable}
+                      onClick={() => {
+                        owner.draft(item.id, state.drafts[item.id] ?? proposed(item));
+                        setEditing((previous) => new Set([...previous, item.id]));
+                      }}
+                    >
+                      编辑后接受
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </footer>
+      </article>
+    );
+  };
+  const renderSuggestions = () => {
+    if (!review?.grouped) return items.map(renderItem);
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return review.groups.map((group) => {
+      const decision =
+        state.receipt && 'group' in state.receipt && state.receipt.group.group_id === group.group_id
+          ? state.receipt.group.status
+          : group.status;
+      const members = group.suggestion_ids.flatMap((identity) => {
+        const item = byId.get(identity);
+        return item ? [item] : [];
+      });
+      return (
+        <section
+          key={group.group_id}
+          className="review-group"
+          hidden={pendingOnly && decision !== 'PENDING'}
+        >
+          <header className="review-group-heading">
+            <h3>{group.title}</h3>
+            <span className="review-decision-status" data-state={decision}>
+              {statuses[decision]}
+            </span>
+          </header>
+          <p className="review-explanation">{group.reason}</p>
+          {metadata?.status === 'PENDING' && (
+            <div className="suggestion-decisions" aria-label={group.title + '的组决定'}>
+              <button
+                className="ui-button"
+                type="button"
+                disabled={!owner.editable || decision === 'ACCEPTED'}
+                onClick={() =>
+                  void owner
+                    .decideGroup(group.group_id, 'ACCEPTED')
+                    .then((ok) => ok && notify(decidedNotice('DECIDE_GROUP')))
+                }
+              >
+                接受本组
+              </button>
+              <button
+                className="ui-button"
+                type="button"
+                disabled={!owner.editable || decision === 'REJECTED'}
+                onClick={() =>
+                  void owner
+                    .decideGroup(group.group_id, 'REJECTED')
+                    .then((ok) => ok && notify(decidedNotice('DECIDE_GROUP')))
+                }
+              >
+                拒绝本组
+              </button>
+            </div>
+          )}
+          <details className="review-group-members">
+            <summary>查看 {members.length} 处修改</summary>
+            {members.map(renderItem)}
+          </details>
+        </section>
+      );
+    });
+  };
   return (
     <section className="suggestion-panel suggestion-review" aria-label="建议处理" aria-busy={busy}>
       <header className="review-header">
         <div className="review-heading">
           <h2>{batch?.title ?? '修改建议'}</h2>
-          <span className="review-batch-status" data-state={metadata?.status}>
-            {metadata?.status === 'PENDING'
-              ? '尚未应用'
-              : metadata?.status === 'DISCARDED'
-                ? '已放弃'
-                : metadata?.completion_result === 'NO_CHANGE'
-                  ? '无正文变化'
-                  : '已应用'}
-          </span>
+          {metadata && (
+            <span className="review-batch-status" data-state={metadata.status}>
+              {outdated
+                ? '基准版本已更新'
+                : metadata.status === 'PENDING'
+                  ? '尚未应用'
+                  : metadata.status === 'DISCARDED'
+                    ? '已放弃'
+                    : metadata.completion_result === 'NO_CHANGE'
+                      ? '无正文变化'
+                      : '已应用'}
+            </span>
+          )}
         </div>
         {metadata && totals && (
           <>
@@ -281,8 +625,44 @@ export function SuggestionPanel({
               目标文档{' '}
               <strong>{state.target?.name ?? '文档 ' + metadata.target_document_id}</strong>
               <span>基于 V{metadata.base_content_version}</span>
-              <span>共 {totals.total} 项</span>
+              <span>
+                {review?.grouped ? `${review.groups.length} 组 · ` : ''}共 {totals.total} 处
+              </span>
             </p>
+            {review && (
+              <div className="review-version-actions" role="group" aria-label="审阅正文版本">
+                {review.base_revision_id !== null && (
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={openingVersion || busy}
+                    onClick={() => void preview('BASE')}
+                  >
+                    查看基准 V{metadata.base_content_version}
+                  </button>
+                )}
+                {review.applied_revision_id !== null && (
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={openingVersion || busy}
+                    onClick={() => void preview('APPLIED')}
+                  >
+                    查看已保存 V{metadata.applied_content_version}
+                  </button>
+                )}
+                {viewingVersion != null && closeVersion && (
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={openingVersion || busy}
+                    onClick={() => void closeVersion()}
+                  >
+                    返回当前正文
+                  </button>
+                )}
+              </div>
+            )}
             <dl className="review-counts">
               {(
                 [
@@ -365,11 +745,15 @@ export function SuggestionPanel({
           重新核对建议状态
         </button>
       )}
-      {(state.stale ||
-        (batch?.status === 'PENDING' &&
-          batch.base_content_version !== state.detail.current?.content_version)) && (
+      {outdated && (
         <p className="review-notice" role="alert">
-          正文版本或目标已变化，不能直接完成；请放弃本批后重新发起修改。
+          当前正文已更新{state.target ? '至 V' + state.target.content_version : ''}。
+          本批可在基准版本中查看，请基于最新正文重新发起修订。
+        </p>
+      )}
+      {metadata?.status === 'PENDING' && !outdated && state.target?.archived_at != null && (
+        <p className="review-notice" role="alert">
+          目标文档已归档。恢复文档后可继续处理本批建议。
         </p>
       )}
       {protectedIntent && !modal && (
@@ -418,7 +802,7 @@ export function SuggestionPanel({
             >
               下一条待处理
             </button>
-            {metadata?.status === 'PENDING' && (
+            {!review?.grouped && metadata?.status === 'PENDING' && (
               <button
                 className="ui-button review-bulk-button"
                 type="button"
@@ -443,231 +827,7 @@ export function SuggestionPanel({
         {visible.length === 0 && !state.loading && !state.error && (
           <EmptyState icon="suggestion" message={pendingOnly ? '暂无待处理建议' : '暂无修改建议'} />
         )}
-        {items.map((item) => {
-          const content = state.drafts[item.id] ?? proposed(item),
-            rowInvalid =
-              item.patch_operation === 'REPLACE_TABLE_ROW' &&
-              (!tableRowCells(content, item.proposed_data!.cells.length) ||
-                [...content].length > 100000);
-          return (
-            <article
-              key={item.id}
-              tabIndex={-1}
-              hidden={!visible.includes(item.id)}
-              data-suggestion-id={item.id}
-              className="suggestion-card"
-              data-state={item.status}
-              onClick={(event) => {
-                if (
-                  !(event.target instanceof Element) ||
-                  event.target.closest('button,a,input,textarea,label,select,fieldset,details') ||
-                  window.getSelection()?.isCollapsed === false
-                )
-                  return;
-                indicate(item.id);
-              }}
-            >
-              <header className="review-card-heading">
-                <span className="review-order">{String(item.order_no).padStart(2, '0')}</span>
-                <h3>{item.title}</h3>
-                <span className="review-decision-status" data-state={item.status}>
-                  {statuses[item.status]}
-                </span>
-              </header>
-              <div className="review-card-body">
-                <p className="review-explanation">{item.explanation}</p>
-                {item.impact && (
-                  <p className="review-impact">
-                    <span>影响</span>
-                    {item.impact}
-                  </p>
-                )}
-                {item.patch_operation === 'INSERT_BEFORE' ||
-                item.patch_operation === 'INSERT_AFTER' ? (
-                  <p className="review-impact">
-                    在目标区块{item.patch_operation === 'INSERT_BEFORE' ? '之前' : '之后'}插入
-                  </p>
-                ) : null}
-                <div
-                  className={
-                    'review-diff' +
-                    (item.patch_operation === 'DELETE_BLOCK' ? ' review-diff-delete' : '')
-                  }
-                >
-                  <section
-                    className="review-diff-pane review-before"
-                    aria-label={item.patch_operation === 'DELETE_BLOCK' ? '待删除内容' : '原内容'}
-                  >
-                    <h4>
-                      {item.patch_operation === 'DELETE_BLOCK'
-                        ? '待删除内容'
-                        : item.patch_operation === 'REPLACE_TABLE_ROW'
-                          ? '原表格行'
-                          : '原内容'}
-                    </h4>
-                    <Preview
-                      markdown={item.original_content}
-                      {...(item.patch_operation === 'REPLACE_TABLE_ROW'
-                        ? { columns: item.proposed_data!.cells.length }
-                        : {})}
-                      render={render}
-                    />
-                  </section>
-                  {item.patch_operation !== 'DELETE_BLOCK' && (
-                    <section className="review-diff-pane review-after" aria-label="建议内容">
-                      <h4>
-                        {item.patch_operation.startsWith('INSERT_')
-                          ? '新增内容'
-                          : item.patch_operation === 'REPLACE_TABLE_ROW'
-                            ? '建议表格行'
-                            : '建议内容'}
-                      </h4>
-                      {editing.has(item.id) ? (
-                        item.patch_operation === 'REPLACE_TABLE_ROW' ? (
-                          <RowEdit
-                            item={item}
-                            content={content}
-                            disabled={!owner.editable}
-                            change={(value) => owner.draft(item.id, value)}
-                            composition={(active) =>
-                              setComposing((previous) =>
-                                active
-                                  ? new Set([...previous, item.id])
-                                  : new Set([...previous].filter((id) => id !== item.id)),
-                              )
-                            }
-                          />
-                        ) : (
-                          <label htmlFor={prefix + item.id}>
-                            编辑建议内容
-                            <textarea
-                              className="ui-input"
-                              aria-label="编辑建议内容"
-                              id={prefix + item.id}
-                              value={content}
-                              disabled={!owner.editable}
-                              onChange={(event) => owner.draft(item.id, event.target.value)}
-                              onCompositionStart={() =>
-                                setComposing((previous) => new Set([...previous, item.id]))
-                              }
-                              onCompositionEnd={(event) => {
-                                owner.draft(item.id, event.currentTarget.value);
-                                setComposing(
-                                  (previous) =>
-                                    new Set([...previous].filter((id) => id !== item.id)),
-                                );
-                              }}
-                            />
-                            <span>只编辑建议正文，目标和操作保持不变。</span>
-                          </label>
-                        )
-                      ) : item.patch_operation === 'REPLACE_TABLE_ROW' ? (
-                        <RowProposal item={item} />
-                      ) : (
-                        <Preview
-                          markdown={
-                            item.status === 'EDITED'
-                              ? item.user_edited_content!
-                              : item.proposed_markdown!
-                          }
-                          render={render}
-                        />
-                      )}
-                    </section>
-                  )}
-                </div>
-                {item.validation_status === 'INVALID' && (
-                  <p role="alert" className="inline-error">
-                    {item.validation_error}
-                  </p>
-                )}
-                {state.item_errors[item.id] && (
-                  <p role="alert" className="inline-error">
-                    {state.item_errors[item.id]}
-                  </p>
-                )}
-                {state.intent?.suggestion?.id === item.id && busy && (
-                  <p role="status">正在保存此项决定…</p>
-                )}
-              </div>
-              <footer className="suggestion-actions">
-                <button
-                  className="ui-button review-locate"
-                  type="button"
-                  disabled={busy || !state.available}
-                  onClick={() => indicate(item.id)}
-                >
-                  定位正文
-                </button>
-                {batch?.status === 'PENDING' && (
-                  <div className="suggestion-decisions" aria-label="建议决定">
-                    {editing.has(item.id) ? (
-                      <>
-                        <button
-                          className="ui-button primary"
-                          type="button"
-                          disabled={!owner.editable || composing.has(item.id) || rowInvalid}
-                          onClick={() => void decide(item.id, 'EDITED')}
-                        >
-                          保存编辑并接受
-                        </button>
-                        <button
-                          className="ui-button"
-                          type="button"
-                          disabled={!owner.editable || composing.has(item.id)}
-                          onClick={() => {
-                            owner.cancelDraft(item.id);
-                            setEditing(
-                              (previous) => new Set([...previous].filter((id) => id !== item.id)),
-                            );
-                          }}
-                        >
-                          取消编辑
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          className="ui-button review-accept"
-                          type="button"
-                          disabled={
-                            !owner.editable || composing.has(item.id) || item.status === 'ACCEPTED'
-                          }
-                          onClick={() => void decide(item.id, 'ACCEPTED')}
-                        >
-                          {item.status === 'ACCEPTED' ? '已接受' : '接受'}
-                        </button>
-                        <button
-                          className="ui-button"
-                          type="button"
-                          disabled={
-                            !owner.editable || composing.has(item.id) || item.status === 'REJECTED'
-                          }
-                          onClick={() => void decide(item.id, 'REJECTED')}
-                        >
-                          {item.status === 'REJECTED' ? '已拒绝' : '拒绝'}
-                        </button>
-                        {item.patch_operation !== 'DELETE_BLOCK' && (
-                          <button
-                            className="ui-button"
-                            type="button"
-                            disabled={!owner.editable}
-                            onClick={() => {
-                              owner.draft(item.id, state.drafts[item.id] ?? proposed(item));
-                              setEditing((previous) => new Set([...previous, item.id]));
-                            }}
-                          >
-                            编辑后接受
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-              </footer>
-            </article>
-          );
-        })}
+        {renderSuggestions()}
       </div>
       {batch && (
         <footer className="review-batch-actions">
@@ -681,9 +841,11 @@ export function SuggestionPanel({
             </strong>
             <p className="suggestion-completion-help">
               {metadata?.status === 'PENDING'
-                ? pending > 0
-                  ? '接受仅保存决定，全部处理后再确认应用。'
-                  : '决定已保存，确认应用后更新正文。'
+                ? outdated || (review?.grouped && state.target?.archived_at != null)
+                  ? '本批建议仅供查看。'
+                  : pending > 0
+                    ? '接受仅保存决定，全部处理后再确认应用。'
+                    : '决定已保存，确认应用后更新正文。'
                 : metadata?.status === 'DISCARDED'
                   ? '正文保持不变。'
                   : '以实际保存结果为准。'}

@@ -79,6 +79,8 @@ OPENAI_MANIFEST_SHA256 = '9ddea44727ed60fe6e792708b3f109c7acbd33cb279c5e4e43c446
 OPENAI_ARRAY_MANIFEST_SHA256 = '3b10a730eb5fcd346cec68b163bc4a2ee9ef1023674e513a369616bedaeaa543'
 DISCUSSION_ROUTE_MANIFESTS = frozenset(
     {
+        '12412f4483ec5c0e262eb84381dcaf76897b669ae46bff4197947cb4a6f6e6b3',
+        '91dc07d7100ead35e6f0687600915c477fa32f86eff164217e8c553d5bc66576',
         'b28a2780c74c050bbf1627c56de37ad3a63f7a151430a6c94aa648ea83cf8cfb',
         '538fcc450df89b57cdfb8b0168f9bc3e77dabef6c1fcec30549d52aedaeb813b',
         '317ee70c6bfc5b70f4fdccff794ab50304455ced626fb4ace2569d23a6edef57',
@@ -287,7 +289,13 @@ class CollaborationResources:
             'v45',
             'v46',
             'openai-v6',
+            'openai-v7',
+            'openai-v8',
         )
+
+    @property
+    def grouped_reviews(self):
+        return self.reference('collaboration.release')['version'] == 'openai-v8'
 
     @property
     def formation_driven(self):
@@ -373,7 +381,11 @@ class CollaborationResources:
             and effective['state'] == 'OFFLINE_READY'
             and self.formation_driven
             and release.get('model_transport', {}).get('mode') == 'openai_responses_v1'
-            and os.environ.get('WALLE_ACTIVATED_OPENAI_RELEASE_SHA256') == self.release_sha256
+            and self.release_sha256
+            in (
+                os.environ.get('WALLE_ACTIVATED_OPENAI_RELEASE_SHA256'),
+                os.environ.get('WALLE_ACTIVATED_OPENAI_DOCUMENT_RELEASE_SHA256'),
+            )
         ):
             return
         raise ConfigInvalid('Collaboration release has no verified live admission')

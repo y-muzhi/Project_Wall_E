@@ -64,9 +64,13 @@ def close_edit_session(
     ):
         raise DocumentInvalid('关闭编辑来源必须与草稿及上下文删除同事务')
     requirement = connection.execute(
-        'SELECT document_work_state FROM requirements WHERE id=?', (row['requirement_id'],)
+        'SELECT active_operation_type,active_operation_id FROM requirements WHERE id=?',
+        (row['requirement_id'],),
     ).fetchone()
-    if requirement is None or requirement['document_work_state'] != 'IDLE':
+    if requirement is None or (
+        requirement['active_operation_type'] == 'MANUAL_DRAFT'
+        and requirement['active_operation_id'] == draft_id
+    ):
         raise DocumentInvalid('关闭编辑来源必须与占用释放同事务')
     connection.execute(
         'UPDATE manual_edit_sessions SET status=?,closed_at=? WHERE draft_id=?',

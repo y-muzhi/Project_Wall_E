@@ -112,6 +112,7 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
   const pending = useRef(false),
     callbacks = useRef(props);
   callbacks.current = props;
+  const staleBasis = props.recovery.staleBasis;
   const endingBusy = ['PREPARING', 'SUBMITTING', 'CHECKING'].includes(ending.phase),
     endingUnknown = ending.phase === 'UNKNOWN';
   const editable =
@@ -185,17 +186,26 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
         className="ui-button primary"
         type="button"
         title={
-          !['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase)
-            ? '请先处理草稿恢复提示，进入可编辑状态'
-            : !editable
-              ? '请先确认当前结束操作的结果'
-              : !props.valid
-                ? '请先处理正文格式或结构问题'
-                : save.status !== 'SAVED'
-                  ? '等待最新内容保存确认后可完成编辑'
-                  : undefined
+          staleBasis
+            ? '正式正文已更新，请先从最新版本开始编辑'
+            : !['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase)
+              ? '请先处理草稿恢复提示，进入可编辑状态'
+              : !editable
+                ? '请先确认当前结束操作的结果'
+                : !props.valid
+                  ? '请先处理正文格式或结构问题'
+                  : save.status !== 'SAVED'
+                    ? '等待最新内容保存确认后可完成编辑'
+                    : undefined
         }
-        disabled={locked || error !== null || !editable || !props.valid || save.status !== 'SAVED'}
+        disabled={
+          Boolean(staleBasis) ||
+          locked ||
+          error !== null ||
+          !editable ||
+          !props.valid ||
+          save.status !== 'SAVED'
+        }
         onClick={() => void execute(() => props.ending.complete(), afterEnd)}
       >
         完成编辑
@@ -307,90 +317,38 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
           </button>
         </div>
       )}
-      {!['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase) && ending.phase !== 'CLOSED' && (
-        <section className="draft-recovery-notice" aria-label="本地草稿恢复">
-          <strong>
-            {recovery.checking
-              ? '正在检查草稿'
-              : recovery.local
-                ? '发现需要处理的草稿'
-                : '暂时无法恢复编辑'}
-          </strong>
-          {recovery.checking && <p role="status">正在读取实际编辑会话与本地暂存…</p>}
+      {staleBasis && ending.phase !== 'CLOSED' && (
+        <section className="draft-recovery-notice" aria-label="草稿基准已更新">
+          <p role="status">
+            此草稿基于 V{staleBasis.base}，当前正式正文为 V{staleBasis.current.content_version}
+            。请先保留所需内容，再从最新版本开始编辑。
+          </p>
+          <details>
+            <summary>查看当前正式正文</summary>
+            <pre className="draft-source">{staleBasis.current.markdown_content}</pre>
+          </details>
+          {recovery.local && (
+            <details>
+              <summary>查看本地未同步内容</summary>
+              <pre className="draft-source">{recovery.local.markdown_content}</pre>
+            </details>
+          )}
+          {recovery.server && (
+            <details>
+              <summary>查看后端已保存草稿</summary>
+              <pre className="draft-source">{recovery.server.markdown_content}</pre>
+            </details>
+          )}
           {recovery.error && (
             <p role="alert" className="inline-error">
               {recovery.error}
-            </p>
-          )}
-          {recovery.local && (
-            <>
-              <p>
-                {recovery.phase === 'COMPARE'
-                  ? '后端版本已变化，请保留本地内容并对照处理。'
-                  : '发现本地未同步内容，可选择恢复或继续后端草稿。'}
-              </p>
-              {recovery.phase === 'AVAILABLE' && (
-                <button
-                  className="ui-button"
-                  type="button"
-                  disabled={locked || error !== null || ending.phase !== 'EDITING'}
-                  onClick={() => void execute(() => props.recovery.restore())}
-                >
-                  恢复本地内容
-                </button>
-              )}
-              <button
-                className="ui-button"
-                type="button"
-                disabled={locked}
-                aria-expanded={comparison}
-                onClick={() => setComparison((value) => !value)}
-              >
-                对照内容
-              </button>
-              <button
-                className="ui-button"
-                type="button"
-                disabled={locked || error !== null || ending.phase !== 'EDITING'}
-                onClick={() => setDialog('LOCAL')}
-              >
-                使用后端草稿
-              </button>
-              <div
-                className="motion-disclosure"
-                hidden={!comparison}
-                inert={!comparison}
-                aria-hidden={!comparison}
-              >
-                {sourcePair}
-              </div>
-            </>
-          )}
-          {!recovery.local && props.recovery.canContinueServer && (
-            <>
-              <p>本地暂存无法检查。可以继续服务器已保存的草稿，正式正文保持不变。</p>
-              <button
-                className="ui-button"
-                type="button"
-                disabled={locked || ending.phase !== 'EDITING'}
-                onClick={() =>
-                  void execute(() => props.recovery.continueServerWithoutLocal(), afterServer)
-                }
-              >
-                继续已保存的草稿
-              </button>
-            </>
-          )}
-          {!recovery.local && recovery.phase === 'COMPARE' && (
-            <p role="alert" className="inline-error">
-              服务器草稿版本已变化，当前编辑保持锁定，请重新进入详情后核对最新内容。
             </p>
           )}
           {recovery.phase === 'ERROR' && (
             <button
               className="ui-button"
               type="button"
-              disabled={locked || ending.phase !== 'EDITING'}
+              disabled={locked}
               onClick={() => void execute(() => props.recovery.inspect())}
             >
               重新读取草稿与暂存
@@ -398,6 +356,99 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
           )}
         </section>
       )}
+      {!staleBasis &&
+        !['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase) &&
+        ending.phase !== 'CLOSED' && (
+          <section className="draft-recovery-notice" aria-label="本地草稿恢复">
+            <strong>
+              {recovery.checking
+                ? '正在检查草稿'
+                : recovery.local
+                  ? '发现需要处理的草稿'
+                  : '暂时无法恢复编辑'}
+            </strong>
+            {recovery.checking && <p role="status">正在读取实际编辑会话与本地暂存…</p>}
+            {recovery.error && (
+              <p role="alert" className="inline-error">
+                {recovery.error}
+              </p>
+            )}
+            {recovery.local && (
+              <>
+                <p>
+                  {recovery.phase === 'COMPARE'
+                    ? '后端版本已变化，请保留本地内容并对照处理。'
+                    : '发现本地未同步内容，可选择恢复或继续后端草稿。'}
+                </p>
+                {recovery.phase === 'AVAILABLE' && (
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={locked || error !== null || ending.phase !== 'EDITING'}
+                    onClick={() => void execute(() => props.recovery.restore())}
+                  >
+                    恢复本地内容
+                  </button>
+                )}
+                <button
+                  className="ui-button"
+                  type="button"
+                  disabled={locked}
+                  aria-expanded={comparison}
+                  onClick={() => setComparison((value) => !value)}
+                >
+                  对照内容
+                </button>
+                <button
+                  className="ui-button"
+                  type="button"
+                  disabled={locked || error !== null || ending.phase !== 'EDITING'}
+                  onClick={() => setDialog('LOCAL')}
+                >
+                  使用后端草稿
+                </button>
+                <div
+                  className="motion-disclosure"
+                  hidden={!comparison}
+                  inert={!comparison}
+                  aria-hidden={!comparison}
+                >
+                  {sourcePair}
+                </div>
+              </>
+            )}
+            {!recovery.local && props.recovery.canContinueServer && (
+              <>
+                <p>本地暂存无法检查。可以继续服务器已保存的草稿，正式正文保持不变。</p>
+                <button
+                  className="ui-button"
+                  type="button"
+                  disabled={locked || ending.phase !== 'EDITING'}
+                  onClick={() =>
+                    void execute(() => props.recovery.continueServerWithoutLocal(), afterServer)
+                  }
+                >
+                  继续已保存的草稿
+                </button>
+              </>
+            )}
+            {!recovery.local && recovery.phase === 'COMPARE' && (
+              <p role="alert" className="inline-error">
+                服务器草稿版本已变化，当前编辑保持锁定，请重新进入详情后核对最新内容。
+              </p>
+            )}
+            {recovery.phase === 'ERROR' && (
+              <button
+                className="ui-button"
+                type="button"
+                disabled={locked || ending.phase !== 'EDITING'}
+                onClick={() => void execute(() => props.recovery.inspect())}
+              >
+                重新读取草稿与暂存
+              </button>
+            )}
+          </section>
+        )}
       {error && (
         <p role="alert" className="inline-error">
           {error}
@@ -415,7 +466,13 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
         busy={locked}
         error={error ?? (dialog === 'LOCAL' ? recovery.error : ending.error)}
         confirmLabel={dialog === 'CANCEL' && endingUnknown ? '重新确认结果' : '确认放弃'}
-        cancelLabel={dialog === 'CANCEL' && endingUnknown ? '保留请求并关闭弹窗' : '继续编辑'}
+        cancelLabel={
+          dialog === 'CANCEL' && endingUnknown
+            ? '保留请求并关闭弹窗'
+            : staleBasis
+              ? '保留草稿'
+              : '继续编辑'
+        }
         cancel={closeDialog}
         confirm={() =>
           void execute(

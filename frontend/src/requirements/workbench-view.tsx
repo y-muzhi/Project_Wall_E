@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import type { MouseEvent } from 'react';
-import { RequirementWorkbench } from './workbench.ts';
+import { defaultWorkbenchQuery, RequirementWorkbench } from './workbench.ts';
 import type { WorkbenchQuery } from './workbench.ts';
 import { CreateRequirementFlow } from './create.ts';
 import { CreateRequirementDrawer } from './create_drawer.tsx';
@@ -59,6 +59,19 @@ export function WorkbenchView({
     [searchError, setSearchError] = useState<string | null>(null),
     [drawer, setDrawer] = useState(false),
     [discard, setDiscard] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const tableRegion = useRef<HTMLDivElement>(null);
+  const [tableOverflows, setTableOverflows] = useState(false);
+  const hasResult = state.result !== null;
+  useLayoutEffect(() => {
+    const region = tableRegion.current;
+    if (!region) return;
+    const measure = () => setTableOverflows(region.scrollWidth > region.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(region);
+    return () => observer.disconnect();
+  }, [hasResult]);
   const restore = useRef(restoreScroll),
     restoredQuery = useRef(JSON.stringify(state.requested)),
     opened = useRef<unknown>(null),
@@ -164,6 +177,11 @@ export function WorkbenchView({
     openRequirement(id);
   };
   const phase = workbench.phase;
+  const hasRows = (state.result?.items.length ?? 0) > 0;
+  const hasFilters =
+    state.requested.keyword !== '' ||
+    state.requested.status.length < defaultWorkbenchQuery.status.length ||
+    state.requested.requirement_type.length < defaultWorkbenchQuery.requirement_type.length;
   return (
     <main className="workbench" data-phase={phase}>
       <PageHeader>
@@ -177,8 +195,9 @@ export function WorkbenchView({
         </p>
       )}
       <div className="workbench-controls">
-        <div>
+        <div className="workbench-search">
           <SearchInput
+            inputRef={searchInput}
             value={draft}
             submitted={state.requested.keyword}
             placeholder="请输入需求编号或需求标题"
@@ -191,19 +210,37 @@ export function WorkbenchView({
             </p>
           )}
         </div>
-        <MultiFilter
-          name="需求状态"
-          options={statusOptions}
-          value={state.requested.status}
-          change={(status) => query({ ...state.requested, status, page: 1 })}
-        />
-        <MultiFilter
-          name="需求类型"
-          options={requirementCatalog.requirement_types}
-          value={state.requested.requirement_type}
-          change={(requirement_type) => query({ ...state.requested, requirement_type, page: 1 })}
-        />
-        <button type="button" className="ui-button primary" onClick={() => setDrawer(true)}>
+        <div className="workbench-filters">
+          <MultiFilter
+            name="需求状态"
+            options={statusOptions}
+            value={state.requested.status}
+            change={(status) => query({ ...state.requested, status, page: 1 })}
+          />
+          <MultiFilter
+            name="需求类型"
+            options={requirementCatalog.requirement_types}
+            value={state.requested.requirement_type}
+            change={(requirement_type) => query({ ...state.requested, requirement_type, page: 1 })}
+          />
+          {hasFilters && (
+            <button
+              className="ui-button workbench-reset"
+              type="button"
+              onClick={() => {
+                query(defaultWorkbenchQuery, true);
+                searchInput.current?.focus();
+              }}
+            >
+              重置筛选
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          className="ui-button primary workbench-create"
+          onClick={() => setDrawer(true)}
+        >
           新建需求
         </button>
       </div>
@@ -236,7 +273,14 @@ export function WorkbenchView({
       )}
       {state.result && (
         <>
-          <div className="workbench-table-wrap">
+          <div
+            className="workbench-table-wrap"
+            ref={tableRegion}
+            role="region"
+            hidden={!hasRows}
+            aria-label={tableOverflows ? '需求列表，可横向滚动' : '需求列表'}
+            tabIndex={hasRows && tableOverflows ? 0 : undefined}
+          >
             <table className="workbench-table">
               <colgroup>
                 <col className="number-column" />

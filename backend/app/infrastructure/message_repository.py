@@ -2,6 +2,8 @@
 
 import sqlite3
 import json
+from .batch_repository import BatchRepository
+from .guide_repository import GuideRepository
 from .identifiers import message_sequence, require_write_transaction
 from backend.app.shared.json_canonical import canonical_input
 
@@ -59,18 +61,11 @@ class MessageRepository:
                 )
             ],
             'GUIDE_RUN': [
-                row['id']
-                for row in self.connection.execute(
-                    "SELECT id FROM guide_runs WHERE requirement_id=? AND status='RUNNING' LIMIT 2",
-                    (requirement_id,),
-                )
+                row['id'] for row in GuideRepository(self.connection).occupying_runs(requirement_id)
             ],
             'SUGGESTION_BATCH': [
                 row['id']
-                for row in self.connection.execute(
-                    "SELECT id FROM suggestion_batches WHERE requirement_id=? AND status='PENDING' LIMIT 2",
-                    (requirement_id,),
-                )
+                for row in BatchRepository(self.connection).occupancy_batches(requirement_id)
             ],
         }
 

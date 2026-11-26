@@ -259,7 +259,44 @@ def schema_for_initial_focus(bundle):
     )
 
 
-def build(old, version, *, extended=False, links=False, initial_focus=False):
+def schema_for_review_groups(bundle):
+    defs = bundle['$defs']
+    group = obj(
+        title={'type': 'string', 'minLength': 1, 'maxLength': 120},
+        reason={'type': 'string', 'minLength': 1, 'maxLength': 600},
+        suggestion_orders={
+            'type': 'array',
+            'items': {'type': 'integer', 'minimum': 1, 'maximum': 100},
+            'minItems': 1,
+            'maxItems': 100,
+            'uniqueItems': True,
+        },
+    )
+    analysis = deepcopy(defs['OutputAnalysis'])
+    proposals = defs['OutputProposals']
+    proposals['properties']['suggestion_groups'] = {
+        'type': 'array',
+        'items': group,
+        'minItems': 1,
+        'maxItems': 100,
+    }
+    proposals['required'].append('suggestion_groups')
+    analysis['properties']['suggestion_groups'] = {'type': 'null'}
+    analysis['required'].append('suggestion_groups')
+    defs['OutputProposalAnalysis'] = analysis
+    defs['OutputPropose']['oneOf'][1]['allOf'][0] = ref('OutputProposalAnalysis')
+
+
+def build(
+    old,
+    version,
+    *,
+    extended=False,
+    links=False,
+    initial_focus=False,
+    document_output=False,
+    review_groups=False,
+):
     directory = ROOT / 'backend/resources'
     predecessor = directory / old
     resources = CollaborationResources.load(predecessor)
@@ -268,7 +305,18 @@ def build(old, version, *, extended=False, links=False, initial_focus=False):
     refs = {}
     bundle = deepcopy(resources.bundle)
     bundle['$id'] = 'urn:walle:collaboration-contract:' + version
-    if initial_focus:
+    if document_output:
+        from backend.app.infrastructure.model_profile import OPENAI_DOCUMENT_PROFILE, ModelProfile
+
+        profile = ModelProfile('offline-resource-build-only', OPENAI_DOCUMENT_PROFILE)
+        counting = deepcopy(resources.counting)
+        counting['output_limit'] = profile.output_limit
+        counting['total_limit'] = counting['input_limit'] + counting['output_limit']
+        for key in ('output_limit', 'total_limit'):
+            bundle['$defs']['CountingDefinition']['properties'][key]['const'] = counting[key]
+        if review_groups:
+            schema_for_review_groups(bundle)
+    elif initial_focus:
         schema_for_initial_focus(bundle)
     elif links:
         schema_for_links(bundle)
@@ -316,7 +364,15 @@ def build(old, version, *, extended=False, links=False, initial_focus=False):
             content = compact(bundle)
         elif key in named:
             content = named_schema(bundle, named[key]).schema_json
-        elif key == 'collaboration.common':
+        elif key == 'collaboration.counting' and document_output:
+            content = compact(counting)
+        elif key == 'collaboration.common' and review_groups:
+            content = resources.prompt.rstrip() + (
+                '\n\nPROPOSE_CHANGES 的 CHANGE_PROPOSALS 必须返回 suggestion_groups。按修改意图分组，'
+                '每组给出标题、原因和 suggestions 数组中从 1 起的序号。每条建议恰好归一组，'
+                '组内保持原顺序。没有可执行补丁时用 ANALYSIS，suggestion_groups 为 null。\n'
+            )
+        elif key == 'collaboration.common' and not document_output:
             content = (
                 resources.prompt.rstrip()
                 + '\n\n'
@@ -339,7 +395,14 @@ def build(old, version, *, extended=False, links=False, initial_focus=False):
 
         for block_refs in (None, [], ['d1v1b1']):
             schema_for(named_schema(bundle, 'OutputDiscuss').schema_json, block_refs=block_refs)
+            if review_groups:
+                schema_for(named_schema(bundle, 'OutputPropose').schema_json, block_refs=block_refs)
     release['version'] = version
+    if document_output:
+        profile_hash = hashlib.sha256(compact(profile.snapshot).encode()).hexdigest()
+        release['model_profile_sha256'] = profile_hash
+        release['admission']['profile_sha256'] = profile_hash
+        release['counting'] = refs['collaboration.counting']
     for name in ('canonical_schema', 'wire_schema', 'message_schema', 'prompt'):
         release[name] = refs[release[name]['key']]
     for row in release['output_schemas']:
@@ -349,11 +412,17 @@ def build(old, version, *, extended=False, links=False, initial_focus=False):
     ).hexdigest()
     release['admission']['release_sha256'] = digest
     record(release_row, compact(release))
-    design = ROOT / 'docs/iterations/pending/v2.11/WALL-E.进展简化与讨论主线迭代V1_V_2.11.md'
+    # SHA-256 of V2.11 item 20, revision 3, at resource freeze.
+    design_hash = 'c956878365a6d2ded8ed357eba9de2f802a178c9e8cac17abe65adfcc60c59a5'
+    if review_groups:
+        design_hash = '4354df77fc637047202c33d1a2b78572d320fc72d60ad4c67ad42d82b1c1db13'
+    if not document_output:
+        design = ROOT / 'docs/iterations/pending/v2.11/WALL-E.进展简化与讨论主线迭代V1_V_2.11.md'
+        design_hash = hashlib.sha256(design.read_bytes()).hexdigest()
     manifest = {
         **original,
         'version': version,
-        'design_sha256': hashlib.sha256(design.read_bytes()).hexdigest(),
+        'design_sha256': design_hash,
         'release_sha256': digest,
         'files': metadata,
     }
@@ -389,3 +458,5 @@ if __name__ == '__main__':
         build(old, version, links=True)
     for old, version in [('v43', 'v45'), ('v44', 'v46'), ('openai-v5', 'openai-v6')]:
         build(old, version, initial_focus=True)
+    build('openai-v6', 'openai-v7', document_output=True)
+    build('openai-v7', 'openai-v8', document_output=True, review_groups=True)

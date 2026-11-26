@@ -46,10 +46,22 @@ export function Pagination({
     if (!loading && target !== page && target >= 1 && target <= Math.max(1, total_pages))
       change(target);
   };
+  const recover =
+    page > Math.max(1, total_pages) ? (
+      <button
+        className="ui-button"
+        type="button"
+        disabled={loading}
+        onClick={() => select(Math.max(1, total_pages))}
+      >
+        返回有效页
+      </button>
+    ) : null;
   if (total === 0) {
-    if (!error && (!loading || !showLoadingStatus)) return null;
+    if (!recover && !error && (!loading || !showLoadingStatus)) return null;
     return (
       <div className="pagination" aria-busy={loading}>
+        {recover && <nav aria-label="分页">{recover}</nav>}
         {loading && showLoadingStatus && <span role="status">正在加载</span>}
         {error && (
           <p role="alert" className="inline-error">
@@ -110,16 +122,7 @@ export function Pagination({
           >
             <Icon name="right" />
           </button>
-          {page > Math.max(1, total_pages) && (
-            <button
-              className="ui-button"
-              type="button"
-              disabled={loading}
-              onClick={() => select(Math.max(1, total_pages))}
-            >
-              返回有效页
-            </button>
-          )}
+          {recover}
         </nav>
       )}
       {loading && showLoadingStatus && <span role="status">正在加载</span>}

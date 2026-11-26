@@ -103,9 +103,32 @@ def message_read_model(data):
     value = object_fields(
         data,
         'message',
-        (*MESSAGE_FIELDS, 'formation_operations', 'initial_route_suggestion'),
+        (
+            *MESSAGE_FIELDS,
+            'formation_operations',
+            'initial_route_suggestion',
+            'guide_operations',
+            'audited_document_output',
+        ),
         MESSAGE_FIELDS,
     )
+    if 'guide_operations' in value:
+        from .operation_receipts import guide_operation
+
+        rows = value['guide_operations']
+        if value['role'] != 'USER' or type(rows) is not list or not rows:
+            raise ValueError('Operations must belong to the original user message')
+        projected = [guide_operation(item) for item in rows]
+        identities = [item['run_id'] for item in projected]
+        if identities != sorted(set(identities)):
+            raise ValueError('Operations must be distinct and ordered')
+    if 'audited_document_output' in value and (
+        value['audited_document_output'] is not True
+        or value['role'] != 'ASSISTANT'
+        or value['guide_run_id'] is None
+        or value['message_type'] != 'TEXT'
+    ):
+        raise ValueError('Audited document output must belong to its original assistant text')
     if 'initial_route_suggestion' in value:
         if (
             value['role'] != 'ASSISTANT'

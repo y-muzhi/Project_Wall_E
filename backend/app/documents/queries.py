@@ -12,6 +12,8 @@ from .contracts import (
     get_manual_draft_result,
 )
 from .sources import DocumentSources
+from .guards import validate_manual_occupancy
+from backend.app.shared.command_execution import Rejected
 
 
 def current_document_view(connection, row, catalog):
@@ -100,14 +102,11 @@ def get_manual_draft(
                     else 'MANUAL_DRAFT_NOT_FOUND'
                 )
                 return {'code': code, 'data': None, 'details': None}
-            if (
-                len(rows) != 1
-                or root['document_work_state'] != 'MANUAL_EDITING'
-                or root['active_operation_type'] != 'MANUAL_DRAFT'
-                or root['active_operation_id'] != rows[0]['id']
-            ):
-                return {'code': 'WORK_STATE_INCONSISTENT', 'data': None, 'details': None}
-            if rows[0]['target_document_id'] != document_id:
+            validate_manual_occupancy(connection, root, rows)
+            row = next(
+                (draft for draft in rows if draft['target_document_id'] == document_id), None
+            )
+            if row is None:
                 return {'code': 'MANUAL_DRAFT_NOT_FOUND', 'data': None, 'details': None}
             sources = DocumentSources(
                 connection,
@@ -115,8 +114,10 @@ def get_manual_draft(
                 catalog if catalog is not None else ResourceCatalog(),
                 document_id=document_id,
             )
-            data = get_manual_draft_result(rows[0], sources)
+            data = get_manual_draft_result(row, sources)
         return {'code': 'READ_OK', 'data': data, 'details': None}
+    except Rejected as error:
+        return {'code': error.code, 'data': None, 'details': None}
     except StorageUnavailable:
         return {'code': 'STORAGE_UNAVAILABLE', 'data': None, 'details': None}
     except Exception:

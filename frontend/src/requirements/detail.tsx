@@ -352,6 +352,17 @@ function LoadedDetail({
                 owner={regions.conversation}
                 documents={owner.documents}
                 discussion={regions.discussion}
+                openSuggestions={() => regions.layout.openTab('SUGGESTIONS')}
+                openDocument={(id) =>
+                  void owner
+                    .selectDocument(id)
+                    .catch((error: unknown) =>
+                      owner.toasts.push(
+                        'error',
+                        error instanceof Error ? error.message : '文档暂时无法打开',
+                      ),
+                    )
+                }
                 handoff={
                   handoff &&
                   handoff !== 'INVALID' && (
@@ -381,6 +392,7 @@ function LoadedDetail({
               key={actual.selected_document_id}
               owner={regions.conversation}
               documents={owner.documents}
+              layout={regions.layout}
               toasts={owner.toasts}
             />
           }

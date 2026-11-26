@@ -187,6 +187,8 @@ def build_backend(root, output, program_ref, *, frontend=None, build_frontend=Fa
                 raise BackendBuildError('FRONTEND_BUILD_ENTRY_REQUIRED')
     require_build_environment(root, error_type=BackendBuildError)
     activate()
+    from backend.app.infrastructure.review_schema import LAYOUT_NAME
+
     if output.exists() or output.is_symlink() or output.is_junction():
         raise BackendBuildError('NEW_BACKEND_PACKAGE_DIRECTORY_REQUIRED')
     for protected in (
@@ -229,7 +231,11 @@ def build_backend(root, output, program_ref, *, frontend=None, build_frontend=Fa
         if hashlib.sha256(raw).hexdigest() != DLL_SHA256:
             raise BackendBuildError('PINNED_BUILD_SQLITE_DIFFERS')
         _replace_owned_build_file(package / '_internal/sqlite3.dll', raw)
-        for schema_version in (200, 210):
+        for schema_version, layout in ((200, None), (210, None), (210, LAYOUT_NAME)):
+            probe_environment = environment.copy()
+            probe_environment.pop('WALLE_FORMATION_SCHEMA_LAYOUT', None)
+            if layout is not None:
+                probe_environment['WALLE_FORMATION_SCHEMA_LAYOUT'] = layout
             status, probe_output = run_owned(
                 [
                     str(package / 'walle-backend.exe'),
@@ -238,10 +244,12 @@ def build_backend(root, output, program_ref, *, frontend=None, build_frontend=Fa
                     str(schema_version),
                 ],
                 cwd=temporary_path,
-                environment=environment,
+                environment=probe_environment,
                 timeout=60,
             )
             expected = f'BACKEND_RUNTIME_VERIFIED schema={schema_version} sqlite=3.54.1'
+            if layout is not None:
+                expected += f' release={layout}'
             if status or expected.encode('ascii') not in probe_output:
                 print(probe_output[-5000:].decode('utf-8', 'replace'))
                 warnings = [

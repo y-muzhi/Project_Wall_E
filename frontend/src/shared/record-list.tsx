@@ -17,6 +17,8 @@ export type RecordListItem = Readonly<{
  * by each caller. A row has one keyboard/click target and no nested controls. */
 export function RecordList({
   title,
+  headingLevel = 3,
+  showCount = true,
   total,
   loading,
   error,
@@ -28,6 +30,8 @@ export function RecordList({
   footer,
 }: Readonly<{
   title: string;
+  headingLevel?: 2 | 3;
+  showCount?: boolean;
   total: number | null;
   loading: boolean;
   error: string | null;
@@ -38,11 +42,12 @@ export function RecordList({
   filters?: ReactNode;
   footer?: ReactNode;
 }>) {
+  const Heading = headingLevel === 2 ? 'h2' : 'h3';
   return (
     <section className="record-list" aria-label={title} aria-busy={loading}>
       <header className="record-list-heading">
-        <h3>{title}</h3>
-        {total !== null && <span className="record-list-count">{total} 条</span>}
+        <Heading>{title}</Heading>
+        {showCount && total !== null && <span className="record-list-count">{total} 条</span>}
         <span className="read-status" role="status">
           {loading ? '正在读取…' : ''}
         </span>

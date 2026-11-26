@@ -2,13 +2,13 @@
 
 from dataclasses import dataclass
 from backend.app.shared.http_boundary import request_query
-from backend.app.shared.validation import decimal_integer
+from backend.app.shared.validation import decimal_integer, reject, strict_integer
 from .contracts import batch_read_model
 from .contracts import discard_batch_input, batch_metadata, counts_model
 from backend.app.shared.http_boundary import idempotency_header
 from backend.app.shared.validation import object_fields
 from .contracts import decide_suggestion_input, suggestion_read_model
-from .contracts import complete_batch_input
+from .contracts import complete_batch_input, decide_group_input
 from .contracts import accept_pending_input
 from backend.app.shared.http_projection import document
 
@@ -16,11 +16,15 @@ from backend.app.shared.http_projection import document
 @dataclass(frozen=True)
 class GetBatchRequest:
     batch_id: int
+    include_review: bool
 
     @classmethod
     def parse(cls, request):
-        request_query(request)
-        return cls(decimal_integer(request.path_params['batch_id'], 'batch_id'))
+        fields = request_query(request, singles=('include_review',))
+        include = fields.get('include_review')
+        if include not in (None, '1'):
+            reject('include_review', 'INVALID_FORMAT', '如需读取审阅结果，请使用 1')
+        return cls(decimal_integer(request.path_params['batch_id'], 'batch_id'), include == '1')
 
 
 class GetBatchResponse:
@@ -28,6 +32,12 @@ class GetBatchResponse:
 
     @staticmethod
     def project(data, request):
+        if request.include_review:
+            value = object_fields(data, 'data', ('batch', 'review'), ('batch', 'review'))
+            batch = batch_read_model(value['batch'])
+            if batch['id'] != request.batch_id:
+                raise ValueError('Review belongs to another batch')
+            return {'batch': batch, 'review': value['review']}, None
         value = batch_read_model(data)
         if value['id'] != request.batch_id:
             raise ValueError('Batch response belongs to another request')
@@ -118,6 +128,7 @@ class DiscardBatchResponse:
     success_code = 'BATCH_DISCARDED'
     errors = GetBatchResponse.errors | {
         'STATE_CONFLICT',
+        'CONTENT_VERSION_CONFLICT',
         'WORK_STATE_CONFLICT',
         'WORK_STATE_INCONSISTENT',
         'IDEMPOTENCY_CONFLICT',
@@ -175,14 +186,54 @@ class DecideSuggestionResponse:
 
 
 @dataclass(frozen=True)
-class CompleteBatchRequest:
+class DecideGroupRequest:
     payload: dict
-    body_fields = ('expected_content_version',)
+    body_fields = ('decision', 'expected_decision_version')
 
     @classmethod
     def parse(cls, request, body):
         request_query(request)
-        payload = dict(object_fields(body, 'body', cls.body_fields, cls.body_fields))
+        payload = object_fields(body, 'body', cls.body_fields, cls.body_fields)
+        parsed = decide_group_input(
+            {
+                **payload,
+                'batch_id': decimal_integer(request.path_params['batch_id'], 'batch_id'),
+                'group_id': decimal_integer(request.path_params['group_id'], 'group_id'),
+                'idempotency_key': idempotency_header(request),
+            }
+        )
+        return cls({**parsed.business_input(), 'idempotency_key': parsed.idempotency_key})
+
+
+class DecideGroupResponse:
+    success_code = 'GROUP_DECIDED'
+    errors = DecideSuggestionResponse.errors | {'DECISION_VERSION_CONFLICT'}
+
+    @staticmethod
+    def project(data, request):
+        fields = ('batch_id', 'group', 'decision_version')
+        value = object_fields(data, 'data', fields, fields)
+        group = value['group']
+        if (
+            strict_integer(value['batch_id'], 'batch_id') != request.payload['batch_id']
+            or group['group_id'] != request.payload['group_id']
+            or group['status'] != request.payload['decision']
+            or strict_integer(value['decision_version'], 'decision_version')
+            != request.payload['expected_decision_version'] + 1
+        ):
+            raise ValueError('Group response must reflect the actual accepted decision')
+        return value, None
+
+
+@dataclass(frozen=True)
+class CompleteBatchRequest:
+    payload: dict
+    body_fields = ('expected_content_version', 'expected_decision_version')
+
+    @classmethod
+    def parse(cls, request, body):
+        request_query(request)
+        payload = dict(object_fields(body, 'body', cls.body_fields, ('expected_content_version',)))
         payload.update(
             batch_id=decimal_integer(request.path_params['batch_id'], 'batch_id'),
             idempotency_key=idempotency_header(request),
@@ -196,6 +247,7 @@ class CompleteBatchResponse:
     errors = DiscardBatchResponse.errors | {
         'CONTENT_VERSION_CONFLICT',
         'BATCH_PENDING',
+        'DECISION_VERSION_CONFLICT',
         'TARGET_STALE',
         'PATCH_INVALID',
         'DOCUMENT_INVALID',

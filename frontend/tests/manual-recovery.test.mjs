@@ -15,6 +15,23 @@ function fixture(){const f={local:record,server:draft,root,clears:[],restores:0,
  const cache={get:async(id,draftId)=>{assert.equal(id,1);assert.equal(draftId,3);if(f.cacheError)throw Error('storage');return f.local;},clearIfRevision:async(...args)=>{f.clears.push(args);return f.clearResult;}};
  const recovery=new ManualDraftRecovery(root,current,draft,api,editor,autosave,cache);return {f,api,editor,autosave,cache,recovery};}
 
+test('a reopened stale draft shows both snapshots without autosaving, deleting or unlocking', async () => {
+ const {f,api,editor,autosave,cache}=fixture();
+ const recovery=new ManualDraftRecovery(root,current,draft,api,editor,autosave,cache,6);
+ assert(await recovery.inspect());
+ assert.equal(recovery.staleBasis.base,6);
+ assert.equal(recovery.staleBasis.current.content_version,7);
+ assert.equal(recovery.getSnapshot().phase,'STALE');
+ assert.deepEqual(recovery.getSnapshot().local,record);
+ assert.deepEqual(recovery.getSnapshot().server,draft);
+ assert(!await recovery.restore());
+ assert(!await recovery.discardLocalConfirmed());
+ assert(f.readonly.every(Boolean));
+ assert.deepEqual(f.clears,[]);
+ assert.equal(f.restores,0);
+ recovery.dispose();
+});
+
 test('fresh actual manual session stays frozen until explicit same-base restore; duplicate restore shares pending and opposite discard is refused',async()=>{
  const p=fixture();assert.deepEqual(p.f.readonly,[true]);assert(await p.recovery.inspect());assert.equal(p.f.restores,0);assert.equal(p.recovery.getSnapshot().phase,'AVAILABLE');
  const held=deferred();p.api.getManualDraft=()=>held.promise;const restoring=p.recovery.restore();assert.equal(p.recovery.restore(),restoring);assert(!await p.recovery.discardLocalConfirmed());await flush();assert.equal(p.f.restores,0);

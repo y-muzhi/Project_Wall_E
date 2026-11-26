@@ -268,9 +268,19 @@ async def execute_collaboration(
     if row['status'] != 'RUNNING':
         return execute_guide_run_result('AI_STOPPED', row, last)
     if catalog.collaboration.formation_driven and not wire.succeeded:
-        return await fail('MODEL_ERROR')
+        reason = {
+            'READ_TIMEOUT': '等待模型响应超时，正文未写入。',
+            'RESPONSE_CAPACITY': '模型响应超过当前读取容量，正文未写入。',
+        }.get(wire.category)
+        return await fail('MODEL_ERROR', reason)
     if wire.succeeded:
         await native(_parse, database, prepared['id'], clock)
+        if wire.finish_reason == 'length' and canonical['operation'] in (
+            'GENERATE',
+            'REVISE',
+            'PROPOSE_CHANGES',
+        ):
+            return await fail('OUTPUT_INVALID', '模型输出达到本次上限，未形成完整结果。')
     if response_text(wire.raw_response) is None:
         return await fail('OUTPUT_INVALID' if wire.succeeded else 'MODEL_ERROR')
     await native(

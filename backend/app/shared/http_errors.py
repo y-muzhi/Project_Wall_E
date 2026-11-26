@@ -20,6 +20,7 @@ ERRORS = {
     'WORK_STATE_CONFLICT': (409, 'WORK_STATE_CONFLICT', '当前已有其他操作占用正文'),
     'WORK_STATE_INCONSISTENT': (409, 'WORK_STATE_INCONSISTENT', '工作状态与活动对象不一致'),
     'CONTENT_VERSION_CONFLICT': (409, 'CONTENT_VERSION_CONFLICT', '内容已更新，请刷新后重试'),
+    'DECISION_VERSION_CONFLICT': (409, 'DECISION_VERSION_CONFLICT', '审阅决定已更新，请重新核对'),
     'METADATA_VERSION_CONFLICT': (409, 'METADATA_VERSION_CONFLICT', '属性已更新，请刷新后重试'),
     'DISCUSSION_VERSION_CONFLICT': (409, 'DISCUSSION_VERSION_CONFLICT', '讨论已更新，请刷新后重试'),
     'SOURCE_VERSION_CONFLICT': (409, 'SOURCE_VERSION_CONFLICT', '来源已更新，请重新核对'),
@@ -109,7 +110,12 @@ def _details(code: str, value: object) -> dict[str, Any] | None:
         return {'reason': item['reason'], 'step_ref': item['step_ref'], 'proposal': source}
     if (
         code
-        in ('METADATA_VERSION_CONFLICT', 'DISCUSSION_VERSION_CONFLICT', 'SOURCE_VERSION_CONFLICT')
+        in (
+            'METADATA_VERSION_CONFLICT',
+            'DISCUSSION_VERSION_CONFLICT',
+            'SOURCE_VERSION_CONFLICT',
+            'DECISION_VERSION_CONFLICT',
+        )
         and value is not None
     ):
         if type(value) is not dict or set(value) != {
@@ -119,14 +125,23 @@ def _details(code: str, value: object) -> dict[str, Any] | None:
             'resource_id',
         }:
             raise ValueError('Invalid safe version conflict details')
-        if any(
-            type(value[key]) is not int or not 1 <= value[key] <= MAX_SAFE_INTEGER
-            for key in ('expected_version', 'actual_version', 'resource_id')
-        ) or value['resource_kind'] not in (
-            'Requirement',
-            'RequirementDocument',
-            'Discussion',
-            'Revision',
+        if (
+            any(
+                type(value[key]) is not int or not 1 <= value[key] <= MAX_SAFE_INTEGER
+                for key in ('expected_version', 'actual_version', 'resource_id')
+            )
+            or value['resource_kind']
+            not in (
+                'Requirement',
+                'RequirementDocument',
+                'Discussion',
+                'Revision',
+                'SuggestionBatch',
+            )
+            or (
+                (code == 'DECISION_VERSION_CONFLICT')
+                != (value['resource_kind'] == 'SuggestionBatch')
+            )
         ):
             raise ValueError('Invalid safe version conflict identity')
         return dict(value)

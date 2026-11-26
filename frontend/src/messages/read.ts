@@ -1,4 +1,4 @@
-import { positiveInteger, snapshotObject } from '../api/client.ts';
+import { ApiRejected, positiveInteger, snapshotObject } from '../api/client.ts';
 import type { CursorPagination } from '../api/client.ts';
 import type { Message } from '../api/models.ts';
 import type { WalleApi } from '../api/walle.ts';
@@ -47,6 +47,7 @@ export class RequirementMessages {
   private closed = false;
   private controller: AbortController | undefined;
   private pending: Promise<boolean> | undefined;
+  private readOperationReceipts = true;
   constructor(identity: number, api: Pick<WalleApi, 'listMessages'>) {
     this.identity = positiveInteger(identity);
     this.api = api;
@@ -94,7 +95,24 @@ export class RequirementMessages {
           let cursor = initialCursor,
             pagination: CursorPagination;
           for (;;) {
-            const response = await this.api.listMessages(this.identity, cursor, controller.signal);
+            let response;
+            try {
+              response = await this.api.listMessages(
+                this.identity,
+                cursor,
+                controller.signal,
+                this.readOperationReceipts,
+              );
+            } catch (error) {
+              if (
+                !(error instanceof ApiRejected) ||
+                error.code !== 'INVALID_INPUT' ||
+                !this.readOperationReceipts
+              )
+                throw error;
+              this.readOperationReceipts = false;
+              response = await this.api.listMessages(this.identity, cursor, controller.signal);
+            }
             if (!alive()) return false;
             const meta = response.meta.pagination;
             if (

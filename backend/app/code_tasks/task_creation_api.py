@@ -85,8 +85,6 @@ class CreateTaskRequest:
             raise
         except ValueError:
             reject('budget_limit_cny', 'OUT_OF_RANGE', '预算金额超出可处理范围')
-        if amount <= 0:
-            reject('budget_limit_cny', 'OUT_OF_RANGE', '预算必须大于零')
         return cls(
             document_id,
             strict_integer(fields['design_revision_id'], 'design_revision_id'),

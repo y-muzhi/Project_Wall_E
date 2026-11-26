@@ -102,11 +102,31 @@ def commit_content(
             resources,
         )
     else:
-        if source_type not in kinds or (
+        owned = source_type in kinds and (
             root['document_work_state'],
             root['active_operation_type'],
             root['active_operation_id'],
-        ) != (*kinds[source_type], source_id):
+        ) == (*kinds[source_type], source_id)
+        if not owned and source_type == 'MANUAL_EDIT':
+            from .guards import active_manual_draft
+
+            active_manual_draft(connection, root, document_id=actual['id'], draft_id=source_id)
+            owned = True
+        if not owned and source_type == 'GUIDE_RUN':
+            from backend.app.infrastructure.guide_repository import GuideRepository
+
+            running = GuideRepository(connection).scoped_running(root['id'], actual['id'])
+            owned = [item['id'] for item in running] == [source_id]
+        if not owned and source_type == 'SUGGESTION_BATCH':
+            from backend.app.infrastructure.batch_repository import (
+                BatchRepository,
+                has_independent_review,
+            )
+
+            batch_repository = BatchRepository(connection)
+            batch = batch_repository.get(source_id)
+            owned = batch is not None and has_independent_review(batch_repository.parent(batch))
+        if not owned:
             raise Rejected('WORK_STATE_CONFLICT')
         binding = None
         if source_type == 'MANUAL_EDIT':

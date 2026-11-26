@@ -69,6 +69,7 @@ export class ManualDraftSession {
       editor,
       autosave,
       cache,
+      initial.activity.draft.base_content_version,
     );
     this.ending = new ManualDraftEnd(
       initial.activity.target,
@@ -77,6 +78,7 @@ export class ManualDraftSession {
       editor,
       autosave,
       cache,
+      initial.activity.draft.base_content_version,
     );
     this.value = Object.freeze({
       active: true,
@@ -100,8 +102,8 @@ export class ManualDraftSession {
     diagnostic: Readonly<{ cacheName?: string; clock?: PollClock }> = {},
   ): Promise<ManualDraftSession> {
     if (initial.activity.kind !== 'MANUAL') throw new TypeError('Actual manual detail required');
-    const draftId = initial.activity.draft.id,
-      target = initial.activity.target;
+    const { draft, target } = initial.activity;
+    const draftId = draft.id;
     let session: ManualDraftSession | undefined, cache: DraftRecoveryStore | undefined;
     const editor = await RequirementEditor.create(
       root,
@@ -131,7 +133,7 @@ export class ManualDraftSession {
               requirement_id: id,
               target_document_id: target.id,
               manual_draft_id: draftId,
-              base_content_version: target.content_version,
+              base_content_version: draft.base_content_version,
             },
             diagnostic.cacheName ? { name: diagnostic.cacheName } : {},
           ),
@@ -233,6 +235,7 @@ export class ManualDraftSession {
     });
     if (conflicted) return Promise.resolve(false);
     if (this.ending.getSnapshot().phase === 'CLOSED') return Promise.resolve(true);
+    if (this.ending.stale) return Promise.resolve(this.ending.getSnapshot().phase !== 'UNKNOWN');
     if (this.saving) return this.saving;
     const pending = Promise.resolve()
       .then(async () => {
@@ -289,6 +292,10 @@ export class ManualDraftSession {
     return true;
   }
   async prepareLeave(): Promise<ManualLeaveResult> {
+    await this.ending.waitForEnding();
+    if (this.ending.getSnapshot().phase === 'CLOSED') {
+      return Object.freeze({ saved: true, local_protected: true });
+    }
     const saved = await this.blockAndSave('LEAVING');
     await this.cache.settle();
     let protectedLocal = false;

@@ -5,12 +5,12 @@ import type { JsonObject } from '../api/client.ts';
 import { ApiRejected, snapshotObject } from '../api/client.ts';
 import type { ApiAction, CreateGuide, CreateFormationDiscuss, WalleApi } from '../api/walle.ts';
 import type { GuideRun, Message, RunReceipt } from '../api/models.ts';
-import { sourceRef, derivedRunReceipt, scope as decodeScope } from '../api/models.ts';
+import { sourceRef, derivedRunReceipt, scope as decodeScope, wireScope } from '../api/models.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import { ordinaryInput } from '../shared/text.ts';
 import { ComposerDrafts } from './composer-drafts.ts';
 import type { GuideTarget } from './scope.ts';
-type Operation = 'DISCUSS' | 'REVISE';
+type Operation = 'DISCUSS' | 'REVISE' | 'PROPOSE_CHANGES';
 type SendIntent = Pick<
   ComposerState,
   'action' | 'target' | 'parent' | 'instruction' | 'formation_proposal'
@@ -80,6 +80,7 @@ function discussionTarget(detail: DetailSnapshot): GuideTarget | null {
 const conflicts = new Set([
   'STATE_CONFLICT',
   'WORK_STATE_CONFLICT',
+  'BATCH_PENDING',
   'WORK_STATE_INCONSISTENT',
   'DISCUSSION_VERSION_CONFLICT',
   'CONTENT_VERSION_CONFLICT',
@@ -275,9 +276,8 @@ export class RequirementGuideComposer {
       });
     }
   }
-  choose(action: Operation): void {
-    if (this.closed || action === this.value.action) return;
-    if (action !== 'DISCUSS' && action !== 'REVISE') return;
+  choose(action: 'DISCUSS' | 'REVISE'): void {
+    if (this.closed || (action === 'DISCUSS') === (this.value.action === 'DISCUSS')) return;
     this.publish({
       action,
       target: action === 'DISCUSS' ? discussionTarget(this.value.detail) : null,
@@ -285,6 +285,11 @@ export class RequirementGuideComposer {
       review: null,
       formation_proposal: null,
     });
+  }
+
+  chooseReviewOnly(reviewOnly: boolean): void {
+    if (!this.editable || this.value.action === 'DISCUSS') return;
+    this.publish({ action: reviewOnly ? 'PROPOSE_CHANGES' : 'REVISE' });
   }
 
   selectDocument(identity: number): void {
@@ -332,7 +337,12 @@ export class RequirementGuideComposer {
   }
   selectChapter(target: GuideTarget): boolean {
     if (target.scope.scope_type !== 'SECTION' || !this.select(target)) return false;
-    this.publish({ action: 'REVISE', parent: null, review: null, formation_proposal: null });
+    this.publish({
+      action: this.value.action === 'PROPOSE_CHANGES' ? 'PROPOSE_CHANGES' : 'REVISE',
+      parent: null,
+      review: null,
+      formation_proposal: null,
+    });
     return true;
   }
   useReview(run: GuideRun, target: GuideTarget): boolean {
@@ -703,10 +713,23 @@ export class RequirementGuideComposer {
         submitted = this.value.submitted!;
       const run = (await this.api.getGuideRun(receipt.guide_run_id)).data;
       if (!alive()) throw Error('View hidden');
+      const routedToReview =
+        submitted.kind === 'CREATE' &&
+        submitted.body.operation === 'REVISE' &&
+        run.operation === 'PROPOSE_CHANGES' &&
+        submitted.body.target?.kind === 'EXISTING' &&
+        run.target?.kind === 'EXISTING' &&
+        run.target.document_id === submitted.body.target.document_id &&
+        run.target.expected_content_version === submitted.body.target.expected_content_version &&
+        JSON.stringify(run.scope) ===
+          JSON.stringify(submitted.body.scope === null ? null : wireScope(submitted.body.scope));
       if (
+        run.id !== receipt.guide_run_id ||
         run.requirement_id !== this.value.detail.requirement.id ||
         (submitted.kind === 'CONTINUE' && run.parent_guide_run_id !== submitted.parent.id) ||
-        (submitted.kind === 'CREATE' && run.operation !== submitted.body.operation) ||
+        (submitted.kind === 'CREATE' &&
+          run.operation !== submitted.body.operation &&
+          !routedToReview) ||
         (submitted.kind === 'FORMATION' &&
           (run.operation !== 'DISCUSS' ||
             run.document_id !==

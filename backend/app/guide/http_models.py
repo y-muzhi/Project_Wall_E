@@ -240,6 +240,7 @@ class CreateGuideRunResponse:
             'DISCUSSION_VERSION_CONFLICT',
             'CONTENT_VERSION_CONFLICT',
             'SOURCE_VERSION_CONFLICT',
+            'BATCH_PENDING',
             'SOURCE_INVALID',
             'SCOPE_INVALID',
             'CONFIG_INVALID',

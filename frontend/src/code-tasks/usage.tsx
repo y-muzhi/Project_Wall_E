@@ -93,14 +93,14 @@ export function CodeTaskUsage({ api, task, visible, page, selectPage }: Props) {
   return (
     <section className="code-task-result" aria-label="模型用量">
       <dl className="code-task-facts">
-        <dt>预算</dt>
-        <dd>¥{task.budget.limit_cny}</dd>
-        <dt>已核算</dt>
+        {task.budget.limit_cny !== '0.000000' && (
+          <>
+            <dt>历史预算记录</dt>
+            <dd>¥{task.budget.limit_cny}</dd>
+          </>
+        )}
+        <dt>已核算费用</dt>
         <dd>¥{task.budget.settled_cny}</dd>
-        <dt title="为模型调用暂留的预算，核算后释放差额">预留</dt>
-        <dd>¥{task.budget.reserved_cny}</dd>
-        <dt>可用</dt>
-        <dd>¥{task.budget.available_cny}</dd>
         <dt>费用待核对</dt>
         <dd>{task.budget.unresolved_call_count} 次</dd>
       </dl>

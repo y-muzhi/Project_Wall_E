@@ -23,6 +23,11 @@ test('confirmed cancel stops new saves, waits owned save, reads native latest ve
  const p=fixture(),wait=deferred();p.f.version=9;p.autosave.pauseAndWait=async()=>{p.calls.push(['pause']);await wait.promise;};const end=new ManualDraftEnd(current,draft,p.api,p.editor,p.autosave,p.cache);
  const pending=end.cancelConfirmed();await settle();assert(!p.calls.some(c=>c[0]==='prepare'));wait.resolve();assert(await pending);assert.deepEqual(p.calls.find(c=>c[0]==='prepare'),['prepare','CANCEL',1,9]);assert(!p.calls.some(c=>c[0]==='freeze'));assert.equal(end.getSnapshot().outcome.manual_draft_id,3);end.dispose();
 });
+test('an already stale draft may be discarded explicitly and never starts a formal commit',async()=>{
+ const p=fixture();const end=new ManualDraftEnd(current,draft,p.api,p.editor,p.autosave,p.cache,6);
+ assert(end.stale);assert(!await end.complete());assert.equal(p.f.submits,0);assert.equal(p.f.clears,0);
+ assert(await end.cancelConfirmed());assert.equal(p.f.submits,1);assert.equal(p.f.clears,1);end.dispose();
+});
 test('unknown keeps original immutable action, freezes opposite operation and clears only after joint reads and exact replay confirms receipt',async()=>{
  const p=fixture();p.f.fail=new ApiUnknown(true);const end=new ManualDraftEnd(current,draft,p.api,p.editor,p.autosave,p.cache);assert(!await end.complete());assert.equal(end.getSnapshot().phase,'UNKNOWN');assert.equal(p.f.clears,0);assert(!end.continueEditing());assert(!await end.cancelConfirmed());
  const original=p.calls.find(c=>c[0]==='submit')[1];p.api.getRequirement=async()=>({data:{id:1,document_work_state:'IDLE',active_operation_id:null}});p.api.getManualDraft=async()=>{throw new ApiRejected('MANUAL_DRAFT_NOT_FOUND','missing',null,'request',404);};

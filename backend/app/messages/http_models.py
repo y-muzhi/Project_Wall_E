@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from backend.app.shared.http_boundary import request_query
-from backend.app.shared.validation import decimal_integer, object_fields
+from backend.app.shared.validation import decimal_integer, object_fields, reject
 from .contracts import list_messages_input, list_messages_result
 from backend.app.guide.contracts import submit_card_responses_input, guide_run_accepted
 from backend.app.shared.http_boundary import idempotency_header
@@ -12,10 +12,16 @@ from .contracts import message_read_model
 @dataclass(frozen=True)
 class ListMessagesRequest:
     payload: dict
+    include_operations: bool
 
     @classmethod
     def parse(cls, request):
-        query = request_query(request, singles=('before_sequence_no', 'document_id'))
+        query = request_query(
+            request, singles=('before_sequence_no', 'document_id', 'include_operations')
+        )
+        include = query.get('include_operations')
+        if include not in (None, '1'):
+            reject('include_operations', 'INVALID_FORMAT', '如需读取操作回执，请使用 1')
         cursor = (
             None
             if 'before_sequence_no' not in query
@@ -29,7 +35,7 @@ class ListMessagesRequest:
             'document_id': decimal_integer(query.get('document_id'), 'document_id'),
         }
         list_messages_input(payload)
-        return cls(payload)
+        return cls(payload, include == '1')
 
 
 class ListMessagesResponse:
@@ -94,6 +100,7 @@ class SubmitCardResponsesResponse:
             'WORK_STATE_INCONSISTENT',
             'DISCUSSION_VERSION_CONFLICT',
             'CONTENT_VERSION_CONFLICT',
+            'BATCH_PENDING',
             'TARGET_STALE',
             'DOCUMENT_INVALID',
             'CONFIG_INVALID',

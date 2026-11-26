@@ -1,6 +1,9 @@
 """Provider-specific technical evidence over the shared admission file/lock flow."""
 
+from contextlib import closing
 import json
+from pathlib import Path
+import sqlite3
 
 from backend.app.shared.json_canonical import canonical_input
 
@@ -32,8 +35,38 @@ def validate_measurements(raw, *, release, request_tokens, input_tokens, output_
         raise ConfigInvalid('OpenAI actual usage failed its exact request count') from error
 
 
+def _review_evidence(path):
+    from .formation_database import FormationDatabase
+    from .review_schema import load_review_release, supports_review_layout
+
+    source = Path(path)
+    if not source.is_absolute() or not source.is_file():
+        return None
+    try:
+        with closing(
+            sqlite3.connect(source.resolve().as_uri() + '?mode=ro', uri=True)
+        ) as connection:
+            if not supports_review_layout(connection):
+                return None
+    except sqlite3.Error:
+        return None
+    return FormationDatabase(source, formation_release=load_review_release(), read_only=True)
+
+
 class OpenAIAdmission(CollaborationAdmission):
-    """Only native evidence interpretation differs; persistence stays shared."""
+    """Native evidence interpretation and the pinned review layout on readback."""
+
+    def _saved(self, path, identity):
+        review = _review_evidence(path)
+        if review is None:
+            return super()._saved(path, identity)
+        with review.transaction() as connection:
+            row = connection.execute(
+                'SELECT * FROM llm_uses WHERE id=? AND guide_run_id IS NOT NULL', (identity,)
+            ).fetchone()
+            if row is None:
+                raise ConfigInvalid('The original admitted call is unavailable')
+            return dict(row)
 
     def _observation(self, row, profile_snapshot):
         from backend.app.guide.collaboration_counting import restore_counted, verify_counted
@@ -79,7 +112,8 @@ class OpenAIAdmission(CollaborationAdmission):
 
     def _suspended(self, path, profile_snapshot):
         reference = self.resources.reference('collaboration.release')
-        with evidence_database(path).transaction() as connection:
+        source = _review_evidence(path) or evidence_database(path)
+        with source.transaction() as connection:
             rows = connection.execute(
                 """SELECT input_tokens,output_tokens,
                 json_extract(raw_response_json,'$.model') AS actual_model,

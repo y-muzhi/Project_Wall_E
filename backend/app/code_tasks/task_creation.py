@@ -7,6 +7,7 @@ from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.idempotency import Success
 from backend.app.infrastructure.identifiers import CapacityExhausted, EntityKind, entity_id
 from backend.app.infrastructure.resources import ConfigInvalid
+from backend.app.infrastructure.review_schema import supports_review_layout
 from backend.app.shared.code_errors import empty_conflict
 from backend.app.shared.command_execution import ConfigurationNotReady, operation_time
 
@@ -74,6 +75,8 @@ def _authorized_profile(connection, runtime, request):
 
 def _persist_task(connection, runtime, request, verified, check_active):
     check_active()
+    if request.normalized_budget == '0.000000' and not supports_review_layout(connection):
+        raise ConfigurationNotReady('Q20-CONFIG')
     design = fixed_design_basis(
         connection, request.document_id, request.design_revision_id, request.material_refs
     )

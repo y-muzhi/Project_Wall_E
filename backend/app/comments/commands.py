@@ -30,7 +30,7 @@ from backend.app.documents.anchors import (
     create_block_anchor,
     create_selection_anchor,
 )
-from backend.app.documents.guards import assert_idle, current_at_version
+from backend.app.documents.guards import assert_document_idle, current_at_version
 from backend.app.documents.snapshot import _time
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.infrastructure.idempotency import Idempotency, Success
@@ -87,7 +87,7 @@ def create_comment(
         root = RequirementRepository(connection).get(request.requirement_id)
         if root is None:
             raise Rejected('NOT_FOUND')
-        assert_idle(connection, root, remaining_conflicts=frozenset())
+        assert_document_idle(connection, root, request.document_id, remaining_conflicts=frozenset())
         current = current_at_version(
             connection,
             root['id'],
@@ -178,7 +178,7 @@ def _comment_action(executor, payload, *, action, parse, build, capability, cloc
             raise Rejected('NOT_FOUND')
         if document['archived_at'] is not None:
             raise Rejected('STATE_CONFLICT')
-        assert_idle(connection, root, remaining_conflicts=frozenset())
+        assert_document_idle(connection, root, document['id'], remaining_conflicts=frozenset())
         if action == 'EDIT' and comment['status'] != 'OPEN':
             raise Rejected('STATE_CONFLICT')
         if (action == 'RESOLVE' and comment['status'] == 'RESOLVED') or (

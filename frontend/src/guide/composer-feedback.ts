@@ -2,7 +2,8 @@ import type { ComposerState } from './composer.ts';
 
 const effects = {
   DISCUSS: '仅讨论，不修改文档。',
-  REVISE: '成功后保存为新版本，原版本保留。',
+  REVISE: '请在运行回执查看本轮是否已保存或待审阅。',
+  PROPOSE_CHANGES: '仅生成待审阅的修改建议，确认应用后才写入正文。',
 };
 
 /** Presentation only. The owner and server remain the send permission gates. */
@@ -23,9 +24,9 @@ export function composerFeedback(
     return result('请先完成或放弃当前修改建议，再发送 AI 请求。');
   if (occupancy === 'GUIDE_ACTIVE') return result('AI 正在处理上一轮请求，请等待结束。');
   if (!available) return result('当前操作暂不可用，请等待状态同步完成。');
-  if (state.action === 'REVISE' && state.detail.current?.archived_at != null)
+  if (state.action !== 'DISCUSS' && state.detail.current?.archived_at != null)
     return result('当前文档已归档，无法写入。');
-  if (state.action === 'REVISE' && state.target === null) return result('请先选择写入范围。');
+  if (state.action !== 'DISCUSS' && state.target === null) return result('请先选择写入范围。');
   if (state.action === 'DISCUSS' && state.parent === null && state.formation_blocked)
     return result(state.formation_blocked);
   if (!allowed) return result('目标或来源已变化，请核对当前文档及范围后再发送。');

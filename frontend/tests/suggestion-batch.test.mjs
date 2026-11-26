@@ -25,6 +25,67 @@ async function fixture(){
  const api={getCurrentDocument:async(requirement,id)=>{assert.equal(requirement,1);assert.equal(id,2);return {data:detail(f.batch,f.version).current};},getBatch:async()=>{f.queries++;f.sequence.push('batch');return {data:f.batch};},prepareDecideSuggestion:(id,body)=>prepare('DECIDE',id,body),prepareAcceptPendingBatch:(id,version,ids)=>prepare('BULK',id,{expected_content_version:version,expected_pending_ids:ids}),prepareCompleteBatch:(id,version)=>prepare('COMPLETE',id,{expected_content_version:version}),prepareDiscardBatch:id=>prepare('DISCARD',id)};
  const owner=new RequirementSuggestionBatch(8,actual(),api,async()=>{f.reads++;f.sequence.push('detail');if(f.failRead)throw Error('Unavailable');return actual();},async()=>{f.adopts++;if(f.failAdopt)throw Error('Adoption unavailable');});owner.setAvailable(true);assert(await owner.refresh());return {f,owner,actual,api};
 }
+test('independent reviews can be edited on their selected document without requirement occupancy', async () => {
+ const { f, owner, actual, api } = await fixture();
+ api.getBatchReview = async () => ({data:{batch:f.batch,review:{
+  base_revision_id:20,applied_revision_id:null,independent:true,grouped:false,decision_version:1,
+  groups:[],
+ }}});
+ assert(await owner.refresh());
+ const selected = actual();
+ const independent = { ...selected, selected_document_id:2, activity:{kind:'IDLE'}, requirement:{
+   ...selected.requirement, document_work_state:'IDLE', active_operation_type:null, active_operation_id:null,
+ } };
+ owner.adopt(independent);
+ assert(owner.editable);
+ owner.adopt({...independent,selected_document_id:3});
+ assert(!owner.editable);
+ assert.equal(f.sends,0);
+ owner.dispose();
+});
+test('group decisions bind one version, reject legacy item actions and recover original receipt', async () => {
+ const { f, owner, actual, api } = await fixture();
+ const single = actual();
+ const independent = { ...single, selected_document_id:2, activity:{kind:'IDLE'}, requirement:{
+   ...single.requirement, document_work_state:'IDLE', active_operation_type:null, active_operation_id:null,
+ } };
+ f.readingOther = false;
+ const group = {group_id:1,title:'规则组合',reason:'一组共同变化',suggestion_ids:[10,11,12],status:'PENDING'};
+ let decisionVersion = 1;
+ const commands = [];
+ api.getBatchReview = async () => ({data:{batch:f.batch,review:{
+   base_revision_id:20,applied_revision_id:null,independent:true,grouped:true,decision_version:decisionVersion,
+   groups:[group],
+ }}});
+ const reviewOwner = new RequirementSuggestionBatch(8, independent, api, async()=>independent, async()=>{});
+ api.prepareDecideGroup = (id, groupId, decision, version) => {
+   commands.push([id,groupId,decision,version]);
+   let receipt, dispatched = false;
+   return {async submit() {
+     if (dispatched) return {data:receipt};
+     dispatched = true;
+     decisionVersion++;
+     group.status = decision;
+     f.batch = batch(f.batch.suggestions.map(item=>({...item,status:decision,decided_at:at})));
+     receipt = {batch_id:id,group:copy(group),decision_version:decisionVersion};
+     throw new ApiUnknown(true);
+   }};
+ };
+ owner.dispose();
+ reviewOwner.setAvailable(true);
+ assert(await reviewOwner.refresh());
+ assert.equal(await reviewOwner.decide(10,'ACCEPTED'),false);
+ assert.equal(reviewOwner.canAcceptPending,false);
+ assert.equal(await reviewOwner.decideGroup(1,'ACCEPTED'),false);
+ assert.equal(reviewOwner.getSnapshot().phase,'UNKNOWN');
+ assert(await reviewOwner.recover());
+ assert.deepEqual(commands,[[8,1,'ACCEPTED',1]]);
+ assert.equal(reviewOwner.getSnapshot().review.decision_version,2);
+ assert.equal(reviewOwner.getSnapshot().batch.counts.accepted,3);
+ reviewOwner.setReadOnly(true);
+ assert.equal(await reviewOwner.decideGroup(1,'REJECTED'),false);
+ reviewOwner.dispose();
+});
 test('actual I20 full read, immutable ordering/counts, owner occupancy and hidden/terminal permissions',async()=>{
  const {f,owner,actual}=await fixture();assert.deepEqual(owner.getSnapshot().batch.suggestions.map(item=>item.id),[10,11,12]);assert(!owner.canComplete);assert(owner.canDiscard);owner.setAvailable(false);assert(!owner.editable);assert(!await owner.refresh());owner.setAvailable(true);owner.adopt({...actual(),requirement:{...actual().requirement,active_operation_id:9}});assert(!owner.editable);owner.adopt(actual());assert(owner.editable);f.batch={...f.batch,status:'DISCARDED',completed_at:at};assert(await owner.refresh());assert(!owner.editable);assert(!owner.canDiscard);owner.dispose();
 });

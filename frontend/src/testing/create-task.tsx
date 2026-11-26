@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { positiveInteger, snapshotObject } from '../api/client.ts';
 import { array, choices, count, id, nullable, shape, text } from '../api/decoding.ts';
-import { money, moneyMicro } from '../api/code-values.ts';
 import { testingAuthorizationPath } from '../api/testing-policy.ts';
 import { createTestingTaskInput, testingTasksPath } from '../api/testing-tasks.ts';
 import type { WalleApi } from '../api/walle.ts';
 import { optionPage, PagedTaskSelect } from '../code-tasks/create-selection.tsx';
 import { useSettingsVisibility } from '../code-tasks/settings/read.ts';
 import { Confirmation } from '../shared/confirmation.tsx';
+import { registerModal, trapModalTab } from '../shared/modal.ts';
 import { AssetSelection } from './asset-selection.tsx';
 import { errorText, ReadState, useTestingRead } from './plans/read.tsx';
 import { PlanBasis } from './plan-editor/basis.tsx';
@@ -163,11 +163,15 @@ export function CreateTestingTaskDrawer({
     const current = snapshot.current;
     save({ ...current, draft: { ...current.draft, ...values }, revision: current.revision + 1 });
   }
-  useEffect(() => {
+  useLayoutEffect(() => {
     live.current = true;
-    dialog.current?.showModal();
+    const element = dialog.current!;
+    element.showModal();
+    const release = registerModal(element);
     return () => {
       live.current = false;
+      element.close();
+      release();
     };
   }, []);
   useEffect(() => {
@@ -253,12 +257,7 @@ export function CreateTestingTaskDrawer({
     coding = textId(draft.codingTask);
   const scope = source.data?.data;
   const authorized = grant.data?.data;
-  let amount: string | null = null;
-  try {
-    amount = money(draft.budget);
-  } catch {
-    /* Wait for a complete decimal. */
-  }
+  const referenceAmount = '0.000000';
   const fixedBasis =
     draft.requirement_id !== null && draft.document_id !== null && draft.design_revision_id !== null
       ? {
@@ -293,8 +292,7 @@ export function CreateTestingTaskDrawer({
     scope?.published !== true
   )
     createBlock = '验收需要已发布的联调候选';
-  if (createBlock === null && (draft.profile === null || amount === null))
-    createBlock = '请选择独立测试配置和有效预算';
+  if (createBlock === null && draft.profile === null) createBlock = '请选择独立测试配置';
   if (
     createBlock === null &&
     (grant.loading ||
@@ -302,13 +300,12 @@ export function CreateTestingTaskDrawer({
       authorized?.id !== textId(draft.authorization) ||
       authorized.scope_kind !== 'TASK' ||
       authorized.status !== 'APPROVED_UNBOUND' ||
-      authorized.profile_version_id !== draft.profile ||
-      moneyMicro(authorized.budget_limit_cny) < moneyMicro(amount))
+      authorized.profile_version_id !== draft.profile)
   )
-    createBlock = '请核对适用于此配置和预算的独立授权';
+    createBlock = '请核对适用于此配置的独立授权';
   const approveBlock =
     access.blocked(testingAuthorizationPath) ??
-    (draft.profile === null || amount === null ? '请选择独立测试配置和有效预算' : null);
+    (draft.profile === null ? '请选择独立测试配置' : null);
 
   async function send(kind: 'approve' | 'create') {
     if (
@@ -319,7 +316,11 @@ export function CreateTestingTaskDrawer({
     const stamp = snapshot.current.revision;
     const body =
       kind === 'approve'
-        ? { profile_version_id: draft.profile!, scope_kind: 'TASK', budget_limit_cny: amount! }
+        ? {
+            profile_version_id: draft.profile!,
+            scope_kind: 'TASK',
+            budget_limit_cny: referenceAmount,
+          }
         : createTestingTaskInput({
             ...fixedBasis!,
             target_kind: draft.source,
@@ -328,7 +329,7 @@ export function CreateTestingTaskDrawer({
             purpose: draft.purpose,
             profile_version_id: draft.profile!,
             authorization_id: authorized!.id,
-            budget_limit_cny: amount!,
+            budget_limit_cny: referenceAmount,
             plan_version_id: draft.assets?.plan ?? null,
             test_pack_version_id: draft.assets?.pack ?? null,
             previous_testing_task_id: draft.previous,
@@ -381,6 +382,7 @@ export function CreateTestingTaskDrawer({
       ref={dialog}
       className="create-drawer code-task-drawer"
       aria-labelledby={heading}
+      onKeyDown={trapModalTab}
       onCancel={(event) => {
         event.preventDefault();
         if (busy === null) close();
@@ -526,15 +528,6 @@ export function CreateTestingTaskDrawer({
             />
             <div className="code-settings-form-actions">
               <label>
-                模型总预算（元）{' '}
-                <input
-                  className="ui-input"
-                  inputMode="decimal"
-                  value={draft.budget}
-                  onChange={(event) => change({ budget: event.currentTarget.value })}
-                />
-              </label>
-              <label>
                 独立授权编号{' '}
                 <input
                   className="ui-input"
@@ -576,7 +569,7 @@ export function CreateTestingTaskDrawer({
             />
             {authorized && (
               <p>
-                授权 #{authorized.id} · 批准上限 {authorized.budget_limit_cny} 元
+                授权 #{authorized.id} · 配置 #{authorized.profile_version_id}
               </p>
             )}
           </fieldset>
@@ -616,7 +609,7 @@ export function CreateTestingTaskDrawer({
           </button>
           <button
             type="submit"
-            className="ui-button"
+            className="ui-button primary"
             disabled={busy !== null || createBlock !== null}
             title={busyReason ?? createBlock ?? undefined}
           >
@@ -630,7 +623,7 @@ export function CreateTestingTaskDrawer({
       <Confirmation
         open={confirmApproval}
         title="批准独立测试授权"
-        description={'批准所选 Testing 配置，模型总预算上限 ' + (amount ?? '—') + ' 元。'}
+        description="批准所选独立测试配置。授权将在创建任务时绑定。"
         busy={busy === 'approve'}
         confirmDisabled={approveBlock !== null && busy === null}
         confirmLabel="确认批准"

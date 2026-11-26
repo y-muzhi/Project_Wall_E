@@ -1,10 +1,28 @@
 """INF-GUIDE-REP durable initialization acceptance, without Provider I/O."""
 
+import json
 import sqlite3
 from .identifiers import require_write_transaction
 from backend.app.shared.json_canonical import canonical_input
 from backend.app.documents.snapshot import _time
 from backend.app.shared.pagination import PAGE_SIZE, page_offset
+
+DOCUMENT_SCOPED_RELEASE = 'openai-v8'
+_DOCUMENT_OPERATIONS = ('GENERATE', 'REVISE', 'PROPOSE_CHANGES')
+_SCOPED_SQL = "operation IN ('GENERATE','REVISE','PROPOSE_CHANGES') AND coalesce(json_extract(execution_basis_json,'$.resources.release.version'), '')=?"
+
+
+def is_document_scoped(run):
+    if run['operation'] not in _DOCUMENT_OPERATIONS or not run['execution_basis_json']:
+        return False
+    return (
+        json.loads(run['execution_basis_json'])
+        .get('resources', {})
+        .get('release', {})
+        .get('version')
+        == DOCUMENT_SCOPED_RELEASE
+    )
+
 
 STATUS_COLUMNS = 'id,requirement_id,document_id,action_type,function_type,source_type,source_id,scope_type,scope_ref_json,status,current_step,error_code,error_message,cancel_reason,retry_of_guide_run_id,created_at,started_at,waiting_user_at,ended_at,updated_at'
 
@@ -12,6 +30,28 @@ STATUS_COLUMNS = 'id,requirement_id,document_id,action_type,function_type,source
 class GuideRepository:
     def __init__(self, connection: sqlite3.Connection):
         self.connection = connection
+
+    def scoped_running(self, requirement_id, document_id=None):
+        sql = (
+            "SELECT id,document_id,created_at FROM guide_runs WHERE requirement_id=? AND status='RUNNING' AND "
+            + _SCOPED_SQL
+        )
+        bindings = [requirement_id, DOCUMENT_SCOPED_RELEASE]
+        if document_id is not None:
+            sql += ' AND document_id=?'
+            bindings.append(document_id)
+        return self.connection.execute(sql + ' ORDER BY id', bindings).fetchall()
+
+    def occupying_runs(self, requirement_id, *, waiting=False):
+        status = "status IN ('RUNNING','WAITING_USER')" if waiting else "status='RUNNING'"
+        return self.connection.execute(
+            'SELECT id FROM guide_runs WHERE requirement_id=? AND '
+            + status
+            + ' AND (operation IS NULL OR NOT ('
+            + _SCOPED_SQL
+            + ')) LIMIT 2',
+            (requirement_id, DOCUMENT_SCOPED_RELEASE),
+        ).fetchall()
 
     def accept_initialization(
         self,

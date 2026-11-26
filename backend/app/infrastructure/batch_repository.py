@@ -1,12 +1,43 @@
 """INF-BATCH-REP complete aggregate reads on the caller shared snapshot."""
 
+import json
 import sqlite3
 from .identifiers import require_write_transaction
+
+
+INDEPENDENT_REVIEW_RELEASES = ('openai-v7', 'openai-v8')
+
+
+def has_independent_review(run):
+    if run is None or run['function_type'] != 'collaboration_v1':
+        return False
+    basis = json.loads(run['execution_basis_json'])
+    return (
+        basis.get('resources', {}).get('release', {}).get('version') in INDEPENDENT_REVIEW_RELEASES
+    )
 
 
 class BatchRepository:
     def __init__(self, connection: sqlite3.Connection):
         self.connection = connection
+
+    def occupancy_batches(self, requirement_id):
+        return self.connection.execute(
+            """SELECT b.id FROM suggestion_batches b LEFT JOIN guide_runs g ON g.id=b.guide_run_id
+               WHERE b.requirement_id=? AND b.status='PENDING'
+                 AND coalesce(json_extract(g.execution_basis_json,'$.resources.release.version'), '') NOT IN (?,?)
+               LIMIT 2""",
+            (requirement_id, *INDEPENDENT_REVIEW_RELEASES),
+        ).fetchall()
+
+    def active_for_version(self, requirement_id, document_id, version) -> bool:
+        return (
+            self.connection.execute(
+                "SELECT 1 FROM suggestion_batches WHERE requirement_id=? AND target_document_id=? AND base_content_version=? AND status='PENDING' LIMIT 1",
+                (requirement_id, document_id, version),
+            ).fetchone()
+            is not None
+        )
 
     def get(self, identity: int) -> sqlite3.Row | None:
         return self.connection.execute(

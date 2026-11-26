@@ -1,3 +1,4 @@
+import { Pagination } from '../../shared/pagination.tsx';
 import { useCallback, useEffect, useState } from 'react';
 import { reviewTestingFindingPath } from '../../api/testing-reports.ts';
 import type { TestingFinding, TestingReport } from '../../api/testing-reports.ts';
@@ -5,7 +6,7 @@ import type { TestingTaskView } from '../../api/testing-tasks.ts';
 import type { WalleApi } from '../../api/walle.ts';
 import { EmptyState } from '../../shared/empty-state.tsx';
 import { localTime } from '../../shared/time.ts';
-import { meta, Pager, ReadState, useTestingRead } from '../plans/read.tsx';
+import { ReadState, useTestingRead } from '../plans/read.tsx';
 import { OriginalTaskRequests, useTestingRecovery } from '../task-recovery.tsx';
 import { classificationText, clearSavedFindingDraft, FindingReview } from './finding-review.tsx';
 import { FindingHandoff } from './finding-handoff.tsx';
@@ -197,11 +198,11 @@ function Findings({ api, record }: Readonly<{ api: WalleApi; record: TestingRepo
         />
       )}
       {list.data && (
-        <Pager
-          meta={meta(list.data.meta.pagination)}
-          page={page}
-          busy={list.loading}
-          select={(next) => {
+        <Pagination
+          value={list.data.meta.pagination}
+          loading={list.loading}
+          showLoadingStatus={false}
+          change={(next) => {
             setEditor(null);
             setHandoff(null);
             setPage(next);
