@@ -56,6 +56,7 @@ export class RequirementAiRead {
   private readonly adoptActual: (actual: DetailSnapshot) => Promise<void>;
   private readonly openPanel: () => void | Promise<void>;
   private readonly timing: PollClock | undefined;
+  private readonly allowRunReads: boolean;
   private value: AiReadState;
   private readonly listeners = new Set<() => void>();
   private poll: GuideRunPolling | undefined;
@@ -75,6 +76,7 @@ export class RequirementAiRead {
     adoptActual: (actual: DetailSnapshot) => Promise<void>,
     openPanel: () => void | Promise<void>,
     timing?: PollClock,
+    allowRunReads = true,
   ) {
     positiveInteger(detail.requirement.id);
     if (
@@ -88,6 +90,7 @@ export class RequirementAiRead {
     this.adoptActual = adoptActual;
     this.openPanel = openPanel;
     this.timing = timing;
+    this.allowRunReads = allowRunReads;
     this.messages = new RequirementMessages(detail.requirement.id, api);
     this.history = new RequirementRunHistory(detail.requirement.id, api);
     this.value = Object.freeze({
@@ -170,7 +173,7 @@ export class RequirementAiRead {
     actual?: GuideRun,
   ): void {
     this.owned(run);
-    if (this.closed) return;
+    if (this.closed || !this.allowRunReads) return;
     if (this.value.selected === run.id && this.poll) {
       this.publish({ selection: kind });
       return;
@@ -280,6 +283,10 @@ export class RequirementAiRead {
           if (!alive()) throw Error('AI view is hidden or retired');
           const epoch = this.api.detailReadEpoch ?? 0;
           try {
+            if (!this.allowRunReads) {
+              if (!(await this.messages.refresh())) throw Error('已保存消息暂时无法读取');
+              continue;
+            }
             const actual = await this.readActual();
             if (!alive()) throw Error('AI read was hidden');
             if (actual.requirement.id !== this.value.detail.requirement.id)

@@ -10,6 +10,7 @@ export function RequirementPropertyControl(
     flow: RequirementPropertyEdit;
     blocked: boolean;
     writeReady?: boolean;
+    writeReason?: string | null;
     refresh(): Promise<DetailSnapshot>;
   }>,
 ) {
@@ -56,6 +57,7 @@ export function RequirementPropertyControl(
       draft={state.draft}
       editing={state.phase !== 'VIEW'}
       disabled={locked || !props.flow.allowed || props.writeReady === false}
+      disabledReason={props.writeReason ?? null}
       inputDisabled={locked || !props.flow.allowed || props.writeReady === false}
       readOnly={unresolved}
       saveDisabled={

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import type { DocumentSummary } from '../api/models.ts';
 import type { DesignRevisionUsage } from '../api/code-design-revisions.ts';
 import type { ExecutionProfileVersion } from '../api/code-execution-profiles.ts';
@@ -355,7 +356,11 @@ export function CreateCodeTaskDrawer(props: Props) {
   const [initial] = useState(() => {
     try {
       return {
-        draft: restoreCreateDraft(sessionStorage.getItem(key), requirementId, documentId),
+        draft: restoreCreateDraft(
+          environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(key),
+          requirementId,
+          documentId,
+        ),
         warning: null,
       };
     } catch {
@@ -386,7 +391,10 @@ export function CreateCodeTaskDrawer(props: Props) {
     saved.current = next;
     setDraft(next);
     try {
-      sessionStorage.setItem(key, JSON.stringify(next));
+      environmentBrowserStorage('sessionStorage', api.environmentScope).setItem(
+        key,
+        JSON.stringify(next),
+      );
     } catch {
       setWarning('草稿暂存不可用，当前输入仍保留。');
     }
@@ -395,8 +403,9 @@ export function CreateCodeTaskDrawer(props: Props) {
   function created(id: number, commandKey: string) {
     if (saved.current.original_key !== commandKey) return;
     try {
-      const stored = restoreCreateDraft(sessionStorage.getItem(key), requirementId, documentId);
-      if (stored.original_key === commandKey) sessionStorage.removeItem(key);
+      const storage = environmentBrowserStorage('sessionStorage', api.environmentScope);
+      const stored = restoreCreateDraft(storage.getItem(key), requirementId, documentId);
+      if (stored.original_key === commandKey) storage.removeItem(key);
     } catch {}
     props.created(id);
   }

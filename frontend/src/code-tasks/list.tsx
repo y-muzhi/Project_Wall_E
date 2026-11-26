@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRejected } from '../api/client.ts';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import type { CodeTaskSummary } from '../api/code-task-list.ts';
 import { SectionPageHeader } from '../application/header.tsx';
 import { RecordList } from '../shared/record-list.tsx';
@@ -190,10 +191,10 @@ function OwnedTaskList({
   const loadRecovery = useCallback(
     async (signal: AbortSignal) => {
       void activeRetry;
-      const store = new CommandRecoveryStore();
+      const store = new CommandRecoveryStore({ scope: api.environmentScope });
       try {
         const draft = restoreCreateDraft(
-          sessionStorage.getItem(
+          environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(
             'walle:v2.0:code:create:' + location.origin + ':' + requirementId + ':' + documentId,
           ),
           requirementId,
@@ -210,7 +211,7 @@ function OwnedTaskList({
         store.close();
       }
     },
-    [requirementId, documentId, activeRetry],
+    [api, requirementId, documentId, activeRetry],
   );
   const rows = useSettingsRead(loadTasks, activeReader, '暂时无法读取任务列表');
   const revisions = useSettingsRead(loadChoices, activeReader, '暂时无法读取筛选版本');

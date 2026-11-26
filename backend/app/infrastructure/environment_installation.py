@@ -1,15 +1,16 @@
 """Open a pinned P1 Linux installation and its fixed environment roots."""
 
-from contextlib import contextmanager
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import re
 import stat
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
 
 from .environment_files import (
     SHA256,
     absolute,
+    canonical,
     check_ext4,
     decode,
     digest,
@@ -21,17 +22,59 @@ from .environment_files import (
     relative,
     require,
 )
-from .environment_lock import EnvironmentLock, PROTOCOL
+from .environment_lock import PROTOCOL, EnvironmentLock
 
 UUID_V4 = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}')
 IDENTITY_NUM = re.compile(r'0|[1-9][0-9]{0,19}')
 CAPABILITIES = {'DOCUMENT_READ', 'DOCUMENT_WRITE'}
-PURPOSES = {'DEVELOPMENT', 'INTEGRATION'}
+WORKSPACE_PURPOSES = {'DEVELOPMENT', 'INTEGRATION'}
+CANDIDATE_PURPOSE = 'CANDIDATE'
+PURPOSES = {*WORKSPACE_PURPOSES, CANDIDATE_PURPOSE}
+CANDIDATE_BINDING_FIELDS = (
+    'operation_id',
+    'release_id',
+    'delivery_operation_id',
+    'policy_sha256',
+    'candidate_sha256',
+    'manifest_sha256',
+    'frontend_index_sha256',
+)
+RECOVERY_BINDING_FIELDS = (
+    'operation_id',
+    'run_id',
+    'preparation_policy_sha256',
+    'backup_manifest_sha256',
+    'rehearsal_receipt_sha256',
+    'frontend_index_sha256',
+)
+DEPLOYMENT_BINDING_FIELDS = (
+    'base_installation_sha256',
+    'base_project',
+    'source_deployment_id',
+    'source_configuration_sha256',
+    'preparation_policy_sha256',
+    'authorization_mode',
+    'release_id',
+    'manifest_sha256',
+    'frontend_index_sha256',
+)
 DIRECTORIES = ('lock', 'control', 'data', 'runtime', 'log', 'temporary', 'frontend', 'maintenance')
+DEPLOYMENTS = 'deployments'
+GENERATIONS = 'data-generations'
+GENERATION_RECEIPT = 'restore-generation.v1.json'
+RESTORE_MODE = 'RESTORE_DATA'
+RECONFIGURE_MODE = 'RECONFIGURE'
 ANCHOR_NAME = 'installation.v1.json'
 CONFIG_NAME = 'configuration.v1.json'
 ACCESS_NAME = 'access-policy.v1.json'
+GATEWAY_VERIFIER_REQUIRED = 'RELEASE_GATEWAY_VERIFIER_REQUIRED'
+DEFAULT_BUSINESS_DOMAIN = 'walle-dev.test'
+DEFAULT_BUSINESS_PORT = 9443
+BUSINESS_PORTS = (443, DEFAULT_BUSINESS_PORT)
+DNS_LABEL = re.compile(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?')
 HOLD_NAME = 'host-hold.v1.json'
+RECOVERY_EVIDENCE = 'recovery-evidence'
+RECOVERY_FRONTEND_INDEX = 'frontend-index.v1.json'
 
 
 def uuid_value(value):
@@ -70,9 +113,20 @@ class Installation:
     lock_identity: dict
     project: Path
     schema: Path
+    ingress_group: int | None = None
+    restore_generation_sha256: str | None = None
+
+    @property
+    def environment_root(self):
+        if 'deployment_slot' in self.description:
+            return self.anchor.parent.parent.parent
+        return self.anchor.parent
 
     def path(self, kind):
-        return self.anchor.parent / kind
+        if kind == 'data' and self.restore_generation_sha256 is not None:
+            return restored_data_root(self.environment_root, self.data_generation)
+        parent = self.anchor.parent if kind == 'frontend' else self.environment_root
+        return parent / kind
 
     @property
     def database_relative(self):
@@ -83,7 +137,9 @@ class Installation:
         return self.path('data') / self.database_relative
 
     def expected_directory(self, kind):
-        if kind == 'lock':
+        if kind == 'lock' or (
+            kind in ('control', 'data') and 'recovery_replica' in self.description
+        ):
             return 0, self.group, 0o550
         if kind in ('control', 'data'):
             return 0, self.group, 0o2770
@@ -91,6 +147,8 @@ class Installation:
             return self.maintenance_uid, self.group, 0o700
         if kind == 'frontend':
             return 0, 0, 0o755
+        if kind == 'runtime' and self.ingress_group is not None:
+            return self.application_uid, self.ingress_group, 0o2710
         return self.application_uid, self.group, 0o700
 
     def check_identity(self, *, maintenance):
@@ -105,7 +163,7 @@ class Installation:
     @contextmanager
     def directory(self, native, kind):
         requested = self.path(kind)
-        with protected_directory(self.anchor.parent) as parent:
+        with protected_directory(requested.parent) as parent:
             flags = os.O_RDONLY | os.O_DIRECTORY
             fd = native.open_beneath(parent, kind, flags)
             try:
@@ -128,41 +186,100 @@ class Installation:
             native, self.path('lock'), self.roots['lock'], self.lock_identity, self.group
         )
 
-    def check_hold(self):
-        code = 'HOST_RECOVERY_HOLD'
-        record = decode(read_protected(self.anchor.parent.parent / HOLD_NAME), code)
-        version_record(record, ('recovery_hold', 'allowed_deployments'), code)
-        require(
-            type(record['recovery_hold']) is bool and type(record['allowed_deployments']) is list,
-            code,
+    def check_hold(self, *, offline=False):
+        from .environment_host_hold import enforce_host_hold, host_hold_record
+
+        root = self.environment_root.parent
+        record = host_hold_record(
+            read_protected(root / HOLD_NAME), identity(root.stat(follow_symlinks=False))
         )
-        allowed = set()
-        for item in record['allowed_deployments']:
-            exact(item, ('environment_id', 'data_generation', 'deployment_id'), code)
-            key = (item['environment_id'], item['data_generation'], item['deployment_id'])
-            require(all(uuid_value(value) for value in key) and key not in allowed, code)
-            allowed.add(key)
-        require(
-            not record['recovery_hold']
-            or (self.environment_id, self.data_generation, self.deployment_id) in allowed,
-            code,
-        )
+        enforce_host_hold(record, self, offline=offline)
+
+    def host_admission(self):
+        from .environment_host_hold import ordinary_host_admission
+
+        return ordinary_host_admission(self)
 
 
-def _access_policy(anchor, config, environment_id):
+def check_business_listener(domain, port):
+    code = 'INVALID_ENVIRONMENT_ACCESS'
+    require(
+        type(domain) is str
+        and 1 <= len(domain) <= 214
+        and type(port) is int
+        and port in BUSINESS_PORTS,
+        code,
+    )
+    labels = domain.split('.')
+    require(
+        len(labels) >= 2
+        and all(DNS_LABEL.fullmatch(label) for label in labels)
+        and re.search(r'[a-z]', labels[-1]) is not None,
+        code,
+    )
+
+
+def business_origin(environment_id, domain=DEFAULT_BUSINESS_DOMAIN, port=DEFAULT_BUSINESS_PORT):
+    require(uuid_value(environment_id), 'INVALID_ENVIRONMENT_ACCESS')
+    check_business_listener(domain, port)
+    suffix = '' if port == 443 else f':{port}'
+    return f'https://e-{environment_id}.{domain}{suffix}'
+
+
+def validate_business_origin(origin, environment_id):
+    code = 'INVALID_ENVIRONMENT_ACCESS'
+    prefix = f'https://e-{environment_id}.'
+    require(type(origin) is str and origin.startswith(prefix), code)
+    domain, separator, port = origin[len(prefix) :].partition(':')
+    require(not separator or port == str(DEFAULT_BUSINESS_PORT), code)
+    require(
+        origin
+        == business_origin(environment_id, domain, DEFAULT_BUSINESS_PORT if separator else 443),
+        code,
+    )
+    return origin
+
+
+def read_access_policy(installation):
+    return _access_policy(
+        installation.anchor,
+        installation.environment_root,
+        installation.description,
+        installation.environment_id,
+    )
+
+
+def _access_policy(anchor, environment_root, config, environment_id):
     code = 'INVALID_ENVIRONMENT_ACCESS'
     ref = exact(config['access_policy_ref'], ('name', 'sha256'), code)
     require(ref['name'] == ACCESS_NAME and sha_value(ref['sha256']), code)
     raw = read_protected(anchor.parent / ACCESS_NAME)
     require(digest(raw) == ref['sha256'], code)
     record = decode(raw, code)
+    return validate_access_policy(record, environment_root, environment_id)
+
+
+def access_scope(record):
+    return tuple(record[key] for key in ('environment_id', 'public_origin', 'upstream_socket'))
+
+
+def gateway_verifier_names(record):
+    return {
+        principal['principal_id']
+        for principal in record['principals']
+        if principal['permission'] == 'READ_ONLY' and principal['client_kind'] == 'AUTOMATION'
+    }
+
+
+def validate_access_policy(record, environment_root, environment_id):
+    code = 'INVALID_ENVIRONMENT_ACCESS'
     version_record(
         record, ('environment_id', 'public_origin', 'principals', 'upstream_socket'), code
     )
+    validate_business_origin(record['public_origin'], environment_id)
     require(
         record['environment_id'] == environment_id
-        and record['public_origin'] == f'https://e-{environment_id}.walle-dev.test:9443'
-        and record['upstream_socket'] == str(anchor.parent / 'runtime' / 'walle.sock')
+        and record['upstream_socket'] == str(environment_root / 'runtime' / 'walle.sock')
         and type(record['principals']) is list
         and bool(record['principals']),
         code,
@@ -180,10 +297,14 @@ def _access_policy(anchor, config, environment_id):
             code,
         )
         seen.add(name)
+    return record
 
 
-def _validate_description(anchor, config, record, runtime_sha256):
+def _validate_description(anchor, environment_root, config, record, runtime_sha256):
     code = 'INVALID_ENVIRONMENT_CONFIG'
+    candidate = config.get('purpose') == CANDIDATE_PURPOSE
+    replica = 'recovery_replica' in config
+    slot = 'deployment_slot' in config
     version_record(
         config,
         (
@@ -199,6 +320,9 @@ def _validate_description(anchor, config, record, runtime_sha256):
             'access_policy_ref',
             'model_permission_ref',
             *(f'{kind}_root' for kind in DIRECTORIES[:-1]),
+            *(('release_validation',) if candidate else ()),
+            *(('recovery_replica',) if replica else ()),
+            *(('deployment_slot',) if slot else ()),
         ),
         code,
     )
@@ -220,23 +344,49 @@ def _validate_description(anchor, config, record, runtime_sha256):
             code,
         )
     for kind in DIRECTORIES[:-1]:
-        require(config[f'{kind}_root'] == str(anchor.parent / kind), code)
+        root = anchor.parent if kind == 'frontend' else environment_root
+        expected = root / kind
+        if kind == 'data' and 'restore_generation_sha256' in record:
+            expected = restored_data_root(environment_root, record['data_generation'])
+        require(config[f'{kind}_root'] == str(expected), code)
     database = relative(config['database_relative_path'], code)
     require(len(database.parts) == 1 and database.suffix == '.sqlite', code)
     source = exact(config['program_source'], ('kind', 'sha256'), code)
     require(
-        source['kind'] == 'WORKSPACE_SNAPSHOT' and source['sha256'] == record['program_sha256'],
+        source['kind'] == ('FIXED_RELEASE' if candidate or slot else 'WORKSPACE_SNAPSHOT')
+        and source['sha256'] == record['program_sha256'],
         code,
     )
-    _access_policy(anchor, config, record['environment_id'])
+    if candidate:
+        binding = exact(config['release_validation'], CANDIDATE_BINDING_FIELDS, code)
+        require(
+            all(uuid_value(binding[field]) for field in CANDIDATE_BINDING_FIELDS[:3])
+            and all(sha_value(binding[field]) for field in CANDIDATE_BINDING_FIELDS[3:]),
+            code,
+        )
+    if replica:
+        binding = exact(config['recovery_replica'], RECOVERY_BINDING_FIELDS, code)
+        require(
+            config['purpose'] in WORKSPACE_PURPOSES
+            and record['ingress_gid'] is None
+            and all(uuid_value(binding[key]) for key in RECOVERY_BINDING_FIELDS[:2])
+            and all(sha_value(binding[key]) for key in RECOVERY_BINDING_FIELDS[2:]),
+            code,
+        )
+    _access_policy(anchor, environment_root, config, record['environment_id'])
 
 
-def load_installation(anchor, expected, runtime_sha256, project):
+def read_installation_anchor(anchor, expected):
     code = 'INSTALLATION_ANCHOR_MISMATCH'
     require(anchor.name == ANCHOR_NAME and sha_value(expected), code)
     raw = read_protected(anchor)
     require(digest(raw) == expected, code)
-    record = decode(raw, code)
+    return decode(raw, code)
+
+
+def load_installation(anchor, expected, runtime_sha256, project, *, allow_slot=True):
+    code = 'INSTALLATION_ANCHOR_MISMATCH'
+    record = read_installation_anchor(anchor, expected)
     version_record(
         record,
         (
@@ -253,8 +403,10 @@ def load_installation(anchor, expected, runtime_sha256, project):
             'application_uid',
             'maintenance_uid',
             'shared_gid',
+            'ingress_gid',
             'project',
             'schema',
+            *(('restore_generation_sha256',) if 'restore_generation_sha256' in record else ()),
         ),
         code,
     )
@@ -290,6 +442,10 @@ def load_installation(anchor, expected, runtime_sha256, project):
         and record['project'] == str(project),
         code,
     )
+    ingress = record['ingress_gid']
+    require(
+        ingress is None or (type(ingress) is int and 1 <= ingress < 2**31 and ingress != gid), code
+    )
     roots = exact(record['root_identities'], DIRECTORIES, code)
     for metadata in (*roots.values(), record['lock_identity']):
         identity_record(metadata, code)
@@ -297,7 +453,13 @@ def load_installation(anchor, expected, runtime_sha256, project):
     config_raw = read_protected(anchor.parent / CONFIG_NAME)
     require(digest(config_raw) == record['configuration_sha256'], code)
     config = decode(config_raw, 'INVALID_ENVIRONMENT_CONFIG')
-    _validate_description(anchor, config, record, runtime_sha256)
+    environment_root = anchor.parent
+    if 'deployment_slot' in config:
+        require(allow_slot, code)
+        environment_root = validate_deployment_slot(anchor, config, record, runtime_sha256)
+    else:
+        require('restore_generation_sha256' not in record, code)
+    _validate_description(anchor, environment_root, config, record, runtime_sha256)
     schema = absolute(record['schema'], code)
     with protected_directory(schema):
         pass
@@ -316,7 +478,152 @@ def load_installation(anchor, expected, runtime_sha256, project):
         record['lock_identity'],
         project,
         schema,
+        ingress,
+        record.get('restore_generation_sha256'),
     )
+
+
+def restored_data_root(environment_root, generation):
+    return environment_root / GENERATIONS / generation / 'data'
+
+
+def read_restore_generation(environment_root, environment_id, generation, *, expected=None):
+    code = 'RESTORE_GENERATION_RECEIPT_MISMATCH'
+    require(uuid_value(generation), code)
+    data_root = restored_data_root(environment_root, generation)
+    raw = read_protected(data_root.parent / GENERATION_RECEIPT)
+    receipt = decode(raw, code)
+    hashes = (
+        'source_control_sha256',
+        'target_configuration_sha256',
+        'target_database_sha256',
+        'target_asset_index_sha256',
+        'restore_target_data_sha256',
+        'restore_readiness_sha256',
+        'generation_policy_sha256',
+    )
+    version_record(
+        receipt,
+        (
+            *hashes,
+            'status',
+            'operation_id',
+            'environment_id',
+            'source_database_identity',
+            'target_data_generation',
+            'target_deployment_id',
+            'data_root',
+            'outbound_hold_required',
+            'data_identity',
+            'database_identity',
+        ),
+        code,
+    )
+    measured = digest(raw)
+    require(
+        raw == canonical(receipt)
+        and (expected is None or measured == expected)
+        and receipt['status'] == 'RESTORE_GENERATION_PREPARED_CLOSED'
+        and receipt['environment_id'] == environment_id
+        and receipt['target_data_generation'] == generation
+        and receipt['data_root'] == str(data_root)
+        and receipt['outbound_hold_required'] is True
+        and all(uuid_value(receipt[field]) for field in ('operation_id', 'target_deployment_id'))
+        and all(sha_value(receipt[field]) for field in hashes),
+        code,
+    )
+    for field in ('source_database_identity', 'data_identity', 'database_identity'):
+        identity_record(receipt[field], code)
+    require(receipt['database_identity'] != receipt['source_database_identity'], code)
+    return receipt, measured
+
+
+def validate_deployment_slot(anchor, config, record, runtime_sha256):
+    code = 'INSTALLATION_ANCHOR_MISMATCH'
+    bind = exact(config['deployment_slot'], DEPLOYMENT_BINDING_FIELDS, code)
+    environment_root = anchor.parent.parent.parent
+    require(
+        anchor.parent.name == record['deployment_id']
+        and anchor.parent.parent.name == DEPLOYMENTS
+        and environment_root.name == record['environment_id']
+        and config['purpose'] in WORKSPACE_PURPOSES
+        and 'recovery_replica' not in config
+        and all(
+            sha_value(bind[key])
+            for key in (
+                'base_installation_sha256',
+                'source_configuration_sha256',
+                'preparation_policy_sha256',
+                'manifest_sha256',
+                'frontend_index_sha256',
+            )
+        )
+        and uuid_value(bind['source_deployment_id'])
+        and bind['source_deployment_id'] != record['deployment_id']
+        and uuid_value(bind['release_id'])
+        and bind['authorization_mode']
+        in ('SAME_SCHEMA', 'ROLLBACK_CODE', RECONFIGURE_MODE, RESTORE_MODE),
+        code,
+    )
+    base = load_installation(
+        environment_root / ANCHOR_NAME,
+        bind['base_installation_sha256'],
+        runtime_sha256,
+        absolute(bind['base_project'], code),
+        allow_slot=False,
+    )
+    restored = record['data_generation'] != base.data_generation
+    if restored:
+        expected = record.get('restore_generation_sha256')
+        require(sha_value(expected), code)
+        receipt, _ = read_restore_generation(
+            environment_root, base.environment_id, record['data_generation'], expected=expected
+        )
+        require(
+            receipt['data_identity'] == record['root_identities']['data']
+            and receipt['data_identity'] != base.roots['data'],
+            code,
+        )
+        if bind['authorization_mode'] == RESTORE_MODE:
+            require(
+                (receipt['target_deployment_id'], receipt['target_configuration_sha256'])
+                == (record['deployment_id'], record['configuration_sha256']),
+                code,
+            )
+    else:
+        require(
+            'restore_generation_sha256' not in record
+            and bind['authorization_mode'] != RESTORE_MODE,
+            code,
+        )
+    require(
+        record['deployment_id'] != base.deployment_id
+        and record['environment_id'] == base.environment_id
+        and record['application_uid'] == base.application_uid
+        and record['maintenance_uid'] == base.maintenance_uid
+        and record['shared_gid'] == base.group
+        and record['ingress_gid'] == base.ingress_group
+        and record['lock_identity'] == base.lock_identity
+        and all(
+            record['root_identities'][key] == base.roots[key]
+            for key in DIRECTORIES
+            if key != 'frontend' and (key != 'data' or not restored)
+        )
+        and all(
+            config[key] == base.description[key]
+            for key in (
+                'purpose',
+                'required_capabilities',
+                'enabled_capabilities',
+                'database_relative_path',
+            )
+        ),
+        code,
+    )
+    if config['access_policy_ref'] != base.description['access_policy_ref']:
+        access = _access_policy(anchor, environment_root, config, base.environment_id)
+        require(access_scope(access) == access_scope(read_access_policy(base)), code)
+    return environment_root
 
 
 def validate_target_file(installation, metadata):

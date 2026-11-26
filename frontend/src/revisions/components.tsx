@@ -13,6 +13,7 @@ export function RevisionSaveControl(
     flow: RequirementRevisionSave;
     ready: boolean;
     blocked: boolean;
+    writeReason?: string | null;
     refreshActual(): Promise<DetailSnapshot>;
     saved(receipt: VersionMarker): Promise<void>;
   }>,
@@ -79,6 +80,7 @@ export function RevisionSaveControl(
           className="ui-button"
           type="button"
           disabled={locked || !props.ready || !props.flow.allowed}
+          title={props.writeReason ?? undefined}
           onClick={() => void submit()}
         >
           添加版本说明

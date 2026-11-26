@@ -340,6 +340,14 @@ export class WalleApi {
     this.ctx = ctx;
     this.readScope = readScope;
   }
+  get environmentScope() {
+    return this.client.environmentScope;
+  }
+
+  get environmentConnection() {
+    return this.client.environmentConnection;
+  }
+
   commandReceipt<T>(
     original: CommandIdentity,
     policy: OriginalResultPolicy<T>,

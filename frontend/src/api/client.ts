@@ -1,4 +1,22 @@
 /** API-COM transport and immutable user actions; pages own business refresh. */
+import { exact, object, positiveInteger } from './wire-shape.ts';
+import {
+  compareResponseScope,
+  EnvironmentEntryError,
+  environmentHeaders,
+  sameEnvironmentScope,
+  type BoundEnvironment,
+  type EnvironmentScope,
+} from './environment-binding.ts';
+import type { EnvironmentConnection } from './environment-connection.ts';
+import {
+  allowsOrdinaryRequest,
+  allowsRecoveryRequest,
+  ORDINARY_OPERATION_UNAVAILABLE,
+  RECOVERY_READ_ONLY,
+} from './environment-actions.ts';
+
+export { exact, object, positiveInteger } from './wire-shape.ts';
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
 export type PagePagination = { page: number; page_size: 20; total: number; total_pages: number };
@@ -64,6 +82,26 @@ const ERROR_STATUS: Readonly<Record<string, number>> = {
   INTERNAL_ERROR: 500,
 };
 
+const ENVIRONMENT_ERRORS: Readonly<Record<string, readonly [number, string]>> = {
+  ENVIRONMENT_ACCESS_DENIED: [403, '当前访问身份无权执行此操作'],
+  REQUEST_SOURCE_REJECTED: [403, '请求来源不符合当前环境要求'],
+  ENVIRONMENT_BINDING_INVALID: [400, '环境绑定信息缺失或不合法'],
+  ENVIRONMENT_MISMATCH: [409, '当前入口与请求所属环境不一致'],
+  DATA_GENERATION_MISMATCH: [409, '数据已更换，请先核对原操作和草稿'],
+  BINDING_PROTOCOL_MISMATCH: [409, '客户端与服务的环境协议不兼容'],
+  ENVIRONMENT_CAPABILITY_DISABLED: [403, '此环境未启用该操作所需能力'],
+  RECOVERY_READ_ONLY: [403, RECOVERY_READ_ONLY],
+  ENVIRONMENT_CAPABILITY_UNAVAILABLE: [503, '此环境所需能力尚未就绪'],
+  ENVIRONMENT_NOT_READY: [503, '环境尚未就绪，请稍后查看状态'],
+  ENVIRONMENT_MAINTENANCE: [503, '当前环境维护中，此次新操作未受理'],
+  ENVIRONMENT_CONTROL_UNVERIFIED: [503, '环境控制状态尚未核实'],
+};
+const BINDING_REJECTIONS = new Set([
+  'ENVIRONMENT_MISMATCH',
+  'DATA_GENERATION_MISMATCH',
+  'BINDING_PROTOCOL_MISMATCH',
+]);
+
 export class ApiUnknown extends Error {
   readonly code = 'RESULT_UNKNOWN';
   readonly mutation: boolean;
@@ -75,14 +113,14 @@ export class ApiUnknown extends Error {
 export class ApiRejected extends Error {
   readonly code: string;
   readonly details: JsonObject | null;
-  readonly request_id: string;
-  readonly status: number;
+  readonly request_id: string | null;
+  readonly status: number | null;
   constructor(
     code: string,
     message: string,
     details: JsonObject | null,
-    request_id: string,
-    status: number,
+    request_id: string | null,
+    status: number | null,
   ) {
     super(message);
     this.code = code;
@@ -92,25 +130,13 @@ export class ApiRejected extends Error {
   }
 }
 
-export function object(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
-    throw new TypeError('Expected object');
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null)
-    throw new TypeError('Expected plain object');
-  return value as Record<string, unknown>;
+/** Local refusal before a transport was invoked. No HTTP receipt exists. */
+export class ApiNotSent extends ApiRejected {
+  constructor(message: string, code = 'ENVIRONMENT_LOCAL_PAUSE') {
+    super(code, message, null, null, null);
+  }
 }
-export function exact(value: unknown, keys: readonly string[]): Record<string, unknown> {
-  const result = object(value);
-  if (Object.keys(result).length !== keys.length || keys.some((key) => !Object.hasOwn(result, key)))
-    throw new TypeError('Unexpected fields');
-  return result;
-}
-export function positiveInteger(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1)
-    throw new TypeError('Invalid identity');
-  return value;
-}
+
 function nonnegative(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
     throw new TypeError('Invalid count');
@@ -379,6 +405,7 @@ export type FrozenRequest = Readonly<{
   path: string;
   body: string | null;
   key: string | null;
+  binding_scope?: EnvironmentScope;
 }>;
 export type CommandOptions = Readonly<{
   idempotent: boolean;
@@ -398,12 +425,44 @@ export class ApiClient {
   private readonly commands = new WeakMap<PreparedCommand, FrozenCommand>();
   private readonly send: typeof fetch;
   private readonly uuid: () => string;
+  private readonly environment: BoundEnvironment | undefined;
+  readonly environmentConnection: EnvironmentConnection | undefined;
+  private readonly observedRuns = new Set<string>();
   constructor(
     send: typeof fetch = globalThis.fetch.bind(globalThis),
     uuid: () => string = () => globalThis.crypto.randomUUID(),
+    environment?: BoundEnvironment,
+    environmentConnection?: EnvironmentConnection,
   ) {
+    if (
+      environmentConnection &&
+      (!environment ||
+        !sameEnvironmentScope(
+          environmentConnection.getSnapshot().environment.scope,
+          environment.scope,
+        ))
+    )
+      throw new TypeError('Transport and connection scopes differ');
+    this.environmentConnection = environmentConnection;
     this.send = send;
     this.uuid = uuid;
+    this.environment = environment
+      ? Object.freeze({ ...environment, scope: Object.freeze({ ...environment.scope }) })
+      : undefined;
+    if (environment) this.observedRuns.add(environment.runId);
+  }
+
+  get environmentScope(): EnvironmentScope | undefined {
+    return this.environment?.scope;
+  }
+
+  assertCanDispatch(): void {
+    this.assertConnection(true);
+  }
+
+  private assertConnection(mutation: boolean): void {
+    const reason = this.environmentConnection?.blockReason(mutation);
+    if (reason) throw new ApiNotSent(reason);
   }
 
   prepare(
@@ -431,6 +490,7 @@ export class ApiClient {
       path: command.path,
       body: command.body,
       key: command.key,
+      ...(this.environment ? { binding_scope: this.environment.scope } : {}),
     });
   }
 
@@ -438,7 +498,11 @@ export class ApiClient {
    * Restored bodies must be exactly bytes our own prepare could have emitted.
    */
   restorePrepared(value: FrozenRequest, options: CommandOptions): PreparedCommand {
-    const row = exact(value, ['method', 'path', 'body', 'key']);
+    const fields = ['method', 'path', 'body', 'key'];
+    if (this.environment) fields.push('binding_scope');
+    const row = exact(value, fields);
+    if (this.environment && !sameEnvironmentScope(row.binding_scope, this.environment.scope))
+      throw new TypeError('Frozen request belongs to another environment');
     if (
       typeof row.method !== 'string' ||
       typeof row.path !== 'string' ||
@@ -593,6 +657,15 @@ export class ApiClient {
     signal?: AbortSignal,
     errorPolicy?: ApiErrorPolicy,
   ): Promise<ApiSuccess<T, P>> {
+    this.assertConnection(mutation);
+    const connection = this.environmentConnection;
+    if (connection?.getSnapshot().environment.recovery !== undefined) {
+      if (!allowsRecoveryRequest(method, target))
+        throw new ApiNotSent(RECOVERY_READ_ONLY, 'RECOVERY_READ_ONLY');
+    } else if (connection && !allowsOrdinaryRequest(method, target)) {
+      throw new ApiNotSent(ORDINARY_OPERATION_UNAVAILABLE, 'ENVIRONMENT_CAPABILITY_DISABLED');
+    }
+    const revision = connection?.requestRevision ?? 0;
     errorPolicy = frozenErrorPolicy(errorPolicy);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -600,6 +673,7 @@ export class ApiClient {
     try {
       if (signal?.aborted) throw new ApiUnknown(mutation);
       const headers: Record<string, string> = { Accept: 'application/json' };
+      if (this.environment) Object.assign(headers, environmentHeaders(this.environment.scope));
       if (body !== null) headers['Content-Type'] = 'application/json';
       if (key !== null) headers['Idempotency-Key'] = key;
       const options: RequestInit = {
@@ -628,11 +702,17 @@ export class ApiClient {
           void response.body?.cancel().catch(() => undefined);
           throw new ApiUnknown(mutation);
         }
-        if (
-          response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() !==
-          'application/json'
-        )
+        const json =
+          response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() ===
+          'application/json';
+        if (connection && (response.status === 401 || (!json && response.status === 403))) {
+          void response.body?.cancel().catch(() => undefined);
+          throw new EnvironmentEntryError(response.status === 401 ? 'ACCESS' : 'PERMISSION');
+        }
+        if (!json) {
+          void response.body?.cancel().catch(() => undefined);
           throw new TypeError('Expected API JSON');
+        }
         const text = await response.text();
         if (controller.signal.aborted) throw new ApiUnknown(mutation);
         return { response, text };
@@ -648,6 +728,7 @@ export class ApiClient {
         envelope.error === null &&
         successStatus.includes(response.status)
       ) {
+        this.checkEnvironmentResponse(response, revision, mutation);
         return { data: decode(envelope.data), meta: context, status: response.status };
       }
       if (
@@ -666,6 +747,37 @@ export class ApiClient {
         !error.message
       )
         throw new TypeError('Invalid API error');
+      if (this.environment && Object.hasOwn(ENVIRONMENT_ERRORS, error.code)) {
+        const common = ENVIRONMENT_ERRORS[error.code]!;
+        if (response.status !== common[0] || error.message !== common[1] || error.details !== null)
+          throw new TypeError('Invalid common environment rejection');
+        const bindingRejection = BINDING_REJECTIONS.has(error.code);
+        this.checkEnvironmentResponse(response, revision, mutation, bindingRejection);
+        if (connection) {
+          if (bindingRejection && error.code !== 'BINDING_PROTOCOL_MISMATCH')
+            connection.reportFailure(revision, 'SCOPE_CHANGED');
+          else if (error.code === 'BINDING_PROTOCOL_MISMATCH')
+            connection.reportFailure(revision, 'PROTOCOL');
+          else if (error.code === 'REQUEST_SOURCE_REJECTED')
+            connection.reportFailure(revision, 'PERMISSION');
+          else if (
+            [
+              'ENVIRONMENT_NOT_READY',
+              'ENVIRONMENT_MAINTENANCE',
+              'ENVIRONMENT_CONTROL_UNVERIFIED',
+            ].includes(error.code)
+          )
+            connection.reportFailure(revision, 'NOT_READY');
+          else if (error.code === 'ENVIRONMENT_ACCESS_DENIED' && mutation)
+            void connection.recheck();
+
+          // A scope refusal describes this exchange. An original command may
+          // have been accepted before the environment changed.
+          if (bindingRejection && mutation) throw new ApiUnknown(true);
+        }
+        throw new ApiRejected(error.code, error.message, null, context.request_id, response.status);
+      }
+      this.checkEnvironmentResponse(response, revision, mutation);
       let details: JsonObject | null;
       if (errorPolicy !== undefined) {
         details = errorPolicy.decode(error.code, error.message, error.details, response.status);
@@ -685,12 +797,46 @@ export class ApiClient {
       );
     } catch (error) {
       if (error instanceof ApiRejected) throw error;
+      if (connection && !signal?.aborted) {
+        if (error instanceof EnvironmentEntryError) connection.reportFailure(revision, error.code);
+        else if (!(error instanceof ApiUnknown) || controller.signal.aborted)
+          connection.reportFailure(revision, 'UNREACHABLE');
+      }
       // Includes transport, abort, response/body parse and success projection:
       // none prove that a previously submitted command failed to commit.
       throw new ApiUnknown(mutation);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
       if (stop) signal?.removeEventListener('abort', stop);
+    }
+  }
+
+  private checkEnvironmentResponse(
+    response: Response,
+    revision: number,
+    mutation: boolean,
+    bindingRejection = false,
+  ) {
+    const environment = this.environment;
+    if (!environment) return;
+    if (bindingRejection) {
+      if (
+        !UUID.test(response.headers.get('X-WALL-E-Environment-ID') ?? '') ||
+        !UUID.test(response.headers.get('X-WALL-E-Data-Generation') ?? '') ||
+        !UUID.test(response.headers.get('X-WALL-E-Run-ID') ?? '')
+      )
+        throw new TypeError('Invalid binding rejection identity');
+      return;
+    }
+    const run = compareResponseScope(response.headers, environment.scope);
+    if (this.environmentConnection) {
+      if (!this.environmentConnection.acceptResponse(revision, run, mutation))
+        throw new ApiUnknown(mutation);
+      return;
+    }
+    if (!this.observedRuns.has(run)) {
+      this.observedRuns.add(run);
+      if (environment.onRunChanged) queueMicrotask(() => environment.onRunChanged?.(run));
     }
   }
 }

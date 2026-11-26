@@ -1,6 +1,7 @@
 /** Native API + durable browser ledger. Reads never dispatch or mint an action. */
 import {
   ApiClient,
+  ApiNotSent,
   ApiRejected,
   ApiUnknown,
   exact,
@@ -18,6 +19,7 @@ import type { CommandReceipt, OriginalResultPolicy } from '../api/code-command-r
 import { prepareCloseOriginalCommand } from '../api/code-command-close.ts';
 import type { CommandCloseReceipt } from '../api/code-command-close.ts';
 import { codeErrorPolicy } from '../api/code-errors.ts';
+import { sameEnvironmentScope } from '../api/environment-binding.ts';
 import { CommandRecoveryStore } from './command-recovery-store.ts';
 import { originalFrozen, pendingSummary } from './command-recovery-model.ts';
 import type { PendingSummary, CommandReceiptLocal } from './command-recovery-model.ts';
@@ -85,6 +87,12 @@ export class CommandRecovery {
     nativeBindings: readonly CodeCommandBinding<unknown>[],
     readOperation: OperationReader,
   ) {
+    const scope = client.environmentScope;
+    if (
+      (scope || store.scope) &&
+      (!scope || !store.scope || !sameEnvironmentScope(store.scope, scope))
+    )
+      throw new TypeError('Command ledger and API client must have the same environment scope');
     this.client = client;
     this.store = store;
     this.readOperation = readOperation;
@@ -122,7 +130,7 @@ export class CommandRecovery {
     const row = await this.store.detail(key);
     this.requireOpen();
     if (row === null) return null;
-    const summary = pendingSummary(row, this.store.origin);
+    const summary = pendingSummary(row, this.store.origin, this.store.scope);
     const original = registeredCommand(summary.method, summary.path, summary.key);
     return { row, summary, original, binding: this.binding(original) };
   }
@@ -132,6 +140,7 @@ export class CommandRecovery {
   }
   async stageIntent(path: string, body: JsonObject): Promise<CommandStage> {
     this.requireOpen();
+    this.client.assertCanDispatch();
     const scope = registeredCommand('POST', path, PROBE_KEY);
     const binding = this.binding(scope);
     const input = snapshotObject(body);
@@ -322,6 +331,7 @@ export class CommandRecovery {
       (explicitReplay || action === restored || loaded.summary.dispatch_count !== 0)
     )
       throw new TypeError('Original cooperation window permits query/close only');
+    this.client.assertCanDispatch();
     const gate = await this.store.dispatch(
       loaded.summary,
       action.frozen,
@@ -330,11 +340,20 @@ export class CommandRecovery {
     );
     this.requireOpen();
     if (gate === null) throw new TypeError('Original send gate was not committed');
-    this.fresh.delete(key);
     let response: ApiSuccess<unknown>;
     try {
       response = await action.submit(signal);
+      this.fresh.delete(key);
     } catch (error) {
+      if (error instanceof ApiNotSent) {
+        try {
+          await this.store.restoreUnsent(gate, loaded.summary);
+        } catch {
+          // The original key is kept even when the local ledger cannot confirm the undo.
+        }
+        throw error;
+      }
+      this.fresh.delete(key);
       if (error instanceof ApiRejected) {
         try {
           await this.lookup(key, signal);
@@ -438,6 +457,7 @@ export class CommandRecovery {
     }
     if (current.summary.close_state === 'ALREADY_RECEIVED')
       return { response: null, original_receipt: lookup.original_receipt, local: current.summary };
+    this.client.assertCanDispatch();
     const requested = await this.store.requestClose(current.summary);
     this.requireOpen();
     if (requested === null) throw new TypeError('Original close gate was not committed');

@@ -6,6 +6,7 @@ and matching HEADs do not prove original native directory/file identities.
 
 import hashlib
 from dataclasses import asdict, dataclass, field
+from pathlib import PurePosixPath
 
 from backend.app.shared.validation import MAX_SAFE_INTEGER
 
@@ -88,12 +89,26 @@ class LocalBranch:
     commit_oid: str
 
 
-def _record(fields, format):
+def _listing_path(value, platform):
+    if platform == 'windows':
+        return str(local_absolute_path(value))
+    if (
+        platform != 'linux'
+        or not value.startswith('/')
+        or any(part in ('', '.', '..') for part in value[1:].split('/'))
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+        or len(value.encode('utf-8')) > 4096
+    ):
+        raise ValueError('Git worktree path is not absolute and canonical')
+    return str(PurePosixPath(value))
+
+
+def _record(fields, format, platform):
     first = fields[0]
     if not first.startswith(b'worktree ') or len(first) == 9:
         raise WorktreeError('GIT_WORKTREE_FIRST_FIELD_INVALID')
     try:
-        path = str(local_absolute_path(_text(first[9:])))
+        path = _listing_path(_text(first[9:]), platform)
     except (PathBoundaryError, TypeError, ValueError):
         raise WorktreeError('GIT_WORKTREE_LOCAL_PATH_INVALID') from None
     known = {}
@@ -136,7 +151,7 @@ def _record(fields, format):
     )
 
 
-def decode_worktrees(raw, *, format, query_exit_code, max_output_bytes):
+def decode_worktrees(raw, *, format, query_exit_code, max_output_bytes, platform='windows'):
     _bound(raw, query_exit_code, max_output_bytes)
     format = _format(format)
     if not raw or not raw.endswith(b'\0\0'):
@@ -147,11 +162,11 @@ def decode_worktrees(raw, *, format, query_exit_code, max_output_bytes):
     for record in records:
         if not record:
             raise WorktreeError('GIT_WORKTREE_EMPTY_RECORD')
-        entry = _record(record.split(b'\0'), format)
-        folded = entry.path.casefold()
-        if folded in paths:
+        entry = _record(record.split(b'\0'), format, platform)
+        identity = entry.path.casefold() if platform == 'windows' else entry.path
+        if identity in paths:
             raise WorktreeError('GIT_WORKTREE_PATH_ALIAS_OR_DUPLICATE')
-        paths.add(folded)
+        paths.add(identity)
         entries.append(entry)
     _branches(tuple(entry.branch_ref for entry in entries if entry.branch_ref is not None))
     ordered = tuple(sorted(entries, key=lambda entry: entry.path.encode('utf-8')))

@@ -30,8 +30,8 @@ def _valid_time(value):
         return False
 
 
-def verify_binding(connection, release, binding):
-    """Inspect complete schema, history and expected owner inside the caller's transaction."""
+def verify_snapshot_binding(connection, release, binding):
+    """Verify persisted Schema200 history and owner within one transaction."""
     if not connection.in_transaction:
         raise SchemaMismatch('Binding verification needs an active transaction')
     verify_schema(connection, release.expected_schema)
@@ -55,8 +55,15 @@ def verify_binding(connection, release, binding):
         != (1, 200, release.schema_contract_sha256, 'FRESH_V20', None, None, initialized_at)
         or tuple(owners[0]) != (1, binding.environment_id, binding.data_generation, initialized_at)
         or not _valid_time(initialized_at)
-        or connection.execute('PRAGMA journal_mode').fetchone()[0] != 'wal'
     ):
+        raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
+    return initialized_at
+
+
+def verify_binding(connection, release, binding):
+    """Require the normal application database's WAL connection as well as its binding."""
+    initialized_at = verify_snapshot_binding(connection, release, binding)
+    if connection.execute('PRAGMA journal_mode').fetchone()[0] != 'wal':
         raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
     return initialized_at
 

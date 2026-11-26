@@ -1,4 +1,4 @@
-import { ApiRejected, snapshotObject } from '../api/client.ts';
+import { ApiNotSent, ApiRejected, snapshotObject } from '../api/client.ts';
 import type { DocumentReadModel } from './contracts.ts';
 import { editorReadModel } from './contracts.ts';
 import type { EditedSnapshot, ManualDraftSubmission } from './edited-snapshot.ts';
@@ -38,6 +38,7 @@ export type SaveState = Readonly<{
   error: string | null;
   server_conflict: DocumentReadModel | null;
   local_storage_error: boolean;
+  resume_required: boolean;
   accepting_input: boolean;
 }>;
 const realClock: PollClock = {
@@ -87,6 +88,8 @@ export class ManualDraftAutosave {
   private failures = 0;
   private closed = false;
   private paused = false;
+  private environmentPaused = false;
+  private environmentRevision = 0;
   constructor(
     draft: DocumentReadModel,
     ledger: DraftSaveLedger,
@@ -114,6 +117,7 @@ export class ManualDraftAutosave {
       error: null,
       server_conflict: null,
       local_storage_error: false,
+      resume_required: false,
       accepting_input: true,
     });
   }
@@ -153,8 +157,12 @@ export class ManualDraftAutosave {
   private dirty(): boolean {
     return !same(this.observed, this.confirmed);
   }
-  private persist(): void {
-    if (!this.value.local_revision) return;
+  persistLocal(): Promise<boolean> {
+    return this.dirty() || this.tickets.size ? this.persistObserved() : Promise.resolve(true);
+  }
+
+  private persistObserved(): Promise<boolean> {
+    if (!this.value.local_revision) return Promise.resolve(true);
     const revision = this.value.local_revision;
     const record: LocalDraftSnapshot = Object.freeze({
       schema_version: 1,
@@ -163,11 +171,15 @@ export class ManualDraftAutosave {
       local_revision: revision,
       updated_at: new Date().toISOString(),
     });
-    void this.cache.put(this.confirmed.requirement_id, this.confirmed.id, record).then(
+    return this.cache.put(this.confirmed.requirement_id, this.confirmed.id, record).then(
       (stored) => {
         if (revision === this.value.local_revision) this.publish({ local_storage_error: !stored });
+        return stored && revision === this.value.local_revision;
       },
-      () => this.publish({ local_storage_error: true }),
+      () => {
+        if (revision === this.value.local_revision) this.publish({ local_storage_error: true });
+        return false;
+      },
     );
   }
   /** Call after the exact editor preparation has been accepted/displayed. */
@@ -182,8 +194,12 @@ export class ManualDraftAutosave {
       local_revision: this.value.local_revision + 1,
       ...(this.value.status === 'CONFLICT' ? {} : { error: null }),
     });
-    this.persist();
+    void this.persistObserved();
     if (this.value.status === 'CONFLICT') return;
+    if (this.environmentPaused || this.value.resume_required) {
+      this.requireExplicitSave();
+      return;
+    }
     if (this.pending) {
       this.requested = true;
       return;
@@ -227,20 +243,51 @@ export class ManualDraftAutosave {
         .clearIfRevision(this.confirmed.requirement_id, this.confirmed.id, local.local_revision)
         .catch(() => this.publish({ local_storage_error: true }));
   }
-  /** Blur/visibility-hidden/explicit save; no write abort on hiding. */
-  flush(): Promise<void> {
+  private requireExplicitSave(): void {
+    this.requested = false;
+    this.clearTimers();
+    const needsSave = this.dirty() || this.tickets.size !== 0;
+    this.publish({
+      resume_required: needsSave,
+      ...(this.pending ||
+      this.value.status === 'CONFLICT' ||
+      this.value.status === 'VALIDATION_ERROR'
+        ? {}
+        : { status: this.tickets.size ? 'UNKNOWN' : needsSave ? 'DIRTY' : 'SAVED' }),
+    });
+  }
+
+  /** Keep writing the local draft while its remote dispatch is paused. */
+  setEnvironmentWritable(writable: boolean): void {
+    if (this.closed || this.environmentPaused === !writable) return;
+    this.environmentPaused = !writable;
+    this.environmentRevision += 1;
+    if (!writable) this.requireExplicitSave();
+  }
+
+  /** Automatic blur and timer events cannot resume a disconnected editor. */
+  flush(userRequested = false): Promise<void> {
     if (
       this.closed ||
       this.paused ||
+      this.environmentPaused ||
+      (this.value.resume_required && !userRequested) ||
       this.value.status === 'CONFLICT' ||
       this.value.status === 'VALIDATION_ERROR'
     )
       return this.pending ?? Promise.resolve();
+    const resumeRevision = this.value.resume_required ? this.environmentRevision : undefined;
     this.clearTimers();
     this.requested = true;
-    if (this.pending) return this.pending;
+    if (this.pending) {
+      if (resumeRevision === undefined) return this.pending;
+      return this.pending.then(() => {
+        if (resumeRevision === this.environmentRevision && this.value.resume_required)
+          return this.flush(true);
+      });
+    }
     this.pending = Promise.resolve()
-      .then(() => this.drive())
+      .then(() => this.drive(resumeRevision))
       .finally(() => {
         this.pending = undefined;
       });
@@ -250,7 +297,7 @@ export class ManualDraftAutosave {
     this.requested = false;
     this.clearTimers();
     this.publish({ status, error: message });
-    if (!this.paused && !this.closed)
+    if (!this.paused && !this.closed && !this.environmentPaused && !this.value.resume_required)
       this.retry = this.clock.schedule(
         () => {
           this.retry = undefined;
@@ -267,6 +314,21 @@ export class ManualDraftAutosave {
       document.created_at === this.confirmed.created_at
     );
   }
+  /** A detail read can preserve access to the original save recovery. */
+  canReconcileObservedDraft(document: DocumentReadModel): boolean {
+    const pending = this.value.status === 'SAVING' || this.value.status === 'UNKNOWN';
+    return (
+      pending &&
+      this.value.resume_required &&
+      this.validIdentity(document) &&
+      [...this.tickets.keys()].some(
+        (ticket) =>
+          ticket.expected_version === this.confirmed.content_version &&
+          corresponds(ticket, document),
+      )
+    );
+  }
+
   private acknowledge(ticket: ManualDraftSubmission, document: DocumentReadModel): void {
     if (!this.validIdentity(document)) throw new TypeError('Another draft receipt');
     this.observed = this.ledger.acknowledgeSave(ticket, editorReadModel(document));
@@ -279,10 +341,11 @@ export class ManualDraftAutosave {
       error: null,
       server_conflict: null,
       status: this.dirty() ? 'DIRTY' : 'SAVED',
+      resume_required: this.dirty() && (this.environmentPaused || this.value.resume_required),
     });
     if (this.dirty()) {
-      this.persist();
-      this.requested = true;
+      void this.persistObserved();
+      this.requested = !this.environmentPaused && !this.value.resume_required;
     } else if (this.value.local_revision) {
       const revision = this.value.local_revision;
       void this.cache
@@ -302,15 +365,30 @@ export class ManualDraftAutosave {
   /** Reading the old version does not prove an earlier HTTP write cannot
    * still commit. Retain its proof and never advance the expected version.
    */
-  private async reconcile(): Promise<'OLD' | 'ACK' | 'STOP'> {
+  private async reconcile(resuming = false): Promise<'OLD' | 'ACK' | 'STOP'> {
+    const environmentRevision = this.environmentRevision;
     let document: DocumentReadModel;
     try {
       document = await this.api.read();
     } catch {
-      if (!this.closed) this.later('UNKNOWN', '保存结果待核实，正在重新读取草稿');
+      if (!this.closed && !this.paused && environmentRevision === this.environmentRevision) {
+        if (resuming) {
+          this.requireExplicitSave();
+          this.publish({ error: '暂时无法核对原草稿，当前内容已保留' });
+        } else {
+          this.later('UNKNOWN', '保存结果待核实，正在重新读取草稿');
+        }
+      }
       return 'STOP';
     }
-    if (this.closed) return 'STOP';
+    if (
+      this.closed ||
+      this.paused ||
+      this.environmentPaused ||
+      environmentRevision !== this.environmentRevision ||
+      (this.value.resume_required && !resuming)
+    )
+      return 'STOP';
     if (!this.validIdentity(document)) {
       this.conflict(null);
       return 'STOP';
@@ -322,6 +400,13 @@ export class ManualDraftAutosave {
         value.expected_version === this.confirmed.content_version &&
         (old || corresponds(value, document)),
     );
+    if (!ticket && (!old || this.tickets.size !== 0)) {
+      this.conflict(document);
+      return 'STOP';
+    }
+    if (resuming) this.publish({ resume_required: false });
+    if (this.closed || this.paused || environmentRevision !== this.environmentRevision)
+      return 'STOP';
     if (ticket) {
       // A matching GET is only an observation. The port retains the original
       // keyed action for this exact ticket; its receipt confirms our save.
@@ -331,6 +416,10 @@ export class ManualDraftAutosave {
         this.acknowledge(ticket, receipt);
         return 'ACK';
       } catch (error) {
+        if (this.environmentPaused || this.value.resume_required || error instanceof ApiNotSent) {
+          this.requireExplicitSave();
+          return 'STOP';
+        }
         if (
           error instanceof ApiRejected &&
           !['REQUEST_IN_PROGRESS', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'].includes(error.code)
@@ -342,12 +431,29 @@ export class ManualDraftAutosave {
         return 'STOP';
       }
     }
-    if (old && !this.tickets.size) return 'OLD';
-    this.conflict(document);
-    return 'STOP';
+    return 'OLD';
   }
-  private async drive(): Promise<void> {
-    while (this.requested && !this.closed && !this.paused) {
+  private async drive(resumeRevision?: number): Promise<void> {
+    if (this.value.resume_required) {
+      if (
+        resumeRevision !== this.environmentRevision ||
+        this.closed ||
+        this.paused ||
+        this.environmentPaused
+      )
+        return;
+      this.requested = false;
+      const result = await this.reconcile(true);
+      if (result === 'STOP') return;
+      if (result === 'OLD') this.requested = true;
+    }
+    while (
+      this.requested &&
+      !this.closed &&
+      !this.paused &&
+      !this.environmentPaused &&
+      !this.value.resume_required
+    ) {
       this.requested = false;
       if (this.tickets.size) {
         const result = await this.reconcile();
@@ -357,6 +463,7 @@ export class ManualDraftAutosave {
           return;
         }
       }
+      if (this.environmentPaused || this.value.resume_required) return;
       if (!this.dirty() && !this.tickets.size) {
         this.publish({ status: 'SAVED' });
         return;
@@ -376,6 +483,18 @@ export class ManualDraftAutosave {
         this.acknowledge(ticket, document);
       } catch (error) {
         if (this.closed) return;
+        if (
+          error instanceof ApiNotSent ||
+          (this.environmentPaused &&
+            error instanceof ApiRejected &&
+            (error.code.startsWith('ENVIRONMENT_') || error.code === 'REQUEST_SOURCE_REJECTED'))
+        ) {
+          this.ledger.rejectSave(ticket);
+          this.tickets.delete(ticket);
+          this.requireExplicitSave();
+          this.publish({ status: this.tickets.size ? 'UNKNOWN' : 'DIRTY', error: error.message });
+          return;
+        }
         if (
           error instanceof ApiRejected &&
           !['REQUEST_IN_PROGRESS', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'].includes(error.code)
@@ -404,6 +523,7 @@ export class ManualDraftAutosave {
         // Release only the active slot, not the submitted evidence.
         this.ledger.suspendSave(ticket);
         this.publish({ status: 'UNKNOWN', error: '保存结果待核实' });
+        if (this.environmentPaused || this.value.resume_required) return;
         const result = await this.reconcile();
         if (result === 'ACK' && this.requested) continue;
         if (result === 'OLD') this.later('RETRYING', '保存失败，正在重试');
@@ -414,9 +534,9 @@ export class ManualDraftAutosave {
   /** Parent completes only when this returns true and then uses this confirmed
    * draft version. If false it keeps the editor frozen or explicitly resumes.
    */
-  async freezeAndFlush(): Promise<boolean> {
+  async freezeAndFlush(userRequested = false): Promise<boolean> {
     this.publish({ accepting_input: false });
-    await this.flush();
+    await this.flush(userRequested);
     return !this.closed && this.value.status === 'SAVED' && !this.dirty() && !this.tickets.size;
   }
   resumeEditing(): void {

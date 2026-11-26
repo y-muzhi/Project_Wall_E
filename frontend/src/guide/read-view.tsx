@@ -239,6 +239,7 @@ export function AiReadPanel({
   openSuggestions,
   scrollPort,
   scrollContent,
+  showRunRecords = true,
 }: Readonly<{
   scrollPort?: HTMLElement | null;
   scrollContent?: HTMLElement | null;
@@ -246,6 +247,7 @@ export function AiReadPanel({
   structured?: (message: Message) => ReactNode;
   commands?: (run: GuideRun) => ReactNode;
   openSuggestions?: (id: number) => void;
+  showRunRecords?: boolean;
   renderMarkdown?: MessageMarkdownRenderer;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
@@ -373,7 +375,7 @@ export function AiReadPanel({
                 showDetail={(kind) => showOperation({ receipt, kind })}
               />
             ))
-          ) : message.role === 'USER' && message.guide_run_id !== null ? (
+          ) : showRunRecords && message.role === 'USER' && message.guide_run_id !== null ? (
             <RequestCallRecord runId={message.guide_run_id} messageId={message.id} />
           ) : null
         }

@@ -2836,8 +2836,37 @@ input[type='radio'] {
   color: var(--text);
   overflow-wrap: anywhere;
 }
+.environment-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.browser-archive {
+  max-block-size: min(32rem, 40dvh);
+  overflow: auto;
+  margin-block-start: 8px;
+}
 .application-missing {
   padding: 32px;
+}
+
+.environment-connection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.environment-connection p {
+  margin: 0;
+}
+
+.application-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* Explicit component feedback and disclosure layout. */

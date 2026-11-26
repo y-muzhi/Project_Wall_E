@@ -361,3 +361,43 @@ test('Coding pins a path-only route to its original verified owner without addin
  assert.equal(new URLSearchParams(port.search()).get('plan_id'), '41');
  router.dispose();
 });
+
+test('a bound router restores its own history, and another data generation reads only the current URL', async () => {
+ const origin = 'https://dev.walle.test:9443';
+ const environment_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const data_generation = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const scope = {binding_protocol: 1, origin, environment_id, data_generation};
+ const current = {...api, environmentScope: scope};
+ const port = browser();
+ const original = new ApplicationRouter(current, port, port.storage, port.identify);
+ const query = {...defaultWorkbenchQuery, keyword: '旧代次查询'};
+ await original.getSnapshot().workbench.query(query);
+ original.saveEntry(query, 144);
+ const old = port.history.state;
+ assert.equal(old.scope_version, 1);
+ assert.equal(old.environment_id, environment_id);
+ assert.equal(old.data_generation, data_generation);
+ assert.deepEqual(old.value.query, query);
+ assert.equal(port.history.scrollRestoration, 'manual');
+ const firstKeys = [...port.values.keys()];
+ assert.ok(firstKeys.length > 0);
+ assert.ok(firstKeys.every((key) => key.startsWith('walle:v2.01:' + environment_id + ':' + data_generation + ':')));
+ original.dispose();
+
+ const same = new ApplicationRouter(current, port, port.storage, port.identify);
+ assert.deepEqual(same.getSnapshot().entry.query, query);
+ assert.equal(same.getSnapshot().restoreScroll, 144);
+ same.dispose();
+
+ const nextGeneration = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ const next = new ApplicationRouter(
+  {...api, environmentScope: {...scope, data_generation: nextGeneration}},
+  port, port.storage, port.identify,
+ );
+ assert.equal(port.pathname(), '/requirements');
+ assert.deepEqual(next.getSnapshot().entry.query, defaultWorkbenchQuery);
+ assert.equal(next.getSnapshot().restoreScroll, 0);
+ assert.equal(port.history.state.data_generation, nextGeneration);
+ for (const key of firstKeys) assert.ok(port.values.has(key));
+ next.dispose();
+});

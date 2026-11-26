@@ -15,7 +15,7 @@ export function useTestingRecovery(
   const listeners = useRef({ includes, onResult });
   listeners.current = { includes, onResult };
   const [access] = useState(() => {
-    const store = new CommandRecoveryStore();
+    const store = new CommandRecoveryStore({ scope: api.environmentScope });
     const recovery = api.configurationRecovery(store, async (original, association, signal) => {
       const task = association.testing_task_id;
       if (original.owner_module !== 'TESTING' || task === null || association.task_id !== null)

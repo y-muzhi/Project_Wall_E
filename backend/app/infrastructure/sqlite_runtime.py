@@ -1,7 +1,7 @@
 """Explicit pinned SQLite activation before any SQLite/Python database import.
 
-Only the project-owned Windows x64 bundle is supported. No PATH lookup, download,
-global Python replacement, fallback library or user database access occurs here.
+Windows uses the project-owned x64 bundle. Linux accepts the fixed host entry's
+already verified process binding.
 """
 
 from dataclasses import dataclass
@@ -19,6 +19,7 @@ ARCHIVE_SHA3 = 'c2d09c8babb9399277055c057c97a53f1ffd7c5f11d0c1f2118ffdfa39f2daa4
 SOURCE_ID = '2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76'
 VERSION = '3.54.1'
 _DLL_HANDLE = None
+_LINUX_CHECK = None
 
 
 class RuntimeNotAdmitted(RuntimeError):
@@ -77,8 +78,22 @@ def activate() -> SQLiteRuntime:
     return SQLiteRuntime(VERSION, SOURCE_ID, DLL_SHA256)
 
 
+def bind_linux_runtime(check) -> None:
+    """Accept the active context from the admitted Linux entry, once per process."""
+    global _LINUX_CHECK
+    if sys.platform != 'linux' or _LINUX_CHECK is not None or not callable(check):
+        raise RuntimeNotAdmitted('Invalid Linux runtime bind')
+    active = check()
+    if active.version != VERSION or active.source_id != SOURCE_ID:
+        raise RuntimeNotAdmitted('Linux SQLite binding differs')
+    _LINUX_CHECK = check
+
+
 def require_active() -> SQLiteRuntime:
     """Require the identity established before the Python binding was loaded."""
+    if sys.platform == 'linux' and _LINUX_CHECK is not None:
+        active = _LINUX_CHECK()
+        return SQLiteRuntime(active.version, active.source_id, active.sha256, active.bundle_ref)
     if _DLL_HANDLE is None or 'sqlite3' not in sys.modules:
         raise RuntimeNotAdmitted('Activate the fixed runtime before importing the database')
     import sqlite3

@@ -106,6 +106,10 @@ class Database:
         self.migration = migration or Migration()
         self.migrations = (migration,) if migration is not None else MIGRATIONS
 
+    def _connection_uri(self, *, create: bool) -> str:
+        mode = 'ro' if self.read_only else 'rwc' if create else 'rw'
+        return self.path.as_uri() + '?mode=' + mode
+
     def _connect(self, *, create: bool = False) -> sqlite3.Connection:
         if create and self.read_only:
             raise StorageUnavailable('A read-only evidence database cannot be initialized')
@@ -114,9 +118,8 @@ class Database:
         try:
             if create:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-            mode = 'ro' if self.read_only else 'rwc' if create else 'rw'
             connection = sqlite3.connect(
-                self.path.as_uri() + '?mode=' + mode,
+                self._connection_uri(create=create),
                 uri=True,
                 isolation_level=None,
                 timeout=self.busy_timeout_ms / 1_000,

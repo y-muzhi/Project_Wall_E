@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { exact, snapshotObject } from '../../api/client.ts';
+import type { EnvironmentScope } from '../../api/environment-binding.ts';
+import { environmentBrowserStorage } from '../../api/environment-storage.ts';
 import { findingClassifications, reviewTestingFindingPath } from '../../api/testing-reports.ts';
 import type { TestingFinding } from '../../api/testing-reports.ts';
 import { Confirmation } from '../../shared/confirmation.tsx';
@@ -18,13 +20,15 @@ type Classification = (typeof findingClassifications)[number];
 type Draft = { classification: Classification; reason: string };
 type Confirm = Draft & { expected_state_version: number };
 const storageKey = (id: number) => 'walle:v2.0:testing:draft:' + location.origin + ':FINDING:' + id;
-function restore(finding: TestingFinding): Draft {
+function restore(finding: TestingFinding, scope: EnvironmentScope | undefined): Draft {
   const fallback = {
     classification: finding.classification === 'UNCLASSIFIED' ? 'UNKNOWN' : finding.classification,
     reason: finding.review_reason ?? '',
   } as const;
   try {
-    const saved = sessionStorage.getItem(storageKey(finding.id));
+    const saved = environmentBrowserStorage('sessionStorage', scope).getItem(
+      storageKey(finding.id),
+    );
     if (saved === null) return fallback;
     const envelope = exact(JSON.parse(saved), ['schema_version', 'updated_at', 'content']);
     const draft = exact(envelope.content, ['classification', 'reason']);
@@ -43,10 +47,14 @@ function restore(finding: TestingFinding): Draft {
   return fallback;
 }
 
-export function clearSavedFindingDraft(finding: TestingFinding): boolean {
+export function clearSavedFindingDraft(
+  finding: TestingFinding,
+  scope: EnvironmentScope | undefined,
+): boolean {
   try {
     const key = storageKey(finding.id);
-    const saved = sessionStorage.getItem(key);
+    const storage = environmentBrowserStorage('sessionStorage', scope);
+    const saved = storage.getItem(key);
     if (saved === null) return true;
     const envelope = exact(JSON.parse(saved), ['schema_version', 'updated_at', 'content']);
     const draft = exact(envelope.content, ['classification', 'reason']);
@@ -57,7 +65,7 @@ export function clearSavedFindingDraft(finding: TestingFinding): boolean {
       draft.reason.trim() !== finding.review_reason
     )
       return false;
-    sessionStorage.removeItem(key);
+    storage.removeItem(key);
     return true;
   } catch {
     return false;
@@ -66,18 +74,20 @@ export function clearSavedFindingDraft(finding: TestingFinding): boolean {
 
 export function FindingReview({
   finding,
+  scope,
   access,
   stale,
   refreshed,
   closed,
 }: Readonly<{
   finding: TestingFinding;
+  scope: EnvironmentScope | undefined;
   access: ReturnType<typeof useTestingRecovery>;
   stale: boolean;
   refreshed(): void;
   closed(): void;
 }>) {
-  const [draft, setDraft] = useState(() => restore(finding));
+  const [draft, setDraft] = useState(() => restore(finding, scope));
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +106,7 @@ export function FindingReview({
     setDraft(next);
     setError(null);
     try {
-      sessionStorage.setItem(
+      environmentBrowserStorage('sessionStorage', scope).setItem(
         storageKey(finding.id),
         JSON.stringify({
           schema_version: 1,
@@ -138,7 +148,7 @@ export function FindingReview({
       await access.recovery.send(staged.record.key, staged.record.record_revision);
       done = true;
       try {
-        sessionStorage.removeItem(storageKey(finding.id));
+        environmentBrowserStorage('sessionStorage', scope).removeItem(storageKey(finding.id));
       } catch {
         /* Saved on the server. */
       }

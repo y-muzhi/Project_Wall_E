@@ -20,6 +20,7 @@ import { Icon } from '../shared/icon.tsx';
 import { NameEditor } from '../shared/name-editor.tsx';
 import { ordinaryInput } from '../shared/text.ts';
 import { useMotionPresence } from '../shared/motion-react.ts';
+import { ApplicationConnectionNotice } from '../application/connection-notice.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 
 type CreationDefaults = Readonly<{
@@ -33,9 +34,11 @@ export function useDocumentCreation() {
 }
 export function DocumentCreationProvider({
   owner,
+  writeReason,
   children,
 }: {
   owner: RequirementDetailOwner;
+  writeReason: string | null;
   children: import('react').ReactNode;
 }) {
   const [state, setState] = useState({
@@ -58,6 +61,7 @@ export function DocumentCreationProvider({
           key={state.identity}
           owner={owner}
           open={state.open}
+          writeReason={writeReason}
           defaults={state.defaults}
           close={() => setState((previous) => ({ ...previous, open: false }))}
         />
@@ -68,11 +72,13 @@ export function DocumentCreationProvider({
 function CreateDocumentDialog({
   owner,
   open,
+  writeReason,
   close,
   defaults,
 }: {
   owner: RequirementDetailOwner;
   open: boolean;
+  writeReason: string | null;
   close(): void;
   defaults: CreationDefaults;
 }) {
@@ -92,6 +98,8 @@ function CreateDocumentDialog({
   const id = useId();
   const locked = !open || ['SUBMITTING', 'UNKNOWN', 'CONFIRMED'].includes(state.phase);
   const drawing = kind === 'DRAWING';
+  const connectionNotice = useContext(ApplicationConnectionNotice);
+  const blockedReason = state.phase === 'CONFIRMED' ? null : writeReason;
   const requestClose = () => {
     if (locked) return;
     if (name.length > 0 || kind !== 'REQUIREMENT_BRIEF' || framework) setDiscard(true);
@@ -135,7 +143,8 @@ function CreateDocumentDialog({
     };
   }, [open]);
   const submit = async () => {
-    if (pending.current || composing.current) return;
+    if (pending.current || composing.current || connectionNotice !== null || blockedReason !== null)
+      return;
     if (!locked) {
       try {
         ordinaryInput(name, '文档名称', 1, 80, false);
@@ -180,6 +189,7 @@ function CreateDocumentDialog({
         <dialog
           ref={dialog}
           className="create-drawer"
+          data-environment-connection-owner=""
           tabIndex={-1}
           inert={!open}
           aria-hidden={!open}
@@ -215,6 +225,12 @@ function CreateDocumentDialog({
                 <Icon name="close" />
               </button>
             </header>
+            {connectionNotice}
+            {connectionNotice === null && blockedReason !== null && (
+              <p role="status" className="inline-error">
+                {blockedReason}
+              </p>
+            )}
             <div className="create-fields">
               <div>
                 <label htmlFor={id + '-name'}>文档名称</label>
@@ -286,7 +302,12 @@ function CreateDocumentDialog({
               <button
                 className="ui-button primary"
                 type="submit"
-                disabled={state.phase === 'SUBMITTING'}
+                disabled={
+                  connectionNotice !== null ||
+                  blockedReason !== null ||
+                  state.phase === 'SUBMITTING'
+                }
+                title={blockedReason ?? undefined}
               >
                 {state.phase === 'UNKNOWN'
                   ? '核实创建结果'
@@ -434,10 +455,12 @@ export function NewDocumentButton({
   owner,
   label = '新建文档',
   iconOnly = false,
+  writeReason = null,
 }: {
   owner: RequirementDetailOwner;
   label?: string;
   iconOnly?: boolean;
+  writeReason?: string | null;
 }) {
   const flow = owner.regions!.directory;
   useSyncExternalStore(flow.subscribe, flow.getSnapshot);
@@ -450,8 +473,8 @@ export function NewDocumentButton({
       className={'ui-button' + (iconOnly ? ' icon-button document-create-trigger' : '')}
       type="button"
       aria-label={label}
-      title={iconOnly ? label : undefined}
-      disabled={!flow.allowed || create === null}
+      title={writeReason ?? (iconOnly ? label : undefined)}
+      disabled={writeReason !== null || !flow.allowed || create === null}
       onClick={() => create?.()}
     >
       {iconOnly ? <Icon name="plus" /> : label}
@@ -463,8 +486,10 @@ export function DocumentMetadataBar({
   owner,
   navigation,
   viewActions,
+  writeReason = null,
 }: {
   owner: RequirementDetailOwner;
+  writeReason?: string | null;
   navigation?: import('react').ReactNode;
   viewActions?: import('react').ReactNode;
 }) {
@@ -481,7 +506,7 @@ export function DocumentMetadataBar({
     pending = useRef(false);
   const current = detail?.current;
   const execute = async (work: () => Promise<boolean>, message?: string) => {
-    if (pending.current) return;
+    if (pending.current || writeReason) return;
     pending.current = true;
     setBusy(true);
     setError(null);
@@ -544,7 +569,8 @@ export function DocumentMetadataBar({
           draft={name}
           editing={renamingCurrent}
           canRename={!editing && current.archived_at === null}
-          disabled={!flow.allowed || busy}
+          disabled={!flow.allowed || busy || !!writeReason}
+          disabledReason={writeReason}
           readOnly={unresolved}
           cancelDisabled={busy || unresolved}
           begin={beginRename}
@@ -603,7 +629,8 @@ export function DocumentMetadataBar({
                     </button>
                     <button
                       className="ui-button"
-                      disabled={!flow.allowed}
+                      disabled={!flow.allowed || !!writeReason}
+                      title={writeReason ?? undefined}
                       onClick={() => setArchive(current)}
                     >
                       归档
@@ -612,7 +639,8 @@ export function DocumentMetadataBar({
                 ) : (
                   <button
                     className="ui-button"
-                    disabled={!flow.allowed}
+                    disabled={!flow.allowed || !!writeReason}
+                    title={writeReason ?? undefined}
                     onClick={() =>
                       void execute(() => flow.metadata(current, { type: 'RESTORE' }), '文档已恢复')
                     }

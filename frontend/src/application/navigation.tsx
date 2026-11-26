@@ -14,6 +14,9 @@ export function ApplicationNavigation({
   settingsCurrent,
   testing,
   testingCurrent,
+  codingReason,
+  testingReason,
+  settingsReason,
 }: Readonly<{
   current: 'page' | 'location' | undefined;
   navigate(): void;
@@ -23,6 +26,9 @@ export function ApplicationNavigation({
   settingsCurrent: 'page' | undefined;
   testing(): void;
   testingCurrent: 'page' | undefined;
+  codingReason?: string;
+  testingReason?: string;
+  settingsReason?: string;
   headerHost?(element: HTMLDivElement | null): void;
   headerHeight?(height: number): void;
 }>) {
@@ -50,11 +56,12 @@ export function ApplicationNavigation({
     icon: IconName;
     active: 'page' | 'location' | undefined;
     visit(): void;
+    reason?: string | undefined;
   }[] = [
     { label: '需求工作台', icon: 'workbench', active: current, visit: navigate },
-    { label: '代码开发', icon: 'code', active: codingCurrent, visit: coding },
-    { label: '测试验收', icon: 'outline', active: testingCurrent, visit: testing },
-    { label: '设置', icon: 'settings', active: settingsCurrent, visit: settings },
+    { label: '代码开发', icon: 'code', active: codingCurrent, visit: coding, reason: codingReason },
+    { label: '测试验收', icon: 'outline', active: testingCurrent, visit: testing, reason: testingReason },
+    { label: '设置', icon: 'settings', active: settingsCurrent, visit: settings, reason: settingsReason },
   ];
   return (
     <>
@@ -67,7 +74,7 @@ export function ApplicationNavigation({
         <div className="application-page-header" ref={headerHost} />
       </div>
       <nav className="application-navigation" aria-label="主导航">
-        {destinations.map(({ label, icon, active, visit }) => (
+        {destinations.map(({ label, icon, active, visit, reason }) => (
           <div className="application-navigation-entry" key={label} onMouseEnter={showHint}>
             <button
               type="button"
@@ -75,6 +82,8 @@ export function ApplicationNavigation({
               aria-label={label}
               aria-current={active}
               onFocus={showHint}
+              disabled={!!reason}
+              title={reason}
               onClick={() => {
                 setHintDismissed(true);
                 visit();

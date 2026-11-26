@@ -11,6 +11,7 @@ export function NameEditor({
   heading: Heading = 'strong',
   canRename = true,
   disabled = false,
+  disabledReason,
   inputDisabled = disabled,
   readOnly = false,
   saveDisabled = inputDisabled || readOnly,
@@ -28,6 +29,7 @@ export function NameEditor({
   heading?: 'h1' | 'strong';
   canRename?: boolean;
   disabled?: boolean;
+  disabledReason?: string | null;
   inputDisabled?: boolean;
   readOnly?: boolean;
   saveDisabled?: boolean;
@@ -89,7 +91,7 @@ export function NameEditor({
             className="ui-button icon-button name-editor-trigger"
             type="button"
             aria-label={`修改${label}`}
-            title={`修改${label}`}
+            title={disabledReason ?? `修改${label}`}
             disabled={disabled}
             onClick={begin}
           >

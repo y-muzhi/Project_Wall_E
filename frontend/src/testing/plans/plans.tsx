@@ -276,7 +276,7 @@ export function TestingPlans({
     }
   }
   const [recovery] = useState(() => {
-    const store = new CommandRecoveryStore();
+    const store = new CommandRecoveryStore({ scope: api.environmentScope });
     const commands = api.configurationRecovery(store, async (original, association, signal) => {
       const pack = positiveInteger(original.parameters.id);
       const operation =

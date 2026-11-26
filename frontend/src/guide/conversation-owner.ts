@@ -1,6 +1,7 @@
 import { snapshotObject } from '../api/client.ts';
 import type { GuideRun } from '../api/models.ts';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import { RequirementSuggestionBatch } from '../suggestions/batch-owner.ts';
 import { RequirementAiRead } from './read-owner.ts';
@@ -8,6 +9,7 @@ import { RequirementGuideComposer } from './composer.ts';
 import { RequirementRunActions } from './run-actions.ts';
 import { RequirementCardGroups } from './card-groups.ts';
 import { CardDrafts } from './card-drafts.ts';
+import { ComposerDrafts } from './composer-drafts.ts';
 import { ModelCallCache } from './model-call-reader.ts';
 
 export type ConversationState = Readonly<{
@@ -38,6 +40,7 @@ export class RequirementConversation {
   readonly composer: RequirementGuideComposer;
   readonly runs: RequirementRunActions;
   readonly cards: RequirementCardGroups;
+  readonly actionsDisabled: boolean;
   private value: ConversationState;
   private readonly listeners = new Set<() => void>();
   private readonly releases: (() => void)[] = [];
@@ -63,7 +66,7 @@ export class RequirementConversation {
     adoptActual: (actual: DetailSnapshot) => Promise<void>,
     openPanel: () => void | Promise<void>,
     drafts = new CardDrafts(
-      undefined,
+      () => environmentBrowserStorage('sessionStorage', api.environmentScope),
       undefined,
       detail.selected_document_id ?? detail.current?.id ?? null,
     ),
@@ -77,6 +80,7 @@ export class RequirementConversation {
     )
       throw TypeError('Actual owned CURRENT required');
     this.api = api;
+    this.actionsDisabled = api.environmentScope !== undefined;
     this.modelCalls = new ModelCallCache(detail.requirement.id);
     this.readActual = readActual;
     this.adoptActual = adoptActual;
@@ -99,7 +103,15 @@ export class RequirementConversation {
       if (this.closed) throw Error('Conversation is retired');
       this.adopt(actual);
     };
-    this.read = new RequirementAiRead(detail, api, observeActual, adopt, openPanel);
+    this.read = new RequirementAiRead(
+      detail,
+      api,
+      observeActual,
+      adopt,
+      openPanel,
+      undefined,
+      !this.actionsDisabled,
+    );
     const refreshMessages = async () => {
       if (!(await this.read.messages.refresh())) throw Error('实际消息暂时无法读取');
     };
@@ -110,7 +122,10 @@ export class RequirementConversation {
       adopt,
       this.read.receive,
       refreshMessages,
-      undefined,
+      new ComposerDrafts(
+        () => environmentBrowserStorage('sessionStorage', api.environmentScope),
+        detail.selected_document_id ?? detail.current?.id ?? null,
+      ),
       observeActual,
     );
     this.runs = new RequirementRunActions(
@@ -154,6 +169,7 @@ export class RequirementConversation {
   private permitted(key: string): boolean {
     return (
       !this.closed &&
+      !this.actionsDisabled &&
       (key.startsWith('BATCH:')
         ? this.value.suggestions_visible && (this.value.enabled || this.value.review_read_only)
         : this.value.visible && this.value.enabled) &&
@@ -272,7 +288,7 @@ export class RequirementConversation {
         this.read.setVisible(view);
         this.composer.setAvailable(this.permitted('COMPOSER'));
         this.runs.setAvailable(this.permitted('RUN'));
-        this.cards.setAvailable(view);
+        this.cards.setAvailable(view && !this.actionsDisabled);
         this.cards.reconcilePermissions();
         for (const [id, entry] of this.batches) {
           entry.owner.setReadOnly(this.value.review_read_only);

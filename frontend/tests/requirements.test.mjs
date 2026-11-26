@@ -15,8 +15,13 @@ test('ordinary form normalization agrees with actual backend White_Space for eve
   const cases=[];for(let point=0;point<=0x3000;point++) cases.push(String.fromCodePoint(point)+'😀e\u0301Ａ'+String.fromCodePoint(point));
   cases.push(' \r\na\rb\r\nc\u0085','\ufeff 标题 \ufeff','\u001c 内容 \u001c');
   const script='import json,sys;from backend.app.shared.validation import normalize_text;print(json.dumps([normalize_text(x) for x in json.load(sys.stdin)],ensure_ascii=True))';
-  const native=spawnSync(resolve(import.meta.dirname,'../../.venv/Scripts/python.exe'),['-X','utf8','-c',script],{cwd:resolve(import.meta.dirname,'../..'),input:JSON.stringify(cases),encoding:'utf8'});
-  assert.equal(native.status,0,native.stderr);const expected=JSON.parse(native.stdout);assert.equal(expected.length,cases.length);
+  const root = resolve(import.meta.dirname, '../..');
+  const python = process.env.WALLE_OFFLINE_TEST_PYTHON ??
+    (process.platform === 'win32' ? resolve(root, '.venv/Scripts/python.exe') : 'python3');
+  const native = spawnSync(python, ['-B', '-X', 'utf8', '-c', script], {
+    cwd: root, input: JSON.stringify(cases), encoding: 'utf8',
+  });
+  assert.equal(native.status, 0, native.error?.message ?? native.stderr);const expected=JSON.parse(native.stdout);assert.equal(expected.length,cases.length);
   for(let index=0;index<cases.length;index++) assert.equal(normalizeOrdinary(cases[index]),expected[index],'Native normalization case '+index);
   assert.equal(ordinaryInput(' 😀'.repeat(20).replaceAll(' ',''),'title',1,20,false),'😀'.repeat(20));
   assert.throws(()=>ordinaryInput('😀'.repeat(21),'title',1,20,false));assert.throws(()=>normalizeOrdinary('\ud800'));

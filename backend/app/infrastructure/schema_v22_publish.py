@@ -29,7 +29,7 @@ def _sync_directory(path):
         os.close(descriptor)
 
 
-def _publish_new(source, target):
+def publish_directory(source, target):
     libc = ctypes.CDLL(None, use_errno=True)
     try:
         rename = libc.renameat2
@@ -93,7 +93,7 @@ def build_and_publish(output: Path, release_id: str, runtime_sha256: str):
         _sync_directory(staging)
         candidate = load_release(staging, expected, runtime_sha256)
         _check_reopen(Path(scratch) / 'verification.sqlite', candidate)
-        _publish_new(staging, target)
+        publish_directory(staging, target)
         try:
             _sync_directory(output)
             return load_release(target, expected, runtime_sha256)

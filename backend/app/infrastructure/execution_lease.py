@@ -7,7 +7,7 @@ worker transactions use this wrapper; public command transactions stay native.
 from contextlib import contextmanager
 import sqlite3
 import sys
-from threading import RLock
+from threading import Condition, RLock
 
 from .database import Database
 
@@ -19,6 +19,8 @@ class ExecutionRetired(BaseException):
 class ExecutionLease:
     def __init__(self):
         self._gate = RLock()
+        self._drained = Condition(self._gate)
+        self._transactions = 0
         self._retired = False
         self._connections = set()
 
@@ -42,6 +44,11 @@ class ExecutionLease:
                 except sqlite3.Error:
                     pass  # Already closed, never commit proof.
 
+    def retire_and_wait(self):
+        self.retire()
+        with self._drained:
+            self._drained.wait_for(lambda: self._transactions == 0)
+
 
 class LeasedDatabase(Database):
     def __init__(self, database, lease):
@@ -51,6 +58,8 @@ class LeasedDatabase(Database):
         self.migration, self.migrations = database.migration, database.migrations
         self.schema_release = database.schema_release
         self.read_only = database.read_only
+        self.environment_lock = getattr(database, 'environment_lock', None)
+        self.idempotency_generation = getattr(database, 'idempotency_generation', None)
 
     def reversible(self, connection):
         return self.database.reversible(connection)
@@ -60,6 +69,15 @@ class LeasedDatabase(Database):
         lease = self.lease
         with lease._gate:
             lease._check()
+            lease._transactions += 1
+        try:
+            yield from self._leased_transaction(lease, write)
+        finally:
+            with lease._drained:
+                lease._transactions -= 1
+                lease._drained.notify_all()
+
+    def _leased_transaction(self, lease, write):
         manager = self.database.transaction(write=write)
         connection = manager.__enter__()
         registered = False

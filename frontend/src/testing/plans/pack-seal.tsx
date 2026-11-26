@@ -4,6 +4,7 @@ import { testingPackSealPath } from '../../api/testing-assets.ts';
 import type { TestPack, TestingSealReceipt } from '../../api/testing-assets.ts';
 import type { TestPlanVersion } from '../../api/testing-plans.ts';
 import type { WalleApi } from '../../api/walle.ts';
+import { environmentBrowserStorage } from '../../api/environment-storage.ts';
 import type { CommandRecovery } from '../../code-tasks/command-recovery.ts';
 import { useSettingsVisibility } from '../../code-tasks/settings/read.ts';
 import { Confirmation } from '../../shared/confirmation.tsx';
@@ -29,9 +30,11 @@ const failureLabels = {
   TEST_ASSET_REVOKED: '所属计划或测试包已撤销',
 } as const;
 
-function sessionOperation(pack: number, version: number): number {
+function sessionOperation(api: WalleApi, pack: number, version: number): number {
   try {
-    const value = sessionStorage.getItem('walle:testing-seal:' + version + ':' + pack);
+    const value = environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(
+      'walle:testing-seal:' + version + ':' + pack,
+    );
     return value === null ? 0 : positiveInteger(Number(value));
   } catch {
     return 0;
@@ -62,7 +65,7 @@ export function PackSeal({
   const [confirm, setConfirm] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [accepted, setAccepted] = useState(() => sessionOperation(pack.id, plan.id));
+  const [accepted, setAccepted] = useState(() => sessionOperation(api, pack.id, plan.id));
   const operationId = Math.max(accepted, recovered ?? 0);
   const read = useCallback(
     (signal: AbortSignal) => api.testingSeal(pack.id, operationId, signal),
@@ -95,11 +98,14 @@ export function PackSeal({
   useEffect(() => {
     if (operationId === 0) return;
     try {
-      sessionStorage.setItem('walle:testing-seal:' + plan.id + ':' + pack.id, String(operationId));
+      environmentBrowserStorage('sessionStorage', api.environmentScope).setItem(
+        'walle:testing-seal:' + plan.id + ':' + pack.id,
+        String(operationId),
+      );
     } catch {
       // The durable command record still guards the original acceptance.
     }
-  }, [operationId, pack.id, plan.id]);
+  }, [api, operationId, pack.id, plan.id]);
   useEffect(() => {
     if (!visible || !unfinished || operation.loading || operation.error !== null) return;
     const tick = window.setTimeout(operation.reload, 1100);

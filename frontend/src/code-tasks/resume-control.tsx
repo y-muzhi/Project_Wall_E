@@ -76,26 +76,29 @@ export function TaskResumeControl({ api, task, visible, ready, changed }: Props)
   const path = taskResumePath(taskId);
   const recovery = useMemo(
     () =>
-      api.configurationRecovery(new CommandRecoveryStore(), async (original, link, signal) => {
-        if (
-          original.decoder_kind !== 'APP-CODE-CMD-C36' ||
-          original.parameters.task_id !== taskId ||
-          link.task_id !== taskId
-        )
-          throw Error('Original continuation belongs to another task');
-        const { data } = await api.taskResumeOperation(
-          link.operation_id,
-          taskId,
-          signal,
-          original.key,
-        );
-        return {
-          operation_id: data.id,
-          task_id: taskId,
-          testing_task_id: null,
-          status: data.status,
-        };
-      }),
+      api.configurationRecovery(
+        new CommandRecoveryStore({ scope: api.environmentScope }),
+        async (original, link, signal) => {
+          if (
+            original.decoder_kind !== 'APP-CODE-CMD-C36' ||
+            original.parameters.task_id !== taskId ||
+            link.task_id !== taskId
+          )
+            throw Error('Original continuation belongs to another task');
+          const { data } = await api.taskResumeOperation(
+            link.operation_id,
+            taskId,
+            signal,
+            original.key,
+          );
+          return {
+            operation_id: data.id,
+            task_id: taskId,
+            testing_task_id: null,
+            status: data.status,
+          };
+        },
+      ),
     [api, taskId],
   );
   const [pending, setPending] = useState<PendingSummary | null>(null);

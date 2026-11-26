@@ -10,7 +10,7 @@ from backend.app.infrastructure.audit_repository import AuditRepository, _owned
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.identifiers import EntityKind, entity_id, message_sequence
-from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.process_lock import matches_database
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.shared.command_execution import Rejected, operation_time
 from backend.app.shared.validation import strict_json_object
@@ -87,7 +87,7 @@ def persist_returned_response(database, llm_use_id, *, process_lock, clock=None)
     means the response was delivered. Cancellation and ownership still apply.
     """
     process_lock.assert_owned()
-    if process_lock.path != ProcessLock.for_database(database.path).path:
+    if not matches_database(process_lock, database):
         raise RuntimeError('Display lock must own this database')
     at = operation_time(clock)
     with database.transaction(write=True) as connection:

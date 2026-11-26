@@ -98,28 +98,31 @@ export function TaskChecks({
   const capturePath = captureCheckPath(taskId);
   const recovery = useMemo(
     () =>
-      api.configurationRecovery(new CommandRecoveryStore(), async (original, link, signal) => {
-        if (
-          (original.decoder_kind !== 'APP-CODE-CMD-C50' &&
-            original.decoder_kind !== 'APP-CODE-CMD-C51') ||
-          original.parameters.task_id !== taskId ||
-          link.task_id !== taskId
-        )
-          throw Error('Original check belongs to another task');
-        const { data } = await api.codeTaskOperation(taskId, link.operation_id, signal);
-        const same =
-          original.decoder_kind === 'APP-CODE-CMD-C50'
-            ? data.operation_type === 'CAPTURE_AND_CHECK'
-            : data.operation_type === 'VERIFY_CANDIDATE' &&
-              data.fixed_input.candidate_id === original.parameters.candidate_id;
-        if (!same || data.idempotency_key !== original.key) throw Error('Original check differs');
-        return {
-          operation_id: data.id,
-          task_id: taskId,
-          testing_task_id: null,
-          status: data.status,
-        };
-      }),
+      api.configurationRecovery(
+        new CommandRecoveryStore({ scope: api.environmentScope }),
+        async (original, link, signal) => {
+          if (
+            (original.decoder_kind !== 'APP-CODE-CMD-C50' &&
+              original.decoder_kind !== 'APP-CODE-CMD-C51') ||
+            original.parameters.task_id !== taskId ||
+            link.task_id !== taskId
+          )
+            throw Error('Original check belongs to another task');
+          const { data } = await api.codeTaskOperation(taskId, link.operation_id, signal);
+          const same =
+            original.decoder_kind === 'APP-CODE-CMD-C50'
+              ? data.operation_type === 'CAPTURE_AND_CHECK'
+              : data.operation_type === 'VERIFY_CANDIDATE' &&
+                data.fixed_input.candidate_id === original.parameters.candidate_id;
+          if (!same || data.idempotency_key !== original.key) throw Error('Original check differs');
+          return {
+            operation_id: data.id,
+            task_id: taskId,
+            testing_task_id: null,
+            status: data.status,
+          };
+        },
+      ),
     [api, taskId],
   );
   const [pending, setPending] = useState<PendingSummary | null>(null);
