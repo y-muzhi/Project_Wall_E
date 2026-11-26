@@ -9,8 +9,12 @@ from threading import Thread
 
 import pytest
 
+from backend.app.infrastructure import opencode_control
 from backend.app.infrastructure.opencode_binary import VERSION
-from backend.app.infrastructure.opencode_control import OpenCodeControlCredential
+from backend.app.infrastructure.opencode_control import (
+    OpenCodeControlCredential,
+    OpenCodeControlTransportError,
+)
 from backend.app.infrastructure.opencode_runtime_bundle import REF_PREFIX
 from backend.app.infrastructure.opencode_task_launch import TaskExecutionError, TaskExecutionPlan
 from backend.app.infrastructure.runtime_launch_journal import LaunchScope
@@ -83,6 +87,85 @@ def test_wildcard_model_listener_and_occupied_control_port_are_rejected():
                 observe_task_endpoints(
                     _plan(model, control), process, process.identity, lambda: None
                 )
+
+
+@pytest.mark.parametrize(
+    ('stage', 'failure', 'diagnostic', 'observations'),
+    [
+        ('listener', None, 'LISTENER_PENDING', ['listener']),
+        ('wrong_listener', None, 'LISTENER_OWNER_UNVERIFIED', ['listener']),
+        ('connect', PermissionError, 'TCP_DENIED', ['listener', 'connect', 'close']),
+        ('connect', TimeoutError, 'TCP_TIMEOUT', ['listener', 'connect', 'close']),
+        ('connect', ConnectionRefusedError, 'RESULT_UNVERIFIED', ['listener', 'connect', 'close']),
+        (
+            'request',
+            TimeoutError,
+            'HTTP_TIMEOUT',
+            ['listener', 'connect', 'owner', 'request', 'close'],
+        ),
+        (
+            'response',
+            TimeoutError,
+            'HTTP_TIMEOUT',
+            ['listener', 'connect', 'owner', 'request', 'response', 'close'],
+        ),
+    ],
+)
+def test_control_startup_transport_diagnostics(
+    monkeypatch, stage, failure, diagnostic, observations
+):
+    scope = LaunchScope('a' * 64, 3, 4, 'control-startup-diagnostics')
+    credential = OpenCodeControlCredential.issue(scope, _plan(43101, 43102))
+    calls = []
+
+    def observe_listener(endpoint, owner_pid):
+        assert (endpoint, owner_pid) == (('127.0.0.1', 43102), os.getpid())
+        calls.append('listener')
+        if stage == 'wrong_listener':
+            raise TaskExecutionError('ORIGINAL_TASK_LISTENER_OWNER_UNVERIFIED')
+        return stage != 'listener'
+
+    def verify_owner(_connection, _endpoint, _owner_pid):
+        calls.append('owner')
+
+    def fail_on(step):
+        calls.append(step)
+        if stage == step:
+            raise failure('private detail discarded')
+
+    class ControlConnection:
+        def __init__(self, address, port, *, timeout):
+            assert (address, port) == ('127.0.0.1', 43102)
+            assert 0 < timeout <= 1
+            self.sock = self
+
+        def settimeout(self, seconds):
+            assert 0 < seconds <= 1
+
+        def connect(self):
+            fail_on('connect')
+
+        def request(self, _method, _target, *, body, headers):
+            assert body is None and 'Authorization' not in headers
+            fail_on('request')
+
+        def getresponse(self):
+            fail_on('response')
+
+        def close(self):
+            calls.append('close')
+
+    monkeypatch.setattr(opencode_control, 'original_http_listener_ready', observe_listener)
+    monkeypatch.setattr(opencode_control, 'verify_task_control_connection', verify_owner)
+    monkeypatch.setattr(opencode_control, 'HTTPConnection', ControlConnection)
+    with ObservedProcess(os.getpid()) as process, pytest.raises(TaskExecutionError) as error:
+        credential.verify_basic_challenge(process, process.identity, lambda: None, timeout_ms=1000)
+    prefix = 'ORIGINAL_TASK_' if stage == 'wrong_listener' else 'ORIGINAL_TASK_CONTROL_'
+    assert str(error.value) == prefix + diagnostic
+    assert isinstance(error.value, OpenCodeControlTransportError) == diagnostic.endswith(
+        ('DENIED', 'TIMEOUT')
+    )
+    assert calls == observations
 
 
 def test_basic_probe_sends_only_to_original_established_connection(ordinary_controller):

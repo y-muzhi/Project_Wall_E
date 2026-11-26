@@ -360,6 +360,7 @@ def test_native_task_launch_uses_original_job_and_durable_fence(
         created_folder = profile.prepare(lambda: False)
         program.prepare(deadline=monotonic() + 8, cancelled=lambda: False)
         native = native_launch.TaskNativeLaunch(directories, job, profile, program)
+        assert native._lpac_capability_names() == ('registryRead',)
         managed = tmp_path / 'managed-fixture'
         managed.mkdir()
         monkeypatch.setattr(

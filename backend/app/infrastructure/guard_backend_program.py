@@ -22,7 +22,7 @@ from .program_manifest import (
 )
 from .runtime_launch_journal import _bytes, _hex
 from .windows_access_check import ControllerAccessQuery, require_controller_read_only
-from .windows_config_source import LockedConfigSource
+from .windows_config_source import LockedFileSource
 from .windows_controller_token import ControllerPrimaryToken
 from .windows_executable_pin import ExecutablePin
 from .windows_local_paths import LocalPathGuard, local_absolute_path
@@ -49,7 +49,7 @@ def open_registered_backend_image(root, *, manifest_sha256):
     """Pin the fixed installed entry before reading any backend frame."""
     _hex(manifest_sha256)
     package = local_absolute_path(root)
-    with LockedConfigSource(package / MANIFEST_NAME, max_file_bytes=MAX_MANIFEST_BYTES) as manifest:
+    with LockedFileSource(package / MANIFEST_NAME, max_file_bytes=MAX_MANIFEST_BYTES) as manifest:
         spec = decode_backend_program_manifest(
             manifest.verify().raw, expected_sha256=manifest_sha256
         )
@@ -80,7 +80,7 @@ class ProtectedBackendProgram:
         self._peer = peer
         self._root = local_absolute_path(root)
         self._expected_manifest_sha256 = expected_manifest_sha256
-        self._peer_lease = None
+        self._controller_process = None
         self._token = None
         self._access = None
         self._guards = {}
@@ -94,15 +94,19 @@ class ProtectedBackendProgram:
         self._admission = None
         deadline = self._deadline(timeout_ms, cancelled)
         try:
-            self._peer_lease = peer.original_process()
-            process = self._peer_lease.__enter__()
-            self._token = self._create(ControllerPrimaryToken, process, expected=process.identity)
+            with peer.original_process() as process:
+                self._controller_process = self._create(process.duplicate)
+                self._token = self._create(
+                    ControllerPrimaryToken, self._controller_process, expected=process.identity
+                )
             self._access = self._create(ControllerAccessQuery, self._token)
             for path in reversed(self._root.parents):
                 self._hold_path(path, 'ANCESTOR', deadline, cancelled)
             self._hold_path(self._root, 'PACKAGE_DIRECTORY', deadline, cancelled)
             manifest_path = self._root / MANIFEST_NAME
-            manifest = self._hold_file(manifest_path, MAX_MANIFEST_BYTES, deadline, cancelled)
+            manifest = self._hold_file(
+                manifest_path, MAX_MANIFEST_BYTES, deadline, cancelled, capture_raw=True
+            )
             self._spec = decode_backend_program_manifest(
                 manifest.raw, expected_sha256=expected_manifest_sha256
             )
@@ -129,7 +133,8 @@ class ProtectedBackendProgram:
                 or entry.byte_count != image.byte_count
             ):
                 raise BackendProgramError('BACKEND_PEER_NOT_REGISTERED_PACKAGE_ENTRY')
-            self._admission = self._verify_until(deadline, cancelled)
+            self._verify_inventory(deadline, cancelled)
+            self._admission = self._bound_admission()
         except BaseException as original:
             try:
                 self.close()
@@ -183,13 +188,17 @@ class ProtectedBackendProgram:
         self._facts[path] = facts
         return guard
 
-    def _hold_file(self, path, maximum, deadline, cancelled):
+    def _hold_file(self, path, maximum, deadline, cancelled, *, capture_raw=False):
         guard = self._hold_path(path, 'FILE', deadline, cancelled)
         source = self._create(
-            LockedConfigSource, path, max_file_bytes=maximum, expected_file=guard.identity
+            LockedFileSource,
+            path,
+            max_file_bytes=maximum,
+            expected_file=guard.identity,
+            capture_raw=capture_raw,
         )
         self._sources[path] = source
-        return source.verify()
+        return source.snapshot
 
     def _inventory(self, deadline, cancelled):
         found = set()
@@ -235,24 +244,34 @@ class ProtectedBackendProgram:
 
     def _verify_until(self, deadline, cancelled):
         self._peer.verify()
-        observations = []
-        for path, guard in sorted(
-            self._guards.items(), key=lambda item: str(item[0]).encode('utf-8')
-        ):
+        for path, guard in self._guards.items():
             self._check_deadline(deadline, cancelled)
             facts = require_controller_read_only(self._access.query(guard), role=self._roles[path])
             if facts != self._facts[path]:
                 raise BackendProgramError('BACKEND_PROGRAM_ORIGINAL_DESCRIPTOR_DIFFERS')
-            observations.append(asdict(facts))
         for source in self._sources.values():
             self._check_deadline(deadline, cancelled)
             if source.verify() != source.snapshot:
                 raise BackendProgramError('BACKEND_PROGRAM_ORIGINAL_BYTES_DIFFER')
+        self._verify_inventory(deadline, cancelled)
+        result = self._bound_admission()
+        if result != self._admission:
+            raise BackendProgramError('BACKEND_PROGRAM_ORIGINAL_ADMISSION_DIFFERS')
+        return result
+
+    def _verify_inventory(self, deadline, cancelled):
         actual = self._inventory(deadline, cancelled)
         expected = {MANIFEST_NAME, *(item.path for item in self._spec.files)}
         if actual != expected:
             raise BackendProgramError('BACKEND_PROGRAM_PACKAGE_MEMBERS_DIFFER')
+        self._check_deadline(deadline, cancelled)
+
+    def _bound_admission(self):
         self._peer.verify()
+        observations = [
+            asdict(self._facts[path])
+            for path in sorted(self._facts, key=lambda item: str(item).encode('utf-8'))
+        ]
         evidence = hashlib.sha256(
             _bytes(
                 {
@@ -264,12 +283,9 @@ class ProtectedBackendProgram:
                 }
             )
         ).hexdigest()
-        result = BackendProgramAdmission(
+        return BackendProgramAdmission(
             POLICY_VERSION, self._spec.program_ref, self._spec.manifest_sha256, evidence
         )
-        if self._admission is not None and result != self._admission:
-            raise BackendProgramError('BACKEND_PROGRAM_ORIGINAL_ADMISSION_DIFFERS')
-        return result
 
     @contextmanager
     def admission(self, *, timeout_ms, cancelled):
@@ -306,9 +322,9 @@ class ProtectedBackendProgram:
             for orphan in tuple(self._orphans):
                 orphan.close()
                 self._orphans.remove(orphan)
-            if self._peer_lease is not None:
-                lease, self._peer_lease = self._peer_lease, None
-                lease.__exit__(None, None, None)
+            if self._controller_process is not None:
+                self._controller_process.close()
+                self._controller_process = None
         except BaseException as error:
             error.retained_owner = self
             raise

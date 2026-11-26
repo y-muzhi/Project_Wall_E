@@ -4,6 +4,8 @@ import ctypes
 from contextlib import contextmanager
 from ctypes import wintypes
 
+OPENCODE_LPAC_CAPABILITY_NAMES = ('registryRead',)
+
 
 class LpacCapabilityError(RuntimeError):
     def __init__(self, code, native_error=None):

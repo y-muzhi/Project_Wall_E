@@ -1,5 +1,6 @@
 """The original business START_INSTANCE step and its durable instance allocation."""
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from secrets import token_hex
@@ -8,6 +9,7 @@ from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.idempotency import canonical_input
 from backend.app.infrastructure.identifiers import EntityKind, entity_id
 from backend.app.infrastructure.opencode_binary import VERSION
+from backend.app.infrastructure.opencode_control import OpenCodeControlTransportError
 from backend.app.infrastructure.opencode_task_launch import TaskExecutionError
 from backend.app.infrastructure.runtime_launch_journal import LaunchOutcomeUnknown
 from backend.app.shared.command_execution import operation_time
@@ -294,6 +296,10 @@ def advance_start_instance(runtime, parent, *, cancelled, driver=None):
         with runtime.database.transaction(write=True) as connection:
             _ready(connection, parent, original, evidence)
     except Exception as error:
+        if isinstance(error, OpenCodeControlTransportError):
+            logging.getLogger(__name__).warning(
+                'OpenCode START_INSTANCE operation %d: %s', operation_id, error
+            )
         retained = getattr(error, 'retained_owner', None)
         try:
             with runtime.database.transaction(write=True) as connection:

@@ -16,6 +16,7 @@ from .windows_local_paths import local_absolute_path
 
 VERSION = '1.19.5'
 RELEASE_SHA256 = '09a6e693157f0887e504f2cf4357a8cbddc5ead5d0dffb9a269dcc47c48640f5'
+IMAGE_SHA256 = 'd7b473388cb62555970e400ce54cdfb6d6573608beea6f8fdf382cd1a698a3fa'
 ARCHIVE_NAME = 'opencode-windows-x64.zip'
 IMAGE_NAME = 'opencode.exe'
 MAX_ARCHIVE_BYTES = 96 * 1024 * 1024

@@ -17,7 +17,11 @@ from .opencode_model_credential import OpenCodeModelCredential
 from .opencode_task_launch import TaskExecutionError, TaskExecutionPlan
 from .runtime_launch_journal import LaunchScope, _bytes
 from .windows_process import NativeProcessIdentity, ObservedProcess, ProcessObservationError
-from .windows_task_endpoints import verify_task_control_connection
+from .windows_task_endpoints import original_http_listener_ready, verify_task_control_connection
+
+
+class OpenCodeControlTransportError(TaskExecutionError):
+    """A fixed transport diagnostic with no request or credential details."""
 
 
 class OpenCodeControlCredential:
@@ -105,9 +109,16 @@ class OpenCodeControlCredential:
         before = process.observe()
         if before.identity != expected or before.state != 'RUNNING':
             raise TaskExecutionError('ORIGINAL_TASK_CONTROL_OWNER_UNVERIFIED')
+        if not authenticated and not original_http_listener_ready(self._endpoint, expected.pid):
+            raise TaskExecutionError('ORIGINAL_TASK_CONTROL_LISTENER_PENDING')
         connection = HTTPConnection(*self._endpoint, timeout=remaining())
         try:
-            connection.connect()
+            try:
+                connection.connect()
+            except PermissionError:
+                raise OpenCodeControlTransportError('ORIGINAL_TASK_CONTROL_TCP_DENIED') from None
+            except TimeoutError:
+                raise OpenCodeControlTransportError('ORIGINAL_TASK_CONTROL_TCP_TIMEOUT') from None
             connection.auto_open = 0
             verify_task_control_connection(connection.sock, self._endpoint, expected.pid)
             connection.sock.settimeout(remaining())
@@ -121,7 +132,10 @@ class OpenCodeControlCredential:
                 headers['Authorization'] = 'Basic ' + token
             if body is not None:
                 headers['Content-Type'] = 'application/json'
-            connection.request(method, target, body=body, headers=headers)
+            try:
+                connection.request(method, target, body=body, headers=headers)
+            except TimeoutError:
+                raise OpenCodeControlTransportError('ORIGINAL_TASK_CONTROL_HTTP_TIMEOUT') from None
         except BaseException:
             connection.close()
             raise
@@ -229,10 +243,15 @@ class OpenCodeControlCredential:
                     authenticated=authenticated,
                     accept='application/json',
                 )
-                with connection.getresponse() as response:
-                    status = response.status
-                    challenges = response.headers.get_all('WWW-Authenticate', [])
-                    raw = response.read(max_response_bytes + 1)
+                try:
+                    with connection.getresponse() as response:
+                        status = response.status
+                        challenges = response.headers.get_all('WWW-Authenticate', [])
+                        raw = response.read(max_response_bytes + 1)
+                except TimeoutError:
+                    raise OpenCodeControlTransportError(
+                        'ORIGINAL_TASK_CONTROL_HTTP_TIMEOUT'
+                    ) from None
                 if len(raw) > max_response_bytes:
                     raise TaskExecutionError('ORIGINAL_TASK_CONTROL_RESPONSE_TOO_LARGE')
                 remaining()

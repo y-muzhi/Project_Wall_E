@@ -21,6 +21,7 @@ from backend.app.infrastructure.windows_local_paths import LocalPathGuard, local
 from tools.windows_program_package import (
     freeze_onedir,
     require_build_environment,
+    run_owned,
     snapshot_files,
     source_digest,
     validate_program_destination,
@@ -37,6 +38,9 @@ class BackendBuildError(RuntimeError):
 
 
 def input_files(root, frontend):
+    from backend.app.infrastructure.formation_schema_release import (
+        SOURCE_NAMES as FORMATION_SOURCE_NAMES,
+    )
     from backend.app.infrastructure.schema_v20_release import SOURCE_NAMES
 
     areas = [
@@ -56,6 +60,7 @@ def input_files(root, frontend):
                 result[path.relative_to(root).as_posix()] = path
     for relative in {
         *SOURCE_NAMES,
+        *FORMATION_SOURCE_NAMES,
         'backend/__init__.py',
         'backend/frozen_backend_entry.py',
         'backend/requirements.lock',
@@ -170,7 +175,6 @@ def _replace_owned_build_file(target, raw):
 
 def build_backend(root, output, program_ref, *, frontend=None, build_frontend=False, timeout=900):
     from backend.app.infrastructure.sqlite_runtime import DLL_SHA256, activate
-    from tools.quality_gate import stop_owned
 
     root, output = local_absolute_path(root), local_absolute_path(output)
     frontend = None if frontend is None else local_absolute_path(frontend)
@@ -183,6 +187,8 @@ def build_backend(root, output, program_ref, *, frontend=None, build_frontend=Fa
                 raise BackendBuildError('FRONTEND_BUILD_ENTRY_REQUIRED')
     require_build_environment(root, error_type=BackendBuildError)
     activate()
+    from backend.app.infrastructure.review_schema import LAYOUT_NAME
+
     if output.exists() or output.is_symlink() or output.is_junction():
         raise BackendBuildError('NEW_BACKEND_PACKAGE_DIRECTORY_REQUIRED')
     for protected in (
@@ -225,31 +231,35 @@ def build_backend(root, output, program_ref, *, frontend=None, build_frontend=Fa
         if hashlib.sha256(raw).hexdigest() != DLL_SHA256:
             raise BackendBuildError('PINNED_BUILD_SQLITE_DIFFERS')
         _replace_owned_build_file(package / '_internal/sqlite3.dll', raw)
-        probe = subprocess.Popen(
-            [str(package / 'walle-backend.exe'), '--verify-runtime'],
-            cwd=temporary_path,
-            env=environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        try:
-            probe_output, _ = probe.communicate(timeout=60)
-        finally:
-            if probe.poll() is None:
-                stop_owned(probe)
-        if (
-            probe.returncode
-            or b'BACKEND_RUNTIME_VERIFIED schema=200 sqlite=3.54.1' not in probe_output
-        ):
-            print(probe_output[-5000:].decode('utf-8', 'replace'))
-            warnings = [
-                line
-                for line in log.decode('utf-8', 'replace').splitlines()
-                if 'not found' in line.lower() or 'could not resolve' in line.lower()
-            ]
-            for line in warnings[-16:]:
-                print(line[:500])
-            raise BackendBuildError('FROZEN_BACKEND_RUNTIME_NOT_VERIFIED')
+        for schema_version, layout in ((200, None), (210, None), (210, LAYOUT_NAME)):
+            probe_environment = environment.copy()
+            probe_environment.pop('WALLE_FORMATION_SCHEMA_LAYOUT', None)
+            if layout is not None:
+                probe_environment['WALLE_FORMATION_SCHEMA_LAYOUT'] = layout
+            status, probe_output = run_owned(
+                [
+                    str(package / 'walle-backend.exe'),
+                    '--verify-runtime',
+                    '--schema-version',
+                    str(schema_version),
+                ],
+                cwd=temporary_path,
+                environment=probe_environment,
+                timeout=60,
+            )
+            expected = f'BACKEND_RUNTIME_VERIFIED schema={schema_version} sqlite=3.54.1'
+            if layout is not None:
+                expected += f' release={layout}'
+            if status or expected.encode('ascii') not in probe_output:
+                print(probe_output[-5000:].decode('utf-8', 'replace'))
+                warnings = [
+                    line
+                    for line in log.decode('utf-8', 'replace').splitlines()
+                    if 'not found' in line.lower() or 'could not resolve' in line.lower()
+                ]
+                for line in warnings[-16:]:
+                    print(line[:500])
+                raise BackendBuildError('FROZEN_BACKEND_RUNTIME_NOT_VERIFIED')
         if snapshot_sources(root, frontend) != original:
             raise BackendBuildError('BUILD_SOURCE_CHANGED')
         if build_frontend and frontend_sources(root) != front_original:

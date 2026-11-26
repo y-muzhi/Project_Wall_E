@@ -37,6 +37,7 @@ from .windows_local_paths import FileIdentity, LocalDirectoryPin, LocalPathGuard
 from .windows_private_package import current_operator_sid
 from .windows_process import ObservedProcess
 from .windows_task_directories import TaskRuntimeRoot
+from .windows_wfp_namespace import ensure_admitted_task_wfp_namespace
 
 PROTOCOL = 'DEPLOY20-GUARD-1'
 PROTOCOL_V2 = 'DEPLOY20-GUARD-2'
@@ -310,6 +311,9 @@ class GuardDeploymentOwner:
                     program_sha256=image.sha256,
                     network=task.network,
                     checkpoint=checkpoint,
+                )
+                ensure_admitted_task_wfp_namespace(
+                    spec.installation_ref, task.network.provider, task.network.sublayer, checkpoint
                 )
                 options.update(
                     task_network=task.network,

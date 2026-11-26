@@ -9,6 +9,7 @@ from threading import Event, RLock, Thread
 from .deployment_manifest import absolute_path, digest
 from .guard_deployment_configuration import GuardDeploymentError, GuardDeploymentOwner
 from .guard_service_diagnostics import GuardFailureStage, diagnostic_for_failure
+from .windows_guard_observation_access import grant_backend_observation_access
 from .windows_guard_service import GuardServiceError, guard_service_name
 
 SERVICE_STOPPED = 1
@@ -190,7 +191,10 @@ class GuardServiceHost:
                 )
                 if self._owner.spec.installation_ref != self.installation_ref:
                     raise GuardServiceError('GUARD_SERVICE_INSTALLATION_DIFFERS')
-                self._state_change(SERVICE_RUNNING)
+                if not self._cancelled.is_set():
+                    stage = GuardFailureStage.BACKEND_OBSERVATION_ACCESS
+                    grant_backend_observation_access(self._owner.spec.backend_sid)
+                    self._state_change(SERVICE_RUNNING)
                 if not self._cancelled.is_set():
                     stage = GuardFailureStage.SERVICE_LOOP
                     self._owner.serve(cancelled=self._cancelled.is_set)

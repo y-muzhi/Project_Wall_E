@@ -311,29 +311,9 @@ def start(args):
         native(port=args.port, schema_version=210)
         return 0
 
-    import uvicorn
-    from backend.app.code_tasks.local_deployment import hold_configured_deployment
-    from backend.app.service import create_app
+    from backend.app.review_service import serve_review
 
-    local_database = FormationDatabase(
-        args.database.resolve(), formation_release=database.formation_release
-    )
-    frontend = Path(os.environ.get('WALLE_FRONTEND_DIST', str(ROOT / 'frontend' / 'dist')))
-    with hold_configured_deployment() as installation:
-        uvicorn.run(
-            create_app(
-                database=local_database,
-                frontend_directory=frontend,
-                registration_installation=installation,
-                schema_version=210,
-            ),
-            host='127.0.0.1',
-            port=args.port,
-            workers=1,
-            reload=False,
-            timeout_graceful_shutdown=10,
-            log_level='info',
-        )
+    serve_review(port=args.port)
     return 0
 
 

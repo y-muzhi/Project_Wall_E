@@ -353,7 +353,10 @@ class TaskInstanceDriver:
             try:
                 control.verify_ready(checkpoint, timeout_ms=options()['timeout_ms'])
             except TaskExecutionError as error:
-                if str(error) != 'ORIGINAL_TASK_CONTROL_RESULT_UNVERIFIED':
+                if str(error) not in (
+                    'ORIGINAL_TASK_CONTROL_LISTENER_PENDING',
+                    'ORIGINAL_TASK_CONTROL_RESULT_UNVERIFIED',
+                ):
                     raise
                 sleep(0.025)
             else:

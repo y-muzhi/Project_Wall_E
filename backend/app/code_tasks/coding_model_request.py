@@ -3,6 +3,8 @@
 import re
 from dataclasses import dataclass, field
 
+from backend.app.infrastructure.model_profile import ENDPOINT as ARK_CHAT_ENDPOINT
+from backend.app.infrastructure.openai_protocol import BASE_URL as OPENAI_BASE_URL
 from backend.app.infrastructure.runtime_launch_journal import _bytes
 from backend.app.shared.validation import MAX_SAFE_INTEGER, strict_json_object
 
@@ -53,6 +55,7 @@ class CodingRequestContract:
     authorization_output_cap: int
     chunk_usage: bool = False
     optional_fields: frozenset[str] = frozenset()
+    provider: str = 'volcengine'
 
     def __post_init__(self):
         if (
@@ -74,8 +77,16 @@ class CodingRequestContract:
             or type(self.chunk_usage) is not bool
             or type(self.optional_fields) is not frozenset
             or not self.optional_fields <= _OPTIONAL
+            or self.provider not in ('volcengine', 'openai')
+            or (self.provider == 'openai' and (self.chunk_usage or self.optional_fields))
         ):
             raise CodingModelProtocolError('CODING_MODEL_REQUEST_CONTRACT_INVALID')
+
+    @property
+    def supplier_endpoint(self):
+        if self.provider == 'openai':
+            return OPENAI_BASE_URL + '/chat/completions'
+        return ARK_CHAT_ENDPOINT
 
     @property
     def permitted_output(self):
@@ -331,6 +342,9 @@ def prepare_request(request, contract):
         'stream_options': {**options, 'include_usage': True},
         'thinking': {'type': 'disabled'},
     }
+    if contract.provider == 'openai':
+        del supplier['max_tokens'], supplier['temperature'], supplier['thinking']
+        supplier.update(max_completion_tokens=output, reasoning_effort='medium', store=False)
     body = _bytes(supplier)
     if len(body) > REQUEST_BYTES:
         _reject()

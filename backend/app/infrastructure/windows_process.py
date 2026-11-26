@@ -13,6 +13,10 @@ from threading import RLock
 from .windows_private_package import _api as _security_api
 from .windows_private_package import _sid_text
 
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+SYNCHRONIZE = 0x00100000
+TOKEN_QUERY = 0x8
+
 
 class ProcessObservationError(RuntimeError):
     def __init__(self, code, native_error=None):
@@ -156,7 +160,7 @@ def _identity(kernel, security, handle, pid):
     creation = _creation_time(kernel, handle)
     image = _image_path(kernel, handle)
     token = wintypes.HANDLE()
-    if not security.OpenProcessToken(handle, 0x8, ctypes.byref(token)):
+    if not security.OpenProcessToken(handle, TOKEN_QUERY, ctypes.byref(token)):
         raise _error('PROCESS_TOKEN_UNAVAILABLE')
     try:
         user, size = _token_buffer(security, token, 1)
@@ -197,7 +201,9 @@ class ObservedProcess:
             raise ProcessObservationError('EXPECTED_PROCESS_IDENTITY_INVALID')
         self._gate = RLock()
         self._kernel, self._security = _api()
-        self._handle = self._kernel.OpenProcess(0x1000 | 0x100000, False, pid)
+        self._handle = self._kernel.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, False, pid
+        )
         if not self._handle:
             raise _error('PROCESS_HANDLE_UNAVAILABLE')
         try:
