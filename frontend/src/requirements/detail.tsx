@@ -8,6 +8,7 @@ import { DetailFrame } from './detail-frame.tsx';
 import { RequirementHeader } from './header.tsx';
 import { RequirementPropertyControl } from './property-control.tsx';
 import { OwnedDocumentControls } from './document-controls.tsx';
+import { DraftSavedTime } from '../documents/manual-controls.tsx';
 import {
   DocumentCreationProvider,
   DocumentDirectory,
@@ -96,6 +97,14 @@ function ManualSaveStatus({
     manual = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const recovery = useSyncExternalStore(session.recovery.subscribe, session.recovery.getSnapshot),
     ending = useSyncExternalStore(session.ending.subscribe, session.ending.getSnapshot);
+  if (session.editor.isDrawing) {
+    return (
+      <span role="status">
+        {retained ? '保留草稿：' : ''}
+        <DraftSavedTime savedAt={state.saved_at} />
+      </span>
+    );
+  }
   return (
     <span role="status">
       {retained ? '保留草稿：' : ''}

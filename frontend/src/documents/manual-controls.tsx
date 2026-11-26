@@ -83,9 +83,17 @@ export function ManualStartControl(
   );
 }
 
+export function DraftSavedTime({ savedAt }: Readonly<{ savedAt: string }>) {
+  return (
+    <>
+      最近保存于 <time dateTime={savedAt}>{localTime(savedAt)}</time>
+    </>
+  );
+}
+
 export interface ManualDraftControlsProps {
   actionHost?: HTMLElement | null;
-  showSaveStatus?: boolean;
+  saveIndicator?: 'HIDDEN' | 'STATUS' | 'TIME';
   autosave: ManualDraftAutosave;
   ending: ManualDraftEnd;
   recovery: ManualDraftRecovery;
@@ -175,10 +183,16 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
   );
   const toolbar = (
     <div className="manual-draft-toolbar">
-      {props.showSaveStatus !== false && (
+      {props.saveIndicator !== 'HIDDEN' && (
         <p role="status">
-          {saveStatusLabel(save.status, props.valid)}
-          {props.valid && save.status === 'SAVED' && <> · {localTime(save.saved_at)}</>}
+          {props.saveIndicator === 'TIME' ? (
+            <DraftSavedTime savedAt={save.saved_at} />
+          ) : (
+            <>
+              {saveStatusLabel(save.status, props.valid)}
+              {props.valid && save.status === 'SAVED' && <> · {localTime(save.saved_at)}</>}
+            </>
+          )}
         </p>
       )}
       <button

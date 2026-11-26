@@ -225,7 +225,7 @@ export function OwnedDocumentControls({
       {session && state.mode !== 'HISTORY' && (
         <ManualDraftControls
           actionHost={actionHost ?? null}
-          showSaveStatus={showSaveStatus}
+          saveIndicator={showSaveStatus ? (session.editor.isDrawing ? 'TIME' : 'STATUS') : 'HIDDEN'}
           autosave={session.autosave}
           ending={session.ending}
           recovery={session.recovery}

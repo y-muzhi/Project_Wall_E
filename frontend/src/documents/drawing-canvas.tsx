@@ -107,15 +107,13 @@ export function mountDrawingCanvas(
       }
       return valid;
     }
-    if (
-      pointerActive ||
-      state.editingTextElement ||
-      state.multiElement ||
-      state.pendingImageElementId
-    ) {
+    if (state.editingTextElement || state.multiElement || state.pendingImageElementId) {
       validity(false);
       return false;
     }
+    // Wait for the gesture to settle before snapshotting. Selection and panning
+    // also emit pointer events while the persisted scene stays the same.
+    if (pointerActive) return false;
     initialized = true;
     try {
       const rendered = JSON.parse(
@@ -186,10 +184,7 @@ export function mountDrawingCanvas(
           api = instance;
           pointerSubscriptions = [
             instance.onPointerDown(() => {
-              if (!readonly) {
-                pointerActive = true;
-                validity(false);
-              }
+              if (!readonly) pointerActive = true;
             }),
             instance.onPointerUp(() => {
               pointerActive = false;
