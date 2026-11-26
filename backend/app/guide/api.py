@@ -17,7 +17,12 @@ from .http_models import (
 from .http_models import ModifyFromCommentRequest, ModifyFromCommentResponse
 from .http_models import RetryGuideRunRequest, RetryGuideRunResponse
 from . import model_calls
-from .http_models import ListModelCallsResponse, GetModelCallRequest, GetModelCallResponse
+from .http_models import (
+    ListModelCallsRequest,
+    ListModelCallsResponse,
+    GetModelCallRequest,
+    GetModelCallResponse,
+)
 
 guide_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 
@@ -26,9 +31,14 @@ guide_router = APIRouter(prefix='/api/v1', redirect_slashes=False)
 async def list_model_calls_http(request: Request):
     return await read_http(
         request,
-        GetGuideRunRequest,
+        ListModelCallsRequest,
         ListModelCallsResponse,
-        lambda runtime, parsed: model_calls.list_model_calls(runtime.database, parsed.guide_run_id),
+        lambda runtime, parsed: model_calls.list_model_calls(
+            runtime.database,
+            parsed.guide_run_id,
+            include_input_limit=parsed.include_input_limit,
+            catalog=runtime.catalog,
+        ),
     )
 
 

@@ -71,6 +71,7 @@ class CodingModelAdmission:
             authorized_output,
             self.chunk_usage,
             self.optional_fields,
+            provider=self.model.provider,
         )
 
 
@@ -96,6 +97,7 @@ def _ready_option(catalog, kind, key, value):
 def _fixed_price(row, admission, at):
     if (
         row is None
+        or admission.model.provider != 'volcengine'
         or hashlib.sha256(_bytes(dict(row))).hexdigest() != admission.price_sha256
         or row['model_profile_ref'] != admission.model.profile_id
         or row['model_snapshot_ref'] != admission.model_snapshot_ref

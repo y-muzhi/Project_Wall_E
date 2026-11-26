@@ -15,7 +15,7 @@ import { collaborationValue, operations } from './models.ts';
 
 const callStates = ['RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED'] as const;
 const checkStates = ['NOT_STARTED', 'SUCCEEDED', 'FAILED'] as const;
-export const modelCall = shape({
+const modelCallFields = {
   id,
   guide_run_id: id,
   call_no: id,
@@ -33,7 +33,13 @@ export const modelCall = shape({
   total_tokens: nullable(count),
   cached_tokens: nullable(count),
   duration_ms: nullable(count),
-});
+};
+export const modelCall = shape(modelCallFields);
+const listedModelCall = shape({ ...modelCallFields, input_token_limit: nullable(id) });
+function readListedModelCall(value: unknown) {
+  require(value !== null && typeof value === 'object' && !Array.isArray(value));
+  return listedModelCall({ input_token_limit: null, ...value });
+}
 export const modelCalls = checked(
   shape({
     id,
@@ -51,7 +57,7 @@ export const modelCalls = checked(
     ] as const),
     trigger_message_id: nullable(id),
     program_processed: bool,
-    items: array(modelCall, Number.MAX_SAFE_INTEGER),
+    items: array(readListedModelCall, Number.MAX_SAFE_INTEGER),
   }),
   (value) => {
     require(

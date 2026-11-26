@@ -152,6 +152,7 @@ function LoadedRequestRecord({
     surface.current?.id === runId ? acceptedReplyTarget(surface.current) : null;
   const last = calls.at(-1),
     unknown = data?.items.some((call) => call.user_message_id === null);
+  const inputLimit = last?.input_token_limit ?? null;
   return (
     <section
       className="model-request-record"
@@ -197,9 +198,11 @@ function LoadedRequestRecord({
       {calls.length > 0 ? (
         <>
           <div className="model-token-line">
-            <span>
-              输入 <b>{number(tokenTotal(calls, 'input_tokens'))}</b>
-            </span>
+            {(inputLimit === null || calls.length > 1 || last?.input_tokens === null) && (
+              <span>
+                输入 <b>{number(tokenTotal(calls, 'input_tokens'))}</b>
+              </span>
+            )}
             <span>
               输出 <b>{number(tokenTotal(calls, 'output_tokens'))}</b>
             </span>
@@ -211,6 +214,13 @@ function LoadedRequestRecord({
             </span>
             <span>耗时 {elapsed(tokenTotal(calls, 'duration_ms'))}</span>
           </div>
+          {last && inputLimit !== null && (
+            <ContextInputBudget
+              input={last.input_tokens}
+              limit={inputLimit}
+              multiple={calls.length > 1}
+            />
+          )}
           {calls.length > 1 && (
             <details className="model-call-attempts">
               <summary>{calls.length} 次调用／尝试 · 查看逐次用量</summary>
@@ -281,6 +291,41 @@ function LoadedRequestRecord({
         </p>
       )}
     </section>
+  );
+}
+
+function ContextInputBudget({
+  input,
+  limit,
+  multiple,
+}: Readonly<{ input: number | null; limit: number; multiple: boolean }>) {
+  const label = multiple ? '最近一次上下文输入' : '本次上下文输入';
+  if (input === null) {
+    return (
+      <div className="model-input-budget">
+        {multiple ? '最近一次输入上限' : '本次输入上限'} <b>{number(limit)} token</b>
+      </div>
+    );
+  }
+  const usage = (input / limit) * 100;
+  const percentage = usage.toLocaleString('zh-CN', { maximumFractionDigits: 1 });
+  const amount = `${number(input)} / ${number(limit)} token`;
+  return (
+    <div className="model-input-budget">
+      <div>
+        <span>
+          {label} <b>{amount}</b>
+        </span>
+        <b>{percentage}%</b>
+      </div>
+      <meter
+        min={0}
+        max={limit}
+        value={Math.min(input, limit)}
+        aria-label={label}
+        aria-valuetext={`${amount}，${percentage}%`}
+      />
+    </div>
   );
 }
 

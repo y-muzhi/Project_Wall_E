@@ -9,6 +9,7 @@ from .opencode_binary import VERSION
 from .runtime_launch_journal import LaunchOutcomeUnknown
 from .windows_config_source import ConfigReadError, LockedFileSource
 from .windows_local_paths import FileIdentity, PathBoundaryError
+from .windows_lpac_capabilities import OPENCODE_LPAC_CAPABILITY_NAMES
 from .windows_private_package import PackageSecurityError, PrivatePackageGuard, current_operator_sid
 from .windows_runtime_host_identity import windows_runtime_host_identity
 
@@ -84,6 +85,7 @@ class TaskRuntimeAdmission:
             'binary_ref': plan.binary_ref,
             'program_sha256': program_sha256,
             'opencode_version': VERSION,
+            'lpac_capability_names': list(OPENCODE_LPAC_CAPABILITY_NAMES),
             'host': windows_runtime_host_identity(),
             'wfp_provider': str(network.provider),
             'wfp_sublayer': str(network.sublayer),

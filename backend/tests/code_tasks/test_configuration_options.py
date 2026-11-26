@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.code_tasks.configuration_api import ListOptionsRequest, OptionsResponse
 from backend.app.infrastructure import code_configuration_catalog as catalogue
 from backend.app.infrastructure.code_catalogue_admission import MANIFEST_SHA256, RELEASE_DIRECTORY
 from backend.app.infrastructure.database import Database, StorageUnavailable
@@ -53,10 +54,26 @@ def test_actual_published_catalogue_is_nonsecret_and_does_not_claim_admission():
     assert loaded.manifest_sha256 == MANIFEST_SHA256
     git = loaded.items('GIT')
     models = loaded.items('MODEL')
-    assert len(git) == 1 and len(models) == len(catalogue.PROFILES) == 3
-    assert {row['value']['model_profile_ref'] for row in models} == set(catalogue.PROFILES)
-    assert all(row['ready'] is False and row['unresolved_capability_codes'] for row in git + models)
-    raw = canonical_input({'items': git + models})
+    assert len(git) == 1 and len(models) == 3
+    assert {row['value']['model_profile_ref'] for row in models} == {
+        'deepseek-long-v3',
+        'deepseek-v2',
+        'doubao-v1',
+    }
+    executors = loaded.items('EXECUTOR')
+    assert len(executors) == 1
+    assert executors[0]['value']['binary_ref'] == (
+        'opencode-binary:sha256:' + catalogue.OPENCODE_IMAGE_SHA256
+    )
+    assert executors[0]['unresolved_capability_codes'] == ['Q20-CONFIG', 'Q20-WINDOWS']
+    projected, pagination = OptionsResponse.project(
+        {'items': executors, 'page': 1, 'page_size': 20, 'total': 1, 'total_pages': 1},
+        ListOptionsRequest('EXECUTOR', 1),
+    )
+    assert projected['items'] == executors and pagination['total'] == 1
+    registered = git + models + executors
+    assert all(row['ready'] is False and row['unresolved_capability_codes'] for row in registered)
+    raw = canonical_input({'items': registered})
     assert all(secret not in raw.lower() for secret in ('api_key', 'password', 'https://', 'c:\\'))
     models[0]['value']['model_profile_ref'] = 'changed copy'
     assert (
@@ -67,7 +84,7 @@ def test_actual_published_catalogue_is_nonsecret_and_does_not_claim_admission():
     assert len(policies) == 1 and policies[0]['ready'] is False
     scopes = loaded.items('SCOPE')
     assert scopes == sorted(catalogue.scope_options(), key=lambda row: row['option_id'])
-    for kind in set(catalogue.KINDS) - {'MODEL', 'GIT', 'CONTENT_POLICY', 'SCOPE'}:
+    for kind in set(catalogue.KINDS) - {'MODEL', 'GIT', 'CONTENT_POLICY', 'SCOPE', 'EXECUTOR'}:
         assert loaded.items(kind) == []
 
 
@@ -87,6 +104,16 @@ def test_actual_published_catalogue_is_nonsecret_and_does_not_claim_admission():
         lambda m, d: m.update(schema_version=True),
         lambda m, d: m['files'][0].update(path='../options.json'),
         lambda m, d: d['items'][0].update(kind='EXECUTOR'),
+        lambda m, d: m['opencode_source'].update(image_sha256='f' * 64),
+        lambda m, d: m['opencode_source'].update(openapi_blob='a' * 40),
+        lambda m, d: m['opencode_source'].update(runtime_bundle_ref='latest'),
+        lambda m, d: m['opencode_source'].update(
+            runtime_bundle_ref='opencode-bundle:sha256:' + 'e' * 64
+        ),
+        lambda m, d: next(row for row in d['items'] if row['kind'] == 'EXECUTOR').update(
+            ready=True
+        ),
+        lambda m, d: d.update(items=[row for row in d['items'] if row['kind'] != 'EXECUTOR']),
     ],
 )
 def test_even_matching_digest_cannot_publish_invalid_or_secret_projection(tmp_path, mutation):

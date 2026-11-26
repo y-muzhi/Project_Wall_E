@@ -19,7 +19,8 @@ from backend.app.infrastructure import guard_backend_program as program
 from backend.app.infrastructure.runtime_launch_journal import _bytes
 from backend.app.infrastructure.windows_access_check import ControllerAccess, NativeAccessError
 from backend.app.infrastructure.windows_executable_pin import ExecutablePinError
-from backend.app.infrastructure.windows_local_paths import FileIdentity
+from backend.app.infrastructure.windows_local_paths import FileIdentity, LocalPathGuard
+from backend.app.infrastructure.windows_pipe_peer import PipePeerError
 from backend.tests.infrastructure.test_v20_windows_pipe_peer import connection, peer
 from backend.tests.requirements.test_v15_foundation import tmp_path
 
@@ -173,6 +174,29 @@ def inventory_port(root, monkeypatch):
     return instance
 
 
+def test_fixed_program_member_lease_accepts_binary_and_streams_original_digest(
+    tmp_path, monkeypatch
+):
+    member = tmp_path / 'walle-backend.exe'
+    content = b'MZ\x00\xfffixed program fixture'
+    member.write_bytes(content)
+
+    owner = object.__new__(program.ProtectedBackendProgram)
+    owner._sources = {}
+    owner._orphans = []
+    with LocalPathGuard(member, directory=False) as path_guard:
+        monkeypatch.setattr(owner, '_hold_path', lambda *args: path_guard)
+        try:
+            snapshot = owner._hold_file(member, len(content), None, None)
+            assert snapshot.byte_count == len(content)
+            assert snapshot.sha256 == hashlib.sha256(content).hexdigest()
+            assert snapshot.raw == b''
+            assert owner._sources[member].verify() == snapshot
+        finally:
+            for held in owner._sources.values():
+                held.close()
+
+
 def test_inventory_port_covers_complete_files_extra_empty_directory_and_missing_members(
     tmp_path, monkeypatch
 ):
@@ -228,6 +252,7 @@ def verification_port(monkeypatch):
         '_inventory',
         lambda *args: {'lib/python.dll', 'walle-backend.exe', program.MANIFEST_NAME},
     )
+    instance._admission = instance._bound_admission()
     return instance, facts
 
 
@@ -235,9 +260,7 @@ def test_verification_port_rejects_changed_descriptor_bytes_and_inventory_before
     monkeypatch,
 ):
     instance, facts = verification_port(monkeypatch)
-    original = instance.verify(timeout_ms=3000, cancelled=lambda: False)
-    instance._admission = original
-    assert instance.verify(timeout_ms=3000, cancelled=lambda: False) == original
+    assert instance.verify(timeout_ms=3000, cancelled=lambda: False) == instance._admission
     instance._access.query = lambda _: replace(facts, descriptor_sha256='5' * 64)
     with pytest.raises(program.BackendProgramError, match='DESCRIPTOR_DIFFERS'):
         instance.verify(timeout_ms=3000, cancelled=lambda: False)
@@ -267,7 +290,7 @@ def test_admission_port_holds_original_owner_and_rejects_expiry_during_use(monke
 
 
 @pytest.mark.parametrize('connection', ['CLIENT'], indirect=True)
-def test_failed_program_cleanup_retains_actual_token_and_peer_until_same_owner_retry(
+def test_failed_program_cleanup_retains_original_process_and_token_until_same_owner_retry(
     connection, tmp_path
 ):
     from backend.app.infrastructure.windows_access_check import ControllerAccessQuery
@@ -296,11 +319,39 @@ def test_failed_program_cleanup_retains_actual_token_and_peer_until_same_owner_r
         retained = caught.value.retained_owner
         assert type(retained) is program.ProtectedBackendProgram
         assert retained._token._handle is not None
-        assert actual._users == 1
+        assert retained._controller_process is not actual._process
+        assert retained._controller_process.identity == actual.verify()
+        assert actual._users == 0
         retained.close()
         assert retained._token is None and retained._access is None
-        assert actual._users == 0
+        assert retained._controller_process is None
         assert actual.verify() == connection.process.identity
+
+
+@pytest.mark.parametrize('connection', ['CLIENT'], indirect=True)
+def test_peer_exit_during_program_verification_does_not_retain_closed_resources(
+    connection, tmp_path, monkeypatch
+):
+    with peer(connection) as actual:
+
+        def disconnect_before_next_access(owner, *_):
+            connection.job.terminate_owned(0)
+            process = connection.process
+            assert process._kernel.WaitForSingleObject(process._handle, 8000) == 0
+            owner.peer.verify()
+
+        monkeypatch.setattr(
+            program.ProtectedBackendProgram, '_hold_path', disconnect_before_next_access
+        )
+        with pytest.raises(PipePeerError) as caught:
+            program.ProtectedBackendProgram(
+                actual,
+                tmp_path,
+                expected_manifest_sha256='a' * 64,
+                timeout_ms=10000,
+                cancelled=lambda: False,
+            )
+        assert getattr(caught.value, 'retained_owner', None) is None
 
 
 def test_existing_path_permissions_cannot_silently_refresh_original_descriptor_port(monkeypatch):

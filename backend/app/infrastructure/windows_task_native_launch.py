@@ -19,6 +19,7 @@ from .windows_check_logon import CheckLogonSession
 from .windows_job import JobMembers, OwnedJob
 from .windows_local_paths import local_absolute_path
 from .windows_lpac_access import verify_lpac_task_access
+from .windows_lpac_capabilities import OPENCODE_LPAC_CAPABILITY_NAMES
 from .windows_lpac_profile import TaskLpacProfile
 from .windows_lpac_token import LpacProcessToken
 from .windows_native_process import ProcessInfo, StartupInfoEx, _api, _failure, _fence
@@ -152,6 +153,8 @@ class TaskNativeLaunch:
         return fence
 
     def _lpac_capability_names(self):
+        if not self._dirs.is_project_check:
+            return OPENCODE_LPAC_CAPABILITY_NAMES
         if not self._dirs.is_browser_driver:
             return ()
         if self._program._facts is None:

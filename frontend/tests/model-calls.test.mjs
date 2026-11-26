@@ -22,6 +22,9 @@ test('actual usage totals exclude overlapping cache; missing usage is not zero',
  assert.equal(modelCall(call({input_tokens:0,output_tokens:0,total_tokens:0,cached_tokens:0})).total_tokens,0);
  const inconsistent=modelCall(call({total_tokens:162}));assert.equal(inconsistent.total_tokens,162);assert(usageWarning(inconsistent));assert(usageWarning(call({total_tokens:null})));assert(usageWarning(call({cached_tokens:101})));
  assert.equal(usageWarning(first),null);assert.throws(()=>modelCalls(list({program_processed:true})));
+ assert.equal(modelCalls(list()).items[0].input_token_limit, null);
+ assert.equal(modelCalls(list({items:[call({input_token_limit:131072})]})).items[0].input_token_limit, 131072);
+ assert.throws(()=>modelCalls(list({items:[call({input_token_limit:0})]})));
 });
 test('snapshot decoder retains raw source and nullable legacy fields',()=>{
  const value=modelCallDetail({call:call(),requirement_id:3,action_type:'ASK',operation:'DISCUSS',prompt_reference:null,context_reference:null,sections:[],included_history_ids:[],budget_removed_history_ids:[],raw_request_json:'{"messages":[]}',preflight:{input_tokens:null,budget:null,counts:[null,null,null,null,null,null]}});

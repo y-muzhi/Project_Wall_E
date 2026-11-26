@@ -17,6 +17,7 @@ from backend.app.infrastructure.guard_service_diagnostics import (
     GuardServiceDiagnostic,
     decode_service_diagnostic,
 )
+from backend.app.infrastructure.windows_guard_observation_access import GuardObservationAccessError
 from backend.app.infrastructure.windows_guard_service import GuardServiceError
 from backend.tests.code_tasks import test_local_deployment as local
 from backend.tests.infrastructure import test_v20_guard_deployment_configuration as deployments
@@ -24,6 +25,7 @@ from backend.tests.infrastructure import test_v20_guard_deployment_configuration
 tmp_path = local.tmp_path
 guard_source = deployments.guard_source
 INSTALLATION = 'a' * 64
+BACKEND_SID = 'S-1-5-21-11-22-33-1001'
 
 
 class ScmPort:
@@ -65,7 +67,7 @@ class ScmPort:
 class OwnedGuard:
     def __init__(self, port):
         self.port = port
-        self.spec = SimpleNamespace(installation_ref=INSTALLATION)
+        self.spec = SimpleNamespace(installation_ref=INSTALLATION, backend_sid=BACKEND_SID)
         self.events = [('create', get_ident())]
         self.close_count = 0
         self.run_error = None
@@ -104,6 +106,13 @@ def lifecycle(tmp_path, monkeypatch):
         return owner
 
     monkeypatch.setattr(service, 'GuardDeploymentOwner', factory)
+
+    def grant_observation_access(backend_sid):
+        assert backend_sid == BACKEND_SID
+        assert states(port)[-1] == service.SERVICE_START_PENDING
+        owner.events.append(('grant', get_ident()))
+
+    monkeypatch.setattr(service, 'grant_backend_observation_access', grant_observation_access)
     return port, host, owner, factory
 
 
@@ -116,7 +125,7 @@ def test_actual_callback_abi_and_same_owner_thread_lifecycle(lifecycle):
     result = host.run()
     assert result == service.GuardServiceOutcome(0, None, None)
     assert port.registered_name == service.guard_service_name(INSTALLATION)
-    assert [event for event, _ in owner.events] == ['create', 'serve', 'close']
+    assert [event for event, _ in owner.events] == ['create', 'grant', 'serve', 'close']
     assert len({thread for _, thread in owner.events}) == 1
     assert owner.close_count == 1 and host._owner is None
     assert states(port) == [2, 4, 3, 3, 1]
@@ -146,6 +155,27 @@ def test_stop_during_construction_never_reports_running_or_serves(lifecycle, mon
     assert 4 not in states(port)
     assert [event for event, _ in owner.events] == ['create', 'close']
     assert owner.close_count == 1
+
+
+def test_observation_access_failure_keeps_service_unavailable(lifecycle, monkeypatch):
+    port, host, owner, _ = lifecycle
+
+    def deny_access(backend_sid):
+        assert backend_sid == BACKEND_SID
+        raise GuardObservationAccessError('GUARD_OBSERVATION_TOKEN_DACL_UNAVAILABLE', 5)
+
+    monkeypatch.setattr(service, 'grant_backend_observation_access', deny_access)
+    assert host.run().exit_code == 1
+    assert service.SERVICE_RUNNING not in states(port)
+    assert [event for event, _ in owner.events] == ['create', 'close']
+    status = port.statuses[-1]
+    assert decode_service_diagnostic(status['win32_exit_code'], status['service_exit_code']) == (
+        GuardServiceDiagnostic(
+            GuardFailureStage.BACKEND_OBSERVATION_ACCESS,
+            5,
+            GuardFailureReason.GUARD_OBSERVATION_TOKEN_DACL_UNAVAILABLE,
+        )
+    )
 
 
 def test_clean_cancelled_constructor_is_a_successful_stop(lifecycle, monkeypatch):
@@ -366,7 +396,12 @@ def test_scm_callback_owns_actual_guard_sources_and_pipe_on_one_thread(
         monkeypatch.setattr(owned, 'close', close)
         return owned
 
+    def grant_observation_access(backend_sid):
+        assert backend_sid == value['backend_sid']
+        owner_threads.append(get_ident())
+
     monkeypatch.setattr(service, 'GuardDeploymentOwner', construct)
+    monkeypatch.setattr(service, 'grant_backend_observation_access', grant_observation_access)
     host = service.GuardServiceHost(
         expected, str(manifest), 'd' * 64 if failure == 'source' else sha
     )

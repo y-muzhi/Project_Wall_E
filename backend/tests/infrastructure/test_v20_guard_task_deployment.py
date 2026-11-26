@@ -32,9 +32,23 @@ def test_current_windows_identity_reads_native_build():
     assert actual['windows_version'] == [int(part) for part in win32_ver()[1].split('.')[:3]]
 
 
-@pytest.mark.parametrize('outcome', ['complete', 'wrong_host', 'missing_probe', 'truthy_probe'])
+@pytest.mark.parametrize(
+    'outcome',
+    [
+        'complete',
+        'wrong_host',
+        'wrong_capabilities',
+        'missing_capabilities',
+        'missing_probe',
+        'truthy_probe',
+    ],
+)
 def test_fixed_deployment_evidence_requires_exact_binding_and_all_native_probes(outcome):
-    expected = {'host': windows_runtime_host_identity(), 'opencode_version': VERSION}
+    expected = {
+        'host': windows_runtime_host_identity(),
+        'opencode_version': VERSION,
+        'lpac_capability_names': ['registryRead'],
+    }
     record = {
         'schema_version': 1,
         'deployment': {**expected},
@@ -42,8 +56,16 @@ def test_fixed_deployment_evidence_requires_exact_binding_and_all_native_probes(
     }
     if outcome == 'complete':
         assert _verify_deployment_record(_bytes(record), expected) is None
-    elif outcome == 'wrong_host':
-        record['deployment']['host'] = {'architecture': 'ARM64', 'windows_version': [10, 0, 22000]}
+    elif outcome in ('wrong_host', 'wrong_capabilities', 'missing_capabilities'):
+        if outcome == 'wrong_host':
+            record['deployment']['host'] = {
+                'architecture': 'ARM64',
+                'windows_version': [10, 0, 22000],
+            }
+        elif outcome == 'wrong_capabilities':
+            record['deployment']['lpac_capability_names'] = ['registryRead', 'lpacCom']
+        else:
+            del record['deployment']['lpac_capability_names']
         with pytest.raises(LaunchOutcomeUnknown, match='BINDING_DIFFERS'):
             _verify_deployment_record(_bytes(record), expected)
     else:
@@ -86,6 +108,7 @@ def test_deployment_pins_actual_private_ntfs_file_and_refuses_changed_bytes(tmp_
         'binary_ref': 'fixture',
         'program_sha256': 'b' * 64,
         'opencode_version': VERSION,
+        'lpac_capability_names': ['registryRead'],
         'host': windows_runtime_host_identity(),
         'wfp_provider': str(provider),
         'wfp_sublayer': str(sublayer),

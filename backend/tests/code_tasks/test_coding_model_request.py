@@ -71,6 +71,34 @@ def test_exact_history_and_tool_arguments_are_preserved_while_policy_is_fixed():
     assert prepare_request({**native, 'max_tokens': 31}, _contract()).output_cap == 31
 
 
+def test_openai_chat_projection_preserves_input_and_binds_endpoint():
+    native = {**_request(), 'temperature': 0, 'max_tokens': 31, 'thinking': {'type': 'disabled'}}
+    contract = _contract(model_name='gpt-6.2-sol', provider='openai')
+    prepared = prepare_request(parse_request(_bytes(native)), contract)
+    assert prepared.native == native
+    assert contract.supplier_endpoint == 'https://api.openai.com/v1/chat/completions'
+    assert (
+        _contract().supplier_endpoint == 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'
+    )
+    assert prepared.supplier == {
+        key: value
+        for key, value in native.items()
+        if key not in ('temperature', 'max_tokens', 'thinking')
+    } | {
+        'model': 'gpt-6.2-sol',
+        'stream': True,
+        'n': 1,
+        'service_tier': 'default',
+        'stream_options': {'include_usage': True},
+        'max_completion_tokens': 31,
+        'store': False,
+        'reasoning_effort': 'medium',
+    }
+    assert prepared.output_cap == 31 and prepared.supplier_body == _bytes(prepared.supplier)
+    with pytest.raises(CodingModelProtocolError):
+        _contract(model_name='gpt-6.2-sol', provider='openai', chunk_usage=True)
+
+
 @pytest.mark.parametrize(
     'replacement',
     [

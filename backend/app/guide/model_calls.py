@@ -3,6 +3,7 @@
 import json
 
 from backend.app.infrastructure.database import StorageUnavailable
+from backend.app.infrastructure.resources import ConfigInvalid, ResourceCatalog
 from backend.app.shared.validation import InvalidInput, strict_integer
 
 
@@ -73,7 +74,60 @@ CALL_COLUMNS = """l.id,l.guide_run_id,l.call_no,l.attempt_no,l.model_name,l.call
  coalesce(json_extract(l.request_snapshot_json,'$.request.messages[1].content'),json_extract(l.request_snapshot_json,'$.request.input[1].content')) ->> '$.current_document.content_version') END END AS document_version"""
 
 
-def list_model_calls(database, guide_run_id):
+# Select only the resource references and small profile needed to resolve the budget.
+CALL_BUDGET_REFERENCE = """CASE WHEN json_valid(l.request_snapshot_json) THEN
+ json_extract(l.request_snapshot_json,'$.protocol.function_type','$.protocol.release',
+ '$.counting.counting_resource','$.counting.release_sha256','$.profile')
+ END AS budget_reference"""
+
+
+def _collaboration_budget(resources, reference):
+    if reference is None:
+        return None
+    fixed = _json(resources.content(reference))
+    return {
+        'total_tokens': fixed['total_limit'],
+        'input_tokens': fixed['input_limit'],
+        'output_tokens': fixed['output_limit'],
+        'framing_reserve': fixed['framing_reserve'],
+        'soft_input_target': fixed['soft_input_target'],
+        'counting': fixed['admission_mode'],
+    }
+
+
+def _legacy_budget(release_digest, profile):
+    if not release_digest:
+        return None
+    from backend.app.infrastructure.model_profile import ModelProfile
+
+    from .counted_context import counting_release
+
+    try:
+        return counting_release(ModelProfile.from_snapshot(profile), release_sha256=release_digest)[
+            'budget'
+        ]
+    except (ValueError, KeyError, RuntimeError):
+        return None
+
+
+def _saved_input_limit(reference_json, catalog):
+    if reference_json is None:
+        return None
+    function_type, release, counting_reference, digest, profile = _json(reference_json)
+    if function_type == 'collaboration_v1':
+        if counting_reference is None:
+            return None
+        try:
+            resources = catalog.for_collaboration_release(release).collaboration
+            budget = _collaboration_budget(resources, counting_reference)
+        except (ConfigInvalid, KeyError, TypeError):
+            return None
+    else:
+        budget = _legacy_budget(digest, profile)
+    return _identity(budget['input_tokens']) if budget else None
+
+
+def list_model_calls(database, guide_run_id, *, include_input_limit=False, catalog=None):
     try:
         identity = strict_integer(guide_run_id, 'guide_run_id')
     except InvalidInput as error:
@@ -86,9 +140,12 @@ def list_model_calls(database, guide_run_id):
             ).fetchone()
             if run is None:
                 return {'code': 'NOT_FOUND', 'data': None, 'details': None}
+            columns = CALL_COLUMNS
+            if include_input_limit:
+                columns += ',' + CALL_BUDGET_REFERENCE
             rows = connection.execute(
                 'SELECT '
-                + CALL_COLUMNS
+                + columns
                 + ' FROM llm_uses l WHERE l.guide_run_id=? ORDER BY l.call_no,l.attempt_no,l.id',
                 (identity,),
             ).fetchall()
@@ -96,9 +153,18 @@ def list_model_calls(database, guide_run_id):
                 "SELECT 1 FROM conversation_messages WHERE guide_run_id=? AND role='ASSISTANT' AND content LIKE '程序已%'",
                 (identity,),
             ).fetchone()
+            items = [_summary(row) for row in rows]
+            if include_input_limit:
+                catalog = catalog if catalog is not None else ResourceCatalog()
+                input_limits = {}
+                for row, item in zip(rows, items, strict=True):
+                    reference = row['budget_reference']
+                    if reference not in input_limits:
+                        input_limits[reference] = _saved_input_limit(reference, catalog)
+                    item['input_token_limit'] = input_limits[reference]
             data = dict(run) | {
                 'program_processed': not rows and bool(program),
-                'items': [_summary(row) for row in rows],
+                'items': items,
             }
             return {'code': 'READ_OK', 'data': data, 'details': None}
     except StorageUnavailable:
@@ -172,10 +238,7 @@ def _sections(request):
 
 def _collaboration_detail(row, snapshot, *, catalog=None):
     """Project saved bytes and measurements only; never compile or count on GET."""
-    if catalog is None:
-        from backend.app.infrastructure.resources import ResourceCatalog
-
-        catalog = ResourceCatalog()
+    catalog = catalog if catalog is not None else ResourceCatalog()
     resources = catalog.for_collaboration_release(snapshot['protocol']['release']).collaboration
     request = snapshot.get('request')
     protocol = snapshot.get('protocol') or {}
@@ -250,18 +313,7 @@ def _collaboration_detail(row, snapshot, *, catalog=None):
     )
     if openai_count:
         counts = [_number(measurement.get('request_tokens'))]
-    budget = None
-    reference = counting.get('counting_resource')
-    if reference is not None:
-        fixed = _json(resources.content(reference))
-        budget = {
-            'total_tokens': fixed['total_limit'],
-            'input_tokens': fixed['input_limit'],
-            'output_tokens': fixed['output_limit'],
-            'framing_reserve': fixed['framing_reserve'],
-            'soft_input_target': fixed['soft_input_target'],
-            'counting': fixed['admission_mode'],
-        }
+    budget = _collaboration_budget(resources, counting.get('counting_resource'))
     selection = None
     if wire is not None:
         resources.validate('ContextBasis', basis)
@@ -358,19 +410,7 @@ def get_model_call(database, llm_use_id, *, catalog=None):
             measurement = final.get('measurement') or {}
             counts = measurement.get('counts') if isinstance(measurement, dict) else None
             counts = counts if isinstance(counts, list) and len(counts) == 6 else [None] * 6
-            budget = None
-            if counting.get('release_sha256'):
-                try:
-                    from backend.app.infrastructure.model_profile import ModelProfile
-
-                    from .counted_context import counting_release
-
-                    budget = counting_release(
-                        ModelProfile.from_snapshot(snapshot['profile']),
-                        release_sha256=counting['release_sha256'],
-                    )['budget']
-                except (ValueError, KeyError, RuntimeError):
-                    pass
+            budget = _legacy_budget(counting.get('release_sha256'), snapshot.get('profile'))
             metadata = wire.get('request_metadata', {}) if isinstance(wire, dict) else {}
             metadata = metadata if isinstance(metadata, dict) else {}
             history = (

@@ -1,9 +1,8 @@
 """Frozen nonsecret ConfigurationOption metadata; no runtime/provider probing.
 
-The initial release registers the real fixed Git archive and existing immutable
-model Profile identities. Neither has V2 execution/price admission: ready=false.
-Managed task read roots carry pinned abstract semantics, with runtime admission closed.
-Other resource kinds require real preparation/validation before registration.
+The catalogue registers fixed Git and OpenCode sources, immutable model Profile
+identities, and managed read roots. Runtime and model admission are independent.
+Other resource kinds require real source validation before registration.
 """
 
 import hashlib
@@ -14,7 +13,9 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import mkdtemp
+from time import monotonic
 
+from backend.app.shared.json_canonical import canonical_input
 from backend.app.shared.validation import strict_enum, strict_json_object
 
 from .content_secret_policy import CAPABILITIES, CONTENT_VALUE, REFERENCE, load_secret_policy
@@ -25,7 +26,6 @@ from .git_bundle import (
     VERSION,
     verify_bundle_bytes,
 )
-from backend.app.shared.json_canonical import canonical_input
 from .managed_read_scopes import (
     RESOURCE_SHA256 as MANAGED_READ_SCOPES_SHA256,
 )
@@ -34,6 +34,16 @@ from .managed_read_scopes import (
     scope_options,
 )
 from .model_profile import PROFILES
+from .opencode_binary import IMAGE_SHA256 as OPENCODE_IMAGE_SHA256
+from .opencode_binary import RELEASE_SHA256 as OPENCODE_ARCHIVE_SHA256
+from .opencode_binary import VERSION as OPENCODE_VERSION
+from .opencode_binary import verify_opencode_archive
+from .opencode_protocol_source import OPENAPI_BLOB, verify_opencode_protocol_source
+from .opencode_runtime_bundle import (
+    OpenCodeRuntimeBundle,
+    is_opencode_runtime_bundle_ref,
+    verify_opencode_runtime_bundle,
+)
 from .resources import ConfigInvalid
 
 KINDS = (
@@ -95,6 +105,70 @@ def _git_value():
     }
 
 
+@dataclass(frozen=True)
+class OpenCodeCatalogueSources:
+    archive: Path
+    openapi: Path
+    bundle: OpenCodeRuntimeBundle
+    bundle_ref: str
+
+
+def _executor_from_manifest(source):
+    fields = ('archive_sha256', 'image_sha256', 'openapi_blob', 'runtime_bundle_ref')
+    _exact(source, fields)
+    if (
+        source['archive_sha256'] != OPENCODE_ARCHIVE_SHA256
+        or source['openapi_blob'] != OPENAPI_BLOB
+        or source['image_sha256'] != OPENCODE_IMAGE_SHA256
+    ):
+        raise ConfigInvalid('Code executor source differs from the pinned OpenCode release')
+    return _executor_option(source['runtime_bundle_ref'])
+
+
+def _executor_option(bundle_ref):
+    if not is_opencode_runtime_bundle_ref(bundle_ref):
+        raise ConfigInvalid('Code executor runtime bundle reference is invalid')
+    return {
+        'option_id': 'executor:opencode-' + OPENCODE_VERSION,
+        'kind': 'EXECUTOR',
+        'label': 'OpenCode ' + OPENCODE_VERSION,
+        'ready': False,
+        'unresolved_capability_codes': ['Q20-CONFIG', 'Q20-WINDOWS'],
+        'value': {
+            'version': OPENCODE_VERSION,
+            'binary_ref': 'opencode-binary:sha256:' + OPENCODE_IMAGE_SHA256,
+            'adapter_contract_version': 'opencode-openapi:gitblob:' + OPENAPI_BLOB,
+            'configuration_policy_version': 'OC20-CONFIG-1',
+            'runtime_policy_version': 'WIN20-ISOLATION-1',
+            'runtime_bundle_ref': bundle_ref,
+        },
+    }
+
+
+def _verify_executor_sources(source):
+    if type(source) is not OpenCodeCatalogueSources:
+        raise ConfigInvalid('Explicit fixed OpenCode catalogue sources are required')
+
+    def cancelled():
+        return False
+
+    archive = verify_opencode_archive(
+        source.archive, deadline=monotonic() + 120, cancelled=cancelled
+    )
+    protocol = verify_opencode_protocol_source(
+        source.openapi, deadline=monotonic() + 15, cancelled=cancelled
+    )
+    verify_opencode_runtime_bundle(
+        source.bundle, source.bundle_ref, deadline=monotonic() + 120, cancelled=cancelled
+    )
+    return {
+        'archive_sha256': OPENCODE_ARCHIVE_SHA256,
+        'image_sha256': archive.sha256,
+        'openapi_blob': protocol.blob,
+        'runtime_bundle_ref': source.bundle_ref,
+    }
+
+
 def option(value):
     row = _exact(
         value,
@@ -132,6 +206,11 @@ def option(value):
             or row['unresolved_capability_codes'] != ['Q20-GIT', 'Q20-WINDOWS']
         ):
             raise ConfigInvalid('Code Git option differs from the registered archive')
+    elif row['kind'] == 'EXECUTOR':
+        if type(row['value']) is not dict or row != _executor_option(
+            row['value'].get('runtime_bundle_ref')
+        ):
+            raise ConfigInvalid('Code executor option differs from the registered source')
     elif row['kind'] == 'MODEL':
         fields = _exact(row['value'], ('model_profile_ref',))
         profile = fields['model_profile_ref']
@@ -177,12 +256,14 @@ def load_verified_catalogue(root, expected_sha256):
             raise ConfigInvalid('Code catalogue manifest digest differs')
         version = manifest.get('schema_version')
         fields = ('schema_version', 'release_id', 'files', 'git_manifest_sha256', 'model_profiles')
-        if type(version) is int and version == 2:
+        if type(version) is int and version in (2, 3):
             fields += ('managed_read_scopes_sha256',)
+        if type(version) is int and version == 3:
+            fields += ('opencode_source',)
         _exact(manifest, fields)
         if (
             type(version) is not int
-            or version not in (1, 2)
+            or version not in (1, 2, 3)
             or type(manifest['release_id']) is not str
             or re.fullmatch('[a-z][a-z0-9-]{0,63}', manifest['release_id']) is None
             or manifest['git_manifest_sha256'] != GIT_MANIFEST_SHA256
@@ -222,7 +303,11 @@ def load_verified_catalogue(root, expected_sha256):
             ):
                 raise ConfigInvalid('Code catalogue Profile source differs')
             expected_model_ids.add(ref)
+        executor = _executor_from_manifest(manifest['opencode_source']) if version == 3 else None
         entries = [option(entry) for entry in data['items']]
+        executors = [entry for entry in entries if entry['kind'] == 'EXECUTOR']
+        if executors != ([] if executor is None else [executor]):
+            raise ConfigInvalid('Code catalogue executor source coverage differs')
         actual_git = _git_value()
         if any(entry['value'] != actual_git for entry in entries if entry['kind'] == 'GIT'):
             raise ConfigInvalid('Code catalogue Git file source differs')
@@ -263,7 +348,7 @@ def load_code_catalogue():
     return load_verified_catalogue(ROOT / RELEASE_DIRECTORY, MANIFEST_SHA256)
 
 
-def prepare_catalogue(release_id):
+def prepare_catalogue(release_id, *, opencode=None):
     """Register a NEW frozen metadata release; never mark runtime/model ready."""
     if type(release_id) is not str or re.fullmatch('[a-z][a-z0-9-]{0,63}', release_id) is None:
         raise ValueError('Explicit safe catalogue release identity required')
@@ -293,8 +378,17 @@ def prepare_catalogue(release_id):
     )
     load_managed_read_scopes()
     entries.extend(scope_options())
+    executor_source = None if opencode is None else _verify_executor_sources(opencode)
+    if executor_source is not None:
+        entries.append(_executor_from_manifest(executor_source))
     sources = []
-    for ref, (model, version) in PROFILES.items():
+    model_refs = (
+        PROFILES
+        if opencode is None
+        else (entry['value']['model_profile_ref'] for entry in load_code_catalogue().items('MODEL'))
+    )
+    for ref in model_refs:
+        model, version = PROFILES[ref]
         entries.append(
             {
                 'option_id': 'model:' + ref,
@@ -311,8 +405,9 @@ def prepare_catalogue(release_id):
     )
     manifest = _encoded(
         {
-            'schema_version': 2,
+            'schema_version': 2 if executor_source is None else 3,
             'managed_read_scopes_sha256': MANAGED_READ_SCOPES_SHA256,
+            **({} if executor_source is None else {'opencode_source': executor_source}),
             'release_id': release_id,
             'files': [
                 {

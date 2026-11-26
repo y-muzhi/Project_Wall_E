@@ -1,4 +1,4 @@
-"""Execute one original audited Coding model call through the fixed Beijing route."""
+"""Execute one original audited Coding model call through its fixed supplier route."""
 
 from base64 import b64encode
 from collections.abc import Callable
@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
-from backend.app.infrastructure.model_profile import ENDPOINT
+from backend.app.infrastructure.openai_transport import configured_proxy
 from backend.app.shared.command_execution import operation_time
 from backend.app.shared.validation import MAX_SAFE_INTEGER
 
@@ -139,12 +139,13 @@ class CodingModelGateway:
             with db.transaction(write=True) as connection:
                 mark_sending(connection, call, verified)
             active()
-            with self._client(deadline - monotonic()) as client:
+            contract = call.binding.contract
+            with self._client(deadline - monotonic(), contract.provider) as client:
                 active()
                 entered = True
                 with client.stream(
                     'POST',
-                    ENDPOINT,
+                    contract.supplier_endpoint,
                     content=request.supplier_body,
                     headers={
                         'Authorization': 'Bearer ' + credentials[0],
@@ -183,11 +184,16 @@ class CodingModelGateway:
                 raise
             raise CodingGatewayError('hold') from None
 
-    def _client(self, remaining):
+    def _client(self, remaining, provider):
         if remaining <= 0:
             raise CodingGatewayError('hold')
         transport = (
-            httpx.HTTPTransport(retries=0, trust_env=False, http2=False)
+            httpx.HTTPTransport(
+                proxy=configured_proxy() if provider == 'openai' else None,
+                retries=0,
+                trust_env=False,
+                http2=False,
+            )
             if self._transport_factory is None
             else self._transport_factory()
         )

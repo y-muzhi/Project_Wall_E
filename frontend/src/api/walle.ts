@@ -1275,6 +1275,7 @@ export class WalleApi {
     );
   }
   getBatch(identity: number, signal?: AbortSignal) {
+        [['include_input_limit', '1']],
     return this.single(
       target('suggestion-batches', identity),
       identified(models.batch, identity),

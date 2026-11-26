@@ -298,6 +298,15 @@ def test_actual_guard_full_task_group_and_failed_admission_hold_no_execution(
         return admission.evidence_sha256
 
     monkeypatch.setattr(guard.TaskRuntimeAdmission, 'verify', admission_port)
+
+    def namespace_port(installation_ref, provider, sublayer, checkpoint):
+        checkpoint()
+        assert len(checked) == 1
+        assert installation_ref == value['installation_ref']
+        assert str(provider) == group['network']['provider']
+        assert str(sublayer) == group['network']['sublayer']
+
+    monkeypatch.setattr(guard, 'ensure_admitted_task_wfp_namespace', namespace_port)
     if defect == 'source-id':
         group['source_parent']['file_id'] = 'f' * 32
     elif defect == 'runtime-id':

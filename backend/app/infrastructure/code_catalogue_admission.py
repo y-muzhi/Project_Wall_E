@@ -1,4 +1,4 @@
 """Generated immutable code option catalogue pin; not runtime admission."""
 
-RELEASE_DIRECTORY = 'code20-r3'
-MANIFEST_SHA256 = 'a009afe7dd78664658ae4d6d45263053c15d25ce5ad661262ab7932b89432127'
+RELEASE_DIRECTORY = 'code20-r4'
+MANIFEST_SHA256 = '957b615ec0ca3131a3795c76ccc245d0731318eba8613ffbf4fe45fb5984b294'

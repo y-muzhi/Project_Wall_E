@@ -244,9 +244,28 @@ def verify_ready(channel, action):
 def report_guard_identity_failure(installation_ref):
     from backend.app.infrastructure.windows_guard_service import _GuardServiceStatus
 
+    kernel, security = process_api()
+
     try:
         with _GuardServiceStatus(installation_ref) as service:
             pid = service.running_pid()
+            for label, mask in (('query', 0x1000), ('synchronize', 0x100000)):
+                handle = kernel.OpenProcess(mask, False, pid)
+                result = 0 if handle else ctypes.get_last_error()
+                print(f'GUARD_{label.upper()}_ACCESS native={result}', flush=True)
+                if not handle:
+                    continue
+                try:
+                    if label == 'query':
+                        token = wintypes.HANDLE()
+                        opened = security.OpenProcessToken(handle, 0x8, ctypes.byref(token))
+                        code = 0 if opened else ctypes.get_last_error()
+                        print(f'GUARD_TOKEN_QUERY_ACCESS native={code}', flush=True)
+                        if opened and not kernel.CloseHandle(token):
+                            raise RuntimeError('Guard diagnostic token did not close')
+                finally:
+                    if not kernel.CloseHandle(handle):
+                        raise RuntimeError('Guard diagnostic process did not close')
             with ObservedProcess(pid) as original:
                 value = original.observe()
                 if value.identity.pid != service.running_pid():

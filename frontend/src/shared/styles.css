@@ -4111,6 +4111,45 @@ input[type='radio'] {
   grid-template-columns: minmax(90px, 40%) minmax(0, 1fr);
   gap: 9px 12px;
   font-size: 13px;
+.model-input-budget {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.model-input-budget > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 10px;
+}
+.model-input-budget b {
+  color: var(--text);
+  font-weight: 500;
+}
+.model-input-budget meter {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  appearance: none;
+}
+.model-input-budget meter::-webkit-meter-bar {
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent-soft);
+}
+.model-input-budget meter::-webkit-meter-optimum-value {
+  border-radius: 4px;
+  background: var(--accent);
+}
+.model-input-budget meter::-moz-meter-bar {
+  border-radius: 4px;
+  background: var(--accent);
+}
 }
 .model-property-grid dt {
   color: var(--muted);

@@ -13,11 +13,15 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from backend.app.code_tasks import task_instance_driver
 from backend.app.code_tasks.task_instance_driver import TaskInstanceDriver
 from backend.app.code_tasks.task_native_actions import TaskNativeActions
 from backend.app.code_tasks.task_native_issues import normalize_permission, normalize_question
 from backend.app.infrastructure.opencode_binary import VERSION
-from backend.app.infrastructure.opencode_control import OpenCodeControlCredential
+from backend.app.infrastructure.opencode_control import (
+    OpenCodeControlCredential,
+    OpenCodeControlTransportError,
+)
 from backend.app.infrastructure.opencode_instance_control import OpenCodeInstanceControl
 from backend.app.infrastructure.opencode_task_launch import TaskExecutionError
 from backend.app.infrastructure.runtime_launch_journal import LaunchScope
@@ -242,6 +246,41 @@ def _session_input(scope):
         },
         'permission': [],
     }
+
+
+@pytest.mark.parametrize(
+    ('error_kind', 'diagnostic', 'retry'),
+    [
+        (TaskExecutionError, 'LISTENER_PENDING', True),
+        (TaskExecutionError, 'RESULT_UNVERIFIED', True),
+        (OpenCodeControlTransportError, 'TCP_DENIED', False),
+        (OpenCodeControlTransportError, 'TCP_TIMEOUT', False),
+        (OpenCodeControlTransportError, 'HTTP_TIMEOUT', False),
+    ],
+)
+def test_startup_only_retries_original_transient_control_results(
+    monkeypatch, error_kind, diagnostic, retry
+):
+    calls = []
+    failure = error_kind('ORIGINAL_TASK_CONTROL_' + diagnostic)
+
+    def check_ready(checkpoint, *, timeout_ms):
+        checkpoint()
+        calls.append(timeout_ms)
+        if len(calls) == 1:
+            raise failure
+
+    monkeypatch.setattr(task_instance_driver, 'sleep', lambda _seconds: None)
+    control = SimpleNamespace(verify_ready=check_ready)
+    driver = TaskInstanceDriver.__new__(TaskInstanceDriver)
+    if retry:
+        driver._wait_ready(control, _CHECKPOINT, lambda: _TIMEOUT)
+        assert calls == [4000, 4000]
+    else:
+        with pytest.raises(error_kind) as caught:
+            driver._wait_ready(control, _CHECKPOINT, lambda: _TIMEOUT)
+        assert caught.value is failure
+        assert calls == [4000]
 
 
 def test_native_configuration_status_and_pending_are_bound(native_control):
