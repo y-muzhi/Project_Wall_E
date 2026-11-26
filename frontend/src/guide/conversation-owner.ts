@@ -19,6 +19,8 @@ export type ConversationState = Readonly<{
   active: boolean;
   lease: string | null;
   batch: RequirementSuggestionBatch | null;
+  pendingBatchId: number | null;
+  pendingBatchRead: 'IDLE' | 'LOADING' | 'READY' | 'ERROR';
   revision: number;
 }>;
 const retained = (phase: string) =>
@@ -53,6 +55,7 @@ export class RequirementConversation {
   private batchVisibility = 0;
   private batchRead = '';
   private selectedBatch: number | null = null;
+  private pendingBatchRequest: AbortController | null = null;
   constructor(
     detail: DetailSnapshot,
     api: WalleApi,
@@ -86,6 +89,8 @@ export class RequirementConversation {
       active: true,
       lease: null,
       batch: null,
+      pendingBatchId: null,
+      pendingBatchRead: 'IDLE',
       revision: 0,
     });
     const adopt = async (actual: DetailSnapshot) => {
@@ -171,8 +176,44 @@ export class RequirementConversation {
   openBatch(identity: number): void {
     if (this.closed || !Number.isSafeInteger(identity) || identity < 1) return;
     this.selectedBatch = identity;
+    this.cancelPendingBatchRead();
+    this.publish({ pendingBatchRead: 'IDLE' });
     this.reconcile();
   }
+  private cancelPendingBatchRead(): void {
+    this.pendingBatchRequest?.abort();
+    this.pendingBatchRequest = null;
+  }
+  refreshPendingBatch = async (): Promise<void> => {
+    const { detail, suggestions_visible, enabled, review_read_only } = this.value;
+    const documentId = detail.selected_document_id;
+    if (
+      this.closed ||
+      !suggestions_visible ||
+      !(enabled || review_read_only) ||
+      documentId === null ||
+      this.selectedBatch !== null ||
+      this.pendingBatchRequest !== null
+    )
+      return;
+    const request = new AbortController();
+    this.pendingBatchRequest = request;
+    this.publish({ pendingBatchRead: 'LOADING' });
+    try {
+      const { data } = await this.api.getPendingDocumentBatch(
+        detail.requirement.id,
+        documentId,
+        request.signal,
+      );
+      if (request.signal.aborted) return;
+      this.publish({ pendingBatchId: data.batch_id, pendingBatchRead: 'READY' });
+      this.reconcile();
+    } catch {
+      if (!request.signal.aborted) this.publish({ pendingBatchRead: 'ERROR' });
+    } finally {
+      if (this.pendingBatchRequest === request) this.pendingBatchRequest = null;
+    }
+  };
   private batchOwner(id: number): RequirementSuggestionBatch {
     const retained = this.batches.get(id);
     if (retained) return retained.owner;
@@ -213,18 +254,16 @@ export class RequirementConversation {
           this.runSignature = signature;
           this.runs.adopt(this.value.detail, parent.run);
         }
-        const active = this.value.detail.activity,
-          previous = this.value.batch?.getSnapshot().batch,
-          selected = lease?.startsWith('BATCH:')
-            ? Number(lease.slice(6))
-            : (this.selectedBatch ??
-              (active.kind === 'BATCH' &&
-              active.batch.target_document_id === this.value.detail.selected_document_id
-                ? active.batch.id
-                : (parent.run?.suggestion_batch_id ??
-                  (parent.run === null && parent.selected === previous?.guide_run_id
-                    ? previous.id
-                    : null))));
+        const active = this.value.detail.activity;
+        const activeBatch =
+          this.value.pendingBatchRead !== 'READY' &&
+          active.kind === 'BATCH' &&
+          active.batch.target_document_id === this.value.detail.selected_document_id
+            ? active.batch.id
+            : null;
+        const selected = lease?.startsWith('BATCH:')
+          ? Number(lease.slice(6))
+          : (this.selectedBatch ?? this.value.pendingBatchId ?? activeBatch);
         const batch = selected === null ? null : this.batchOwner(selected);
         if (batch !== this.value.batch) this.publish({ batch });
         const view = this.value.visible && this.value.enabled,
@@ -259,6 +298,7 @@ export class RequirementConversation {
     enabled = this.value.enabled,
     suggestionsVisible = false,
     reviewReadOnly = false,
+    reviewTabSelected = suggestionsVisible,
   ): void {
     if (
       this.closed ||
@@ -268,16 +308,23 @@ export class RequirementConversation {
         reviewReadOnly === this.value.review_read_only)
     )
       return;
+    const wasReviewing = this.value.suggestions_visible;
     const mayReadReview = enabled || reviewReadOnly;
     const didReadReview = this.value.enabled || this.value.review_read_only;
-    if (suggestionsVisible !== this.value.suggestions_visible || mayReadReview !== didReadReview)
+    const leavingReview = wasReviewing && !suggestionsVisible;
+    if (leavingReview && !reviewTabSelected) this.selectedBatch = null;
+    if (!suggestionsVisible || !mayReadReview) this.cancelPendingBatchRead();
+    if (suggestionsVisible !== wasReviewing || mayReadReview !== didReadReview)
       this.batchVisibility++;
     this.publish({
       visible,
       enabled,
       suggestions_visible: suggestionsVisible,
       review_read_only: reviewReadOnly,
+      ...(leavingReview ? { pendingBatchId: null, pendingBatchRead: 'IDLE' as const } : {}),
     });
+    if (suggestionsVisible && mayReadReview && (!wasReviewing || !didReadReview))
+      void this.refreshPendingBatch();
     this.reconcile();
   }
   adopt(actual: DetailSnapshot): void {
@@ -316,6 +363,7 @@ export class RequirementConversation {
     if (this.closed) return;
     this.publish({ active: false, visible: false, suggestions_visible: false, enabled: false });
     this.closed = true;
+    this.cancelPendingBatchRead();
     for (const release of this.releases) release();
     for (const entry of this.batches.values()) {
       entry.release();

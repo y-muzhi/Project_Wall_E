@@ -79,16 +79,9 @@ function BatchView({
       if (versionRequest.current === controller) versionRequest.current = null;
     }
   };
-  const render = useCallback(
-    (markdown: string, columns?: number) => {
-      return documents.previewMarkdown(markdown, columns);
-    },
-    [documents],
-  );
   return (
     <SuggestionPanel
       owner={owner}
-      render={render}
       locate={locate}
       openVersion={openVersion}
       closeVersion={async () => {
@@ -119,6 +112,18 @@ export function ConversationSuggestions({
     batch = state.batch;
   return (
     <div className="conversation-suggestions">
+      {state.pendingBatchRead === 'ERROR' && (
+        <p className="inline-error" role="alert">
+          暂时无法读取当前文档的修改建议。
+          <button
+            className="ui-button"
+            type="button"
+            onClick={() => void owner.refreshPendingBatch()}
+          >
+            重试读取
+          </button>
+        </p>
+      )}
       {batch ? (
         <BatchView
           key={batch.batchId}
@@ -127,9 +132,15 @@ export function ConversationSuggestions({
           layout={layout}
           toasts={toasts}
         />
-      ) : (
-        <EmptyState icon="suggestion" message="暂无修改建议" fill />
-      )}
+      ) : state.detail.selected_document_id === null ? (
+        <EmptyState icon="suggestion" message="请选择文档查看修改建议" fill />
+      ) : state.pendingBatchRead === 'READY' && state.pendingBatchId === null ? (
+        <EmptyState icon="suggestion" message="暂无待审阅的修改建议" fill />
+      ) : state.pendingBatchRead === 'LOADING' ? (
+        <p className="read-status" role="status">
+          正在读取修改建议…
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -142,7 +153,6 @@ export function GuideConversation({
   handoff,
   discussion,
   openSuggestions,
-  openDocument,
 }: Readonly<{
   owner: RequirementConversation;
   documents: RequirementDocumentOwner;
@@ -150,7 +160,6 @@ export function GuideConversation({
   handoff?: ReactNode;
   discussion: RequirementDiscussion;
   openSuggestions: () => void;
-  openDocument?: (id: number) => void;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     read = useSyncExternalStore(owner.read.subscribe, owner.read.getSnapshot),
@@ -190,7 +199,6 @@ export function GuideConversation({
                     owner.openBatch(id);
                     openSuggestions();
                   }}
-                  {...(openDocument ? { openDocument } : {})}
                   structured={(message) => (
                     <CardMessage
                       groups={owner.cards}

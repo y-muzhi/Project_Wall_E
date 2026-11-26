@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request
 from backend.app.shared.http_boundary import read_http
 from . import queries
 from .http_models import GetBatchRequest, GetBatchResponse
+from .http_models import GetPendingDocumentBatchRequest, GetPendingDocumentBatchResponse
 from .http_models import DiscardBatchRequest, DiscardBatchResponse
 from backend.app.shared.http_boundary import handle_http
 from . import commands
@@ -23,6 +24,18 @@ async def accept_pending_http(request: Request):
         AcceptPendingResponse,
         lambda runtime, parsed: commands.accept_pending_suggestions(
             runtime.commands(), parsed.payload, catalog=runtime.catalog
+        ),
+    )
+
+
+@batch_router.get('/requirements/{requirement_id}/documents/{document_id}/pending-suggestion')
+async def get_pending_document_batch_http(request: Request):
+    return await read_http(
+        request,
+        GetPendingDocumentBatchRequest,
+        GetPendingDocumentBatchResponse,
+        lambda runtime, parsed: queries.get_pending_document_batch(
+            runtime.database, parsed.requirement_id, parsed.document_id
         ),
     )
 

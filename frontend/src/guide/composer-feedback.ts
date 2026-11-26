@@ -2,7 +2,7 @@ import type { ComposerState } from './composer.ts';
 
 const effects = {
   DISCUSS: '仅讨论，不修改文档。',
-  REVISE: '请在运行回执查看本轮是否已保存或待审阅。',
+  REVISE: '已有正文先生成待审阅建议。原始空白文档的首份正文可直接保存。',
   PROPOSE_CHANGES: '仅生成待审阅的修改建议，确认应用后才写入正文。',
 };
 

@@ -126,6 +126,7 @@ export class RequirementSuggestionBatch {
   private work: string | undefined;
   private closed = false;
   private visibility = 0;
+  private refreshVisibility = 0;
   private controller: AbortController | undefined;
   constructor(
     identity: number,
@@ -365,14 +366,19 @@ export class RequirementSuggestionBatch {
   refresh(): Promise<boolean> {
     if (!this.value.available || !['READY', 'ERROR'].includes(this.value.phase))
       return Promise.resolve(false);
+    const epoch = this.visibility;
+    const visible = () => !this.closed && this.value.available && epoch === this.visibility;
+    if (this.pending && this.work === 'REFRESH' && this.refreshVisibility !== epoch)
+      return this.pending.then(() => (visible() ? this.refresh() : false));
+    this.refreshVisibility = epoch;
     return this.enqueue('REFRESH', async () => {
-      const epoch = this.visibility;
+      if (!visible()) return false;
       this.publish({ loading: true });
       try {
         const actual = await this.observe();
+        if (!visible()) throw Error('Adoption hidden');
         await this.adoptActual(actual.detail);
-        if (this.closed || !this.value.available || epoch !== this.visibility)
-          throw Error('Adoption hidden');
+        if (!visible()) throw Error('Adoption hidden');
         this.publish({
           detail: actual.detail,
           target: actual.target,
@@ -391,8 +397,12 @@ export class RequirementSuggestionBatch {
       } catch {
         this.publish({
           loading: false,
-          needs_refresh: true,
-          error: '建议与需求读取失败，保留上次确认的批次和编辑内容，请重试',
+          ...(visible()
+            ? {
+                needs_refresh: true,
+                error: '建议与需求读取失败，保留上次确认的批次和编辑内容，请重试',
+              }
+            : {}),
         });
         return false;
       }

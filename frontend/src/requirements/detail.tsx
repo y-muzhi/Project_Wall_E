@@ -8,6 +8,7 @@ import { DetailFrame } from './detail-frame.tsx';
 import { RequirementHeader } from './header.tsx';
 import { RequirementPropertyControl } from './property-control.tsx';
 import { OwnedDocumentControls } from './document-controls.tsx';
+import { DraftSavedTime } from '../documents/manual-controls.tsx';
 import {
   DocumentCreationProvider,
   DocumentDirectory,
@@ -96,6 +97,14 @@ function ManualSaveStatus({
     manual = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const recovery = useSyncExternalStore(session.recovery.subscribe, session.recovery.getSnapshot),
     ending = useSyncExternalStore(session.ending.subscribe, session.ending.getSnapshot);
+  if (session.editor.isDrawing) {
+    return (
+      <span role="status">
+        {retained ? '保留草稿：' : ''}
+        <DraftSavedTime savedAt={state.saved_at} />
+      </span>
+    );
+  }
   return (
     <span role="status">
       {retained ? '保留草稿：' : ''}
@@ -423,16 +432,6 @@ function LoadedDetail({
                 documents={owner.documents}
                 discussion={regions.discussion}
                 openSuggestions={() => regions.layout.openTab('SUGGESTIONS')}
-                openDocument={(id) =>
-                  void owner
-                    .selectDocument(id)
-                    .catch((error: unknown) =>
-                      owner.toasts.push(
-                        'error',
-                        error instanceof Error ? error.message : '文档暂时无法打开',
-                      ),
-                    )
-                }
                 handoff={
                   handoff &&
                   handoff !== 'INVALID' && (

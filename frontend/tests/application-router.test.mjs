@@ -9,6 +9,20 @@ function browser(path='/requirements'){
  return {history,entries,values,pathname:()=>entries[index].path,scroll:()=>scroll,scrollTop:()=>{scroll=0;},setScroll:value=>{scroll=value;},listen:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},storage:{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)},identify:()=>`00000000-0000-4000-8000-${String(++serial).padStart(12,'0')}`,idle:()=>new Promise(resolve=>setImmediate(resolve))};
 }
 const api={listRequirements:async filters=>({data:{items:[]},meta:{pagination:{page:filters.page,page_size:20,total:0,total_pages:0}}})};
+test('code settings tabs and history keep the current window scroll', async () => {
+ const port=browser('/settings/code'),router=new ApplicationRouter(api,port,port.storage,port.identify);
+ port.setScroll(42);
+ router.selectCodeSettingsSection('execution');
+ assert.equal(port.pathname(),'/settings/code?section=execution');
+ assert.equal(port.scroll(),42);
+ port.history.go(-1);
+ await port.idle();
+ assert.equal(port.pathname(),'/settings/code');
+ assert.equal(port.scroll(),42);
+ router.mainNavigation();
+ assert.equal(port.scroll(),0);
+ router.dispose();
+});
 test('workbench button directly opens the default list; main navigation creates fresh defaults',async()=>{
  const port=browser(),router=new ApplicationRouter(api,port,port.storage,port.identify),first=router.getSnapshot();
  const query={...defaultWorkbenchQuery,keyword:'原提交',status:['PLANNING'],page:3};await first.workbench.query(query);port.setScroll(320);router.saveEntry(query,320);router.openRequirement(17);

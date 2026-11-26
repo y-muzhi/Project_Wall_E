@@ -403,7 +403,8 @@ export class ApplicationRouter {
     }
     this.currentPath = path;
     this.currentState = this.browser.history.state;
-    this.browser.scrollTop();
+    if (route.kind !== 'CODE_SETTINGS' || prior.route.kind !== 'CODE_SETTINGS')
+      this.browser.scrollTop();
     this.publish({
       route,
       documentReading: reading,

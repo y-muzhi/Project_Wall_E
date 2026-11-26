@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import type { GuideRun, GuideSummary, Message } from '../api/models.ts';
+import type { GuideOperationReceipt, GuideRun, GuideSummary, Message } from '../api/models.ts';
 import { runActions, runStatuses } from '../api/models.ts';
 import { MultiFilter } from '../shared/filter.tsx';
 import { Pagination } from '../shared/pagination.tsx';
@@ -14,6 +14,8 @@ import { ModelReturnContent } from '../messages/model-return.tsx';
 import { RequestCallRecord } from './model-call-view.tsx';
 import { AnalysisResult } from './analysis-result.tsx';
 import { GuideOperationCard } from './operation-receipt.tsx';
+import { OperationDetailDialog } from './operation-detail-dialog.tsx';
+import type { OperationDetailKind } from './saved-operation.ts';
 export const statuses = {
   RUNNING: '运行中',
   COMPLETED: '已完成',
@@ -235,7 +237,6 @@ export function AiReadPanel({
   commands,
   renderMarkdown,
   openSuggestions,
-  openDocument,
   scrollPort,
   scrollContent,
 }: Readonly<{
@@ -245,12 +246,22 @@ export function AiReadPanel({
   structured?: (message: Message) => ReactNode;
   commands?: (run: GuideRun) => ReactNode;
   openSuggestions?: (id: number) => void;
-  openDocument?: (id: number) => void;
   renderMarkdown?: MessageMarkdownRenderer;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
     run = state.run;
   const messages = useSyncExternalStore(owner.messages.subscribe, owner.messages.getSnapshot);
+  const [operation, showOperation] = useState<{
+    receipt: GuideOperationReceipt;
+    kind: OperationDetailKind;
+  } | null>(null);
+  const readOperation = useCallback(
+    (signal: AbortSignal) => {
+      if (!operation) return Promise.reject(Error('回执不可用'));
+      return owner.readOperation(operation.receipt, operation.kind, signal);
+    },
+    [operation, owner],
+  );
   const inTimeline =
     messages.items?.some((message) =>
       message.guide_operations?.some((receipt) => receipt.run_id === state.selected),
@@ -324,6 +335,18 @@ export function AiReadPanel({
             )}
           </section>
         )}
+      {operation && (
+        <OperationDetailDialog
+          title={
+            operation.kind === 'VERSION'
+              ? `已保存版本 V${operation.receipt.saved_content_version}`
+              : `比对 V${operation.receipt.base_content_version} 与 V${operation.receipt.saved_content_version}`
+          }
+          read={readOperation}
+          close={() => showOperation(null)}
+          {...(renderMarkdown ? { renderMarkdown } : {})}
+        />
+      )}
       <MessageTimeline
         {...(scrollPort !== undefined ? { scrollPort } : {})}
         {...(scrollContent !== undefined ? { scrollContent } : {})}
@@ -347,8 +370,7 @@ export function AiReadPanel({
                   run?.id === receipt.run_id && state.selection !== 'HISTORY' && commands?.(run)
                 }
                 {...(openSuggestions ? { review: openSuggestions } : {})}
-                {...(openDocument ? { openDocument } : {})}
-                openRun={(id) => owner.open({ id, requirement_id: message.requirement_id })}
+                showDetail={(kind) => showOperation({ receipt, kind })}
               />
             ))
           ) : message.role === 'USER' && message.guide_run_id !== null ? (

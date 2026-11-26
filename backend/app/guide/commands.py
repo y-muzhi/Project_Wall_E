@@ -134,7 +134,7 @@ def _document_write_request(connection, request, catalog):
         target['expected_content_version'],
         document_id=target['document_id'],
     )
-    if current['content_version'] == 1:
+    if current['content_version'] == 1 and not current['markdown_content'].strip():
         creation = connection.execute(
             """SELECT 1 FROM document_change_audits a
                JOIN revisions r ON r.id=a.revision_id AND r.document_id=a.document_id

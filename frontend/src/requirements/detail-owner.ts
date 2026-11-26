@@ -298,6 +298,7 @@ export class RequirementDetailOwner {
           !historical && actual?.current !== null,
           this.supported && geometry.right_open && geometry.right_tab === 'SUGGESTIONS',
           historical && actual?.current !== null,
+          geometry.right_tab === 'SUGGESTIONS',
         );
         regions.comments.setView(
           historical ? 'HISTORY' : document.mode === 'MANUAL' ? 'MANUAL' : 'CURRENT',

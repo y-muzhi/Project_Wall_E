@@ -1,14 +1,6 @@
 import './panel.css';
 import { SourceReference } from '../requirements/source-reference.tsx';
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { Suggestion } from '../api/models.ts';
 import { Confirmation } from '../shared/confirmation.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
@@ -21,71 +13,8 @@ const statuses = {
   REJECTED: '已拒绝',
   EDITED: '已编辑并接受',
 } as const;
-type Render = (markdown: string, rowColumns?: number) => DocumentFragment;
-function Preview({
-  markdown,
-  columns,
-  render,
-}: Readonly<{ markdown: string; columns?: number; render: Render }>) {
-  const root = useRef<HTMLDivElement>(null),
-    [error, setError] = useState(false);
-  useLayoutEffect(() => {
-    try {
-      root.current!.replaceChildren(render(markdown, columns));
-      setError(false);
-    } catch {
-      root.current!.replaceChildren();
-      setError(true);
-    }
-    return () => root.current?.replaceChildren();
-  }, [markdown, columns, render]);
-  return (
-    <>
-      <div ref={root} className="suggestion-preview milkdown" />
-      {error && (
-        <>
-          <p role="alert">内容渲染失败，保留完整原文。</p>
-          <pre>{markdown}</pre>
-        </>
-      )}
-    </>
-  );
-}
-function Cells({ cells }: Readonly<{ cells: readonly string[] }>) {
-  return (
-    <div className="suggestion-preview">
-      <table>
-        <tbody>
-          <tr>
-            {cells.map((cell, index) => (
-              <td key={index}>{cell}</td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
 function proposed(item: Suggestion): string {
   return item.user_edited_content ?? item.proposed_markdown ?? JSON.stringify(item.proposed_data);
-}
-function RowProposal({ item }: Readonly<{ item: Suggestion }>) {
-  try {
-    const cells =
-      item.status === 'EDITED'
-        ? JSON.parse(item.user_edited_content!).cells
-        : item.proposed_data!.cells;
-    if (!Array.isArray(cells) || cells.some((cell) => typeof cell !== 'string'))
-      throw Error('Invalid cells');
-    return <Cells cells={cells} />;
-  } catch {
-    return (
-      <>
-        <p role="alert">已保存的行内容无法渲染，保留原文。</p>
-        <pre>{item.user_edited_content}</pre>
-      </>
-    );
-  }
 }
 function RowEdit({
   item,
@@ -157,7 +86,6 @@ function RowEdit({
  * are local UI. A successful individual decision never alters CURRENT. */
 export function SuggestionPanel({
   owner,
-  render,
   locate,
   openVersion,
   closeVersion,
@@ -166,7 +94,6 @@ export function SuggestionPanel({
   notify,
 }: Readonly<{
   owner: RequirementSuggestionBatch;
-  render: Render;
   locate: (identity: number) => boolean | Promise<boolean>;
   openVersion?: (kind: 'BASE' | 'APPLIED') => Promise<boolean>;
   closeVersion?: () => Promise<boolean>;
@@ -357,96 +284,47 @@ export function SuggestionPanel({
               在目标区块{item.patch_operation === 'INSERT_BEFORE' ? '之前' : '之后'}插入
             </p>
           ) : null}
-          <details className="review-preview-details" open={editing.has(item.id) || undefined}>
-            <summary>查看修改内容</summary>
-            <div
-              className={
-                'review-diff' +
-                (item.patch_operation === 'DELETE_BLOCK' ? ' review-diff-delete' : '')
-              }
-            >
-              <section
-                className="review-diff-pane review-before"
-                aria-label={item.patch_operation === 'DELETE_BLOCK' ? '待删除内容' : '原内容'}
-              >
-                <h4>
-                  {item.patch_operation === 'DELETE_BLOCK'
-                    ? '待删除内容'
-                    : item.patch_operation === 'REPLACE_TABLE_ROW'
-                      ? '原表格行'
-                      : '原内容'}
-                </h4>
-                <Preview
-                  markdown={item.original_content}
-                  {...(item.patch_operation === 'REPLACE_TABLE_ROW'
-                    ? { columns: item.proposed_data!.cells.length }
-                    : {})}
-                  render={render}
-                />
-              </section>
-              {item.patch_operation !== 'DELETE_BLOCK' && (
-                <section className="review-diff-pane review-after" aria-label="建议内容">
-                  <h4>
-                    {item.patch_operation.startsWith('INSERT_')
-                      ? '新增内容'
-                      : item.patch_operation === 'REPLACE_TABLE_ROW'
-                        ? '建议表格行'
-                        : '建议内容'}
-                  </h4>
-                  {editing.has(item.id) ? (
-                    item.patch_operation === 'REPLACE_TABLE_ROW' ? (
-                      <RowEdit
-                        item={item}
-                        content={content}
-                        disabled={!owner.editable}
-                        change={(value) => owner.draft(item.id, value)}
-                        composition={(active) =>
-                          setComposing((previous) =>
-                            active
-                              ? new Set([...previous, item.id])
-                              : new Set([...previous].filter((id) => id !== item.id)),
-                          )
-                        }
-                      />
-                    ) : (
-                      <label htmlFor={prefix + item.id}>
-                        编辑建议内容
-                        <textarea
-                          className="ui-input"
-                          aria-label="编辑建议内容"
-                          id={prefix + item.id}
-                          value={content}
-                          disabled={!owner.editable}
-                          onChange={(event) => owner.draft(item.id, event.target.value)}
-                          onCompositionStart={() =>
-                            setComposing((previous) => new Set([...previous, item.id]))
-                          }
-                          onCompositionEnd={(event) => {
-                            owner.draft(item.id, event.currentTarget.value);
-                            setComposing(
-                              (previous) => new Set([...previous].filter((id) => id !== item.id)),
-                            );
-                          }}
-                        />
-                        <span>只编辑建议正文，目标和操作保持不变。</span>
-                      </label>
+          {editing.has(item.id) && item.patch_operation !== 'DELETE_BLOCK' && (
+            <div className="review-editor">
+              {item.patch_operation === 'REPLACE_TABLE_ROW' ? (
+                <RowEdit
+                  item={item}
+                  content={content}
+                  disabled={!owner.editable}
+                  change={(value) => owner.draft(item.id, value)}
+                  composition={(active) =>
+                    setComposing((previous) =>
+                      active
+                        ? new Set([...previous, item.id])
+                        : new Set([...previous].filter((id) => id !== item.id)),
                     )
-                  ) : item.patch_operation === 'REPLACE_TABLE_ROW' ? (
-                    <RowProposal item={item} />
-                  ) : (
-                    <Preview
-                      markdown={
-                        item.status === 'EDITED'
-                          ? item.user_edited_content!
-                          : item.proposed_markdown!
-                      }
-                      render={render}
-                    />
-                  )}
-                </section>
+                  }
+                />
+              ) : (
+                <label htmlFor={prefix + item.id}>
+                  编辑建议内容
+                  <textarea
+                    className="ui-input"
+                    aria-label="编辑建议内容"
+                    id={prefix + item.id}
+                    value={content}
+                    disabled={!owner.editable}
+                    onChange={(event) => owner.draft(item.id, event.target.value)}
+                    onCompositionStart={() =>
+                      setComposing((previous) => new Set([...previous, item.id]))
+                    }
+                    onCompositionEnd={(event) => {
+                      owner.draft(item.id, event.currentTarget.value);
+                      setComposing(
+                        (previous) => new Set([...previous].filter((id) => id !== item.id)),
+                      );
+                    }}
+                  />
+                  <span>只编辑建议正文，目标和操作保持不变。</span>
+                </label>
               )}
             </div>
-          </details>
+          )}
           {item.validation_status === 'INVALID' && (
             <p role="alert" className="inline-error">
               {item.validation_error}

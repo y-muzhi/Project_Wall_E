@@ -177,32 +177,41 @@ export function CodeSettings({
   const state = useSyncExternalStore(owner.reader.subscribe, owner.reader.getSnapshot);
   const identity =
     section === 'execution' ? owner.execution : section === 'checks' ? owner.checks : null;
+  const hasSection = section !== null;
   useEffect(() => {
+    if (!hasSection) return;
     function readRecovery() {
-      if (section !== null && document.visibilityState !== 'hidden') void owner.reader.refresh();
+      if (!document.hidden) void owner.reader.refresh();
     }
-    function readVisible() {
-      if (section === null || document.visibilityState === 'hidden') {
-        owner.reader.pause();
-        identity?.pause();
-        owner.registration.pause();
-      } else {
-        readRecovery();
-        identity?.resume();
-        if (section === 'repositories') owner.registration.resume();
-      }
+    function syncRecoveryVisibility() {
+      if (document.hidden) owner.reader.pause();
+      else readRecovery();
     }
-    readVisible();
+    syncRecoveryVisibility();
     window.addEventListener('focus', readRecovery);
+    window.addEventListener('online', readRecovery);
+    document.addEventListener('visibilitychange', syncRecoveryVisibility);
+    return () => {
+      window.removeEventListener('focus', readRecovery);
+      window.removeEventListener('online', readRecovery);
+      document.removeEventListener('visibilitychange', syncRecoveryVisibility);
+      owner.reader.pause();
+    };
+  }, [owner, hasSection]);
+  useEffect(() => {
+    const settings = section === 'repositories' ? owner.registration : identity;
+    if (!settings) return;
+    const readVisible = () => {
+      if (document.hidden) settings.pause();
+      else settings.resume();
+    };
+    readVisible();
     window.addEventListener('online', readVisible);
     document.addEventListener('visibilitychange', readVisible);
     return () => {
-      window.removeEventListener('focus', readRecovery);
       window.removeEventListener('online', readVisible);
       document.removeEventListener('visibilitychange', readVisible);
-      owner.reader.pause();
-      identity?.pause();
-      owner.registration.pause();
+      settings.pause();
     };
   }, [owner, section, identity]);
   useEffect(() => {

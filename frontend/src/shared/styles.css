@@ -228,13 +228,11 @@ select {
 }
 a:any-link,
 .message-markdown a:any-link,
-.detail-document-content a:any-link,
-.suggestion-preview a:any-link {
+.detail-document-content a:any-link {
   color: var(--text-accent);
 }
 .message-markdown a:active,
-.detail-document-content a:active,
-.suggestion-preview a:active {
+.detail-document-content a:active {
   text-decoration: underline;
 }
 .ui-button:disabled {
@@ -1303,22 +1301,19 @@ input[type='radio'] {
   min-width: 0;
   white-space: pre-wrap;
 }
-.detail-document-content h1,
-.suggestion-preview h1 {
+.detail-document-content h1 {
   font-size: 28px;
   line-height: 38px;
   margin: 24px 0 16px;
   font-weight: 600;
 }
-.detail-document-content h2,
-.suggestion-preview h2 {
+.detail-document-content h2 {
   font-size: 22px;
   line-height: 32px;
   margin: 28px 0 12px;
   font-weight: 600;
 }
-.detail-document-content h3,
-.suggestion-preview h3 {
+.detail-document-content h3 {
   font-size: 20px;
   line-height: 30px;
   margin: 20px 0 10px;
@@ -1326,10 +1321,7 @@ input[type='radio'] {
 }
 .detail-document-content h4,
 .detail-document-content h5,
-.detail-document-content h6,
-.suggestion-preview h4,
-.suggestion-preview h5,
-.suggestion-preview h6 {
+.detail-document-content h6 {
   font-size: 18px;
   line-height: 28px;
   margin: 16px 0 8px;
@@ -1339,8 +1331,7 @@ input[type='radio'] {
 .detail-document-content .ProseMirror > h2:first-child {
   margin-top: 12px;
 }
-.detail-document-content .ProseMirror p,
-.suggestion-preview p {
+.detail-document-content .ProseMirror p {
   margin: 12px 0;
 }
 .detail-document-content pre {
@@ -2695,30 +2686,6 @@ input[type='radio'] {
   padding: 12px 0;
   background: var(--surface-base);
 }
-.suggestion-preview {
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.6;
-  overflow: auto;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-base);
-}
-.suggestion-preview table {
-  border-collapse: collapse;
-}
-.suggestion-preview td,
-.suggestion-preview th {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  min-width: 60px;
-  white-space: pre-wrap;
-}
-.suggestion-preview pre {
-  white-space: pre;
-  overflow: auto;
-}
 .suggestion-card > pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -4051,9 +4018,67 @@ input[type='radio'] {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.guide-operation-detail > button {
-  justify-self: start;
+.guide-operation-version-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
+.guide-operation-dialog {
+  box-sizing: border-box;
+  width: min(56rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--surface-base);
+  color: var(--text);
+}
+.guide-operation-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.guide-operation-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.36);
+}
+.guide-operation-dialog header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+.guide-operation-dialog h2,
+.guide-saved-changes h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.guide-operation-dialog-body {
+  overflow: auto;
+  padding: 16px;
+  min-height: 0;
+  overflow-wrap: anywhere;
+}
+.guide-operation-dialog-body .message-markdown {
+  overflow-x: auto;
+}
+.guide-saved-changes,
+.guide-saved-changes > section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.guide-saved-changes :is(.document-revision-added-block, .document-revision-deleted-block) {
+  padding: 10px 12px;
+  min-width: 0;
+}
+.guide-saved-change-label {
+  display: block;
+  font-size: 12px;
+  text-decoration: none;
+}
+
 .model-request-record {
   margin: 10px 0 0;
   padding: 10px 12px;

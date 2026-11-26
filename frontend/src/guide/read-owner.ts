@@ -1,5 +1,7 @@
 import { positiveInteger, snapshotObject } from '../api/client.ts';
-import type { GuideRun, GuideSummary } from '../api/models.ts';
+import type { GuideOperationReceipt, GuideRun, GuideSummary } from '../api/models.ts';
+import { readOperationDetail } from './saved-operation.ts';
+import type { OperationDetailKind } from './saved-operation.ts';
 import type { WalleApi } from '../api/walle.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import { RequirementMessages } from '../messages/read.ts';
@@ -7,7 +9,15 @@ import { RequirementRunHistory } from './history.ts';
 import { GuideRunPolling } from './polling.ts';
 import type { PollClock } from './polling.ts';
 type RunIdentity = Readonly<{ id: number; requirement_id: number }>;
-type Api = Pick<WalleApi, 'getGuideRun' | 'listGuideRuns' | 'listMessages'> &
+type Api = Pick<
+  WalleApi,
+  | 'getGuideRun'
+  | 'listGuideRuns'
+  | 'listMessages'
+  | 'getRevision'
+  | 'listRevisions'
+  | 'revisionBlocks'
+> &
   Partial<Pick<WalleApi, 'detailReadEpoch' | 'waitForDetailWrites'>>;
 export type AiReadState = Readonly<{
   detail: DetailSnapshot;
@@ -223,6 +233,9 @@ export class RequirementAiRead {
   open(summary: Pick<GuideSummary, 'id' | 'requirement_id'>): void {
     if (this.closed || !this.value.visible) return;
     this.select(summary, 'HISTORY');
+  }
+  readOperation(receipt: GuideOperationReceipt, kind: OperationDetailKind, signal: AbortSignal) {
+    return readOperationDetail(this.api, this.value.detail.requirement.id, receipt, kind, signal);
   }
   readRun(): void {
     if (!this.closed && this.value.visible) this.poll?.refresh();

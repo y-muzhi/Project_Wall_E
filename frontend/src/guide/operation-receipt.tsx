@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { GuideOperationReceipt } from '../api/models.ts';
 import { RequestCallRecord } from './model-call-view.tsx';
+import type { OperationDetailKind } from './saved-operation.ts';
 
 const states = {
   RUNNING: '处理中',
@@ -22,16 +23,15 @@ export function GuideOperationCard({
   receipt,
   commands,
   review,
-  openDocument,
-  openRun,
+  showDetail,
 }: Readonly<{
   receipt: GuideOperationReceipt;
   commands?: ReactNode;
   review?: (id: number) => void;
-  openDocument?: (id: number) => void;
-  openRun: (id: number) => void;
+  showDetail: (kind: OperationDetailKind) => void;
 }>) {
   const [expanded, setExpanded] = useState(false);
+  const savedVersion = receipt.state === 'SAVED' ? receipt.saved_content_version : null;
   const label =
     receipt.operation === 'PROPOSE_CHANGES'
       ? '文档修改建议'
@@ -65,9 +65,6 @@ export function GuideOperationCard({
           {receipt.reason && <p role="status">{receipt.reason}</p>}
           {expanded && <RequestCallRecord runId={receipt.run_id} />}
           {commands}
-          <button className="ui-button" type="button" onClick={() => openRun(receipt.run_id)}>
-            查看运行详情
-          </button>
         </div>
       </details>
       {review && receipt.batch_id !== null && (
@@ -75,14 +72,17 @@ export function GuideOperationCard({
           查看修改建议
         </button>
       )}
-      {openDocument && receipt.state === 'SAVED' && receipt.document_id !== null && (
-        <button
-          className="ui-button"
-          type="button"
-          onClick={() => openDocument(receipt.document_id!)}
-        >
-          打开文档
-        </button>
+      {savedVersion !== null && (
+        <div className="guide-operation-version-actions">
+          <button className="ui-button" type="button" onClick={() => showDetail('VERSION')}>
+            查看 V{savedVersion}
+          </button>
+          {receipt.base_content_version !== null && (
+            <button className="ui-button" type="button" onClick={() => showDetail('COMPARE')}>
+              比对 V{receipt.base_content_version} 与 V{savedVersion}
+            </button>
+          )}
+        </div>
       )}
     </section>
   );
