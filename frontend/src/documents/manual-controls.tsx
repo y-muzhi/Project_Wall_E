@@ -216,7 +216,8 @@ export function ManualDraftControls(props: ManualDraftControlsProps) {
         className="ui-button primary"
         type="button"
         title={
-          props.writeReason ?? (staleBasis
+          props.writeReason ??
+          (staleBasis
             ? '正式正文已更新，请先从最新版本开始编辑'
             : !['RESTORED', 'SERVER_SELECTED'].includes(recovery.phase)
               ? '请先处理草稿恢复提示，进入可编辑状态'

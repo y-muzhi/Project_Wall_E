@@ -60,8 +60,20 @@ export function ApplicationNavigation({
   }[] = [
     { label: '需求工作台', icon: 'workbench', active: current, visit: navigate },
     { label: '代码开发', icon: 'code', active: codingCurrent, visit: coding, reason: codingReason },
-    { label: '测试验收', icon: 'outline', active: testingCurrent, visit: testing, reason: testingReason },
-    { label: '设置', icon: 'settings', active: settingsCurrent, visit: settings, reason: settingsReason },
+    {
+      label: '测试验收',
+      icon: 'outline',
+      active: testingCurrent,
+      visit: testing,
+      reason: testingReason,
+    },
+    {
+      label: '设置',
+      icon: 'settings',
+      active: settingsCurrent,
+      visit: settings,
+      reason: settingsReason,
+    },
   ];
   return (
     <>

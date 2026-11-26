@@ -480,13 +480,13 @@ function LoadedDetail({
             ordinary ? (
               <p className="field-help">此环境暂未开放 AI 修改建议。</p>
             ) : (
-            <ConversationSuggestions
-              key={actual.selected_document_id}
-              owner={regions.conversation}
-              documents={owner.documents}
-              layout={regions.layout}
-              toasts={owner.toasts}
-            />
+              <ConversationSuggestions
+                key={actual.selected_document_id}
+                owner={regions.conversation}
+                documents={owner.documents}
+                layout={regions.layout}
+                toasts={owner.toasts}
+              />
             )
           }
           progress={

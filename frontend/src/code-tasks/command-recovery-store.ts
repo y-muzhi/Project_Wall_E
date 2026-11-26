@@ -233,9 +233,11 @@ export class CommandRecoveryStore {
       };
       request.onerror = () => {
         refused = true;
-        reject(!this.scope && request.error?.name === 'VersionError'
-          ? new CommandStorageError('VERSION')
-          : reason(request.error));
+        reject(
+          !this.scope && request.error?.name === 'VersionError'
+            ? new CommandStorageError('VERSION')
+            : reason(request.error),
+        );
       };
       request.onupgradeneeded = (event) => {
         if (this.closed || refused) {
