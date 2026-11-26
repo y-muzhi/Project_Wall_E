@@ -1,4 +1,4 @@
-import { exact, positiveInteger } from '../api/wire-shape.ts';
+import { exact, object, positiveInteger } from '../api/wire-shape.ts';
 import { hash, items, one, utc, uuid } from './model.ts';
 
 const choiceStates = [
@@ -118,7 +118,12 @@ export function restoreConfirmation(value: unknown) {
 
 export function restorePlan(value: unknown, expected: RestoreVariables) {
   const envelope = exact(value, ['plan_id', 'plan_sha256', 'expires_at', 'preview']);
-  const preview = exact(envelope.preview, [
+  const rawPreview = object(envelope.preview);
+  const recovery = one(rawPreview.recovery_requirement, [
+    'LOCAL_VERIFIED',
+    'OFFHOST_VERIFIED',
+  ] as const);
+  const preview = exact(rawPreview, [
     'kind',
     'plan_id',
     'expires_at',
@@ -139,6 +144,7 @@ export function restorePlan(value: unknown, expected: RestoreVariables) {
     'preserved_backup_id',
     'data_handling',
     'backup',
+    ...(recovery === 'OFFHOST_VERIFIED' ? ['offhost_recovery'] : []),
   ]);
   const requested = variables(preview);
   const id = uuid(envelope.plan_id);
@@ -207,7 +213,23 @@ export function restorePlan(value: unknown, expected: RestoreVariables) {
   ])
     hash(current[field]);
   hash(rawBackup.logical_content_sha256);
-  one(preview.recovery_requirement, ['LOCAL_VERIFIED'] as const);
+  let offhost = null;
+  if (recovery === 'OFFHOST_VERIFIED') {
+    const proof = exact(preview.offhost_recovery, [
+      'verification_id',
+      'verification_sha256',
+      'snapshot_id',
+      'retrieved_at',
+    ]);
+    offhost = {
+      id: uuid(proof.verification_id),
+      digest: hash(proof.verification_sha256),
+      snapshot: hash(proof.snapshot_id),
+      retrieved: utc(proof.retrieved_at),
+    };
+    if (offhost.retrieved < backup.cutoff || offhost.retrieved > expires)
+      throw new TypeError('Invalid restore verification time');
+  }
   one(preview.data_handling, ['PRESERVE_CURRENT_SOURCE'] as const);
   return {
     id,
@@ -218,6 +240,7 @@ export function restorePlan(value: unknown, expected: RestoreVariables) {
     source,
     target,
     backup,
+    offhost,
     preserved,
     controlRevision: positiveInteger(current.control_revision),
     manifest: hash(preview.release_manifest_sha256),

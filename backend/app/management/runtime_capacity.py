@@ -1,7 +1,7 @@
 """Host policy and transactional ordinary-runtime capacity reservations."""
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,9 +16,10 @@ from backend.app.infrastructure.environment_installation import uuid_value
 
 from .attachment_observation import now
 from .host_capacity import NOT_READY, available_memory_bytes
-from .operation_contract import PURPOSES, RESOURCE, UNAVAILABLE, installed_record
+from .operation_contract import PURPOSES, RELEASE_ACTIONS, RESOURCE, UNAVAILABLE, installed_record
 
-POLICY_PATH = Path('/run/wall-e/management/ordinary-capacity.v1.json')
+POLICY_NAME = 'ordinary-capacity.v1.json'
+POLICY_PATH = Path('/run/wall-e/management') / POLICY_NAME
 MINIMUM = dict(memory_bytes=128 * 1024**2, cpu_percent=25, tasks=16, run_slots=1)
 MAXIMUM = dict(memory_bytes=2 * 1024**3, cpu_percent=200, tasks=512, run_slots=1)
 DIMENSIONS = tuple(MINIMUM)
@@ -47,11 +48,17 @@ class CapacityPolicy:
         }
 
 
+def capacity_policy_path(catalog):
+    if catalog.capacity_policy_location == 'CATALOG':
+        return catalog.directory / POLICY_NAME
+    return POLICY_PATH
+
+
 def load_capacity(catalog):
     expected = catalog.capacity_policy_sha256
     require(expected is not None, UNAVAILABLE)
     try:
-        record = installed_record(POLICY_PATH, expected, code=NOT_READY)
+        record = installed_record(capacity_policy_path(catalog), expected, code=NOT_READY)
     except (OSError, ValueError, EnvironmentFailure) as error:
         raise EnvironmentFailure(NOT_READY) from error
     exact(
@@ -123,7 +130,7 @@ def capacity_totals(claims):
             kind in counts
             and type(claim['quota']) is int
             and claim['quota'] > 0
-            and claim['operation_action'] in ('START', 'RELEASE', 'RESTORE'),
+            and claim['operation_action'] in ('START', *RELEASE_ACTIONS, 'RESTORE'),
             RESOURCE,
         )
         counts[kind] += claim['quota']
@@ -204,14 +211,15 @@ def release_capacity(connection, start_id, stop_id, environment_id, outcome, enc
         'FROM management_operations AS op JOIN management_steps AS step USING(operation_id) '
         'WHERE op.operation_id=? AND step.ordinal=1 AND '
         "((op.action='START' AND step.step_kind='RUNTIME_STARTED') OR "
-        "(op.action='RELEASE' AND step.step_kind='RELEASE_DEPLOYMENT') OR "
+        "(op.action IN ('RELEASE','ROLLBACK_CODE','RECONFIGURE') "
+        "AND step.step_kind='RELEASE_DEPLOYMENT') OR "
         "(op.action='RESTORE' AND step.step_kind='RESTORE_ENVIRONMENT'))",
         (start_id,),
     ).fetchone()
     require(
         source is not None
         and source['environment_id'] == environment_id
-        and source['action'] in ('START', 'RELEASE', 'RESTORE')
+        and source['action'] in ('START', *RELEASE_ACTIONS, 'RESTORE')
         and source['status'] == 'SUCCEEDED'
         and source['result_json'] is not None
         and decoded(source['result_json'])['run_id'] == outcome['run_id']

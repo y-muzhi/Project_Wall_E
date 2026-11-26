@@ -1,14 +1,14 @@
 """Capture and validate short-lived, host-installed attachment observations."""
 
-from datetime import datetime, timezone
 import fcntl
 import json
 import os
-from pathlib import Path
 import pwd
 import stat
 import subprocess
 import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
 from time import monotonic_ns
 from uuid import uuid4
 
@@ -28,6 +28,9 @@ from backend.app.infrastructure.environment_files import (
 )
 from backend.app.infrastructure.environment_installation import (
     load_installation as load_environment,
+)
+from backend.app.infrastructure.environment_installation import (
+    read_access_policy,
     sha_value,
     validate_target_file,
 )
@@ -37,11 +40,24 @@ from .operation_contract import RESOURCE, installed_record, path_reference, vers
 
 FRESH_MS = 120_000
 PATH_SCOPE = 'HOST_FILESYSTEM'
+ATTACHMENT_RESOURCE_KINDS = frozenset(
+    (
+        'INSTALLATION_ROOT',
+        'WORKTREE',
+        'DATA_ROOT',
+        'CONTROL_ROOT',
+        'BUSINESS_DATABASE',
+        'STABLE_LOCK',
+        'UPSTREAM_SOCKET',
+        'GIT_BRANCH',
+        'PUBLIC_ORIGIN',
+    )
+)
 PROOF_VERSION = 1
 
 
 def now():
-    return utc_milliseconds(datetime.now(timezone.utc))
+    return utc_milliseconds(datetime.now(UTC))
 
 
 def machine_clock():
@@ -72,6 +88,11 @@ def resource(kind, scope, locator, object_identity=None):
 
 def path_resource(kind, path, object_identity=None):
     return resource(kind, PATH_SCOPE, path.as_posix().removeprefix('/'), object_identity)
+
+
+def public_origin_resource(environment):
+    origin = read_access_policy(environment)['public_origin']
+    return resource('PUBLIC_ORIGIN', 'HTTPS', origin.removeprefix('https://'))
 
 
 def roots_for(environment):
@@ -132,10 +153,20 @@ def stopped_sample(environment):
     return control['control_revision'], database, directory_facts(environment)
 
 
+def observer_scratch(area):
+    with protected_directory(area):
+        traversable = all(path.stat().st_mode & stat.S_IXOTH for path in (area, *area.parents))
+    return area if traversable else Path('/run')
+
+
 def invoke_observer(uid, gid, command, area, *, input_bytes=None, timeout=35):
-    with tempfile.TemporaryDirectory(dir=area, prefix='probe-') as path:
+    scratch = observer_scratch(area)
+    with (
+        protected_directory(scratch),
+        tempfile.TemporaryDirectory(dir=scratch, prefix='walle-probe-') as path,
+    ):
         root = Path(path)
-        root.chmod(0o755)
+        root.chmod(0o711)
         paths = [root / name for name in ('home', 'tmp')]
         for item in paths:
             item.mkdir(mode=0o700)
@@ -176,7 +207,7 @@ def invoke_observer(uid, gid, command, area, *, input_bytes=None, timeout=35):
             raise EnvironmentFailure(RESOURCE) from error
 
 
-def verified_workspace(reference, args, area):
+def verified_workspace(reference, args, area, *, ownership_only=False):
     source, source_sha = reference
     policy = installed_record(source, source_sha)
     uid = policy.get('uid')
@@ -187,7 +218,7 @@ def verified_workspace(reference, args, area):
         gid,
         [
             Path(__file__).resolve().parents[3] / 'tools/linux_runtime/manage_registry.py',
-            'workspace',
+            'workspace-binding' if ownership_only else 'workspace',
             '--project',
             args.project,
             '--program-sha256',
@@ -218,8 +249,7 @@ def verified_workspace(reference, args, area):
 
 def capture(catalog, reference, args, runtime_entry):
     require(os.geteuid() == 0, RESOURCE)
-    expected = catalog.candidates.get(reference)
-    require(expected is not None, RESOURCE)
+    expected = catalog.installed_candidate_pin(reference)
     candidate = catalog.candidate(reference, expected)
     environment = candidate_environment(candidate, args.sha256)
     require(
@@ -294,9 +324,7 @@ def capture(catalog, reference, args, runtime_entry):
         ),
         path_resource('UPSTREAM_SOCKET', environment.path('runtime') / 'walle.sock'),
         resource('GIT_BRANCH', 'REPOSITORY:' + git['repository_ref'], found['branch']),
-        resource(
-            'PUBLIC_ORIGIN', 'HTTPS', 'e-' + environment.environment_id + '.walle-dev.test:9443'
-        ),
+        public_origin_resource(environment),
     ]
     proof = {
         'format_version': PROOF_VERSION,
@@ -324,7 +352,10 @@ def capture(catalog, reference, args, runtime_entry):
     }
 
 
-def publish_observation(catalog, reference, proof):
+ANY_PREVIOUS_OBSERVATION = object()
+
+
+def publish_observation(catalog, reference, proof, *, expected=ANY_PREVIOUS_OBSERVATION):
     path = observation_path(catalog, reference)
     with protected_directory(path.parent) as directory:
         fcntl.flock(directory, fcntl.LOCK_EX)
@@ -332,6 +363,8 @@ def publish_observation(catalog, reference, proof):
             original = read_entry(directory, path.name, owner=0)
         except FileNotFoundError:
             original = None
+        if expected is not ANY_PREVIOUS_OBSERVATION:
+            require(original == expected, RESOURCE)
         if original is not None:
             previous = decode(original, RESOURCE)
             require(

@@ -1,4 +1,4 @@
-import { exact, positiveInteger } from '../api/wire-shape.ts';
+import { exact, object, positiveInteger } from '../api/wire-shape.ts';
 
 export const purposes = ['DEVELOPMENT', 'INTEGRATION', 'CANDIDATE', 'PRODUCTION'] as const;
 export const operationStates = [
@@ -315,8 +315,18 @@ function backupStamp(value: unknown) {
   return { id: uuid(row.backup_id), cutoff, verifiedAt };
 }
 
+function offhostVerification(value: unknown, cutoff: string) {
+  const proof = exact(value, ['verification_id', 'snapshot_id', 'retrieved_at']);
+  const retrievedAt = utc(proof.retrieved_at);
+  if (retrievedAt < cutoff) throw new TypeError('Invalid offhost retrieval time');
+  return { id: uuid(proof.verification_id), snapshot: hash(proof.snapshot_id), retrievedAt };
+}
+
 function backupPoint(value: unknown, environmentId: string) {
+  const hasOffhost = Object.hasOwn(object(value), 'offhost_verification');
+  const keys = hasOffhost ? ['offhost_verification'] : [];
   const row = exact(value, [
+    ...keys,
     'backup_id',
     'source_environment_id',
     'source_data_generation',
@@ -333,7 +343,11 @@ function backupPoint(value: unknown, environmentId: string) {
     'local_verification',
     'local_snapshot_retrieval',
   ]);
-  const state = one(row.verification_status, ['UNVERIFIED', 'LOCAL_VERIFIED'] as const);
+  const state = one(row.verification_status, [
+    'UNVERIFIED',
+    'LOCAL_VERIFIED',
+    'OFFHOST_VERIFIED',
+  ] as const);
   const cutoff = utc(row.cutoff_at);
   const local = nullable(row.local_verification, (value) => {
     const proof = exact(value, ['verification_id', 'verified_at', 'verified_scopes']);
@@ -358,7 +372,12 @@ function backupPoint(value: unknown, environmentId: string) {
     if (retrievedAt < cutoff) throw new TypeError('Invalid snapshot retrieval time');
     return { snapshot: hash(proof.snapshot_id), retrievedAt };
   });
-  if (uuid(row.source_environment_id) !== environmentId || (state === 'LOCAL_VERIFIED') !== !!local)
+  const offhost = hasOffhost ? offhostVerification(row.offhost_verification, cutoff) : null;
+  if (
+    uuid(row.source_environment_id) !== environmentId ||
+    (state !== 'UNVERIFIED') !== !!local ||
+    (state === 'OFFHOST_VERIFIED') !== !!offhost
+  )
     throw new TypeError('Backup point belongs to another scope or observation');
   return {
     id: uuid(row.backup_id),
@@ -375,6 +394,7 @@ function backupPoint(value: unknown, environmentId: string) {
     state,
     local,
     retrieval,
+    offhost,
   };
 }
 
@@ -422,6 +442,11 @@ export function backupStatus(value: unknown) {
     (offhost !== null && offhost.verifiedAt > (indexedAt ?? asOf))
   )
     throw new TypeError('Backup freshness evidence is inconsistent');
+  if (offhost !== null && rpoTarget !== null && rpo !== 'UNVERIFIED') {
+    const gap = Date.parse(asOf) - Date.parse(offhost.cutoff);
+    if ((rpo === 'MET') !== gap <= rpoTarget * 1000)
+      throw new TypeError('Backup freshness does not match its cutoff');
+  }
   return { asOf, indexedAt, policy, rpoTarget, rtoTarget, attempt, local, offhost, rpo };
 }
 
@@ -436,7 +461,20 @@ export function environmentBackups(value: unknown, environmentId: string) {
     if (!/^[A-Za-z0-9_-]+$/.test(cursor)) throw new TypeError('Invalid backup cursor');
     return cursor;
   });
-  return { entries, next, ...backupStatus(row.backup_status) };
+  const status = backupStatus(row.backup_status);
+  for (const entry of entries) {
+    if (!entry.offhost) continue;
+    const latest = status.offhost;
+    if (
+      !latest ||
+      entry.cutoff > latest.cutoff ||
+      entry.offhost.retrievedAt > (status.indexedAt ?? status.asOf) ||
+      (entry.id === latest.id &&
+        (entry.cutoff !== latest.cutoff || entry.offhost.retrievedAt !== latest.verifiedAt))
+    )
+      throw new TypeError('Offhost point differs from the recovery status');
+  }
+  return { entries, next, ...status };
 }
 
 export function operation(value: unknown) {
@@ -460,7 +498,10 @@ export function operation(value: unknown) {
       'REGISTER_DELIVERY',
       'START',
       'STOP',
+      'ARCHIVE',
       'RELEASE',
+      'ROLLBACK_CODE',
+      'RECONFIGURE',
       'BACKUP',
       'RESTORE',
     ] as const),
@@ -494,6 +535,7 @@ const operationSteps = [
   'RELEASE_DEPLOYMENT',
   'BACKUP_RECOVERY_POINT',
   'RESTORE_ENVIRONMENT',
+  'ENVIRONMENT_ARCHIVED',
   ...lifecycleSteps,
 ] as const;
 const stepByAction = {
@@ -501,18 +543,49 @@ const stepByAction = {
   REGISTER_DELIVERY: 'DELIVERY_REGISTERED',
   START: 'RUNTIME_STARTED',
   STOP: 'RUNTIME_STOPPED',
+  ARCHIVE: 'ENVIRONMENT_ARCHIVED',
   RELEASE: 'RELEASE_DEPLOYMENT',
+  ROLLBACK_CODE: 'RELEASE_DEPLOYMENT',
+  RECONFIGURE: 'RELEASE_DEPLOYMENT',
   BACKUP: 'BACKUP_RECOVERY_POINT',
   RESTORE: 'RESTORE_ENVIRONMENT',
 } as const;
 
 function receipt(value: unknown, kind: (typeof operationSteps)[number]) {
+  if (kind === 'ENVIRONMENT_ARCHIVED') {
+    const row = exact(value, [
+      'environment_id',
+      'record_version',
+      'assignment_generation',
+      'archived_at',
+    ]);
+    return {
+      kind,
+      environment: uuid(row.environment_id),
+      recordVersion: positiveInteger(row.record_version),
+      generation: positiveInteger(row.assignment_generation),
+      archivedAt: utc(row.archived_at),
+    };
+  }
   if (kind === 'BACKUP_RECOVERY_POINT') {
-    const row = exact(value, ['environment_id', 'observed_at', 'point']);
+    const hasOffhost = Object.hasOwn(object(value), 'offhost_observation_max_age_seconds');
+    const row = exact(value, [
+      'environment_id',
+      'observed_at',
+      'point',
+      ...(hasOffhost ? ['offhost_observation_max_age_seconds'] : []),
+    ]);
     const environment = uuid(row.environment_id);
     const observed = utc(row.observed_at);
     const point = backupPoint(row.point, environment);
-    if (!point.local || point.local.verifiedAt > observed)
+    if (
+      !point.local ||
+      point.local.verifiedAt > observed ||
+      hasOffhost !== Boolean(point.offhost) ||
+      (point.offhost !== null &&
+        (point.offhost.retrievedAt > observed ||
+          positiveInteger(row.offhost_observation_max_age_seconds) > 365 * 86400))
+    )
       throw new TypeError('Invalid backup receipt');
     return { kind, environment, observed, point };
   }

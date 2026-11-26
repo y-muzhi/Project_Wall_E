@@ -1,7 +1,8 @@
 """Require specific preserved facts before any recovery disposition may be written."""
 
 import sqlite3
-from contextlib import closing
+from contextlib import closing, nullcontext
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -389,3 +390,306 @@ def test_already_succeeded_backup_must_agree_with_external_result(original_backu
     )
     with pytest.raises(EnvironmentFailure):
         verify()
+
+
+@pytest.fixture
+def original_stop(original_start, tmp_path, monkeypatch):
+    pytest.importorskip('fcntl')
+    from backend.app.management import operation_contract, runtime_stop
+    from backend.app.management import registry_recovery_stop as stop_proof
+
+    connection, binding, environment = original_start
+    operation = binding['operation_id']
+    source, run, proof = (str(uuid4()) for _ in range(3))
+    created = '2026-11-22T08:00:00.000Z'
+    manager = connection.execute('SELECT * FROM manager_state').fetchone()
+    scope = {key: manager[key] for key in ('manager_id', 'host_id', 'registry_generation')}
+    intent = {
+        'action': 'STOP',
+        'environment_id': environment,
+        'expected_record_version': 4,
+        'expected_assignment_generation': 1,
+        'target': {'kind': 'RUN', 'run_id': run},
+    }
+    raw = canonical(intent)
+    binding = {**binding, 'source_revision': 3, 'source_intent_sha256': digest(raw)}
+    connection.execute(
+        "UPDATE management_operations SET action='STOP',status='SUCCEEDED',revision=3,"
+        'intent_sha256=?,intent_json=?',
+        (digest(raw), raw.decode()),
+    )
+    source_raw = canonical(
+        {
+            'action': 'START',
+            'environment_id': environment,
+            'expected_record_version': 4,
+            'expected_assignment_generation': 1,
+            'expected_configuration_sha256': 'a' * 64,
+        }
+    )
+    connection.execute(
+        'INSERT INTO management_operations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        (
+            source,
+            scope['registry_generation'],
+            str(uuid4()),
+            'owner',
+            1,
+            'START',
+            environment,
+            4,
+            1,
+            1,
+            digest(source_raw),
+            source_raw.decode(),
+            'SUCCEEDED',
+            2,
+            0,
+            created,
+        ),
+    )
+    connection.execute(
+        'INSERT INTO management_steps VALUES (?,1,?,?,?,?,?)',
+        (source, 'RUNTIME_STARTED', 'SUCCEEDED', None, None, canonical({'run_id': run}).decode()),
+    )
+    external = {'start_operation_id': source, 'run_id': run, 'policy_sha256': 'd' * 64}
+    result = {
+        'environment_id': environment,
+        'run_id': run,
+        'runtime_state': 'STOPPED',
+        'observed_at': created,
+        'proof_id': proof,
+    }
+    connection.execute(
+        "UPDATE management_steps SET step_kind='RUNTIME_STOPPED',status='SUCCEEDED',"
+        "executor_ref='SYSTEMD_ORDINARY_RUNTIME',external_identity_json=?,result_json=? "
+        'WHERE operation_id=?',
+        (canonical(external).decode(), canonical(result).decode(), operation),
+    )
+    observed = tmp_path / 'observations'
+    observed.mkdir()
+    common = {
+        'format_version': 1,
+        **scope,
+        'stop_operation_id': operation,
+        'environment_id': environment,
+        'run_id': run,
+        'start_operation_id': source,
+        'stop_policy_sha256': external['policy_sha256'],
+        'runtime_policy_sha256': 'e' * 64,
+    }
+    record = observed / f'stop-{operation}.v1.json'
+    claim = observed / f'stop-claim-{environment}-{run}.v1.json'
+    claim.write_bytes(canonical(common))
+    record.write_bytes(
+        canonical(
+            {
+                **common,
+                'state': 'STOPPED',
+                'dispatch': 'DISPATCH_RECORDED',
+                'recorded_at': created,
+                'observation': {
+                    'proof_id': proof,
+                    'environment_id': environment,
+                    'observed_at': created,
+                    'state': 'STOPPED',
+                    'reason_code': 'MANAGED_STOP_CONFIRMED',
+                },
+            }
+        )
+    )
+    monkeypatch.setattr(operation_contract, 'read_protected', lambda path: path.read_bytes())
+    monkeypatch.setattr(stop_proof, 'protected_directory', nullcontext)
+    monkeypatch.setattr(
+        runtime_stop, 'read_entry', lambda root, name, **_: (root / name).read_bytes()
+    )
+    catalog = SimpleNamespace(directory=tmp_path, scope=scope)
+
+    def verify():
+        evidence = stop_proof.completed_stop_evidence(connection, catalog, binding)
+        return {**evidence, 'capacity': stop_proof.stop_capacity_evidence(connection, evidence)}
+
+    return connection, verify, claim, external, environment, binding
+
+
+def test_original_stop_requires_final_receipt_and_run_claim(original_stop):
+    connection, verify, claim, external, environment, binding = original_stop
+    evidence = verify()
+    assert evidence['disposition'] == 'STOP_COMPLETED'
+    assert evidence['start_operation_id'] == external['start_operation_id']
+    assert evidence['run_id'] == external['run_id']
+    assert evidence['environment_id'] == environment
+    assert evidence['operation_id'] == binding['operation_id']
+    assert (
+        connection.execute(
+            'SELECT status FROM management_operations WHERE operation_id=?',
+            (binding['operation_id'],),
+        ).fetchone()[0]
+        == 'SUCCEEDED'
+    )
+    claim.unlink()
+    with pytest.raises(EnvironmentFailure):
+        verify()
+
+
+def test_original_stop_does_not_certify_an_unreleased_capacity_reservation(original_stop):
+    connection, verify, _, external, environment, _ = original_stop
+    from backend.app.management.runtime_capacity import CLAIM_KIND, CLAIM_SCOPE
+
+    connection.execute(
+        'INSERT INTO resource_claims VALUES (?,?,?,?,?,?,?,?,?,?)',
+        (
+            str(uuid4()),
+            environment,
+            external['start_operation_id'],
+            CLAIM_KIND,
+            CLAIM_SCOPE,
+            'memory_bytes',
+            '{}',
+            64,
+            None,
+            None,
+        ),
+    )
+    with pytest.raises(EnvironmentFailure):
+        verify()
+
+
+@pytest.mark.parametrize(
+    ('state', 'pid', 'empty', 'expected'),
+    (
+        ('ABSENT_OBSERVED', 0, True, None),
+        ('QUIET_OBSERVED', 0, True, None),
+        ('QUIET_OBSERVED', 0, False, 'ORIGINAL_STEP_UNRESOLVED'),
+        ('QUIET_OBSERVED', 18, True, 'ORIGINAL_STEP_UNRESOLVED'),
+        ('PRESENT_OBSERVED', 18, False, 'ORIGINAL_RUNTIME_UNVERIFIED'),
+        ('UNKNOWN', None, None, 'ORIGINAL_STEP_UNRESOLVED'),
+    ),
+)
+def test_stopped_original_unit_requires_a_fresh_empty_group(
+    original_stop, state, pid, empty, expected
+):
+    from backend.app.management import registry_recovery_dispatch_review as review
+    from backend.app.management.registry_recovery_stop import stopped_runtime_unit
+
+    _, verify, _, external, environment, _ = original_stop
+    evidence = verify()
+    unit = stopped_runtime_unit(environment, external['start_operation_id'])
+    row = {
+        'environment_id': environment,
+        'ordinal': 1,
+        'original_status': 'SUCCEEDED',
+        'step_kind': 'RUNTIME_STOPPED',
+        'state': 'UNKNOWN' if state == 'UNKNOWN' else 'OBSERVED',
+        'units': [{'unit': unit, 'state': state, 'main_pid': pid, 'cgroup_empty': empty}],
+    }
+    blocker = review.completed_effect_blocker(row, {'evidence': evidence})
+    assert blocker == (None if expected is None else {'reason_code': expected, 'unit': unit})
+    row['units'][0]['unit'] = stopped_runtime_unit(environment, str(uuid4()))
+    with pytest.raises(EnvironmentFailure):
+        review.completed_effect_blocker(row, {'evidence': evidence})
+
+
+@pytest.mark.parametrize('last_status', ('ACCEPTED', 'UNKNOWN'))
+def test_known_stop_can_release_only_the_preserved_group(original_stop, last_status):
+    from backend.app.management import registry_recovery_stop as stop_proof
+    from backend.app.management.runtime_capacity import CLAIM_KIND, CLAIM_SCOPE, MINIMUM
+
+    connection, verify, _, external, environment, binding = original_stop
+    owner = external['start_operation_id']
+    operation = binding['operation_id']
+    connection.execute(
+        'UPDATE management_operations SET status=? WHERE operation_id=?', (last_status, operation)
+    )
+    if last_status == 'ACCEPTED':
+        connection.execute(
+            "UPDATE management_steps SET status='PLANNED',executor_ref=NULL,"
+            'external_identity_json=NULL,result_json=NULL WHERE operation_id=?',
+            (operation,),
+        )
+    else:
+        connection.execute(
+            "UPDATE management_steps SET status='UNKNOWN',result_json=NULL WHERE operation_id=?",
+            (operation,),
+        )
+    capacity_binding = canonical(
+        {'policy_sha256': '5' * 64, 'profile_ref': 'standard', 'configuration_sha256': 'a' * 64}
+    ).decode()
+    for locator, quota in MINIMUM.items():
+        connection.execute(
+            'INSERT INTO resource_claims VALUES (?,?,?,?,?,?,?,?,?,?)',
+            (
+                str(uuid4()),
+                environment,
+                owner,
+                CLAIM_KIND,
+                CLAIM_SCOPE,
+                locator,
+                capacity_binding,
+                quota,
+                None,
+                None,
+            ),
+        )
+    evidence = verify()
+    assert evidence['capacity']['count'] == len(MINIMUM)
+    connection.execute("UPDATE resource_claims SET quota=quota+1 WHERE locator='memory_bytes'")
+    with pytest.raises(EnvironmentFailure):
+        stop_proof.settle_stop_capacity(connection, evidence, recorded=False)
+    connection.execute("UPDATE resource_claims SET quota=quota-1 WHERE locator='memory_bytes'")
+    stop_proof.settle_stop_capacity(connection, evidence, recorded=False)
+    released = connection.execute('SELECT released_at,release_json FROM resource_claims').fetchall()
+    assert len(released) == len(MINIMUM)
+    assert all(
+        row[0]
+        and row[1] == canonical({'stop_operation_id': operation, **evidence['completion']}).decode()
+        for row in released
+    )
+    stop_proof.settle_stop_capacity(connection, evidence, recorded=True)
+    connection.execute("UPDATE resource_claims SET release_json='{}' WHERE locator='memory_bytes'")
+    with pytest.raises(EnvironmentFailure):
+        stop_proof.settle_stop_capacity(connection, evidence, recorded=True)
+
+
+def test_reserved_undispatched_start_requires_its_complete_original_binding(
+    undispatched_module, original_start, tmp_path
+):
+    from backend.app.management.registry_recovery_capacity import settle_capacity
+    from backend.app.management.runtime_capacity import MINIMUM, CapacityPolicy, reserve_capacity
+
+    connection, policy, environment = original_start
+    operation = policy['operation_id']
+    connection.execute("UPDATE management_operations SET status='ACCEPTED'")
+    connection.execute('UPDATE management_steps SET result_json=NULL')
+    profile = {'profile_ref': 'standard', 'limits': MINIMUM}
+    capacity_pin = 'b' * 64
+    capacity = CapacityPolicy(capacity_pin, tmp_path, tmp_path, MINIMUM, {'DEVELOPMENT': profile})
+    row = connection.execute('SELECT * FROM managed_environments').fetchone()
+    reserve_capacity(connection, operation, capacity, row, lambda value: canonical(value).decode())
+    scope = {'host_id': row['host_id']}
+    catalog = SimpleNamespace(capacity_policy_sha256=capacity_pin, scope=scope)
+    evidence = undispatched_module.reserved_start_evidence(connection, catalog, policy)
+    measured = undispatched_module.reserved_start_capacity(connection, evidence)
+    assert measured['count'] == len(MINIMUM)
+    assert evidence['disposition'] == 'UNDISPATCHED_RESERVED_CANCELLED'
+    published = {'recovery_operation_id': str(uuid4()), 'disposition': evidence['disposition']}
+    foreign_host = SimpleNamespace(
+        capacity_policy_sha256=capacity_pin, scope={'host_id': str(uuid4())}
+    )
+    with pytest.raises(EnvironmentFailure):
+        undispatched_module.reserved_start_evidence(connection, foreign_host, policy)
+    other_catalog = SimpleNamespace(capacity_policy_sha256='c' * 64, scope=scope)
+    changed = undispatched_module.reserved_start_evidence(connection, other_catalog, policy)
+    with pytest.raises(EnvironmentFailure):
+        undispatched_module.reserved_start_capacity(connection, changed)
+    connection.execute("UPDATE management_steps SET external_identity_json='{}'")
+    with pytest.raises(EnvironmentFailure):
+        undispatched_module.reserved_start_evidence(connection, catalog, policy)
+    connection.execute('UPDATE management_steps SET external_identity_json=NULL')
+    settle_capacity(connection, operation, environment, measured, published, recorded=False)
+    settle_capacity(connection, operation, environment, measured, published, recorded=True)
+    with pytest.raises(EnvironmentFailure):
+        undispatched_module.reserved_start_capacity(connection, evidence)
+    assert (
+        connection.execute('SELECT status FROM management_operations').fetchone()[0] == 'ACCEPTED'
+    )

@@ -25,6 +25,7 @@ from .operation_store import (
     require_no_conflicting_action,
     stored,
 )
+from .recovery_offhost import offhost_authority
 from .registry import is_timestamp, verified_registry
 from .release_configuration import CHANGED
 from .release_maintenance_view import confirmed_current_control
@@ -65,18 +66,24 @@ def backup_policy(catalog, reference, identifier, *, supported=True):
     pin = catalog.backup_policies.get(reference)
     require(uuid_value(reference) and sha_value(pin), RESOURCE)
     record = installed_record(catalog.directory / 'backup-policies' / (reference + '.json'), pin)
-    version_record(
-        record,
-        (
-            *catalog.scope,
-            'backup_policy_ref',
-            'environment_id',
-            'minimum_verification',
-            'assets',
-            *LIMITS,
-        ),
-        RESOURCE,
+    fields = (
+        *catalog.scope,
+        'backup_policy_ref',
+        'environment_id',
+        'minimum_verification',
+        'assets',
+        *LIMITS,
     )
+    if type(record.get('format_version')) is int and record['format_version'] == 2:
+        exact(record, ('format_version', *fields, 'offhost_authority'), RESOURCE)
+        authority = offhost_authority(record['offhost_authority'])
+        require(
+            record['minimum_verification'] == 'OFFHOST_VERIFIED'
+            and authority['source_host_id'] == catalog.scope['host_id'],
+            RESOURCE,
+        )
+    else:
+        version_record(record, fields, RESOURCE)
     require(
         all(record[key] == value for key, value in catalog.scope.items())
         and record['backup_policy_ref'] == reference
@@ -92,7 +99,10 @@ def backup_policy(catalog, reference, identifier, *, supported=True):
         ASSET_UNSUPPORTED,
     )
     if supported:
-        require(record['minimum_verification'] == 'LOCAL_VERIFIED', ASSET_UNSUPPORTED)
+        require(
+            record['minimum_verification'] == 'LOCAL_VERIFIED' or 'offhost_authority' in record,
+            ASSET_UNSUPPORTED,
+        )
     return record, pin
 
 

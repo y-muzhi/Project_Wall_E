@@ -25,7 +25,10 @@ def backup_choices(connection, catalog, principal, identifier):
             continue
         policy, _ = backup_policy(catalog, reference, identifier, supported=False)
         state = 'READY'
-        if policy['minimum_verification'] == 'OFFHOST_VERIFIED':
+        if (
+            policy['minimum_verification'] == 'OFFHOST_VERIFIED'
+            and 'offhost_authority' not in policy
+        ):
             state = 'OFFHOST_REQUIRED'
         elif busy:
             state = 'ENVIRONMENT_BUSY'

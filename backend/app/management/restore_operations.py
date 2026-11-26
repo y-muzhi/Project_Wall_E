@@ -18,9 +18,9 @@ from backend.app.infrastructure.environment_release_preflight import (
     read_reference,
 )
 from backend.app.infrastructure.environment_restore_preflight import (
-    POLICY as PREFLIGHT_POLICY,
     restore_authorization,
     restore_plan,
+    selected_offhost_report,
 )
 from backend.app.shared.time import utc_milliseconds
 
@@ -117,16 +117,40 @@ def registered_restore(catalog, reference):
     return record, pin
 
 
-def selected_point(connection, catalog, intent, template):
-    _, points = managed_backup_history(connection, catalog, intent['environment_id'], now())
-    point = next((item for item in points if item['backup_id'] == intent['backup_id']), None)
+def restore_recovery_policy(catalog, policy_reference, template):
+    recovery = read_recovery_policy(catalog, policy_reference, allow_offhost=True)
+    require(recovery.get('offhost_authority') == template.get('offhost_authority'), CHANGED)
+    return recovery
+
+
+def checked_restore_point(point, environment, template, ceiling):
     require(
         point is not None
-        and point['verification_status'] == 'LOCAL_VERIFIED'
-        and point['source_environment_id'] == intent['environment_id']
+        and point['verification_status'] in ('LOCAL_VERIFIED', 'OFFHOST_VERIFIED')
+        and point['local_verification'] is not None
+        and point['source_environment_id'] == environment
         and point['cutoff_at'] == template['accepted_backup_cutoff_at'],
         CHANGED,
     )
+    if template['format_version'] == 1:
+        return None
+    offhost = point.get('offhost_verification')
+    require(point['verification_status'] == 'OFFHOST_VERIFIED' and offhost is not None, CHANGED)
+    verified = selected_offhost_report(template, point, environment, ceiling, CHANGED)
+    require(
+        offhost
+        == {field: verified[field] for field in ('verification_id', 'snapshot_id', 'retrieved_at')},
+        CHANGED,
+    )
+    return verified
+
+
+def selected_point(connection, catalog, intent, template):
+    ceiling = now()
+    environment = intent['environment_id']
+    _, points = managed_backup_history(connection, catalog, environment, ceiling)
+    point = next((item for item in points if item['backup_id'] == intent['backup_id']), None)
+    offhost = checked_restore_point(point, environment, template, ceiling)
     selected = template['selected']
     verification = read_reference(selected['verification'], name=VERIFY_POLICY)
     read = parse_local_recovery(read_reference(selected['local_verification']), RESOURCE)
@@ -144,7 +168,7 @@ def selected_point(connection, catalog, intent, template):
         and read['verified_at'] == point['local_verification']['verified_at'],
         CHANGED,
     )
-    return {
+    selected = {
         field: point[field]
         for field in (
             'backup_id',
@@ -155,6 +179,7 @@ def selected_point(connection, catalog, intent, template):
             'logical_content_sha256',
         )
     }
+    return selected, offhost
 
 
 def restore_subject(connection, catalog, principal, intent, runtime_sha):
@@ -177,10 +202,9 @@ def restore_subject(connection, catalog, principal, intent, runtime_sha):
         CHANGED,
     )
     source = catalog.candidate(attachment['candidate_ref'], attachment['sha256'])
-    recovery = read_recovery_policy(catalog, record['recovery_policy'])
     template_path, template_pin = path_reference(record['preflight_template'])
-    require(template_path.name == PREFLIGHT_POLICY, RESOURCE)
     template = restore_plan(template_path, template_pin)
+    recovery = restore_recovery_policy(catalog, record['recovery_policy'], template)
     deployment = read_reference(record['deployment_policy'], name=RESTORE_POLICY)
     require(
         template['installation_sha256']
@@ -218,7 +242,7 @@ def restore_subject(connection, catalog, principal, intent, runtime_sha):
         and proof['schema_contract_sha256'] == schema.schema_contract_sha256,
         INCOMPATIBLE,
     )
-    point = selected_point(connection, catalog, intent, template)
+    point, offhost = selected_point(connection, catalog, intent, template)
     return {
         'operation_id': template['operation_id'],
         'source': {
@@ -256,42 +280,45 @@ def restore_subject(connection, catalog, principal, intent, runtime_sha):
         'preserved_backup_id': template['preserved']['backup_id'],
         'data_handling': template['data_handling'],
         'backup': point,
+        **({'offhost_recovery': offhost} if offhost is not None else {}),
     }
 
 
 def plan_restore(native, installation, catalog, principal, raw, runtime_sha):
     require(principal.role == 'MANAGER', DENIED)
     intent = restore_input(raw)
-    with verified_registry(native, installation, writable=True) as (connection, lock):
-        with mutation(connection, lock):
-            require_no_conflicting_action(connection, intent['environment_id'])
-            subject = restore_subject(connection, catalog, principal, intent, runtime_sha)
-            require(not operation_exists(connection, subject['operation_id']), CHANGED)
-            identifier = str(uuid4())
-            expires = utc_milliseconds(datetime.now(UTC) + timedelta(milliseconds=FRESH_MS))
-            preview = {
-                'kind': ACTION,
-                'plan_id': identifier,
-                'expires_at': expires,
-                **intent,
-                **subject,
-            }
-            pin = digest(canonical(preview))
-            connection.execute(
-                'INSERT INTO management_plans (plan_id,environment_id,principal,kind,record_version,'
-                'assignment_generation,plan_sha256,preview_json,expires_at) VALUES (?,?,?,?,?,?,?,?,?)',
-                (
-                    identifier,
-                    intent['environment_id'],
-                    principal.id,
-                    ACTION,
-                    intent['expected_record_version'],
-                    intent['expected_assignment_generation'],
-                    pin,
-                    stored(preview),
-                    expires,
-                ),
-            )
+    with (
+        verified_registry(native, installation, writable=True) as (connection, lock),
+        mutation(connection, lock),
+    ):
+        require_no_conflicting_action(connection, intent['environment_id'])
+        subject = restore_subject(connection, catalog, principal, intent, runtime_sha)
+        require(not operation_exists(connection, subject['operation_id']), CHANGED)
+        identifier = str(uuid4())
+        expires = utc_milliseconds(datetime.now(UTC) + timedelta(milliseconds=FRESH_MS))
+        preview = {
+            'kind': ACTION,
+            'plan_id': identifier,
+            'expires_at': expires,
+            **intent,
+            **subject,
+        }
+        pin = digest(canonical(preview))
+        connection.execute(
+            'INSERT INTO management_plans (plan_id,environment_id,principal,kind,record_version,'
+            'assignment_generation,plan_sha256,preview_json,expires_at) VALUES (?,?,?,?,?,?,?,?,?)',
+            (
+                identifier,
+                intent['environment_id'],
+                principal.id,
+                ACTION,
+                intent['expected_record_version'],
+                intent['expected_assignment_generation'],
+                pin,
+                stored(preview),
+                expires,
+            ),
+        )
     return {'plan_id': identifier, 'plan_sha256': pin, 'expires_at': expires, 'preview': preview}
 
 

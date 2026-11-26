@@ -36,11 +36,18 @@ from backend.app.infrastructure.environment_installation import (
 from backend.app.infrastructure.schema_v22_publish import publish_directory
 
 from .attachment_observation import now
-from .recovery_evidence import backup_cutoff
 from .recovery_catalog import attempt_view, policy_target, read_backup_index
+from .recovery_evidence import backup_cutoff
+from .recovery_offhost import offhost_authority
 from .registry import is_timestamp
 
 POLICY = 'management-backup-export.v1.json'
+OFFHOST_POLICY = 'management-backup-export.v2.json'
+EVIDENCE_FIELDS = {
+    'local_verification': 'local',
+    'local_retrieval': 'retrieval',
+}
+OFFHOST_EVIDENCE_FIELDS = {**EVIDENCE_FIELDS, 'offhost_verification': 'offhost'}
 RECEIPT = 'management-backup-export-receipt.v1.json'
 SCOPE = ('manager_id', 'host_id', 'registry_generation')
 INVALID = 'MANAGEMENT_BACKUP_EXPORT_INTENT_MISMATCH'
@@ -48,10 +55,12 @@ UNVERIFIED = 'MANAGEMENT_BACKUP_EXPORT_UNVERIFIED'
 
 
 def export_inputs(args):
+    offhost = args.anchor.name == OFFHOST_POLICY
+    extras = ('offhost_authority',) if offhost else ()
     plan = read_policy(
         args.anchor,
         args.anchor_sha256,
-        POLICY,
+        OFFHOST_POLICY if offhost else POLICY,
         (
             'operation_id',
             *SCOPE,
@@ -62,7 +71,9 @@ def export_inputs(args):
             'points',
             'output_directory',
             'output_identity',
+            *extras,
         ),
+        version=2 if offhost else 1,
     )
     require(
         all(uuid_value(plan[key]) for key in ('operation_id', *SCOPE, 'environment_id'))
@@ -80,15 +91,15 @@ def export_inputs(args):
         == len(plan['points']),
         INVALID,
     )
+    if offhost:
+        offhost_authority(plan['offhost_authority'])
     policy_target(plan['backup_policy'])
     attempt_view(plan['latest_attempt'], plan['indexed_at'])
     return plan, output
 
 
-def point_input(raw, output):
-    selection = exact(
-        raw, ('backup_id', 'package', 'local_verification', 'local_retrieval'), INVALID
-    )
+def point_input(raw, output, evidence_fields):
+    selection = exact(raw, ('backup_id', 'package', *evidence_fields), INVALID)
     details = exact(
         selection['package'],
         ('path', 'identity', 'manifest_sha256', 'maintenance_uid', 'shared_gid'),
@@ -127,8 +138,8 @@ def copy_evidence(folder, prefix, reference, suffix, output):
     return ref['sha256']
 
 
-def extract_point(entry, evidence_fd, env, output):
-    selection, path = point_input(entry, output)
+def extract_point(entry, evidence_fd, env, output, evidence_fields):
+    selection, path = point_input(entry, output, evidence_fields)
     request = selection['package']
     principal = SimpleNamespace(
         maintenance_uid=request['maintenance_uid'], group=request['shared_gid']
@@ -162,13 +173,17 @@ def extract_point(entry, evidence_fd, env, output):
         'count_audit_state': evidence['coverage_ref']['audit_state'],
         'program_sha256': program['program_sha256'],
         'configuration_sha256': program['configuration_sha256'],
-        'local_verification_sha256': copy_evidence(
-            evidence_fd, backup_id, selection['local_verification'], 'local', output
-        ),
-        'local_retrieval_sha256': copy_evidence(
-            evidence_fd, backup_id, selection['local_retrieval'], 'retrieval', output
-        ),
+        **{
+            f'{field}_sha256': copy_evidence(
+                evidence_fd, backup_id, selection[field], suffix, output
+            )
+            for field, suffix in evidence_fields.items()
+        },
     }
+
+
+def evidence_fields_for(plan):
+    return OFFHOST_EVIDENCE_FIELDS if plan['format_version'] == 2 else EVIDENCE_FIELDS
 
 
 def assemble_index(plan, stage, output, final, input_sha):
@@ -176,17 +191,23 @@ def assemble_index(plan, stage, output, final, input_sha):
     evidence.mkdir(mode=0o755)
     evidence.chmod(0o755)
     environment = plan['environment_id']
+    evidence_fields = evidence_fields_for(plan)
     with protected_directory(evidence) as fd:
-        points = [extract_point(entry, fd, environment, output) for entry in plan['points']]
+        points = [
+            extract_point(entry, fd, environment, output, evidence_fields)
+            for entry in plan['points']
+        ]
         os.fsync(fd)
     index = {
-        'format_version': 1,
+        'format_version': plan['format_version'],
         **{
             key: plan[key]
             for key in (*SCOPE, 'environment_id', 'indexed_at', 'backup_policy', 'latest_attempt')
         },
         'points': points,
     }
+    if plan['format_version'] == 2:
+        index['offhost_authority'] = plan['offhost_authority']
     encoded = canonical(index)
     filename = environment + '.json'
     target = {
@@ -243,7 +264,7 @@ def read_export(final, plan, input_sha):
     support = {
         f'{point["backup_id"]}.{name}.v1.json'
         for point in plan['points']
-        for field, name in (('local_verification', 'local'), ('local_retrieval', 'retrieval'))
+        for field, name in evidence_fields_for(plan).items()
         if point[field] is not None
     }
     with protected_directory(final / 'backup-evidence') as directory:

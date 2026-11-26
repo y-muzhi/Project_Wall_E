@@ -46,7 +46,7 @@ export function backupOptions(value: unknown, environmentId: string) {
         'LOCAL_VERIFIED',
         'OFFHOST_VERIFIED',
       ] as const);
-      if ((state === 'OFFHOST_REQUIRED') !== (verification === 'OFFHOST_VERIFIED'))
+      if (state === 'OFFHOST_REQUIRED' && verification !== 'OFFHOST_VERIFIED')
         throw new TypeError('Invalid backup availability');
       return {
         policy: uuid(choice.backup_policy_ref),
@@ -141,7 +141,7 @@ export function backupPlan(value: unknown, expected: BackupVariables) {
     requested,
     backup: uuid(plan.backup_id),
     completion: one(plan.completion, ['KEEP_STOPPED'] as const),
-    verification: one(plan.minimum_verification, ['LOCAL_VERIFIED'] as const),
+    verification: one(plan.minimum_verification, ['LOCAL_VERIFIED', 'OFFHOST_VERIFIED'] as const),
     assets: assetSet(plan.assets),
     source: {
       deployment: uuid(source.deployment_id),

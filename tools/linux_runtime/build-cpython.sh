@@ -4,10 +4,19 @@
 set -euo pipefail
 umask 077
 
+[[ "$#" = 2 || "$#" = 3 ]]
+architecture=${3-aarch64}
+case "$architecture" in
+    aarch64|x86_64) ;;
+    *) printf '%s\n' 'Unsupported native Linux architecture' >&2; exit 2 ;;
+esac
+if [[ "$(uname -sm)" != "Linux $architecture" ]]; then
+    printf '%s\n' 'Build architecture differs from the host' >&2
+    exit 2
+fi
 prefix=$(realpath -e -- "$1")
 inputs=$(realpath -e -- "$2")
 [[ "$prefix" = "$1" && "$prefix" != / && ! -L "$1" && -O "$prefix" ]]
-[[ "$(uname -sm)" = 'Linux aarch64' ]]
 source /etc/os-release
 [[ "$ID" = ubuntu && "$VERSION_ID" = 24.04 ]]
 [[ -z "$(find "$prefix" -mindepth 1 -print -quit)" ]]

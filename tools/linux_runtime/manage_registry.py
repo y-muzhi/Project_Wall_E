@@ -1,14 +1,14 @@
 """Run fixed Linux management and maintenance commands."""
 
 import argparse
-from contextlib import ExitStack
 import json
 import os
-from pathlib import Path
 import runpy
 import stat
 import subprocess
 import sys
+from contextlib import ExitStack
+from pathlib import Path
 
 
 def trusted_script(path):
@@ -34,13 +34,13 @@ def target(args, entry):
     entry['demand'](dict(os.environ) == expected_environment, 'Untrusted target environment')
     manifest, libraries, bindings = entry['admit_target'](args.root, args.sha256, args.temporary)
     entry['verify_target_imports'](args.root, manifest)
-    if args.action in ('_workspace', '_release'):
+    if args.action in ('_workspace', '_workspace-binding', '_release'):
         entry['validate_mappings'](args.root, bindings, libraries)
-    if args.action == '_workspace':
+    if args.action in ('_workspace', '_workspace-binding'):
         from backend.app.management.workspace_evidence import load_repository, source_evidence
 
         repository = load_repository(args.anchor, args.anchor_sha256)
-        return source_evidence(repository)
+        return source_evidence(repository, ownership_only=args.action == '_workspace-binding')
     if args.action == '_release':
         from backend.app.management.release_artifacts import verify_release
 
@@ -51,11 +51,12 @@ def target(args, entry):
     from backend.app.infrastructure.sqlite_runtime import bind_linux_runtime
 
     bind_linux_runtime(entry['require_active'])
+    from sqlite3 import Error as SQLiteError
+
     from backend.app.infrastructure.environment_files import EnvironmentFailure
     from backend.app.infrastructure.environment_lock import NativeEnvironmentFiles
     from backend.app.management.registry import REGISTRY_ERROR, registry_command
     from backend.app.management.registry_installation import load_installation
-    from sqlite3 import Error as SQLiteError
 
     native = NativeEnvironmentFiles(args.root)
     entry['validate_mappings'](
@@ -77,12 +78,36 @@ def target(args, entry):
             from backend.app.infrastructure.environment_backup_package import lookup_backup_result
 
             return lookup_backup_result(args)
+        if args.action == '_publish-backup-snapshot':
+            from backend.app.infrastructure.environment_restic_publish import (
+                publish_backup_snapshot,
+            )
+
+            return publish_backup_snapshot(args)
         if args.action == '_retrieve-backup-snapshot':
             from backend.app.infrastructure.environment_restic_restore import (
                 retrieve_backup_snapshot,
             )
 
             return retrieve_backup_snapshot(args)
+        if args.action == '_publish-offhost-backup-snapshot':
+            from backend.app.infrastructure.environment_restic_offhost_publish import (
+                publish_offhost_backup_snapshot,
+            )
+
+            return publish_offhost_backup_snapshot(args)
+        if args.action == '_verify-offhost-backup-snapshot':
+            from backend.app.infrastructure.environment_restic_offhost_verify import (
+                verify_offhost_backup_snapshot,
+            )
+
+            return verify_offhost_backup_snapshot(args)
+        if args.action == '_materialize-offhost-backup-package':
+            from backend.app.infrastructure.environment_restic_offhost_materialize import (
+                materialize_offhost_backup_package,
+            )
+
+            return materialize_offhost_backup_package(args)
         if args.action == '_rehearse-backup-package':
             from backend.app.infrastructure.environment_backup_rehearsal import (
                 rehearse_backup_package,
@@ -92,11 +117,13 @@ def target(args, entry):
         if args.action == '_observe-release-open':
             from backend.app.infrastructure.environment_command import admission_inputs
             from backend.app.infrastructure.environment_release_open import (
-                open_inputs,
                 observe_release_open,
+                open_inputs,
             )
 
-            installation, _ = admission_inputs(args, entry['require_active'](), args.program_sha256)
+            installation, _ = admission_inputs(
+                args, entry['require_active'](), args.program_sha256, offline=True
+            )
             plan = open_inputs(
                 installation,
                 args.release_open_operation,
@@ -165,6 +192,16 @@ def target(args, entry):
 
             return restore_database(native, entry['require_active'](), args, entry)
         installation = load_installation(args.anchor, args.anchor_sha256, args.sha256)
+        if args.action == '_inspect-registry-recovery-deployment':
+            from backend.app.management.registry_recovery_opened import inspect_recovered_deployment
+
+            return inspect_recovered_deployment(native, installation, args)
+        if args.action == '_settle-registry-recovery-deployment':
+            from backend.app.management.registry_recovery_deployment_settlement import (
+                settle_opened_deployment,
+            )
+
+            return settle_opened_deployment(native, installation, args)
         if args.action == '_settle-registry-recovery-disposition':
             from backend.app.management.registry_recovery_disposition import (
                 settle_registry_recovery_disposition,
@@ -208,6 +245,19 @@ def target(args, entry):
                 else snapshot_registry
             )
             return action(native, installation, args)
+        if args.action == '_release-build-source':
+            from backend.app.management.operation_contract import load_catalog
+            from backend.app.management.registry import read_registry, verify_registered_data
+            from backend.app.management.release_staging import load_build_plan, observe_build_source
+
+            catalog = load_catalog(args.catalog, args.catalog_sha256, installation)
+            plan = load_build_plan(catalog, args)
+            with read_registry(native, installation, args.sha256) as connection:
+                observation = observe_build_source(
+                    connection, catalog, plan, args.release_build_policy_sha256
+                )
+            verify_registered_data(native, installation, args.sha256)
+            return observation
         if args.action in ('_candidate', '_inspect-release-build'):
             from contextlib import nullcontext
 
@@ -239,11 +289,11 @@ def target(args, entry):
                 return result
         if args.action == '_serve':
             from backend.app.management.management_web import serve
+            from backend.app.management.operation_contract import load_catalog
             from backend.app.management.registry_recovery_entry_admission import (
                 verify_serving_entry,
             )
             from backend.app.management.web_installation import load_web
-            from backend.app.management.operation_contract import load_catalog
 
             catalog = load_catalog(args.catalog, args.catalog_sha256, installation)
             verify_serving_entry(installation, args)
@@ -256,7 +306,10 @@ def target(args, entry):
             '_claim-restore-maintenance',
             '_admit-release-open',
             '_admit-restore-open',
+            '_observe-managed-backup',
             '_claim-managed-backup',
+            '_archive-subject',
+            '_complete-archive',
         ):
             from backend.app.infrastructure.environment_files import decode, require
             from backend.app.management.lifecycle_operations import dispatch_start
@@ -272,7 +325,21 @@ def target(args, entry):
 
                 with read_registry(native, installation, args.sha256) as connection:
                     return authorize_cancel(connection, catalog, request)
+            if args.action == '_observe-managed-backup':
+                from backend.app.management.backup_capture import observe_backup
+
+                with read_registry(native, installation, args.sha256) as connection:
+                    return observe_backup(connection, catalog, request)
+            if args.action == '_archive-subject':
+                from backend.app.management.environment_archive import read_archive_subject
+
+                with read_registry(native, installation, args.sha256) as connection:
+                    return read_archive_subject(connection, catalog, request)
             with verified_registry(native, installation, writable=True) as (connection, lock):
+                if args.action == '_complete-archive':
+                    from backend.app.management.environment_archive import complete_archive
+
+                    return complete_archive(connection, lock, catalog, request)
                 if args.action == '_claim-release-maintenance':
                     from backend.app.management.release_execution import claim_release_maintenance
 
@@ -316,13 +383,24 @@ def target(args, entry):
             '_lookup-restore-result': 'RESTORE_RESULT_UNVERIFIED',
             '_check-restore-readiness': 'RESTORE_READINESS_UNVERIFIED',
             '_seal-backup-package': 'BACKUP_PACKAGE_UNVERIFIED',
+            '_publish-offhost-backup-snapshot': 'OFFHOST_BACKUP_UNVERIFIED',
+            '_verify-offhost-backup-snapshot': 'OFFHOST_BACKUP_UNVERIFIED',
+            '_materialize-offhost-backup-package': 'OFFHOST_BACKUP_UNVERIFIED',
             '_snapshot-registry': 'MANAGEMENT_REGISTRY_SNAPSHOT_UNVERIFIED',
             '_verify-registry-snapshot': 'MANAGEMENT_REGISTRY_SNAPSHOT_UNVERIFIED',
             '_prepare-registry-recovery': 'MANAGEMENT_REGISTRY_RECOVERY_UNVERIFIED',
             '_verify-registry-recovery': 'MANAGEMENT_REGISTRY_RECOVERY_UNVERIFIED',
             '_ready-registry-recovery': 'MANAGEMENT_REGISTRY_READINESS_UNVERIFIED',
             '_inventory-registry-recovery': 'MANAGEMENT_REGISTRY_RECOVERY_INVENTORY_UNVERIFIED',
-            '_settle-registry-recovery-disposition': 'MANAGEMENT_REGISTRY_RECOVERY_DISPOSITION_UNVERIFIED',
+            '_settle-registry-recovery-disposition': (
+                'MANAGEMENT_REGISTRY_RECOVERY_DISPOSITION_UNVERIFIED'
+            ),
+            '_inspect-registry-recovery-deployment': (
+                'MANAGEMENT_REGISTRY_RECOVERY_OPENING_UNVERIFIED'
+            ),
+            '_settle-registry-recovery-deployment': (
+                'MANAGEMENT_REGISTRY_RECOVERY_DEPLOYMENT_SETTLEMENT_UNVERIFIED'
+            ),
         }.get(args.action, REGISTRY_ERROR)
         raise EnvironmentFailure(code) from error
 
@@ -340,10 +418,14 @@ def main():
         'ready-registry-recovery',
         'inventory-registry-recovery',
         'settle-registry-recovery-disposition',
+        'inspect-registry-recovery-deployment',
+        'settle-registry-recovery-deployment',
         'workspace',
+        'workspace-binding',
         'release',
         'candidate',
         'inspect-release-build',
+        'release-build-source',
         'operation',
         'serve',
         'capture-database',
@@ -359,7 +441,11 @@ def main():
         'seal-backup-package',
         'verify-backup-package',
         'lookup-backup-result',
+        'publish-backup-snapshot',
         'retrieve-backup-snapshot',
+        'publish-offhost-backup-snapshot',
+        'verify-offhost-backup-snapshot',
+        'materialize-offhost-backup-package',
         'rehearse-backup-package',
         'restore-database',
         'seal-result-index',
@@ -375,6 +461,9 @@ def main():
             'place-registry-recovery',
             'observe-registry-recovery',
             'refresh-registry-recovery-observation',
+            'stop-registry-recovery-deployment',
+            'verify-registry-recovery-deployment-entry',
+            'authorize-registry-recovery-deployment-adoption',
             'check-registry-recovery-dispatch',
             'inspect-registry-recovery-dispatch',
             'open-registry-recovery-dispatch',
@@ -392,6 +481,7 @@ def main():
             'observe-release-maintenance',
             'observe-environment-control',
             'enter-managed-release',
+            'retire-managed-release',
             'enter-managed-restore',
             'retire-managed-restore',
             'select-managed-restore',
@@ -402,6 +492,7 @@ def main():
             'complete-managed-backup',
             'stop-runtime',
             'start-runtime',
+            'archive-environment',
             'prepare-candidate-validation',
             'prepare-recovery-replica',
             'prepare-restore-generation',
@@ -414,6 +505,8 @@ def main():
             'verify-release-deployment',
             'verify-release-gateway',
             'seal-release',
+            'prepare-release-build',
+            'prepare-release-final-build',
             'cancel-runtime',
             'gateway',
             '_admit-runtime',
@@ -422,7 +515,10 @@ def main():
             '_claim-restore-maintenance',
             '_admit-release-open',
             '_admit-restore-open',
+            '_observe-managed-backup',
             '_claim-managed-backup',
+            '_archive-subject',
+            '_complete-archive',
             *modes,
             *('_' + mode for mode in modes),
         ),
@@ -470,8 +566,12 @@ def main():
     parser.add_argument('--release-candidate')
     parser.add_argument('--release-candidate-sha256')
     parser.add_argument('--require-release-evidence', action='store_true')
+    parser.add_argument('--release-build-policy', type=Path)
+    parser.add_argument('--release-build-policy-sha256')
     parser.add_argument('--release-publication-policy', type=Path)
     parser.add_argument('--release-publication-policy-sha256')
+    parser.add_argument('--release-finalization-policy', type=Path)
+    parser.add_argument('--release-finalization-policy-sha256')
     parser.add_argument('--request', type=Path)
     parser.add_argument('--candidate-ref')
     parser.add_argument('--release-configuration-ref')
@@ -529,8 +629,10 @@ def main():
     parser.add_argument('--candidate-validation-policy-sha256')
     parser.add_argument('--runtime-policy', type=Path)
     parser.add_argument('--runtime-policy-sha256')
+    parser.add_argument('--recovered-observation-id')
     parser.add_argument('--stop-policy', type=Path)
     parser.add_argument('--stop-policy-sha256')
+    parser.add_argument('--archive-operation-id')
     parser.add_argument('--start-policy', type=Path)
     parser.add_argument('--start-policy-sha256')
     parser.add_argument('--cancel-policy', type=Path)
@@ -546,13 +648,21 @@ def main():
     registry_recovery_placement = args.action == 'place-registry-recovery'
     registry_recovery_open = args.action == 'open-registry-recovery-dispatch'
     registry_recovery_inspect = args.action == 'inspect-registry-recovery-dispatch'
+    registry_recovery_stop = args.action == 'stop-registry-recovery-deployment'
+    registry_deployment_adoption = args.action == 'authorize-registry-recovery-deployment-adoption'
+    registry_deployment_entry = (
+        args.action == 'verify-registry-recovery-deployment-entry' or registry_deployment_adoption
+    )
     registry_recovery_review = (
         args.action == 'check-registry-recovery-dispatch'
         or registry_recovery_open
         or registry_recovery_inspect
     )
     registry_recovery_refresh = (
-        args.action == 'refresh-registry-recovery-observation' or registry_recovery_review
+        args.action == 'refresh-registry-recovery-observation'
+        or registry_recovery_review
+        or registry_recovery_stop
+        or registry_deployment_entry
     )
     registry_recovery_observer = (
         args.action == 'observe-registry-recovery' or registry_recovery_refresh
@@ -569,6 +679,7 @@ def main():
         or registry_recovery_select
         or registry_recovery_entry
     )
+    archive = args.action == 'archive-environment'
     attach_observer = args.action == 'observe-attach'
     delivery_observer = args.action == 'observe-delivery'
     runtime_observer = args.action == 'observe-runtime'
@@ -577,6 +688,7 @@ def main():
     release_maintenance_observer = args.action == 'observe-release-maintenance'
     environment_control_observer = args.action == 'observe-environment-control'
     release_maintenance = args.action == 'enter-managed-release'
+    release_retirement = args.action == 'retire-managed-release'
     restore_maintenance = args.action == 'enter-managed-restore'
     restore_retirement = args.action == 'retire-managed-restore'
     managed_restore_selection = args.action == 'select-managed-restore'
@@ -586,6 +698,7 @@ def main():
     managed_backup_capture = args.action == 'capture-managed-backup'
     managed_backup_completion = args.action == 'complete-managed-backup'
     normal_runtime_stop = args.action == 'stop-runtime'
+    has_stop_policy = normal_runtime_stop or registry_recovery_stop or registry_deployment_entry
     normal_runtime_start = args.action == 'start-runtime'
     runtime_cancellation = args.action == 'cancel-runtime'
     gateway = args.action == 'gateway'
@@ -621,6 +734,9 @@ def main():
     candidate = args.action in ('candidate', '_candidate')
     inspect_release = args.action in ('inspect-release-build', '_inspect-release-build')
     publication = args.action == 'seal-release'
+    initial_build = args.action == 'prepare-release-build'
+    build_observation = args.action in ('release-build-source', '_release-build-source')
+    final_build = args.action == 'prepare-release-final-build'
     host_action = (
         attach_observer
         or delivery_observer
@@ -630,6 +746,7 @@ def main():
         or release_maintenance_observer
         or environment_control_observer
         or release_maintenance
+        or release_retirement
         or restore_maintenance
         or restore_retirement
         or managed_restore_selection
@@ -640,11 +757,14 @@ def main():
         or managed_backup_completion
         or normal_runtime_stop
         or normal_runtime_start
+        or archive
         or runtime_cancellation
         or gateway
         or candidate_validation
         or standalone_host_action
         or publication
+        or initial_build
+        or final_build
     )
     operation = args.action in ('operation', '_operation')
     registry_recovery_verify = args.action in (
@@ -684,6 +804,10 @@ def main():
     registry_disposition = args.action in (
         'settle-registry-recovery-disposition',
         '_settle-registry-recovery-disposition',
+        'inspect-registry-recovery-deployment',
+        '_inspect-registry-recovery-deployment',
+        'settle-registry-recovery-deployment',
+        '_settle-registry-recovery-deployment',
     )
     disposition_values = (args.registry_disposition_policy, args.registry_disposition_policy_sha256)
     registry_snapshot = args.action in ('snapshot-registry', '_snapshot-registry')
@@ -698,14 +822,28 @@ def main():
         '_claim-restore-maintenance',
         '_admit-release-open',
         '_admit-restore-open',
+        '_observe-managed-backup',
         '_claim-managed-backup',
+        '_archive-subject',
+        '_complete-archive',
     )
     privileged = (args.manager_uid, args.manager_gid, args.host_id)
     ordinary = (args.anchor_sha256, args.temporary, args.home)
     installed = (args.catalog, args.catalog_sha256)
     workspace = (args.workspace_ref, args.workspace_sha256)
     candidate_values = (args.release_candidate, args.release_candidate_sha256)
+    build_values = (args.release_build_policy, args.release_build_policy_sha256)
     publication_values = (args.release_publication_policy, args.release_publication_policy_sha256)
+    use_publication_policy = (
+        publication
+        or final_build
+        or inspect_release
+        or (candidate_validation and any(publication_values))
+    )
+    finalization_values = (
+        args.release_finalization_policy,
+        args.release_finalization_policy_sha256,
+    )
     validation_values = (args.candidate_validation_policy, args.candidate_validation_policy_sha256)
     web_values = (args.web, args.web_sha256)
     gateway_values = (args.web_hashes, args.web_output, args.gateway_group)
@@ -802,19 +940,22 @@ def main():
             or admission
             or candidate
             or inspect_release
+            or build_observation
             else bool(args.catalog_sha256)
             if registry_snapshot_verify
             else not any(installed)
         )
-        or not (all(disposition_values) if registry_disposition else not any(disposition_values))
+        or not (
+            all(disposition_values)
+            if registry_disposition or registry_deployment_adoption
+            else not any(disposition_values)
+        )
         or not (all(candidate_values) if candidate else not any(candidate_values))
         or (args.require_release_evidence and not candidate)
-        or not (
-            all(publication_values)
-            if publication or inspect_release
-            else not any(publication_values)
-        )
+        or not (all(publication_values) if use_publication_policy else not any(publication_values))
         or not (all(validation_values) if candidate_validation else not any(validation_values))
+        or not (all(build_values) if initial_build or build_observation else not any(build_values))
+        or not (all(finalization_values) if final_build else not any(finalization_values))
         or not (all(capture_values) if capture else not any(capture_values))
         or not (all(restore_values) if restoring else not any(restore_values))
         or not (all(chain_values) if recovery_chain else not any(chain_values))
@@ -855,8 +996,10 @@ def main():
         )
         or bool(args.result_index_sha256) != looking_up_index
         or not (all(runtime_values) if runtime_observer else not any(runtime_values))
-        or not (all(stop_values) if normal_runtime_stop else not any(stop_values))
+        or (args.recovered_observation_id is not None and not runtime_observer)
+        or not (all(stop_values) if has_stop_policy else not any(stop_values))
         or not (all(start_values) if normal_runtime_start else not any(start_values))
+        or bool(args.archive_operation_id) != archive
         or not (all(cancel_values) if runtime_cancellation else not any(cancel_values))
         or bool(args.request) != (operation or delivery_observer)
         or bool(args.registry_recovery_id) != registry_dispatch
@@ -898,10 +1041,13 @@ def main():
             else not any(registry_entry_values)
         )
         or not (all(entry_admission_values) if admitting_entry else not any(entry_admission_values))
-        or (registry_recovery_review and not args.registry_entry_admission_receipt_sha256)
+        or (
+            (registry_recovery_review or registry_deployment_entry)
+            and not args.registry_entry_admission_receipt_sha256
+        )
         or (
             args.registry_entry_admission_receipt_sha256 is not None
-            and not (serving or registry_recovery_review)
+            and not (serving or registry_recovery_review or registry_deployment_entry)
         )
         or bool(args.registry_snapshot_id) != (registry_snapshot or registry_snapshot_verify)
         or bool(args.registry_snapshot_receipt_sha256) != registry_snapshot_verify
@@ -915,6 +1061,7 @@ def main():
         or bool(args.release_operation_id)
         != (
             release_maintenance
+            or release_retirement
             or restore_maintenance
             or restore_retirement
             or managed_restore_selection
@@ -978,7 +1125,14 @@ def main():
             )
             print(json.dumps({'status': 'REGISTRY_PREPARED', **result}, sort_keys=True))
         elif registry_recovery_host:
-            _, runtime_hosts = entry['verify_runtime'](args.root, args.sha256)
+            manifest, runtime_hosts = entry['verify_runtime'](args.root, args.sha256)
+            executable = args.root / manifest['python']['executable_ref']
+            if Path(sys.executable) != executable:
+                os.execve(
+                    executable,
+                    [str(executable), *entry['FLAGS'], str(Path(__file__)), *sys.argv[1:]],
+                    {'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'TZ': 'UTC'},
+                )
             from backend.app.infrastructure.environment_lock import (
                 LIBRARY_REF,
                 NativeEnvironmentFiles,
@@ -989,6 +1143,8 @@ def main():
             )
             from backend.app.management.registry_recovery_dispatch_review import (
                 BLOCKED as DISPATCH_REVIEW_BLOCKED,
+            )
+            from backend.app.management.registry_recovery_dispatch_review import (
                 check_registry_recovery_dispatch,
                 inspect_registry_recovery_dispatch,
             )
@@ -1010,7 +1166,9 @@ def main():
             from backend.app.management.registry_recovery_selection import select_registry_recovery
 
             native = NativeEnvironmentFiles(args.root)
-            entry['validate_mappings'](args.root, (args.root / LIBRARY_REF,), runtime_hosts)
+            entry['validate_mappings'](
+                args.root, (executable, args.root / LIBRARY_REF), runtime_hosts
+            )
             if registry_recovery_select:
                 result = select_registry_recovery(native, args)
             else:
@@ -1023,6 +1181,24 @@ def main():
                     result = inspect_registry_recovery_dispatch(native, registry, args, entry)
                 elif registry_recovery_review:
                     result = check_registry_recovery_dispatch(native, registry, args, entry)
+                elif registry_deployment_adoption:
+                    from backend.app.management.registry_recovery_deployment_authorization import (
+                        authorize_deployment_adoption,
+                    )
+
+                    result = authorize_deployment_adoption(native, registry, args, entry)
+                elif registry_deployment_entry:
+                    from backend.app.management.registry_recovery_deployment_entry import (
+                        verify_recovered_deployment_entry,
+                    )
+
+                    result = verify_recovered_deployment_entry(native, registry, args, entry)
+                elif registry_recovery_stop:
+                    from backend.app.management.registry_recovery_deployment_stop import (
+                        stop_recovered_deployment,
+                    )
+
+                    result = stop_recovered_deployment(native, registry, args, entry)
                 elif registry_recovery_refresh:
                     result = refresh_registry_recovery_observation(native, registry, args, entry)
                 elif registry_recovery_observer:
@@ -1171,6 +1347,18 @@ def main():
                     result = prepare_candidate_validation(
                         catalog, registry, args, entry, Path(__file__)
                     )
+                elif archive:
+                    from backend.app.management.environment_archive import archive_environment
+
+                    result = archive_environment(catalog, registry, args, entry, Path(__file__))
+                elif initial_build:
+                    from backend.app.management.release_staging import prepare_release_build
+
+                    result = prepare_release_build(catalog, registry, args, entry, Path(__file__))
+                elif final_build:
+                    from backend.app.management.release_finalization import prepare_final_build
+
+                    result = prepare_final_build(catalog, registry, args, entry, Path(__file__))
                 elif publication:
                     from backend.app.management.release_publication import seal_release
 
@@ -1181,6 +1369,10 @@ def main():
                     result = enter_release_maintenance(
                         catalog, registry, args, entry, Path(__file__)
                     )
+                elif release_retirement:
+                    from backend.app.management.release_retirement import retire_managed_release
+
+                    result = retire_managed_release(catalog, registry, args, entry, Path(__file__))
                 elif restore_maintenance:
                     from backend.app.management.restore_execution import enter_managed_restore
 
@@ -1210,7 +1402,10 @@ def main():
 
                     result = capture_managed_backup(catalog, registry, args, Path(__file__))
                 elif managed_backup_completion:
-                    from backend.app.management.backup_completion import complete_managed_backup
+                    from backend.app.management.backup_completion import (
+                        LOCAL_STATUS,
+                        complete_managed_backup,
+                    )
 
                     result = complete_managed_backup(catalog, registry, args, Path(__file__))
                 elif environment_control_observer:
@@ -1232,9 +1427,16 @@ def main():
 
                     result = capture_release_source(catalog, args, entry)
                 elif runtime_observer:
-                    from backend.app.management.runtime_observation import capture_runtime
+                    if args.recovered_observation_id is None:
+                        from backend.app.management.runtime_observation import capture_runtime
 
-                    result = capture_runtime(catalog, args, entry)
+                        result = capture_runtime(catalog, args, entry)
+                    else:
+                        from backend.app.management.registry_recovered_runtime import (
+                            capture_recovered_runtime,
+                        )
+
+                        result = capture_recovered_runtime(catalog, registry, args, entry)
                 elif normal_runtime_start:
                     from backend.app.management.runtime_start import start_runtime
 
@@ -1260,21 +1462,35 @@ def main():
                         catalog, installed_record(args.request, code=INVALID), args
                     )
                 print(json.dumps(result, sort_keys=True))
+                if managed_backup_completion and result['status'] == LOCAL_STATUS:
+                    return 3
+        elif admission:
+            manifest, _ = entry['verify_runtime'](args.root, args.sha256)
+            executable = args.root / manifest['python']['executable_ref']
+            current = Path(sys.executable)
+            if current != executable:
+                entry['demand'](
+                    current.resolve(strict=True) == Path('/usr/bin/python3').resolve(strict=True),
+                    'Untrusted management callback bootstrap',
+                )
+                environment = entry['minimum_environment'](args.home, args.temporary)
+                command = [str(executable), *entry['FLAGS'], str(Path(__file__)), *sys.argv[1:]]
+                os.chdir(args.temporary)
+                os.execve(str(executable), command, environment)
+            result = target(args, entry)
+            sys.stdout.buffer.write(entry['canonical'](result))
         elif args.action.startswith('_'):
             result = target(args, entry)
             if serving:
                 return result
-            if admission:
-                sys.stdout.buffer.write(entry['canonical'](result))
-            else:
-                print(json.dumps(result, sort_keys=True))
-                if (maintenance or observe_open) and result['status'] == 'PENDING_RECONCILIATION':
-                    return 3
-                if (
-                    args.require_release_evidence
-                    and result['verification_readiness']['state'] != 'REQUIRED_EVIDENCE_RECORDED'
-                ):
-                    return 2
+            print(json.dumps(result, sort_keys=True))
+            if (maintenance or observe_open) and result['status'] == 'PENDING_RECONCILIATION':
+                return 3
+            if (
+                args.require_release_evidence
+                and result['verification_readiness']['state'] != 'REQUIRED_EVIDENCE_RECORDED'
+            ):
+                return 2
         else:
             manifest, _ = entry['verify_runtime'](args.root, args.sha256)
             executable = str(args.root / manifest['python']['executable_ref'])
@@ -1303,10 +1519,17 @@ def main():
     ) as error:
         failure = {
             'workspace': 'MANAGEMENT_WORKSPACE_UNVERIFIED',
+            'workspace-binding': 'MANAGEMENT_WORKSPACE_UNVERIFIED',
+            'archive-environment': 'MANAGEMENT_ARCHIVE_UNVERIFIED',
+            'archive-subject': 'MANAGEMENT_ARCHIVE_UNVERIFIED',
+            'complete-archive': 'MANAGEMENT_ARCHIVE_UNVERIFIED',
             'release': 'RELEASE_ARTIFACT_UNVERIFIED',
             'candidate': 'RELEASE_CANDIDATE_UNVERIFIED',
             'inspect-release-build': 'RELEASE_PUBLICATION_UNVERIFIED',
             'seal-release': 'RELEASE_PUBLICATION_UNVERIFIED',
+            'prepare-release-build': 'RELEASE_BUILD_UNVERIFIED',
+            'release-build-source': 'RELEASE_BUILD_UNVERIFIED',
+            'prepare-release-final-build': 'RELEASE_FINALIZATION_UNVERIFIED',
             'prepare-candidate-validation': 'CANDIDATE_VALIDATION_UNVERIFIED',
             'prepare-recovery-replica': 'RECOVERY_REPLICA_UNVERIFIED',
             'prepare-restore-generation': 'RESTORE_GENERATION_UNVERIFIED',
@@ -1331,8 +1554,21 @@ def main():
             'ready-registry-recovery': 'MANAGEMENT_REGISTRY_READINESS_UNVERIFIED',
             'inventory-registry-recovery': 'MANAGEMENT_REGISTRY_RECOVERY_INVENTORY_UNVERIFIED',
             'settle-registry-recovery-disposition': 'MANAGEMENT_REGISTRY_RECOVERY_DISPOSITION_UNVERIFIED',
+            'inspect-registry-recovery-deployment': (
+                'MANAGEMENT_REGISTRY_RECOVERY_OPENING_UNVERIFIED'
+            ),
+            'settle-registry-recovery-deployment': (
+                'MANAGEMENT_REGISTRY_RECOVERY_DEPLOYMENT_SETTLEMENT_UNVERIFIED'
+            ),
             'observe-registry-recovery': 'MANAGEMENT_REGISTRY_RECOVERY_HOST_UNVERIFIED',
             'refresh-registry-recovery-observation': 'MANAGEMENT_REGISTRY_RECOVERY_HOST_UNVERIFIED',
+            'stop-registry-recovery-deployment': 'MANAGEMENT_REGISTRY_RECOVERY_DEPLOYMENT_STOP_UNVERIFIED',
+            'verify-registry-recovery-deployment-entry': (
+                'MANAGEMENT_REGISTRY_RECOVERY_DEPLOYMENT_ENTRY_UNVERIFIED'
+            ),
+            'authorize-registry-recovery-deployment-adoption': (
+                'MANAGEMENT_REGISTRY_RECOVERY_DEPLOYMENT_ADOPTION_UNVERIFIED'
+            ),
             'check-registry-recovery-dispatch': 'MANAGEMENT_REGISTRY_RECOVERY_DISPATCH_UNVERIFIED',
             'inspect-registry-recovery-dispatch': 'MANAGEMENT_REGISTRY_RECOVERY_DISPATCH_UNVERIFIED',
             'open-registry-recovery-dispatch': 'MANAGEMENT_REGISTRY_RECOVERY_DISPATCH_OPEN_UNVERIFIED',
@@ -1364,7 +1600,11 @@ def main():
             'seal-backup-package': 'BACKUP_PACKAGE_UNVERIFIED',
             'verify-backup-package': 'BACKUP_PACKAGE_UNVERIFIED',
             'lookup-backup-result': 'BACKUP_PACKAGE_UNVERIFIED',
+            'publish-backup-snapshot': 'RESTIC_PUBLICATION_UNVERIFIED',
             'retrieve-backup-snapshot': 'RESTIC_SNAPSHOT_UNVERIFIED',
+            'publish-offhost-backup-snapshot': 'OFFHOST_BACKUP_UNVERIFIED',
+            'verify-offhost-backup-snapshot': 'OFFHOST_BACKUP_UNVERIFIED',
+            'materialize-offhost-backup-package': 'OFFHOST_BACKUP_UNVERIFIED',
             'rehearse-backup-package': 'BACKUP_REHEARSAL_UNVERIFIED',
             'restore-database': 'DATABASE_RESTORE_UNVERIFIED',
             'seal-result-index': 'ORIGINAL_RESULT_INDEX_UNVERIFIED',

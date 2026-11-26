@@ -84,20 +84,20 @@ class GuideWorker:
             self.ordinary, 'recover_local_commands', False
         )
 
-        # Verify existing schema before acquiring the exclusive process owner;
-        # startup never initializes, drops or migrates an application database.
+        # Legacy storage keeps its existing startup check. Ordinary environments
+        # can inspect their database only after acquiring the stable owner.
         def verify():
             if self.ordinary is None:
                 with self.database.transaction():
                     pass
-            elif recover or recover_local:
-                self.database.preflight()
             self.catalog.collaboration  # Validate V1.5 fixed resources; no Chat admission or credentials.
 
         await _native(verify)
         try:
             await _native(self.process_lock.acquire)
             if self.ordinary is not None:
+                if recover or recover_local:
+                    await _native(self.ordinary.preflight)
                 await _native(self.ordinary.before_recovery)
             self.executor = Idempotency(self.database, self.process_lock, clock=self.clock)
             cleared = (

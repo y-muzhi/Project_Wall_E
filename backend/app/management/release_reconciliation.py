@@ -8,7 +8,9 @@ from backend.app.infrastructure.environment_files import (
 
 from .operation_contract import (
     DENIED,
+    RECONFIGURE,
     RESOURCE,
+    ROLLBACK_CODE,
     UNAVAILABLE,
     VERSION,
     installed_record,
@@ -71,7 +73,7 @@ def verify_opened_evidence(catalog, root, request, selected, attachment, receipt
     return receipt
 
 
-def adopt_opened_deployment(
+def projected_opened_registration(
     connection, operation, row, grant, request, receipt, *, recovery=None, business_entry=None
 ):
     target = grant['target']
@@ -121,20 +123,58 @@ def adopt_opened_deployment(
             'origin': business_entry,
             **{key: target[key] for key in TARGET[1:]},
         }
+    return work, outcome
+
+
+def opened_registration_row(row, grant, work, outcome):
+    target = grant['target']
+    return {
+        **dict(row),
+        'record_version': outcome['record_version'],
+        'configuration_ref': stored(grant['target_attachment']),
+        'configuration_sha256': target['configuration_sha256'],
+        'program_source': target['program_sha256'],
+        'work_package_json': stored(work),
+    }
+
+
+def update_opened_registration(connection, previous, target):
     updated = connection.execute(
         'UPDATE managed_environments SET record_version=?, configuration_ref=?, configuration_sha256=?, '
         'program_source=?, work_package_json=? WHERE environment_id=? AND record_version=? AND assignment_generation=?',
         (
-            next_version,
-            stored(grant['target_attachment']),
-            target['configuration_sha256'],
-            target['program_sha256'],
-            stored(work),
-            row['environment_id'],
-            row['record_version'],
-            row['assignment_generation'],
+            *(
+                target[key]
+                for key in (
+                    'record_version',
+                    'configuration_ref',
+                    'configuration_sha256',
+                    'program_source',
+                    'work_package_json',
+                )
+            ),
+            previous['environment_id'],
+            previous['record_version'],
+            previous['assignment_generation'],
         ),
     )
+    require(updated.rowcount == 1, VERSION)
+
+
+def adopt_opened_deployment(
+    connection, operation, row, grant, request, receipt, *, recovery=None, business_entry=None
+):
+    work, outcome = projected_opened_registration(
+        connection,
+        operation,
+        row,
+        grant,
+        request,
+        receipt,
+        recovery=recovery,
+        business_entry=business_entry,
+    )
+    update_opened_registration(connection, row, opened_registration_row(row, grant, work, outcome))
     completed = connection.execute(
         "UPDATE management_operations SET status='SUCCEEDED',revision=revision+1 "
         "WHERE operation_id=? AND status='RUNNING' AND revision=?",
@@ -145,12 +185,20 @@ def adopt_opened_deployment(
         "WHERE operation_id=? AND ordinal=1 AND status='DISPATCHING'",
         (stored(outcome), operation['operation_id']),
     )
-    require(updated.rowcount == completed.rowcount == recorded.rowcount == 1, VERSION)
+    require(completed.rowcount == recorded.rowcount == 1, VERSION)
+
+
+def retained_business_origin(catalog, row, action):
+    if action not in (ROLLBACK_CODE, RECONFIGURE):
+        return None
+    from .management_query import business_entry
+
+    return business_entry(catalog, row, decoded(row['work_package_json']))
 
 
 def reconcile_release(connection, catalog, principal, operation):
     require(principal.role == 'MANAGER', DENIED)
-    if operation['status'] == 'SUCCEEDED':
+    if operation['status'] in ('SUCCEEDED', 'CANCELLED'):
         return
     row = row_for_release(connection, principal, decoded(operation['intent_json']))
     require(
@@ -164,11 +212,25 @@ def reconcile_release(connection, catalog, principal, operation):
         step['status'] == 'DISPATCHING' and step['external_identity_json'] is not None, RESOURCE
     )
     external = decoded(step['external_identity_json'])
-    request = external.get('opening')
-    if request is None:
-        return
     grant = external['maintenance']
     require(grant['environment_id'] == row['environment_id'], CHANGED)
+    request = external.get('opening')
+    if request is None:
+        from .release_retirement import original_retirement
+        from .restore_retirement import record_retirement
+
+        retired = original_retirement(catalog, grant)
+        if retired is not None:
+            record_retirement(connection, operation, external, retired)
+        return
     receipt = opened_evidence(catalog, grant, request)
     if receipt is not None:
-        adopt_opened_deployment(connection, operation, row, grant, request, receipt)
+        adopt_opened_deployment(
+            connection,
+            operation,
+            row,
+            grant,
+            request,
+            receipt,
+            business_entry=retained_business_origin(catalog, row, operation['action']),
+        )

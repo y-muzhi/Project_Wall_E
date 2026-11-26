@@ -127,8 +127,22 @@ def ensure_entry_store(installation):
     location = installation.directory_root / RECOVERY_ENTRY
     with protected_directory(installation.directory_root) as root:
         require(identity(os.fstat(root)) == installation.generation_root_facts, UNVERIFIED)
-        if RECOVERY_ENTRY not in os.listdir(root):
+        created = RECOVERY_ENTRY not in os.listdir(root)
+        if created:
             os.mkdir(RECOVERY_ENTRY, mode=0o700, dir_fd=root)
+        with protected_directory(location) as store:
+            check_ext4(store)
+            metadata = os.fstat(store)
+            mode = stat.S_IMODE(metadata.st_mode)
+            inherited_empty = (
+                mode == 0o2700 and metadata.st_gid == installation.gid and not os.listdir(store)
+            )
+            if created or inherited_empty:
+                # A setgid installation directory passes the bit to new child directories.
+                os.fchmod(store, 0o700)
+            else:
+                require(mode == 0o700, UNVERIFIED)
+            os.fsync(store)
         os.fsync(root)
     return location
 

@@ -7,8 +7,8 @@ from backend.app.management.release_artifacts import index_entries, indexed_file
 
 from .environment_backup_package import read_policy
 from .environment_command import admission_inputs
-from .environment_files import absolute, decode, read_protected, require
-from .environment_installation import ANCHOR_NAME, RESTORE_MODE, sha_value
+from .environment_files import absolute, decode, require
+from .environment_installation import ANCHOR_NAME, RESTORE_MODE, read_installation_anchor, sha_value
 from .environment_lock import NativeEnvironmentFiles
 from .environment_recovery_installation import checked_ref
 from .environment_release_preflight import read_reference
@@ -21,7 +21,7 @@ INVALID = 'RELEASE_GATEWAY_INTENT_MISMATCH'
 
 def load_site(ref, runtime, entry):
     anchor, expected = checked_ref(ref, ANCHOR_NAME)
-    record = decode(read_protected(anchor), INVALID)
+    record = read_installation_anchor(anchor, expected)
     project = absolute(record['project'], INVALID)
     program = entry['verify_program'](project)
     installed, _ = admission_inputs(

@@ -15,21 +15,12 @@ SAFE_STATIC_PATH = re.compile(r'/[A-Za-z0-9._/-]{1,240}')
 PURPOSE_LABELS = {'DEVELOPMENT': '开发环境', 'INTEGRATION': '集成环境', 'CANDIDATE': '候选验证环境'}
 
 
-def site_block(installation, accounts, *, previous_frontend=None):
-    from backend.app.infrastructure.environment_files import (
-        decode,
-        digest,
-        exact,
-        read_protected,
-        require,
-    )
-    from backend.app.infrastructure.environment_installation import ACCESS_NAME
+def site_block(installation, accounts, *, previous_frontend=None, vite_socket=None):
+    from backend.app.infrastructure.environment_files import exact, require
+    from backend.app.infrastructure.environment_installation import read_access_policy
 
     code = 'GATEWAY_POLICY_MISMATCH'
-    reference = installation.description['access_policy_ref']
-    policy_raw = read_protected(installation.anchor.parent / ACCESS_NAME)
-    require(digest(policy_raw) == reference['sha256'], code)
-    policy = decode(policy_raw, code)
+    policy = read_access_policy(installation)
     origin = policy['public_origin']
     socket = policy['upstream_socket']
     frontend = str(installation.path('frontend'))
@@ -38,7 +29,8 @@ def site_block(installation, accounts, *, previous_frontend=None):
         and len(socket.encode('utf-8')) < 108
         and SAFE_SOCKET_PATH.fullmatch(socket)
         and SAFE_STATIC_PATH.fullmatch(frontend)
-        and (previous_frontend is None or SAFE_STATIC_PATH.fullmatch(str(previous_frontend))),
+        and (previous_frontend is None or SAFE_STATIC_PATH.fullmatch(str(previous_frontend)))
+        and (vite_socket is None or previous_frontend is None),
         code,
     )
     names = [principal['principal_id'] for principal in policy['principals']]
@@ -65,6 +57,7 @@ def site_block(installation, accounts, *, previous_frontend=None):
     )
     body = json.dumps(public, ensure_ascii=False)
     assets = asset_handlers(frontend, previous_frontend)
+    routes = frontend_handlers(frontend, assets, origin, vite_socket)
     return f"""{origin} {{
     bind 127.0.0.1
     tls internal
@@ -83,32 +76,123 @@ def site_block(installation, accounts, *, previous_frontend=None):
         }}
         @api path /api/*
         handle @api {{
-            request_header -Authorization
-            request_header -Proxy-Authorization
-            request_header -Cookie
-            request_header -Forwarded
-            request_header -X-WALL-E-Auth-*
-            reverse_proxy unix/{socket} {{
+{private_headers('            ')}            reverse_proxy unix/{socket} {{
                 header_up X-WALL-E-Auth-Principal {{http.auth.user.id}}
             }}
         }}
-        @asset path /assets/*
-        handle @asset {{
-{assets}        }}
-        @page path_regexp wallepage ^(/|/requirements(/[1-9][0-9]*(/documents/[1-9][0-9]*/code-tasks)?)?|/code-tasks/[1-9][0-9]*|/testing(/plans|/tasks/[1-9][0-9]*)?|/settings/(code|testing))$
-        handle @page {{
-            header Cache-Control "no-store"
-            header Content-Security-Policy "frame-ancestors 'none'"
-            root * {frontend}
-            rewrite * /index.html
-            file_server
-        }}
-        handle {{
+{routes}        handle {{
             respond 404
         }}
     }}
 }}
 """
+
+
+def private_headers(indent):
+    names = (
+        'Authorization',
+        'Proxy-Authorization',
+        'Cookie',
+        'Forwarded',
+        'X-WALL-E-Auth-*',
+    )
+    return ''.join(f'{indent}request_header -{name}\n' for name in names)
+
+
+def frontend_handlers(frontend, assets, origin, vite_socket):
+    if vite_socket is None:
+        pages = f"""            header Cache-Control "no-store"
+            header Content-Security-Policy "frame-ancestors 'none'"
+            root * {frontend}
+            rewrite * /index.html
+            file_server
+"""
+        development = ''
+    else:
+        proxy = f"""{private_headers('            ')}            reverse_proxy unix/{vite_socket}
+"""
+        pages = f"""            header Cache-Control "no-store"
+            header Content-Security-Policy "frame-ancestors 'none'"
+{proxy}"""
+        development = f"""        @development_hmr path /__walle_hmr
+        handle @development_hmr {{
+            @development_origin {{
+                method GET
+                header Origin {origin}
+                header Upgrade websocket
+            }}
+            handle @development_origin {{
+{private_headers('                ')}                reverse_proxy unix/{vite_socket}
+            }}
+            respond 403
+        }}
+        @development_module {{
+            path /@vite/* /@react-refresh /@id/* /@fs/* /src/* /node_modules/.vite/*
+            path /node_modules/vite/dist/client/env.mjs
+        }}
+        handle @development_module {{
+            header Cache-Control "no-store"
+            header Cross-Origin-Resource-Policy "same-origin"
+{proxy}        }}
+"""
+    return f"""{development}        @asset path /assets/*
+        handle @asset {{
+{assets}        }}
+        @page path_regexp wallepage ^(/|/requirements(/[1-9][0-9]*(/documents/[1-9][0-9]*/code-tasks)?)?|/code-tasks/[1-9][0-9]*|/testing(/plans|/tasks/[1-9][0-9]*)?|/settings/(code|testing))$
+        handle @page {{
+{pages}        }}
+"""
+
+
+def development_sockets(entries, installations):
+    from backend.app.infrastructure.environment_files import absolute, protected_directory, require
+    from backend.app.infrastructure.environment_installation import WORKSPACE_PURPOSES
+
+    code = 'DEVELOPMENT_FRONTEND_NOT_ADMITTED'
+    installed = {item.environment_id: item for item in installations}
+    paths = {}
+    for environment_id, address in entries:
+        item = installed.get(environment_id)
+        require(
+            item is not None
+            and environment_id not in paths
+            and item.description['purpose'] in WORKSPACE_PURPOSES
+            and 'deployment_slot' not in item.description
+            and 'recovery_replica' not in item.description
+            and item.ingress_group is not None,
+            code,
+        )
+        socket = absolute(address, code)
+        require(
+            socket.name == 'vite.sock'
+            and socket.parent.name == environment_id
+            and SAFE_SOCKET_PATH.fullmatch(address)
+            and not any(
+                socket.is_relative_to(root)
+                for scope in installations
+                for root in (scope.environment_root, scope.project, scope.schema)
+            ),
+            code,
+        )
+        with protected_directory(socket.parent) as fd:
+            parent = os.fstat(fd)
+            require(stat.S_IMODE(parent.st_mode) == 0o755, code)
+            try:
+                metadata = os.stat(socket.name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                # systemd may bind the configured path after this Caddyfile is rendered.
+                pass
+            else:
+                require(
+                    stat.S_ISSOCK(metadata.st_mode)
+                    and metadata.st_nlink == 1
+                    and metadata.st_uid == 0
+                    and metadata.st_gid == item.ingress_group
+                    and stat.S_IMODE(metadata.st_mode) == 0o660,
+                    code,
+                )
+        paths[environment_id] = socket
+    return paths
 
 
 def asset_handlers(frontend, previous_frontend):
@@ -129,13 +213,31 @@ def asset_handlers(frontend, previous_frontend):
 """
 
 
+def installed_site(anchor, expected, runtime_sha256, verify_program):
+    from backend.app.infrastructure.environment_files import absolute, require
+    from backend.app.infrastructure.environment_installation import (
+        load_installation,
+        read_installation_anchor,
+    )
+
+    code = 'GATEWAY_POLICY_MISMATCH'
+    record = read_installation_anchor(anchor, expected)
+    project = absolute(record['project'], code)
+    installation = load_installation(anchor, expected, runtime_sha256, project)
+    require(verify_program(project) == installation.description['program_source']['sha256'], code)
+    return installation
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--project', required=True, type=Path)
+    parser.add_argument(
+        '--project', required=True, type=Path, help='Trusted gateway renderer program'
+    )
     parser.add_argument('--runtime-sha256', required=True)
     parser.add_argument('--runtime-entry', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--site', nargs=2, action='append', metavar=('ANCHOR', 'SHA256'))
+    parser.add_argument('--vite-site', nargs=2, action='append', metavar=('ENVIRONMENT', 'SOCKET'))
     parser.add_argument('--hashes-file', type=Path, required=True)
     parser.add_argument('--gateway-group', type=int)
     parser.add_argument('--release-stage-policy', type=Path)
@@ -145,7 +247,7 @@ def main():
     stage_values = (args.release_stage_policy, args.release_stage_policy_sha256, args.runtime_root)
     release_stage = bool(args.release_stage_policy)
     if not (
-        all(stage_values) and not args.site
+        all(stage_values) and not (args.site or args.vite_site)
         if release_stage
         else not any(stage_values) and args.site
     ):
@@ -169,7 +271,7 @@ def main():
         ):
             raise ValueError('Runtime entry is not trusted')
         entry = runpy.run_path(str(path))
-        program_sha = entry['verify_program'](args.project)
+        entry['verify_program'](args.project)
     except (OSError, RuntimeError, ValueError, KeyError):
         print('GATEWAY_CONFIGURATION_NOT_ADMITTED', file=sys.stderr)
         return 2
@@ -187,7 +289,6 @@ def main():
         read_protected,
         require,
     )
-    from backend.app.infrastructure.environment_installation import load_installation
 
     try:
         stage = None
@@ -201,7 +302,7 @@ def main():
             installations, previous, stage = gateway_release(args, entry)
         else:
             installations = [
-                load_installation(Path(anchor), expected, args.runtime_sha256, args.project)
+                installed_site(Path(anchor), expected, args.runtime_sha256, entry['verify_program'])
                 for anchor, expected in args.site
             ]
         code = 'GATEWAY_POLICY_MISMATCH'
@@ -211,14 +312,7 @@ def main():
         require(
             (isolated_candidate or ordinary_pair)
             and len({item.environment_id for item in installations}) == len(installations)
-            and len({item.ingress_group for item in installations}) == len(installations)
-            and (
-                release_stage
-                or all(
-                    item.description['program_source']['sha256'] == program_sha
-                    for item in installations
-                )
-            ),
+            and len({item.ingress_group for item in installations}) == len(installations),
             code,
         )
         if isolated_candidate:
@@ -230,6 +324,7 @@ def main():
                 candidate.project,
                 candidate.description['release_validation'],
             )
+        vite = development_sockets(args.vite_site or (), installations)
         all_credentials = decode(read_protected(args.hashes_file), code)
         exact(all_credentials, [item.environment_id for item in installations], code)
         output = ''.join(
@@ -237,6 +332,7 @@ def main():
                 item,
                 all_credentials[item.environment_id],
                 previous_frontend=previous if release_stage and index == 0 else None,
+                vite_socket=vite.get(item.environment_id),
             )
             for index, item in enumerate(installations)
         )

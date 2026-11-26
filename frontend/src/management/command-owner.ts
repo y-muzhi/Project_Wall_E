@@ -104,7 +104,16 @@ export class ManagementCommands {
     const { operation, receipt } = outcome;
     if (
       command.kind !== 'CONTROL' ||
-      !['RELEASE', 'START', 'STOP', 'BACKUP', 'RESTORE'].includes(operation.original.action) ||
+      ![
+        'RELEASE',
+        'ROLLBACK_CODE',
+        'RECONFIGURE',
+        'START',
+        'STOP',
+        'ARCHIVE',
+        'BACKUP',
+        'RESTORE',
+      ].includes(operation.original.action) ||
       operation.original.id !== command.operation_id ||
       receipt.command !== command.action ||
       receipt.operationRevision < command.target_version ||

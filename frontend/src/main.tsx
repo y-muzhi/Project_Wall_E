@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { Crepe } from '@milkdown/crepe';
 import { installSourceNodes } from './documents/source-nodes.ts';
+import { validateLocalDraftSnapshot } from './documents/recovery-store.ts';
 import { ApiClient } from './api/client.ts';
 import {
   EnvironmentEntryError,
@@ -76,7 +77,15 @@ async function mountApplication(environment: BoundEnvironment, signal: AbortSign
       storage,
     );
     const root = createRoot(container);
-    root.render(<Application router={router} connection={connection} />);
+    const validateArchivedDraft = (value: unknown) =>
+      parser.editor.action((ctx) => validateLocalDraftSnapshot(ctx, value));
+    root.render(
+      <Application
+        router={router}
+        connection={connection}
+        validateArchivedDraft={validateArchivedDraft}
+      />,
+    );
     function pageExit(event: PageTransitionEvent): void {
       connection.disconnected();
       if (event.persisted) return;

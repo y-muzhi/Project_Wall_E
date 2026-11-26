@@ -41,7 +41,8 @@ STATEMENTS = (
         original_read_allowed INTEGER NOT NULL CHECK(original_read_allowed IN (0, 1)),
         action TEXT NOT NULL CHECK(action IN ('CREATE', 'ATTACH', 'START', 'STOP', 'HANDOFF',
             'REGISTER_DELIVERY', 'ARCHIVE', 'CLEANUP', 'RELEASE', 'RECONFIGURE', 'BACKUP', 'RESTORE', 'ROLLBACK_CODE')),
-        environment_id TEXT NOT NULL REFERENCES managed_environments(environment_id) DEFERRABLE INITIALLY DEFERRED,
+        environment_id TEXT NOT NULL REFERENCES managed_environments(environment_id) \
+DEFERRABLE INITIALLY DEFERRED,
         expected_record_version INTEGER CHECK(expected_record_version BETWEEN 1 AND 9007199254740991),
         expected_assignment_generation INTEGER CHECK(expected_assignment_generation BETWEEN 1 AND 9007199254740991),
         intent_version INTEGER NOT NULL CHECK(intent_version = 1),
@@ -70,11 +71,13 @@ STATEMENTS = (
         operation_id TEXT NOT NULL REFERENCES management_operations(operation_id),
         ordinal INTEGER NOT NULL CHECK(ordinal >= 1),
         step_kind TEXT NOT NULL,
-        status TEXT NOT NULL CHECK(status IN ('PLANNED', 'DISPATCHING', 'SUCCEEDED', 'FAILED', 'UNKNOWN', 'SKIPPED')),
+        status TEXT NOT NULL CHECK(status IN ('PLANNED', 'DISPATCHING', \
+'SUCCEEDED', 'FAILED', 'UNKNOWN', 'SKIPPED')),
         executor_ref TEXT,
         external_identity_json TEXT CHECK(json_valid(external_identity_json)),
         result_json TEXT CHECK(json_valid(result_json)),
-        CHECK(status NOT IN ('DISPATCHING','UNKNOWN') OR (executor_ref IS NOT NULL AND external_identity_json IS NOT NULL)),
+        CHECK(status NOT IN ('DISPATCHING','UNKNOWN') OR (executor_ref IS NOT NULL AND \
+external_identity_json IS NOT NULL)),
         PRIMARY KEY(operation_id, ordinal)
     ) STRICT, WITHOUT ROWID""",
     """CREATE TABLE resource_claims(
@@ -175,6 +178,11 @@ HISTORY_PROTECTION = (
 )
 
 RECOVERY_RESOLUTION_SCHEMA_VERSION = 3
+PRE_DISPATCH_SCHEMA_VERSION = 4
+DEPLOYMENT_ADOPTION_SCHEMA_VERSION = 5
+ROLLBACK_RECOVERY_SCHEMA_VERSION = 6
+RECONFIGURATION_RECOVERY_SCHEMA_VERSION = 7
+RELEASE_RETIREMENT_SCHEMA_VERSION = 8
 OUTCOME_TABLE = 'registry_recovery_outcomes'
 OUTCOME_STATEMENT = f"""CREATE TABLE {OUTCOME_TABLE}(
     operation_id TEXT PRIMARY KEY,
@@ -185,7 +193,9 @@ OUTCOME_STATEMENT = f"""CREATE TABLE {OUTCOME_TABLE}(
     source_snapshot_sha256 TEXT NOT NULL CHECK(length(source_snapshot_sha256) = 64),
     policy_sha256 TEXT NOT NULL CHECK(length(policy_sha256) = 64),
     evidence_sha256 TEXT NOT NULL CHECK(length(evidence_sha256) = 64),
-    disposition TEXT NOT NULL CHECK(disposition IN ('UNDISPATCHED_CANCELLED', 'BACKUP_COMPLETED')),
+    disposition TEXT NOT NULL CHECK(disposition IN ('UNDISPATCHED_CANCELLED', \
+'UNDISPATCHED_RESERVED_CANCELLED', 'BACKUP_COMPLETED', \
+'STOP_COMPLETED', 'RESTORE_RETIRED')),
     recorded_at TEXT NOT NULL,
     FOREIGN KEY(operation_id, source_registry_generation)
         REFERENCES management_operations(operation_id, registry_generation),
@@ -209,7 +219,12 @@ OUTCOME_PROTECTION = (
             AND registry_generation = NEW.source_registry_generation
             AND revision = NEW.source_revision AND intent_sha256 = NEW.source_intent_sha256
             AND ((NEW.disposition = 'UNDISPATCHED_CANCELLED' AND action = 'START' AND status = 'WAITING_CAPACITY')
-                OR (NEW.disposition = 'BACKUP_COMPLETED' AND action = 'BACKUP' AND status IN ('RUNNING','UNKNOWN','SUCCEEDED')))
+                OR (NEW.disposition = 'UNDISPATCHED_RESERVED_CANCELLED' AND action = 'START' \
+AND status = 'ACCEPTED')
+                OR (NEW.disposition = 'BACKUP_COMPLETED' AND action = 'BACKUP' \
+AND status IN ('RUNNING','UNKNOWN','SUCCEEDED'))
+                OR (NEW.disposition = 'STOP_COMPLETED' AND action = 'STOP' AND status IN ('ACCEPTED','UNKNOWN','SUCCEEDED'))
+                OR (NEW.disposition = 'RESTORE_RETIRED' AND action = 'RESTORE' AND status IN ('RUNNING','CANCELLED')))
         )
     BEGIN SELECT RAISE(ABORT, 'MANAGEMENT_RECOVERY_OUTCOME_UNBOUND'); END""",
     *(
@@ -219,14 +234,133 @@ OUTCOME_PROTECTION = (
     ),
 )
 
+PRE_DISPATCH_TABLES = (
+    *(
+        statement.replace('CHECK(schema_version = 3)', 'CHECK(schema_version = 4)')
+        for statement in RESOLUTION_TABLES[:-1]
+    ),
+    OUTCOME_STATEMENT.replace(
+        "'STOP_COMPLETED', 'RESTORE_RETIRED'))",
+        "'STOP_COMPLETED', 'RESTORE_RETIRED', 'UNSTARTED_OPERATION_CANCELLED'))",
+    ),
+)
+
+PRE_DISPATCH_PROTECTION = (
+    OUTCOME_PROTECTION[0].replace(
+        "OR (NEW.disposition = 'RESTORE_RETIRED'",
+        "OR (NEW.disposition = 'UNSTARTED_OPERATION_CANCELLED' "
+        "AND action IN ('ARCHIVE','RELEASE','BACKUP','RESTORE') AND status = 'ACCEPTED')\n"
+        "                OR (NEW.disposition = 'RESTORE_RETIRED'",
+    ),
+    *OUTCOME_PROTECTION[1:],
+)
+
+DEPLOYMENT_ADOPTION_TABLES = (
+    *(
+        statement.replace('CHECK(schema_version = 4)', 'CHECK(schema_version = 5)')
+        for statement in PRE_DISPATCH_TABLES[:-1]
+    ),
+    PRE_DISPATCH_TABLES[-1].replace(
+        "'UNSTARTED_OPERATION_CANCELLED'))",
+        "'UNSTARTED_OPERATION_CANCELLED', 'OPENED_DEPLOYMENT_ADOPTED'))",
+    ),
+)
+
+DEPLOYMENT_ADOPTION_PROTECTION = (
+    PRE_DISPATCH_PROTECTION[0].replace(
+        "OR (NEW.disposition = 'RESTORE_RETIRED'",
+        "OR (NEW.disposition = 'OPENED_DEPLOYMENT_ADOPTED' "
+        "AND action IN ('RELEASE','RESTORE') AND status = 'RUNNING' AND cancel_requested = 0)\n"
+        "                OR (NEW.disposition = 'RESTORE_RETIRED'",
+    ),
+    *PRE_DISPATCH_PROTECTION[1:],
+)
+
+ROLLBACK_RECOVERY_TABLES = (
+    *(
+        statement.replace('CHECK(schema_version = 5)', 'CHECK(schema_version = 6)')
+        for statement in DEPLOYMENT_ADOPTION_TABLES[:-1]
+    ),
+    DEPLOYMENT_ADOPTION_TABLES[-1],
+)
+
+ROLLBACK_RECOVERY_PROTECTION = (
+    DEPLOYMENT_ADOPTION_PROTECTION[0]
+    .replace(
+        "action IN ('ARCHIVE','RELEASE','BACKUP','RESTORE')",
+        "action IN ('ARCHIVE','RELEASE','ROLLBACK_CODE','BACKUP','RESTORE')",
+    )
+    .replace(
+        "action IN ('RELEASE','RESTORE') AND status = 'RUNNING'",
+        "action IN ('RELEASE','ROLLBACK_CODE','RESTORE') AND status = 'RUNNING'",
+    ),
+    *DEPLOYMENT_ADOPTION_PROTECTION[1:],
+)
+
+RECONFIGURATION_RECOVERY_TABLES = (
+    *(
+        statement.replace('CHECK(schema_version = 6)', 'CHECK(schema_version = 7)')
+        for statement in ROLLBACK_RECOVERY_TABLES[:-1]
+    ),
+    ROLLBACK_RECOVERY_TABLES[-1],
+)
+
+RECONFIGURATION_RECOVERY_PROTECTION = (
+    ROLLBACK_RECOVERY_PROTECTION[0]
+    .replace(
+        "action IN ('ARCHIVE','RELEASE','ROLLBACK_CODE','BACKUP','RESTORE')",
+        "action IN ('ARCHIVE','RELEASE','ROLLBACK_CODE','RECONFIGURE','BACKUP','RESTORE')",
+    )
+    .replace(
+        "action IN ('RELEASE','ROLLBACK_CODE','RESTORE') AND status = 'RUNNING'",
+        "action IN ('RELEASE','ROLLBACK_CODE','RECONFIGURE','RESTORE') AND status = 'RUNNING'",
+    ),
+    *ROLLBACK_RECOVERY_PROTECTION[1:],
+)
+
+RELEASE_RETIREMENT_TABLES = (
+    *(
+        statement.replace('CHECK(schema_version = 7)', 'CHECK(schema_version = 8)')
+        for statement in RECONFIGURATION_RECOVERY_TABLES[:-1]
+    ),
+    RECONFIGURATION_RECOVERY_TABLES[-1].replace(
+        "'OPENED_DEPLOYMENT_ADOPTED'))",
+        "'OPENED_DEPLOYMENT_ADOPTED', 'RELEASE_RETIRED'))",
+    ),
+)
+
+RELEASE_RETIREMENT_PROTECTION = (
+    RECONFIGURATION_RECOVERY_PROTECTION[0].replace(
+        "OR (NEW.disposition = 'RESTORE_RETIRED'",
+        "OR (NEW.disposition = 'RELEASE_RETIRED' "
+        "AND action IN ('RELEASE','ROLLBACK_CODE','RECONFIGURE') "
+        "AND ((status = 'RUNNING' AND cancel_requested = 0) OR (status = 'CANCELLED' AND cancel_requested = 1)))\n"
+        "                OR (NEW.disposition = 'RESTORE_RETIRED'",
+    ),
+    *RECONFIGURATION_RECOVERY_PROTECTION[1:],
+)
+
 RECOVERY_TABLES = {
     RESTORED_SCHEMA_VERSION: RESTORED_TABLES,
     RECOVERY_RESOLUTION_SCHEMA_VERSION: RESOLUTION_TABLES,
+    PRE_DISPATCH_SCHEMA_VERSION: PRE_DISPATCH_TABLES,
+    DEPLOYMENT_ADOPTION_SCHEMA_VERSION: DEPLOYMENT_ADOPTION_TABLES,
+    ROLLBACK_RECOVERY_SCHEMA_VERSION: ROLLBACK_RECOVERY_TABLES,
+    RECONFIGURATION_RECOVERY_SCHEMA_VERSION: RECONFIGURATION_RECOVERY_TABLES,
+    RELEASE_RETIREMENT_SCHEMA_VERSION: RELEASE_RETIREMENT_TABLES,
 }
 
 RECOVERY_TRIGGERS = {
     RESTORED_SCHEMA_VERSION: HISTORY_PROTECTION,
     RECOVERY_RESOLUTION_SCHEMA_VERSION: (*HISTORY_PROTECTION, *OUTCOME_PROTECTION),
+    PRE_DISPATCH_SCHEMA_VERSION: (*HISTORY_PROTECTION, *PRE_DISPATCH_PROTECTION),
+    DEPLOYMENT_ADOPTION_SCHEMA_VERSION: (*HISTORY_PROTECTION, *DEPLOYMENT_ADOPTION_PROTECTION),
+    ROLLBACK_RECOVERY_SCHEMA_VERSION: (*HISTORY_PROTECTION, *ROLLBACK_RECOVERY_PROTECTION),
+    RECONFIGURATION_RECOVERY_SCHEMA_VERSION: (
+        *HISTORY_PROTECTION,
+        *RECONFIGURATION_RECOVERY_PROTECTION,
+    ),
+    RELEASE_RETIREMENT_SCHEMA_VERSION: (*HISTORY_PROTECTION, *RELEASE_RETIREMENT_PROTECTION),
 }
 
 SCHEMAS = {

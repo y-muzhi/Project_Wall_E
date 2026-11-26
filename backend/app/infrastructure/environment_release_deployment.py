@@ -1,10 +1,10 @@
 """Prepare one fixed release under an existing environment's stable data and lock."""
 
-from dataclasses import dataclass
 import fcntl
 import os
-from pathlib import Path
 import stat
+from dataclasses import dataclass
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
@@ -15,6 +15,7 @@ from .environment_files import (
     EnvironmentFailure,
     canonical,
     check_ext4,
+    decode,
     digest,
     identity,
     persisted_write,
@@ -28,22 +29,35 @@ from .environment_installation import (
     CONFIG_NAME,
     DEPLOYMENTS,
     DIRECTORIES,
+    GATEWAY_VERIFIER_REQUIRED,
+    RECONFIGURE_MODE,
     RESTORE_MODE,
-    Installation,
     WORKSPACE_PURPOSES,
+    Installation,
+    access_scope,
+    gateway_verifier_names,
     load_installation,
+    read_access_policy,
     read_restore_generation,
     restored_data_root,
     uuid_value,
+    validate_access_policy,
 )
 from .environment_lock import LOCK_NAME, PROTOCOL, NativeEnvironmentFiles
 from .environment_provision import _frontend_copy
+from .environment_recovery_installation import checked_ref
 from .environment_release_compatibility import checked_schema
-from .environment_release_preflight import candidate_target, compatibility, rollback_subject
+from .environment_release_preflight import (
+    candidate_target,
+    compatibility,
+    reconfiguration_program,
+    rollback_subject,
+)
 from .schema_v22_publish import publish_directory
 
 POLICY = 'release-deployment-policy.v1.json'
 ROLLBACK_POLICY = 'rollback-deployment-policy.v1.json'
+RECONFIGURE_POLICY = 'reconfigure-deployment-policy.v1.json'
 RESTORE_POLICY = 'restore-deployment-policy.v1.json'
 INVALID = 'RELEASE_DEPLOYMENT_INTENT_MISMATCH'
 UNVERIFIED = 'RELEASE_DEPLOYMENT_UNVERIFIED'
@@ -63,11 +77,33 @@ class DeploymentTarget:
     generation_sha256: str | None = None
 
 
+def reconfigured_access(plan, source):
+    policy, pin = checked_ref(plan['target_access_policy'], ACCESS_NAME)
+    raw = read_protected(policy)
+    approved = validate_access_policy(
+        decode(raw, UNVERIFIED), source.environment_root, source.environment_id
+    )
+    current = read_access_policy(source)
+    require(
+        raw == canonical(approved)
+        and digest(raw) == pin
+        and pin != source.description['access_policy_ref']['sha256']
+        and access_scope(approved) == access_scope(current)
+        and any(
+            role['client_kind'] == 'WEB' and role['permission'] == 'DEVELOP'
+            for role in approved['principals']
+        ),
+        UNVERIFIED,
+    )
+    return raw, {'name': ACCESS_NAME, 'sha256': pin}
+
+
 def prepare_target(args, entry, *, describe=False):
     policy = args.release_deployment_policy.name
-    require(policy in (POLICY, ROLLBACK_POLICY, RESTORE_POLICY), INVALID)
+    require(policy in (POLICY, ROLLBACK_POLICY, RECONFIGURE_POLICY, RESTORE_POLICY), INVALID)
     restore = policy == RESTORE_POLICY
     rollback = policy == ROLLBACK_POLICY
+    reconfigure = policy == RECONFIGURE_POLICY
     require(not describe or restore, INVALID)
     plan = read_policy(
         args.release_deployment_policy,
@@ -82,6 +118,7 @@ def prepare_target(args, entry, *, describe=False):
             'candidate_proof',
             *(('operation_id', 'target_data_generation') if restore else ('compatibility_ref',)),
             *(('previous_installation', 'previous_project') if rollback else ()),
+            *(('target_access_policy',) if reconfigure else ()),
         ),
     )
     key = plan['target_deployment_id']
@@ -107,23 +144,29 @@ def prepare_target(args, entry, *, describe=False):
             and not source.environment_root.is_relative_to(path)
             for path in (program.parent, schema_path, args.root)
         )
-        and (restore or source.project != program)
+        and (restore or reconfigure or source.project != program)
         and entry['verify_program'](program) == program_sha,
         INVALID,
     )
     original = checked_schema(
-        source.schema, source.description['schema_manifest_sha256'], args.sha256
+        source.schema, source.description['schema_manifest_sha256'], args.sha256, source.project
     )
     if restore:
         require(schema.schema_contract_sha256 == original.schema_contract_sha256, INVALID)
     else:
         if rollback:
             rollback_subject(plan, source, manifest, program_sha, entry)
-        compatibility(plan, source, original, manifest, schema, program_sha, rollback=rollback)
+        if reconfigure:
+            reconfiguration_program(plan, source, manifest, program_sha)
+        compatibility(
+            plan, source, original, manifest, schema, program_sha, retained=rollback or reconfigure
+        )
     base = source.description.get('deployment_slot')
     authorization = 'ROLLBACK_CODE' if rollback else 'SAME_SCHEMA'
     if restore:
         authorization = RESTORE_MODE
+    elif reconfigure:
+        authorization = RECONFIGURE_MODE
     binding = {
         'base_installation_sha256': (
             source.anchor_sha256 if base is None else base['base_installation_sha256']
@@ -145,8 +188,13 @@ def prepare_target(args, entry, *, describe=False):
         'frontend_root': str(frontend),
         'deployment_slot': binding,
     }
-    access = read_protected(source.anchor.parent / ACCESS_NAME)
-    require(digest(access) == description['access_policy_ref']['sha256'], UNVERIFIED)
+    if reconfigure:
+        access, description['access_policy_ref'] = reconfigured_access(plan, source)
+    else:
+        access = read_protected(source.anchor.parent / ACCESS_NAME)
+        require(digest(access) == description['access_policy_ref']['sha256'], UNVERIFIED)
+    if source.ingress_group is not None:
+        require(gateway_verifier_names(decode(access, UNVERIFIED)), GATEWAY_VERIFIER_REQUIRED)
     receipt = None
     pin = source.restore_generation_sha256
     if restore:
@@ -313,9 +361,10 @@ def prepare_deployment(args, entry):
         check_ext4(root_fd)
         fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if not os.path.lexists(deployments):
-            deployments.mkdir(mode=0o755)
-            deployments.chmod(0o755)
-            os.fsync(root_fd)
+            with target.source.host_admission():
+                deployments.mkdir(mode=0o755)
+                deployments.chmod(0o755)
+                os.fsync(root_fd)
         with protected_directory(deployments) as deployment_fd:
             metadata = os.fstat(deployment_fd)
             require(stat.S_IMODE(metadata.st_mode) == 0o755 and metadata.st_gid == 0, INVALID)
@@ -328,11 +377,15 @@ def prepare_deployment(args, entry):
             with TemporaryDirectory(prefix='.walle-release-', dir=deployments) as temporary:
                 staging = Path(temporary) / target.deployment_id
                 stage_deployment(staging, target)
-                target.source.check_hold()
-                publish_directory(staging, final)
+                published = False
                 try:
-                    os.fsync(deployment_fd)
-                    os.fsync(root_fd)
+                    with target.source.host_admission():
+                        publish_directory(staging, final)
+                        published = True
+                        os.fsync(deployment_fd)
+                        os.fsync(root_fd)
                     return read_prepared(final, target, args.sha256, native)
                 except (OSError, RuntimeError, ValueError, KeyError, TypeError) as error:
-                    raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
+                    if published:
+                        raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
+                    raise

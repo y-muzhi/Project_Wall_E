@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 
-from backend.app.infrastructure.environment_files import exact, require
+from backend.app.infrastructure.environment_files import absolute, exact, require
 from backend.app.infrastructure.environment_installation import (
+    ANCHOR_NAME,
     sha_value,
     uuid_value,
     version_record,
@@ -11,7 +12,17 @@ from backend.app.infrastructure.environment_installation import (
 from backend.app.infrastructure.environment_release_compatibility import COMPATIBILITY
 from backend.app.infrastructure.environment_release_preflight import read_reference
 
-from .operation_contract import INVALID, RESOURCE, UNAVAILABLE, installed_record, path_reference
+from .operation_contract import (
+    INVALID,
+    RECONFIGURE,
+    RELEASE,
+    RESOURCE,
+    ROLLBACK_CODE,
+    UNAVAILABLE,
+    installed_record,
+    path_reference,
+)
+from .recovery_offhost import offhost_authority
 from .release_artifacts import MANIFEST
 from .release_candidates import installed_candidate
 
@@ -35,13 +46,32 @@ class ReleaseConfiguration:
     recovery: dict
     recovery_sha256: str
     environment_id: str
+    rollback_source: dict | None = None
+    target_access_sha256: str | None = None
+
+    @property
+    def action(self):
+        if self.rollback_source is not None:
+            return ROLLBACK_CODE
+        return RECONFIGURE if self.target_access_sha256 is not None else RELEASE
+
+    @property
+    def deployment_mode(self):
+        return 'SAME_SCHEMA' if self.action == RELEASE else self.action
 
     def public_references(self):
-        return {
+        common = {
             'environment_id': self.environment_id,
-            'release_ref': self.release_ref,
             'configuration_ref': self.reference,
-            'compatibility_ref': self.compatibility_reference['ref'],
+        }
+        if self.action == RECONFIGURE:
+            return {**common, 'recovery_policy_ref': self.recovery['ref']}
+        common['compatibility_ref'] = self.compatibility_reference['ref']
+        if self.action == ROLLBACK_CODE:
+            return {**common, 'retained_release_ref': self.release_ref}
+        return {
+            **common,
+            'release_ref': self.release_ref,
             'recovery_policy_ref': self.recovery['ref'],
         }
 
@@ -51,6 +81,15 @@ def attachment_reference(catalog, item):
     return catalog.candidate(item['candidate_ref'], item['sha256'])
 
 
+def configuration_action(record):
+    rollback = 'rollback_source' in record
+    reconfigure = 'target_access_sha256' in record
+    require(not (rollback and reconfigure), RESOURCE)
+    if rollback:
+        return ROLLBACK_CODE
+    return RECONFIGURE if reconfigure else RELEASE
+
+
 def read_configuration(catalog, reference, *, supported=True):
     require(uuid_value(reference), INVALID)
     pin = catalog.release_configurations.get(reference)
@@ -58,6 +97,12 @@ def read_configuration(catalog, reference, *, supported=True):
     record = installed_record(
         catalog.directory / 'release-configurations' / (reference + '.json'), pin
     )
+    action = configuration_action(record)
+    extra = {
+        RELEASE: (),
+        ROLLBACK_CODE: ('rollback_source',),
+        RECONFIGURE: ('target_access_sha256',),
+    }[action]
     version_record(
         record,
         (
@@ -70,6 +115,7 @@ def read_configuration(catalog, reference, *, supported=True):
             'target_attachment',
             'compatibility',
             'recovery_policy',
+            *extra,
         ),
         RESOURCE,
     )
@@ -100,8 +146,24 @@ def read_configuration(catalog, reference, *, supported=True):
         and proof.get('mode') == 'SAME_SCHEMA',
         INCOMPATIBLE,
     )
+    previous = None
+    if action == ROLLBACK_CODE:
+        previous = exact(
+            record['rollback_source'], ('previous_installation', 'previous_project'), RESOURCE
+        )
+        anchor, _ = path_reference(previous['previous_installation'])
+        absolute(previous['previous_project'], RESOURCE)
+        require(
+            anchor.name == ANCHOR_NAME
+            and previous['previous_installation']
+            not in (source['installation'], target['installation']),
+            RESOURCE,
+        )
+    target_access = record.get('target_access_sha256')
+    if action == RECONFIGURE:
+        require(sha_value(target_access), RESOURCE)
     policy = record['recovery_policy']
-    recovery = read_recovery_policy(catalog, policy, supported=supported)
+    recovery = read_recovery_policy(catalog, policy, supported=supported, allow_offhost=True)
     return ReleaseConfiguration(
         reference,
         pin,
@@ -116,19 +178,29 @@ def read_configuration(catalog, reference, *, supported=True):
         recovery,
         policy['sha256'],
         record['environment_id'],
+        previous,
+        target_access,
     )
 
 
-def read_recovery_policy(catalog, policy, *, supported=True):
+def read_recovery_policy(catalog, policy, *, supported=True, allow_offhost=False):
     exact(policy, ('ref', 'sha256'), RESOURCE)
     require(uuid_value(policy['ref']) and sha_value(policy['sha256']), RESOURCE)
     recovery = installed_record(
         catalog.directory / 'release-recovery-policies' / (policy['ref'] + '.json'),
         policy['sha256'],
     )
-    version_record(
-        recovery, (*catalog.scope, 'ref', 'minimum_verification', 'preserve_source'), RESOURCE
-    )
+    fields = (*catalog.scope, 'ref', 'minimum_verification', 'preserve_source')
+    if type(recovery.get('format_version')) is int and recovery['format_version'] == 2:
+        exact(recovery, ('format_version', *fields, 'offhost_authority'), RESOURCE)
+        authority = offhost_authority(recovery['offhost_authority'])
+        require(
+            recovery['minimum_verification'] == 'OFFHOST_VERIFIED'
+            and authority['source_host_id'] == catalog.scope['host_id'],
+            RESOURCE,
+        )
+    else:
+        version_record(recovery, fields, RESOURCE)
     require(
         all(recovery[key] == value for key, value in catalog.scope.items())
         and recovery['ref'] == policy['ref']
@@ -137,7 +209,11 @@ def read_recovery_policy(catalog, policy, *, supported=True):
         RESOURCE,
     )
     if supported:
-        require(recovery['minimum_verification'] == 'LOCAL_VERIFIED', UNAVAILABLE)
+        require(
+            recovery['minimum_verification'] == 'LOCAL_VERIFIED'
+            or (allow_offhost and 'offhost_authority' in recovery),
+            UNAVAILABLE,
+        )
     return recovery
 
 

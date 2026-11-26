@@ -1,18 +1,21 @@
 """Retrieve a single fixed Restic snapshot from an admitted local repository."""
 
-from contextlib import ExitStack, contextmanager
 import fcntl
 import json
 import os
-from pathlib import Path
-from shutil import disk_usage
 import stat
 import subprocess
+from contextlib import ExitStack, contextmanager
+from pathlib import Path
+from shutil import disk_usage
 from tempfile import TemporaryDirectory
+from threading import Event, Thread
+from time import monotonic
 
 from backend.app.management.attachment_observation import now
 from backend.app.management.release_artifacts import snapshot_file
 
+from .environment_backup_assets import audit_directory
 from .environment_backup_package import (
     principal_for_process,
     private_root,
@@ -20,7 +23,6 @@ from .environment_backup_package import (
     validate_location,
     verify_contents,
 )
-from .environment_backup_assets import audit_directory
 from .environment_files import (
     EnvironmentFailure,
     absolute,
@@ -32,12 +34,13 @@ from .environment_files import (
     require,
 )
 from .environment_installation import identity_record, sha_value, uuid_value
+from .environment_restic_contract import RETRIEVED, VERSION
 
 POLICY = 'restic-retrieval-policy.v1.json'
-VERSION = '0.19.1'
 INVALID = 'RESTIC_RETRIEVAL_INTENT_MISMATCH'
 UNVERIFIED = 'RESTIC_SNAPSHOT_UNVERIFIED'
 LIMIT = 'RESTIC_RESTORE_LIMIT'
+MAX_RESTIC_OUTPUT = 128 * 1024
 
 
 def retrieval_inputs(args):
@@ -120,7 +123,7 @@ def fixed_password(path, expected, principal):
                 INVALID,
             )
             no_acl(descriptor)
-            yield
+            yield descriptor
             current = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
             require(
                 identity(current) == expected
@@ -132,38 +135,76 @@ def fixed_password(path, expected, principal):
             os.close(descriptor)
 
 
-def restic_call(command, deadline, cwd, code):
-    try:
-        output = subprocess.run(
-            command,
-            cwd=cwd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            timeout=deadline,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise EnvironmentFailure(code) from error
-    require(output.returncode == 0 and len(output.stdout) <= 128 * 1024, code)
-    return output.stdout
+def restic_call(command, deadline, cwd, code, *, environment=None):
+    finish_by = monotonic() + deadline
+    with subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    ) as child:
+        finished = Event()
+        reply = []
+
+        def capture_output():
+            try:
+                reply.append(child.stdout.read(MAX_RESTIC_OUTPUT + 1))
+            except OSError:
+                pass
+            finally:
+                finished.set()
+
+        reader = Thread(target=capture_output, name='restic-output')
+        try:
+            reader.start()
+            require(finished.wait(max(0, finish_by - monotonic())), code)
+            require(len(reply) == 1 and len(reply[0]) <= MAX_RESTIC_OUTPUT, code)
+            try:
+                status = child.wait(timeout=max(0, finish_by - monotonic()))
+            except subprocess.TimeoutExpired as error:
+                raise EnvironmentFailure(code) from error
+            require(status == 0, code)
+            return reply[0]
+        finally:
+            if child.poll() is None:
+                child.kill()
+            if reader.ident is not None:
+                reader.join()
 
 
-def snapshot_facts(command, policy, work):
+def snapshot_facts(command, policy, work, call):
     def observe(*parameters):
-        return json.loads(restic_call([*command, *parameters], 30, work, UNVERIFIED))
+        return json.loads(call([*command, *parameters], 30, work, UNVERIFIED))
 
     config = observe('cat', 'config')
-    require(config['id'] == policy['repository_id'], UNVERIFIED)
+    require(type(config) is dict and config.get('id') == policy['repository_id'], UNVERIFIED)
     snapshot = policy['snapshot_id']
     rows = observe('snapshots', '--json', snapshot)
-    require(type(rows) is list and len(rows) == 1 and rows[0]['id'] == snapshot, UNVERIFIED)
+    require(
+        type(rows) is list
+        and len(rows) == 1
+        and type(rows[0]) is dict
+        and rows[0].get('id') == snapshot,
+        UNVERIFIED,
+    )
     tags = rows[0].get('tags')
     expected_tags = (
         f'wall-e-backup-{policy["backup_id"]}',
         f'wall-e-manifest-{policy["backup_manifest_sha256"]}',
     )
     require(type(tags) is list and all(tags.count(tag) == 1 for tag in expected_tags), UNVERIFIED)
+    publication = policy.get('publication_operation_id')
+    if publication is not None:
+        all_tags = {*expected_tags, f'wall-e-publication-{publication}'}
+        require(
+            all(type(tag) is str for tag in tags)
+            and len(tags) == len(all_tags)
+            and set(tags) == all_tags
+            and rows[0].get('paths') == [policy['snapshot_subdirectory']],
+            UNVERIFIED,
+        )
     stats = observe('stats', '--json', '--mode', 'restore-size', snapshot)
     size, count = stats['total_size'], stats['total_file_count']
     require(
@@ -178,10 +219,9 @@ def snapshot_facts(command, policy, work):
     return size, count
 
 
-def retrieve_into(receive, receiver, principal, plan, binary, password, repository):
-    executable = str(binary)
-    command = [
-        executable,
+def restic_arguments(binary, password, repository):
+    return [
+        str(binary),
         '--repo',
         str(repository),
         '--password-file',
@@ -189,13 +229,15 @@ def retrieve_into(receive, receiver, principal, plan, binary, password, reposito
         '--no-cache',
         '--quiet',
     ]
-    version = restic_call([executable, 'version'], 12, receive, INVALID)
-    require(version.startswith(f'restic {VERSION} '.encode('ascii')), INVALID)
-    size, count = snapshot_facts(command, plan, receive)
+
+
+@contextmanager
+def verified_snapshot_directory(receive, receiver, principal, plan, command, call):
+    size, count = snapshot_facts(command, plan, receive, call)
     with TemporaryDirectory(prefix='.restic-restore-', dir=receive) as scratch:
         fresh = Path(scratch)
         selector = plan['snapshot_id'] + ':' + plan['snapshot_subdirectory']
-        restic_call(
+        call(
             [
                 *command,
                 'restore',
@@ -219,10 +261,26 @@ def retrieve_into(receive, receiver, principal, plan, binary, password, reposito
                 plan['backup_id'],
                 expected_manifest=plan['backup_manifest_sha256'],
             )
-        require(snapshot_facts(command, plan, receive) == (size, count), UNVERIFIED)
+        require(snapshot_facts(command, plan, receive, call) == (size, count), UNVERIFIED)
+        yield fresh, manifest, measured, size, count
+
+
+def restore_verified_package(receive, receiver, principal, plan, command, call):
+    with verified_snapshot_directory(receive, receiver, principal, plan, command, call) as restored:
+        _, manifest, measured, size, count = restored
+        return manifest, measured, size, count
+
+
+def retrieve_into(receive, receiver, principal, plan, binary, password, repository):
+    command = restic_arguments(binary, password, repository)
+    version = restic_call([str(binary), 'version'], 12, receive, INVALID)
+    require(version.startswith(f'restic {VERSION} '.encode('ascii')), INVALID)
+    manifest, measured, size, count = restore_verified_package(
+        receive, receiver, principal, plan, command, restic_call
+    )
     return {
         'format_version': 1,
-        'status': 'LOCAL_SNAPSHOT_RETRIEVED',
+        'status': RETRIEVED,
         'operation_id': plan['operation_id'],
         'retrieved_at': now(),
         'backup_id': manifest['backup_id'],

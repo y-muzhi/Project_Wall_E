@@ -1,11 +1,11 @@
 """Open a pinned P1 Linux installation and its fixed environment roots."""
 
-from contextlib import contextmanager
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import re
 import stat
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
 
 from .environment_files import (
     SHA256,
@@ -22,7 +22,7 @@ from .environment_files import (
     relative,
     require,
 )
-from .environment_lock import EnvironmentLock, PROTOCOL
+from .environment_lock import PROTOCOL, EnvironmentLock
 
 UUID_V4 = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}')
 IDENTITY_NUM = re.compile(r'0|[1-9][0-9]{0,19}')
@@ -63,9 +63,15 @@ DEPLOYMENTS = 'deployments'
 GENERATIONS = 'data-generations'
 GENERATION_RECEIPT = 'restore-generation.v1.json'
 RESTORE_MODE = 'RESTORE_DATA'
+RECONFIGURE_MODE = 'RECONFIGURE'
 ANCHOR_NAME = 'installation.v1.json'
 CONFIG_NAME = 'configuration.v1.json'
 ACCESS_NAME = 'access-policy.v1.json'
+GATEWAY_VERIFIER_REQUIRED = 'RELEASE_GATEWAY_VERIFIER_REQUIRED'
+DEFAULT_BUSINESS_DOMAIN = 'walle-dev.test'
+DEFAULT_BUSINESS_PORT = 9443
+BUSINESS_PORTS = (443, DEFAULT_BUSINESS_PORT)
+DNS_LABEL = re.compile(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?')
 HOLD_NAME = 'host-hold.v1.json'
 RECOVERY_EVIDENCE = 'recovery-evidence'
 RECOVERY_FRONTEND_INDEX = 'frontend-index.v1.json'
@@ -195,6 +201,54 @@ class Installation:
         return ordinary_host_admission(self)
 
 
+def check_business_listener(domain, port):
+    code = 'INVALID_ENVIRONMENT_ACCESS'
+    require(
+        type(domain) is str
+        and 1 <= len(domain) <= 214
+        and type(port) is int
+        and port in BUSINESS_PORTS,
+        code,
+    )
+    labels = domain.split('.')
+    require(
+        len(labels) >= 2
+        and all(DNS_LABEL.fullmatch(label) for label in labels)
+        and re.search(r'[a-z]', labels[-1]) is not None,
+        code,
+    )
+
+
+def business_origin(environment_id, domain=DEFAULT_BUSINESS_DOMAIN, port=DEFAULT_BUSINESS_PORT):
+    require(uuid_value(environment_id), 'INVALID_ENVIRONMENT_ACCESS')
+    check_business_listener(domain, port)
+    suffix = '' if port == 443 else f':{port}'
+    return f'https://e-{environment_id}.{domain}{suffix}'
+
+
+def validate_business_origin(origin, environment_id):
+    code = 'INVALID_ENVIRONMENT_ACCESS'
+    prefix = f'https://e-{environment_id}.'
+    require(type(origin) is str and origin.startswith(prefix), code)
+    domain, separator, port = origin[len(prefix) :].partition(':')
+    require(not separator or port == str(DEFAULT_BUSINESS_PORT), code)
+    require(
+        origin
+        == business_origin(environment_id, domain, DEFAULT_BUSINESS_PORT if separator else 443),
+        code,
+    )
+    return origin
+
+
+def read_access_policy(installation):
+    return _access_policy(
+        installation.anchor,
+        installation.environment_root,
+        installation.description,
+        installation.environment_id,
+    )
+
+
 def _access_policy(anchor, environment_root, config, environment_id):
     code = 'INVALID_ENVIRONMENT_ACCESS'
     ref = exact(config['access_policy_ref'], ('name', 'sha256'), code)
@@ -202,12 +256,29 @@ def _access_policy(anchor, environment_root, config, environment_id):
     raw = read_protected(anchor.parent / ACCESS_NAME)
     require(digest(raw) == ref['sha256'], code)
     record = decode(raw, code)
+    return validate_access_policy(record, environment_root, environment_id)
+
+
+def access_scope(record):
+    return tuple(record[key] for key in ('environment_id', 'public_origin', 'upstream_socket'))
+
+
+def gateway_verifier_names(record):
+    return {
+        principal['principal_id']
+        for principal in record['principals']
+        if principal['permission'] == 'READ_ONLY' and principal['client_kind'] == 'AUTOMATION'
+    }
+
+
+def validate_access_policy(record, environment_root, environment_id):
+    code = 'INVALID_ENVIRONMENT_ACCESS'
     version_record(
         record, ('environment_id', 'public_origin', 'principals', 'upstream_socket'), code
     )
+    validate_business_origin(record['public_origin'], environment_id)
     require(
         record['environment_id'] == environment_id
-        and record['public_origin'] == f'https://e-{environment_id}.walle-dev.test:9443'
         and record['upstream_socket'] == str(environment_root / 'runtime' / 'walle.sock')
         and type(record['principals']) is list
         and bool(record['principals']),
@@ -226,6 +297,7 @@ def _access_policy(anchor, environment_root, config, environment_id):
             code,
         )
         seen.add(name)
+    return record
 
 
 def _validate_description(anchor, environment_root, config, record, runtime_sha256):
@@ -304,12 +376,17 @@ def _validate_description(anchor, environment_root, config, record, runtime_sha2
     _access_policy(anchor, environment_root, config, record['environment_id'])
 
 
-def load_installation(anchor, expected, runtime_sha256, project, *, allow_slot=True):
+def read_installation_anchor(anchor, expected):
     code = 'INSTALLATION_ANCHOR_MISMATCH'
     require(anchor.name == ANCHOR_NAME and sha_value(expected), code)
     raw = read_protected(anchor)
     require(digest(raw) == expected, code)
-    record = decode(raw, code)
+    return decode(raw, code)
+
+
+def load_installation(anchor, expected, runtime_sha256, project, *, allow_slot=True):
+    code = 'INSTALLATION_ANCHOR_MISMATCH'
+    record = read_installation_anchor(anchor, expected)
     version_record(
         record,
         (
@@ -484,7 +561,8 @@ def validate_deployment_slot(anchor, config, record, runtime_sha256):
         and uuid_value(bind['source_deployment_id'])
         and bind['source_deployment_id'] != record['deployment_id']
         and uuid_value(bind['release_id'])
-        and bind['authorization_mode'] in ('SAME_SCHEMA', 'ROLLBACK_CODE', RESTORE_MODE),
+        and bind['authorization_mode']
+        in ('SAME_SCHEMA', 'ROLLBACK_CODE', RECONFIGURE_MODE, RESTORE_MODE),
         code,
     )
     base = load_installation(
@@ -538,11 +616,13 @@ def validate_deployment_slot(anchor, config, record, runtime_sha256):
                 'required_capabilities',
                 'enabled_capabilities',
                 'database_relative_path',
-                'access_policy_ref',
             )
         ),
         code,
     )
+    if config['access_policy_ref'] != base.description['access_policy_ref']:
+        access = _access_policy(anchor, environment_root, config, base.environment_id)
+        require(access_scope(access) == access_scope(read_access_policy(base)), code)
     return environment_root
 
 

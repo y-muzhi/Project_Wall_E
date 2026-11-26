@@ -61,29 +61,82 @@ export function recoveryStorageKey(binding: RecoveryBinding, scope?: Environment
   ] as const);
 }
 
-/** Local intentions, not a server DocumentReadModel or saved receipt. */
-export function validateLocalDraftSnapshot(ctx: Ctx, value: unknown): LocalDraftSnapshot {
+export function scopedDraftPayload(value: unknown, key: IDBValidKey, origin: string): unknown {
   try {
+    if (!Array.isArray(key) || key.length !== 7 || key[0] !== origin)
+      throw new TypeError('Invalid scoped draft key');
+    for (const part of key.slice(3)) positiveInteger(part);
+    const scopeFromKey = decodeEnvironmentScope({
+      binding_protocol: 1,
+      origin: key[0],
+      environment_id: key[1],
+      data_generation: key[2],
+    });
     const row = exact(value, [
       'schema_version',
+      'scope_version',
+      'origin',
+      'environment_id',
+      'data_generation',
       'base_confirmed_version',
       'markdown_content',
       'block_state_json',
       'local_revision',
       'updated_at',
     ]);
-    if (row.schema_version !== 1) throw new TypeError('Invalid local schema');
-    positiveInteger(row.base_confirmed_version);
-    positiveInteger(row.local_revision);
-    time(row.updated_at);
+    if (
+      row.schema_version !== 2 ||
+      row.scope_version !== 1 ||
+      row.origin !== scopeFromKey.origin ||
+      row.environment_id !== scopeFromKey.environment_id ||
+      row.data_generation !== scopeFromKey.data_generation
+    )
+      throw new TypeError('Stored draft scope differs from its key');
+    return {
+      schema_version: 1,
+      base_confirmed_version: row.base_confirmed_version,
+      markdown_content: row.markdown_content,
+      block_state_json: row.block_state_json,
+      local_revision: row.local_revision,
+      updated_at: row.updated_at,
+    };
+  } catch {
+    throw new DraftStorageError('CORRUPT');
+  }
+}
+
+export function localDraftEnvelope(value: unknown) {
+  const row = exact(value, [
+    'schema_version',
+    'base_confirmed_version',
+    'markdown_content',
+    'block_state_json',
+    'local_revision',
+    'updated_at',
+  ]);
+  if (row.schema_version !== 1 || typeof row.markdown_content !== 'string')
+    throw new TypeError('Invalid local schema');
+  return {
+    base_confirmed_version: positiveInteger(row.base_confirmed_version),
+    local_revision: positiveInteger(row.local_revision),
+    updated_at: time(row.updated_at),
+    markdown_content: row.markdown_content,
+    block_state_json: row.block_state_json,
+  };
+}
+
+/** Local intentions, not a server DocumentReadModel or saved receipt. */
+export function validateLocalDraftSnapshot(ctx: Ctx, value: unknown): LocalDraftSnapshot {
+  try {
+    const row = localDraftEnvelope(value);
     const pair = validateBlockState(ctx, row.markdown_content, row.block_state_json);
     return Object.freeze({
       schema_version: 1,
-      base_confirmed_version: row.base_confirmed_version as number,
+      base_confirmed_version: row.base_confirmed_version,
       markdown_content: pair.source.markdown,
       block_state_json: pair.state,
-      local_revision: row.local_revision as number,
-      updated_at: row.updated_at as string,
+      local_revision: row.local_revision,
+      updated_at: row.updated_at,
     });
   } catch {
     throw new DraftStorageError('CORRUPT');
@@ -166,53 +219,8 @@ export class DraftRecoveryStore {
         }
       : value;
   }
-  private payloadForKey(value: unknown, key: IDBValidKey): unknown {
-    if (!this.scope) return value;
-    try {
-      if (!Array.isArray(key) || key.length !== 7 || key[0] !== this.scope.origin)
-        throw new TypeError('Invalid scoped draft key');
-      for (const part of key.slice(3)) positiveInteger(part);
-      const scopeFromKey = decodeEnvironmentScope({
-        binding_protocol: 1,
-        origin: key[0],
-        environment_id: key[1],
-        data_generation: key[2],
-      });
-      const row = exact(value, [
-        'schema_version',
-        'scope_version',
-        'origin',
-        'environment_id',
-        'data_generation',
-        'base_confirmed_version',
-        'markdown_content',
-        'block_state_json',
-        'local_revision',
-        'updated_at',
-      ]);
-      if (
-        row.schema_version !== 2 ||
-        row.scope_version !== 1 ||
-        row.origin !== scopeFromKey.origin ||
-        row.environment_id !== scopeFromKey.environment_id ||
-        row.data_generation !== scopeFromKey.data_generation
-      )
-        throw new TypeError('Stored draft scope differs from its key');
-      return {
-        schema_version: 1,
-        base_confirmed_version: row.base_confirmed_version,
-        markdown_content: row.markdown_content,
-        block_state_json: row.block_state_json,
-        local_revision: row.local_revision,
-        updated_at: row.updated_at,
-      };
-    } catch {
-      throw new DraftStorageError('CORRUPT');
-    }
-  }
-
   private validateStored(value: unknown, key: IDBValidKey): LocalDraftSnapshot {
-    return this.validate(this.payloadForKey(value, key));
+    return this.validate(this.scope ? scopedDraftPayload(value, key, this.scope.origin) : value);
   }
 
   private open(): Promise<IDBDatabase> {
@@ -361,7 +369,7 @@ export class DraftRecoveryStore {
             size = bytes(entry.value);
             if (this.scope) {
               if (size > DRAFT_BYTES) throw new DraftStorageError('CORRUPT');
-              this.payloadForKey(entry.value, entry.key);
+              scopedDraftPayload(entry.value, entry.key, this.scope.origin);
             }
           } catch {
             fail(new DraftStorageError('CORRUPT'));

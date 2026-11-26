@@ -1,13 +1,13 @@
 """Capture the SQLite component of a stopped ordinary environment recovery point."""
 
-from contextlib import closing, contextmanager, ExitStack
-from datetime import datetime, timezone
-from hashlib import sha256
 import os
-from pathlib import Path
 import sqlite3
 import stat
 import time
+from contextlib import ExitStack, closing, contextmanager
+from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
 from types import SimpleNamespace
 
 from .database import SchemaMismatch
@@ -37,7 +37,7 @@ from .environment_files import (
     read_protected,
     require,
 )
-from .environment_initialize import assert_database
+from .environment_initialize import assert_database, read_locked_database, verify_locked_binding
 from .environment_installation import database_identity, identity_record, sha_value, uuid_value
 from .environment_ordinary import EXTERNAL_EFFECTS
 from .schema_inspection import verify_integrity
@@ -236,14 +236,11 @@ def copy_database(installation, release, data_fd, folder, output_fd, plan):
     require(source_identity is not None, STALE)
     assert_database(installation, data_fd, source_identity)
     binding = EnvironmentBinding(installation.environment_id, installation.data_generation)
-    source_uri = installation.database.as_uri() + '?mode=ro'
     snapshot_uri = (folder / SNAPSHOT).as_uri()
     created = False
     try:
-        with closing(sqlite3.connect(source_uri, uri=True, isolation_level=None)) as source:
-            source.execute('PRAGMA query_only=ON')
-            source.execute('BEGIN')
-            verify_binding(source, release, binding)
+        with read_locked_database(installation.database) as source:
+            verify_locked_binding(source, installation.database, release, binding)
             verify_integrity(source)
             for check in EXTERNAL_EFFECTS:
                 require(source.execute(check).fetchone() is None, 'EXTERNAL_RECOVERY_REQUIRED')
@@ -303,7 +300,7 @@ def capture_status(version):
     return 'DATABASE_AND_COUNT_AUDIT_VERIFIED' if version == 2 else 'DATABASE_SNAPSHOT_VERIFIED'
 
 
-def capture_inputs(active, args, entry):
+def capture_inputs(active, args, entry, *, offline=False):
     plan = capture_policy(args.capture_policy, args.capture_sha256)
     require(plan['installation_sha256'] == args.anchor_sha256, INVALID)
     source_program = Path(plan['source_program'])
@@ -315,6 +312,7 @@ def capture_inputs(active, args, entry):
         ),
         active,
         program_sha,
+        offline=offline,
     )
     installation.check_identity(maintenance=True)
     for key in ('environment_id', 'data_generation', 'deployment_id'):
@@ -323,11 +321,12 @@ def capture_inputs(active, args, entry):
 
 
 def capture_database(native, active, args, entry):
-    plan, installation, release = capture_inputs(active, args, entry)
+    plan, installation, release = capture_inputs(active, args, entry, offline=True)
     with recovery_directory(plan, installation) as (folder, fd):
         previous = original_receipt(fd, plan, installation, args.capture_sha256)
         if previous is not None:
             return previous
+        installation.check_hold()
         with ExitStack() as opened:
             lock = opened.enter_context(installation.lock(native))
             acquired = original_receipt(fd, plan, installation, args.capture_sha256)
@@ -372,9 +371,10 @@ def capture_database(native, active, args, entry):
                     )
                     members = verify_count_audit(installation, fd, plan, result)
                     assert_contents(fd, {SNAPSHOT, *members})
-                lock.assert_owned()
-                require(read_control(control_fd, installation) == control, STALE)
-                persisted_write(fd, RECEIPT, canonical(result), mode=0o400)
+                with installation.host_admission():
+                    lock.assert_owned()
+                    require(read_control(control_fd, installation) == control, STALE)
+                    persisted_write(fd, RECEIPT, canonical(result), mode=0o400)
                 return original_receipt(fd, plan, installation, args.capture_sha256)
             except EnvironmentFailure as error:
                 code = (

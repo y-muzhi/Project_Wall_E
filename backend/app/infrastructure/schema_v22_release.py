@@ -1,14 +1,13 @@
 """Build and load the V2.2 FRESH_ONLY extension of Schema200."""
 
-from dataclasses import asdict, dataclass
 import json
-from pathlib import Path
 import re
 import sqlite3
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from .database import SchemaMismatch, _statements
 from .schema_inspection import inspect_schema, verify_integrity
-from .schema_v20_admission import MANIFEST_SHA256, RELEASE_DIRECTORY
 from .schema_v20_assembly import fresh_sql as base_fresh_sql
 from .schema_v20_release import (
     DESIGN_SOURCE,
@@ -59,6 +58,10 @@ V22_SOURCES = (
 MANIFEST = 'manifest.v2.json'
 OBJECTS = 'objects.v1.json'
 FRESH_SQL = 'fresh.v1.sql'
+# The V2.2 structural delta is relative to this immutable release.
+# The Windows Schema200 startup pin can advance independently.
+BASE_RELEASE_DIRECTORY = 'db20-r50'
+BASE_MANIFEST_SHA256 = '10ff02e670eb705e6ac537eb9335449a72de9dbc93eeffbe46b16d7d74557f31'
 NEW_OBJECTS = {('table', 'environment_binding'), ('trigger', 'code_snapshots_origin_guard_insert')}
 UPDATED_OBJECTS = {('table', 'code_snapshots'), ('trigger', 'code_snapshots_identity_fixed')}
 
@@ -72,18 +75,18 @@ class FreshSchemaRelease(SchemaRelease):
         raise SchemaMismatch('SCHEMA_UPGRADE_NOT_ADMITTED')
 
 
-def _source_hashes():
-    return {source: digest(_read(ROOT / source)) for source in (*SOURCE_NAMES, *V22_SOURCES)}
+def _source_hashes(source_root):
+    return {source: digest(_read(source_root / source)) for source in (*SOURCE_NAMES, *V22_SOURCES)}
 
 
-def _design_hashes():
+def _design_hashes(source_root):
     return [
-        {'path': source, 'sha256': digest(_read(ROOT / source))}
+        {'path': source, 'sha256': digest(_read(source_root / source))}
         for source in (DESIGN_SOURCE, ENVIRONMENT_DESIGN)
     ]
 
 
-def _bound_fields(release_id, runtime_sha256):
+def _bound_fields(release_id, runtime_sha256, source_root=ROOT):
     if (
         type(release_id) is not str
         or re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', release_id) is None
@@ -101,9 +104,12 @@ def _bound_fields(release_id, runtime_sha256):
         'expected_objects_ref': OBJECTS,
         'fresh_sql_ref': FRESH_SQL,
         'upgrade_sql_ref': None,
-        'sources': _source_hashes(),
-        'design_sources': _design_hashes(),
-        'base_release': {'release_id': RELEASE_DIRECTORY, 'manifest_sha256': MANIFEST_SHA256},
+        'sources': _source_hashes(source_root),
+        'design_sources': _design_hashes(source_root),
+        'base_release': {
+            'release_id': BASE_RELEASE_DIRECTORY,
+            'manifest_sha256': BASE_MANIFEST_SHA256,
+        },
     }
 
 
@@ -111,10 +117,10 @@ def _facts(resources):
     return {name: {'sha256': digest(data), 'bytes': len(data)} for name, data in resources.items()}
 
 
-def _base_schema():
-    directory = RELEASE_PARENT / RELEASE_DIRECTORY
+def _base_schema(source_root=ROOT):
+    directory = source_root / RELEASE_PARENT.relative_to(ROOT) / BASE_RELEASE_DIRECTORY
     raw = _read(directory / 'manifest.json')
-    if digest(raw) != MANIFEST_SHA256 or RELEASE_DIRECTORY != 'db20-r50':
+    if digest(raw) != BASE_MANIFEST_SHA256:
         raise SchemaMismatch('Unexpected original Schema200 release')
     base = json.loads(raw)
     objects = _read(directory / OBJECTS)
@@ -182,15 +188,19 @@ def build_candidate(release_id, runtime_sha256):
     return {**resources, MANIFEST: canonical_bytes(manifest)}
 
 
-def load_release(directory: Path, expected_digest: str, runtime_sha256: str) -> FreshSchemaRelease:
-    """Load only an explicitly pinned V2.2 release, with no old-format fallback."""
-    if directory.is_symlink() or directory.resolve(strict=True) != directory:
+def load_release(
+    directory: Path, expected_digest: str, runtime_sha256: str, *, source_root: Path = ROOT
+) -> FreshSchemaRelease:
+    """Verify the pinned V2.2 schema against the admitted program's source bytes."""
+    if any(
+        path.is_symlink() or path.resolve(strict=True) != path for path in (directory, source_root)
+    ):
         raise SchemaMismatch('SCHEMA_RELEASE_MISMATCH')
     path = directory / MANIFEST
     raw = _read(path)
     if digest(raw) != expected_digest:
         raise SchemaMismatch('SCHEMA_RELEASE_MISMATCH')
-    bound = _bound_fields(directory.name, runtime_sha256)
+    bound = _bound_fields(directory.name, runtime_sha256, source_root)
     resources = {name: _read(directory / name) for name in (OBJECTS, FRESH_SQL)}
     contract = digest(resources[OBJECTS])
     expected_bytes = canonical_bytes(
@@ -199,7 +209,7 @@ def load_release(directory: Path, expected_digest: str, runtime_sha256: str) -> 
     if raw != expected_bytes:
         raise SchemaMismatch('SCHEMA_RELEASE_MISMATCH')
     snapshot = _snapshot(json.loads(resources[OBJECTS]))
-    _check_delta(_base_schema(), snapshot)
+    _check_delta(_base_schema(source_root), snapshot)
     return FreshSchemaRelease(
         directory.name,
         contract,

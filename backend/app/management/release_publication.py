@@ -1,7 +1,7 @@
 """Seal one registered release from the fixed build into its independent publication root."""
 
-from contextlib import contextmanager
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -154,33 +154,36 @@ def create_read_only(path, data):
         os.fsync(stream.fileno())
 
 
-def copy_members(source, target, manifest, manifest_sha):
+def copy_index_tree(source, target, files, directories):
+    target.mkdir()
+    ordered = sorted(directories, key=lambda path: (len(Path(path).parts), path))
+    for relative in ordered:
+        (target / relative).mkdir()
+    for relative, (mode, size, expected) in files.items():
+        with (target / relative).open('xb') as stream:
+            measured, _ = snapshot_file(source / relative, mode, size, copy_to=stream)
+            require(measured == expected, UNVERIFIED)
+            stream.flush()
+            os.fchmod(stream.fileno(), mode)
+            os.fsync(stream.fileno())
+    for path in [*(target / relative for relative in reversed(ordered)), target]:
+        with protected_directory(path) as fd:
+            os.fchmod(fd, 0o555)
+            os.fsync(fd)
+
+
+def copy_members(source, target, manifest, manifest_sha, *, output_manifest=None):
     for role in ROLES:
         index = manifest[role + '_index_ref']
         index_path = index['path']
         measured, raw = snapshot_file(source / index_path, 0o444, index['bytes'], capture=True)
         require(measured == index['sha256'], UNVERIFIED)
         files, directories = index_entries(decode(raw, UNVERIFIED), role)
-        layer = target / role
-        layer.mkdir()
-        ordered = sorted(directories, key=lambda path: (len(Path(path).parts), path))
-        for relative in ordered:
-            (layer / relative).mkdir()
-        for relative, (mode, size, sha) in files.items():
-            with (layer / relative).open('xb') as stream:
-                measured, _ = snapshot_file(source / role / relative, mode, size, copy_to=stream)
-                require(measured == sha, UNVERIFIED)
-                stream.flush()
-                os.fchmod(stream.fileno(), mode)
-                os.fsync(stream.fileno())
-        for path in [*(layer / relative for relative in reversed(ordered)), layer]:
-            with protected_directory(path) as fd:
-                os.fchmod(fd, 0o555)
-                os.fsync(fd)
+        copy_index_tree(source / role, target / role, files, directories)
         create_read_only(target / index_path, raw)
     actual, raw = snapshot_file(source / MANIFEST, 0o444, capture=True)
     require(actual == manifest_sha, UNVERIFIED)
-    create_read_only(target / MANIFEST, raw)
+    create_read_only(target / MANIFEST, raw if output_manifest is None else output_manifest)
     with protected_directory(target) as fd:
         os.fchmod(fd, 0o555)
         os.fsync(fd)

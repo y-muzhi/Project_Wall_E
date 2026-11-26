@@ -3,9 +3,9 @@
 from backend.app.infrastructure.environment_files import EnvironmentFailure, require
 from backend.app.infrastructure.environment_installation import uuid_value
 
-from .operation_contract import DENIED, INVALID, MISSING, installed_record
+from .operation_contract import DENIED, INVALID, MISSING, RELEASE, installed_record
 from .operation_store import conflicting_action, decoded, environment_row
-from .release_configuration import CHANGED, read_configuration
+from .release_configuration import CHANGED, configuration_action, read_configuration
 from .release_operations import (
     binding_for_release,
     candidate_inputs,
@@ -14,7 +14,7 @@ from .release_operations import (
 )
 
 
-def installed_choices(catalog, identifier, source_attachment):
+def installed_choices(catalog, identifier, source_attachment, action):
     for reference, pin in sorted(catalog.release_configurations.items()):
         raw = installed_record(
             catalog.directory / 'release-configurations' / (reference + '.json'), pin
@@ -22,6 +22,7 @@ def installed_choices(catalog, identifier, source_attachment):
         if (
             raw.get('environment_id') == identifier
             and raw.get('source_attachment') == source_attachment
+            and configuration_action(raw) == action
         ):
             yield read_configuration(catalog, reference, supported=False)
 
@@ -48,7 +49,10 @@ def checked_candidate(connection, catalog, configuration, runtime_sha):
 
 
 def option_state(connection, catalog, row, config, candidate):
-    if config.recovery['minimum_verification'] != 'LOCAL_VERIFIED':
+    if (
+        config.recovery['minimum_verification'] == 'OFFHOST_VERIFIED'
+        and 'offhost_authority' not in config.recovery
+    ):
         return 'RECOVERY_NOT_ADMITTED'
     if (
         candidate is None
@@ -59,13 +63,15 @@ def option_state(connection, catalog, row, config, candidate):
         return 'ENVIRONMENT_BUSY'
     try:
         no_live_reservation(connection, row['environment_id'])
-        binding_for_release(catalog, row, config.public_references(), fresh=True)
+        binding_for_release(
+            catalog, row, config.public_references(), fresh=True, action=config.action
+        )
     except (EnvironmentFailure, OSError):
         return 'SOURCE_UNVERIFIED'
     return 'READY'
 
 
-def release_choices(connection, catalog, principal, identifier, runtime_sha):
+def release_choices(connection, catalog, principal, identifier, runtime_sha, *, action=RELEASE):
     require(principal.role == 'MANAGER', DENIED)
     require(uuid_value(identifier), INVALID)
     row = environment_row(connection, identifier)
@@ -82,7 +88,7 @@ def release_choices(connection, catalog, principal, identifier, runtime_sha):
     ):
         measured = {}
         source = decoded(row['configuration_ref'])
-        for config in installed_choices(catalog, identifier, source):
+        for config in installed_choices(catalog, identifier, source, action):
             key = (config.release_ref, config.candidate_sha256)
             if key not in measured:
                 measured[key] = checked_candidate(connection, catalog, config, runtime_sha)

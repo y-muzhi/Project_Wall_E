@@ -4,13 +4,16 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from backend.app.management.attachment_observation import now
 from backend.app.management.recovery_evidence import backup_cutoff, parse_local_recovery
+from backend.app.management.recovery_offhost import offhost_authority, offhost_metadata
 from backend.app.management.registry import is_timestamp
 
 from .environment_backup_coverage import LockedBackupCoverage, locked_coverage
 from .environment_backup_rehearsal import POLICY as DATA_POLICY
 from .environment_files import (
     MAX_REVISION,
+    EnvironmentFailure,
     canonical,
     decode,
     digest,
@@ -20,47 +23,56 @@ from .environment_files import (
 )
 from .environment_installation import sha_value, uuid_value, version_record
 from .environment_recovery_installation import checked_ref
-from .schema_v22_release import SchemaRelease
 from .environment_release_preflight import (
     CAPTURE_POLICY,
+    backup_point_from_manifest,
     candidate_target,
     read_reference,
     verified_backup,
 )
+from .schema_v22_release import SchemaRelease
 
 POLICY = 'restore-source-preflight.v1.json'
+OFFHOST_POLICY = 'restore-source-preflight.v2.json'
+POLICIES = {POLICY: 1, OFFHOST_POLICY: 2}
+OFFHOST_FIELDS = ('offhost_authority', 'offhost_verification')
 INVALID = 'RESTORE_PREFLIGHT_INTENT_MISMATCH'
 UNVERIFIED = 'RESTORE_PREFLIGHT_UNVERIFIED'
 
 
 def restore_plan(path, expected):
-    require(path.is_absolute() and path.name == POLICY and sha_value(expected), INVALID)
+    version = POLICIES.get(path.name)
+    require(path.is_absolute() and version is not None and sha_value(expected), INVALID)
     raw = read_protected(path)
     require(digest(raw) == expected, INVALID)
     plan = decode(raw, INVALID)
-    version_record(
-        plan,
-        (
-            'operation_id',
-            'installation_sha256',
-            'source_data_generation',
-            'source_deployment_id',
-            'source_control_revision',
-            'source_configuration_sha256',
-            'preserved',
-            'selected',
-            'accepted_backup_cutoff_at',
-            'data_handling',
-            'candidate_proof',
-            'target_manifest',
-            'target_schema_directory',
-            'target_data_generation',
-            'target_deployment_id',
-            'target_configuration_sha256',
-            'data_preparation',
-        ),
-        INVALID,
+    fields = (
+        'operation_id',
+        'installation_sha256',
+        'source_data_generation',
+        'source_deployment_id',
+        'source_control_revision',
+        'source_configuration_sha256',
+        'preserved',
+        'selected',
+        'accepted_backup_cutoff_at',
+        'data_handling',
+        'candidate_proof',
+        'target_manifest',
+        'target_schema_directory',
+        'target_data_generation',
+        'target_deployment_id',
+        'target_configuration_sha256',
+        'data_preparation',
     )
+    if version == 2:
+        exact(plan, ('format_version', *fields, *OFFHOST_FIELDS), INVALID)
+        require(type(plan['format_version']) is int and plan['format_version'] == 2, INVALID)
+        offhost_authority(plan['offhost_authority'], INVALID)
+        reference = exact(plan['offhost_verification'], ('path', 'sha256'), INVALID)
+        require(sha_value(reference['sha256']), INVALID)
+    else:
+        version_record(plan, fields, INVALID)
     preserved = exact(plan['preserved'], ('backup_id', 'capture_policy', 'verification'), INVALID)
     selected = exact(plan['selected'], ('backup_id', 'verification', 'local_verification'), INVALID)
     require(
@@ -137,6 +149,18 @@ def confirm_current_source(plan, source):
     )
 
 
+def selected_offhost_report(plan, point, environment_id, ceiling, code):
+    reference = plan['offhost_verification']
+    try:
+        report = read_reference(reference)
+    except (EnvironmentFailure, OSError) as error:
+        raise EnvironmentFailure(code) from error
+    metadata = offhost_metadata(
+        report, point, environment_id, ceiling, plan['offhost_authority'], code
+    )
+    return {**metadata, 'verification_sha256': reference['sha256']}
+
+
 def verify_selection(args, plan, source, target_schema):
     preserved = plan['preserved']
     chosen = plan['selected']
@@ -179,7 +203,14 @@ def verify_selection(args, plan, source, target_schema):
         == target_schema.schema_contract_sha256,
         UNVERIFIED,
     )
-    return before, before_sha, selected, selected_sha
+    offhost = {}
+    if plan['format_version'] == 2:
+        point = backup_point_from_manifest(selected, selected_sha, UNVERIFIED)
+        verified = selected_offhost_report(
+            plan, point, source.installation.environment_id, now(), UNVERIFIED
+        )
+        offhost = {'selected_offhost_verification_sha256': verified['verification_sha256']}
+    return before, before_sha, selected, selected_sha, offhost
 
 
 @contextmanager
@@ -196,7 +227,9 @@ def locked_restore_preflight(native, active, args, entry):
     )
     with locked_coverage(native, active, capture, entry) as source:
         confirm_current_source(plan, source)
-        before, before_sha, selected, selected_sha = verify_selection(args, plan, source, schema)
+        before, before_sha, selected, selected_sha, offhost = verify_selection(
+            args, plan, source, schema
+        )
         source.lock.assert_owned()
         observed = {
             'format_version': 1,
@@ -224,6 +257,7 @@ def locked_restore_preflight(native, active, args, entry):
             'selected_logical_content_sha256': selected['logical_content_sha256'],
             'selected_backup_cutoff_at': plan['accepted_backup_cutoff_at'],
             'selected_local_verification_sha256': plan['selected']['local_verification']['sha256'],
+            **offhost,
             'data_handling': plan['data_handling'],
             'target_release_id': release['release_id'],
             'target_release_manifest_sha256': candidate['manifest_sha256'],

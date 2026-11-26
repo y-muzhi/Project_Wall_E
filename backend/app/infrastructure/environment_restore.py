@@ -183,9 +183,10 @@ def read_local(fd, name, installation):
         return None
 
 
-def target_marker(fd, installation, common):
+def target_marker(fd, installation, common, *, create=False):
     marker = read_local(fd, TARGET, installation)
     if marker is None:
+        require(create, UNVERIFIED)
         if os.listdir(fd):
             raise EnvironmentFailure(UNVERIFIED, uncertain=True)
         flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -346,7 +347,7 @@ def completed(fd, installation, common, plan, capture):
 
 
 def convert(installation, release, plan, capture, source, destination, fd, common):
-    marker = target_marker(fd, installation, common)
+    marker = target_marker(fd, installation, common, create=True)
     props = safe_target_file(fd, installation, marker['database_identity'])
     source_file = source / SNAPSHOT
     target_file = destination / SNAPSHOT
@@ -418,6 +419,7 @@ def restore_database(native, active, args, entry):
         SimpleNamespace(anchor=args.anchor, anchor_sha256=args.anchor_sha256, project=program),
         active,
         program_sha,
+        offline=True,
     )
     installation.check_identity(maintenance=True)
     require(
@@ -438,6 +440,7 @@ def restore_database(native, active, args, entry):
             existing = completed(fd, installation, common, plan, capture)
             if existing is not None:
                 return existing
+            installation.check_hold()
             with ExitStack() as opened:
                 lock = opened.enter_context(installation.lock(native))
                 existing = completed(fd, installation, common, plan, capture)
@@ -478,9 +481,6 @@ def restore_database(native, active, args, entry):
                     == receipt,
                     UNVERIFIED,
                 )
-                lock.assert_owned()
-                require(read_control(control_fd, installation) == control, STALE)
-                installation.check_hold()
                 result = {
                     **common,
                     'status': restoration_status(plan['format_version']),
@@ -492,7 +492,10 @@ def restore_database(native, active, args, entry):
                 }
                 if asset_index is not None:
                     result['restored_asset_index'] = asset_index
-                persisted_write(fd, RECEIPT, canonical(result), mode=0o400)
+                with installation.host_admission():
+                    lock.assert_owned()
+                    require(read_control(control_fd, installation) == control, STALE)
+                    persisted_write(fd, RECEIPT, canonical(result), mode=0o400)
                 return completed(fd, installation, common, plan, capture)
         except (OSError, sqlite3.Error, ValueError, SchemaMismatch, EnvironmentFailure) as error:
             if os.listdir(fd):

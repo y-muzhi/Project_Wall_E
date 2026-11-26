@@ -17,6 +17,7 @@ from .registry_recovery_disposition_receipts import (
     disposition_manifest,
     permitted_dispositions,
 )
+from .registry_recovery_effects import DEPLOYMENT_STEPS, START_STEP, current_runtime_unit
 from .registry_recovery_entry_admission import verify_admitted_gateway
 from .registry_recovery_history import (
     retained_snapshot_metadata,
@@ -31,8 +32,17 @@ from .registry_recovery_observation import (
     protected_observations,
     read_observation,
 )
-from .registry_recovery_outcome import BACKUP_COMPLETED, matching_original
+from .registry_recovery_opened_review import adopted_deployment_observations, adopted_host_rows
+from .registry_recovery_outcome import (
+    BACKUP_COMPLETED,
+    EFFECT_DISPOSITIONS,
+    OPENED_DEPLOYMENT,
+    RELEASE_RETIRED,
+    RESTORE_RETIRED,
+    matching_original,
+)
 from .registry_recovery_reobserve import selected_observation_inputs
+from .registry_recovery_stop import stopped_runtime_unit
 
 READY = 'MANAGEMENT_REGISTRY_RECOVERY_DISPATCH_READY'
 BLOCKED = 'MANAGEMENT_REGISTRY_RECOVERY_DISPATCH_BLOCKED'
@@ -63,10 +73,55 @@ BLOCKER_CODES = (
 INSPECTION_PAGE_SIZE = 25
 
 
-def blocked_subjects(rows, operations, expected_count, dispositions=None):
+def completed_effect_blocker(row, receipt):
+    evidence = receipt['evidence']
+    require(
+        row['ordinal'] == 1
+        and row['environment_id'] == evidence['environment_id']
+        and row['step_kind'] == evidence['step_kind']
+        and row['original_status'] == evidence['step_status'],
+        UNVERIFIED,
+    )
+    units = row['units']
+    if evidence['disposition'] in (BACKUP_COMPLETED, RESTORE_RETIRED, RELEASE_RETIRED):
+        require(row['state'] == 'UNKNOWN' and units == [], UNVERIFIED)
+        return None
+    name = stopped_runtime_unit(row['environment_id'], evidence['start_operation_id'])
+    require(len(units) == 1 and units[0]['unit'] == name, UNVERIFIED)
+    unit = units[0]
+    if (
+        row['state'] == 'OBSERVED'
+        and unit['state'] in ('ABSENT_OBSERVED', 'QUIET_OBSERVED')
+        and type(unit.get('main_pid')) is int
+        and unit['main_pid'] == 0
+        and unit.get('cgroup_empty') is True
+    ):
+        return None
+    reason = RUNTIME if unit['state'] == 'PRESENT_OBSERVED' else STEP
+    return {'reason_code': reason, 'unit': name}
+
+
+def runtime_unit_matches(row, unit, current):
+    step = row['step_kind']
+    if step in DEPLOYMENT_STEPS:
+        program = row.get('opening_binding', {}).get('program_sha256')
+        if not sha_value(program) or current.get('binding', {}).get('program_sha256') != program:
+            return False
+    elif step == START_STEP and row.get('original_operation_status') != 'CANCELLED':
+        attachment = row.get('runtime_authority', {}).get('configuration_attachment')
+        if attachment is None or current.get('configuration_attachment') != attachment:
+            return False
+    else:
+        return False
+    return current_runtime_unit(row, unit, current)
+
+
+def blocked_subjects(rows, operations, expected_count, dispositions=None, *, adopted_steps=None):
     dispositions = {} if dispositions is None else dispositions
+    adopted_steps = {} if adopted_steps is None else adopted_steps
     environments = {}
-    verified_backup_steps = set()
+    verified_adoptions = set()
+    verified_effect_steps = set()
     count = 0
     for row in rows:
         count += 1
@@ -83,7 +138,18 @@ def blocked_subjects(rows, operations, expected_count, dispositions=None):
         elif kind == 'ENVIRONMENT':
             environment = row['environment_id']
             require(environment not in environments, UNVERIFIED)
-            environments[environment] = state
+            environments[environment] = {
+                key: row.get(key)
+                for key in (
+                    'state',
+                    'binding',
+                    'configuration_attachment',
+                    'run_id',
+                    'policy_sha256',
+                    'lock_pid',
+                )
+                if key in row
+            }
             if state not in ('CLOSED', 'RUNNING_OBSERVED'):
                 yield {
                     'reason_code': ENVIRONMENT,
@@ -103,22 +169,6 @@ def blocked_subjects(rows, operations, expected_count, dispositions=None):
                     'resource_kind': row['resource_kind'],
                 }
         elif kind == 'ORIGINAL_HELPER_STEP':
-            identifier = row['operation_id']
-            receipt = dispositions.get(identifier)
-            if receipt is not None and receipt['outcome']['disposition'] == BACKUP_COMPLETED:
-                evidence = receipt['evidence']
-                require(
-                    identifier not in verified_backup_steps
-                    and row['ordinal'] == 1
-                    and row['environment_id'] == evidence['environment_id']
-                    and row['step_kind'] == evidence['step_kind']
-                    and row['original_status'] == evidence['step_status']
-                    and row['state'] == 'UNKNOWN'
-                    and row['units'] == [],
-                    UNVERIFIED,
-                )
-                verified_backup_steps.add(identifier)
-                continue
             subject = {
                 'kind': kind,
                 'state': state,
@@ -128,6 +178,41 @@ def blocked_subjects(rows, operations, expected_count, dispositions=None):
                 'ordinal': row['ordinal'],
                 'step_kind': row['step_kind'],
             }
+            if 'external_deployment' in row:
+                subject['external_deployment'] = row['external_deployment']
+            identifier = row['operation_id']
+            receipt = dispositions.get(identifier)
+            if receipt is not None and receipt['outcome']['disposition'] in EFFECT_DISPOSITIONS:
+                require(identifier not in verified_effect_steps, UNVERIFIED)
+                verified_effect_steps.add(identifier)
+                blocker = completed_effect_blocker(row, receipt)
+                if blocker is not None:
+                    yield {**subject, **blocker}
+                continue
+            if (
+                receipt is not None
+                and receipt['outcome']['disposition'] == OPENED_DEPLOYMENT
+                and identifier in adopted_steps
+                and row.get('external_deployment') == adopted_steps[identifier]
+            ):
+                units = row['units']
+                unit = stopped_runtime_unit(row['environment_id'], identifier)
+                require(
+                    identifier not in verified_adoptions
+                    and row['ordinal'] == 1
+                    and row['original_status'] == 'DISPATCHING'
+                    and row['step_kind'] in DEPLOYMENT_STEPS
+                    and state == 'OBSERVED'
+                    and len(units) == 1
+                    and units[0]['unit'] == unit
+                    and units[0]['state'] in ('ABSENT_OBSERVED', 'QUIET_OBSERVED')
+                    and units[0]['cgroup_empty'] is True
+                    and type(units[0]['main_pid']) is int
+                    and units[0]['main_pid'] == 0,
+                    UNVERIFIED,
+                )
+                verified_adoptions.add(identifier)
+                continue
             if row['original_status'] in ('DISPATCHING', 'UNKNOWN') or state != 'OBSERVED':
                 yield {**subject, 'reason_code': STEP}
             for unit in row['units']:
@@ -135,7 +220,9 @@ def blocked_subjects(rows, operations, expected_count, dispositions=None):
                     continue
                 if unit['unit'].startswith('walle-prep-'):
                     yield {**subject, 'reason_code': PREPARATION, 'unit': unit['unit']}
-                elif environments.get(row['environment_id']) != 'RUNNING_OBSERVED':
+                elif not runtime_unit_matches(
+                    row, unit, environments.get(row['environment_id'], {})
+                ):
                     yield {**subject, 'reason_code': RUNTIME, 'unit': unit['unit']}
         else:
             require(False, UNVERIFIED)
@@ -144,7 +231,10 @@ def blocked_subjects(rows, operations, expected_count, dispositions=None):
     for operation in operations:
         require(
             operation['status'] in ('WAITING_CAPACITY', 'ACCEPTED', 'RUNNING', 'UNKNOWN')
-            or matching_original(BACKUP_COMPLETED, operation['action'], operation['status']),
+            or any(
+                matching_original(disposition, operation['action'], operation['status'])
+                for disposition in EFFECT_DISPOSITIONS
+            ),
             UNVERIFIED,
         )
         identifier = operation['operation_id']
@@ -163,22 +253,26 @@ def blocked_subjects(rows, operations, expected_count, dispositions=None):
             'source_revision': operation['revision'],
             'source_intent_sha256': operation['intent_sha256'],
         }
-    expected_backup_steps = {
+    expected_effect_steps = {
         identifier
         for identifier, receipt in dispositions.items()
-        if receipt['outcome']['disposition'] == BACKUP_COMPLETED
+        if receipt['outcome']['disposition'] in EFFECT_DISPOSITIONS
     }
     require(
-        confirmed == set(dispositions) and verified_backup_steps == expected_backup_steps,
+        confirmed == set(dispositions)
+        and verified_effect_steps == expected_effect_steps
+        and set(adopted_steps).issubset(confirmed),
         UNVERIFIED,
     )
 
 
-def review_host_rows(rows, operations, expected_count, dispositions=None):
+def review_host_rows(rows, operations, expected_count, dispositions=None, *, adopted_steps=None):
     return dict(
         Counter(
             item['reason_code']
-            for item in blocked_subjects(rows, operations, expected_count, dispositions)
+            for item in blocked_subjects(
+                rows, operations, expected_count, dispositions, adopted_steps=adopted_steps
+            )
         )
     )
 
@@ -222,19 +316,29 @@ def review_receipt(native, current, args, entry, catalog, directory, subject, ve
     require_fresh(observed)
     coverage = selected_source_coverage(native, current, args, subject)
     dispositions = review_dispositions(native, current, subject, coverage)
+    overlays = adopted_deployment_observations(
+        native, current, args, entry, catalog, directory, subject, dispositions
+    )
     with protected_observations(path, current) as stored:
         blockers = review_host_rows(
-            inventory_rows(stored, OBSERVATIONS),
+            adopted_host_rows(inventory_rows(stored, OBSERVATIONS), overlays),
             inventory_rows(directory, 'operations.jsonl'),
             observed['artifact']['records'],
             dispositions,
+            adopted_steps=overlays[2],
         )
         if coverage['status'] == SOURCE_COVERAGE:
             blockers[SOURCE_COVERAGE] = 1
         if not blockers:
-            now = host_observations(directory, native, catalog, args.sha256, entry)
+            now = host_observations(directory, native, catalog, args, entry)
             rows = inventory_rows(stored, OBSERVATIONS)
-            if any(recorded != actual for recorded, actual in zip_longest(rows, now)):
+            if (
+                any(recorded != actual for recorded, actual in zip_longest(rows, now))
+                or adopted_deployment_observations(
+                    native, current, args, entry, catalog, directory, subject, dispositions
+                )
+                != overlays
+            ):
                 blockers[HOST_CHANGED] = 1
     require(read_observation(path, current, subject, expected=observed_pin) == observed, UNVERIFIED)
     require_fresh(observed)
@@ -310,8 +414,11 @@ def inspect_registry_recovery_dispatch(native, installation, args, entry):
             require(
                 disposition_manifest(dispositions) == review['verified_dispositions'], UNVERIFIED
             )
+            overlays = adopted_deployment_observations(
+                native, current, args, entry, catalog, directory, subject, dispositions
+            )
             items = inspect_blockers(
-                current, directory, subject, review, reason, offset, dispositions
+                current, directory, subject, review, reason, offset, dispositions, overlays=overlays
             )
         next_offset = offset + len(items)
         require(next_offset == min(total, offset + INSPECTION_PAGE_SIZE), UNVERIFIED)
@@ -329,7 +436,11 @@ def inspect_registry_recovery_dispatch(native, installation, args, entry):
         }
 
 
-def inspect_blockers(current, directory, subject, review, reason, offset, dispositions):
+def inspect_blockers(
+    current, directory, subject, review, reason, offset, dispositions, *, overlays=None
+):
+    if overlays is None:
+        overlays = ({}, {}, {})
     path = current.directory_root / HOST_OBSERVATIONS / subject['observation_id']
     observed = read_observation(
         path, current, subject, expected=review['observation_receipt_sha256']
@@ -337,10 +448,11 @@ def inspect_blockers(current, directory, subject, review, reason, offset, dispos
     require_fresh(observed)
     with protected_observations(path, current) as stored:
         blockers = blocked_subjects(
-            inventory_rows(stored, OBSERVATIONS),
+            adopted_host_rows(inventory_rows(stored, OBSERVATIONS), overlays),
             inventory_rows(directory, 'operations.jsonl'),
             observed['artifact']['records'],
             dispositions,
+            adopted_steps=overlays[2],
         )
         matches = (item for item in blockers if item['reason_code'] == reason)
         items = list(islice(matches, offset, offset + INSPECTION_PAGE_SIZE))

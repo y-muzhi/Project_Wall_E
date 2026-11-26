@@ -1,13 +1,17 @@
 """Bind a closed ordinary source and a fixed same-schema release without changing either."""
 
-from dataclasses import dataclass
 import fcntl
+from dataclasses import dataclass
 from types import SimpleNamespace
 
-from backend.app.management.recovery_evidence import parse_local_recovery
+from backend.app.management.attachment_observation import now
+from backend.app.management.recovery_evidence import backup_cutoff, parse_local_recovery
+from backend.app.management.recovery_offhost import offhost_authority, offhost_metadata
 from backend.app.management.registry import is_timestamp
 from backend.app.management.release_artifacts import (
     MANIFEST as RELEASE_MANIFEST,
+)
+from backend.app.management.release_artifacts import (
     snapshot_file,
     verify_release_details,
 )
@@ -37,6 +41,7 @@ from .environment_files import (
 from .environment_installation import (
     ANCHOR_NAME,
     DEPLOYMENTS,
+    RECONFIGURE_MODE,
     RESTORE_MODE,
     load_installation,
     sha_value,
@@ -45,10 +50,23 @@ from .environment_installation import (
 )
 from .environment_recovery_installation import checked_ref
 from .environment_release_compatibility import COMPATIBILITY, compatibility_record
+from .environment_restic_contract import BACKUP_POINT_FIELDS
 from .schema_v22_release import load_release
 
 POLICY = 'release-source-preflight.v1.json'
 ROLLBACK_POLICY = 'rollback-source-preflight.v1.json'
+RECONFIGURE_POLICY = 'reconfigure-source-preflight.v1.json'
+LOCAL_PREFLIGHT = {
+    'SAME_SCHEMA': POLICY,
+    'ROLLBACK_CODE': ROLLBACK_POLICY,
+    RECONFIGURE_MODE: RECONFIGURE_POLICY,
+}
+OFFHOST_PREFLIGHT = {
+    mode: name.removesuffix('.v1.json') + '.v2.json' for mode, name in LOCAL_PREFLIGHT.items()
+}
+PREFLIGHT_MODES = {
+    name: mode for forms in (LOCAL_PREFLIGHT, OFFHOST_PREFLIGHT) for mode, name in forms.items()
+}
 CAPTURE_POLICY = 'database-capture.v1.json'
 CANDIDATE_PROOF = 'release-candidate-check.v1.json'
 INVALID = 'RELEASE_PREFLIGHT_INTENT_MISMATCH'
@@ -116,7 +134,10 @@ def candidate_target(plan, active):
     target_schema = absolute(plan['target_schema_directory'], INVALID)
     with protected_directory(target_schema):
         schema = load_release(
-            target_schema, manifest['schema_manifest_sha256'], active.runtime_manifest_sha256
+            target_schema,
+            manifest['schema_manifest_sha256'],
+            active.runtime_manifest_sha256,
+            source_root=manifest_path.parent / 'application',
         )
     require(schema.schema_contract_sha256 == candidate['schema_contract_sha256'], UNVERIFIED)
     target_program, _ = snapshot_file(
@@ -186,10 +207,29 @@ def rollback_subject(plan, source, manifest, target_program, entry):
     return previous
 
 
-def compatibility(plan, source, current, manifest, target, target_program, *, rollback=False):
+def reconfiguration_program(plan, source, manifest, target_program):
+    binding = source.description.get('deployment_slot')
+    require(
+        binding is not None
+        and 'recovery_replica' not in source.description
+        and source.description['program_source']
+        == {'kind': 'FIXED_RELEASE', 'sha256': target_program}
+        and source.project
+        == absolute(plan['target_manifest']['path'], INVALID).parent / 'application'
+        and source.schema == absolute(plan['target_schema_directory'], INVALID)
+        and binding['release_id'] == manifest['release_id']
+        and binding['manifest_sha256'] == plan['target_manifest']['sha256']
+        and binding['frontend_index_sha256'] == manifest['frontend_index_ref']['sha256']
+        and source.description['schema_manifest_sha256'] == manifest['schema_manifest_sha256']
+        and source.description['runtime_manifest_sha256'] == manifest['runtime_manifest_sha256'],
+        UNVERIFIED,
+    )
+
+
+def compatibility(plan, source, current, manifest, target, target_program, *, retained=False):
     proof = read_reference(plan['compatibility_ref'], name=COMPATIBILITY)
     require(uuid_value(proof.get('compatibility_id')), INVALID)
-    if not rollback:
+    if not retained:
         require(
             {'ref': proof['compatibility_id'], 'sha256': plan['compatibility_ref']['sha256']}
             in manifest['compatibility_refs'],
@@ -216,10 +256,35 @@ class ReleasePreflight:
     capture_arguments: SimpleNamespace
 
 
+def backup_point_from_manifest(manifest, measured, code):
+    return {
+        **{
+            key: manifest[key]
+            for key in BACKUP_POINT_FIELDS
+            if key not in ('cutoff_at', 'backup_manifest_sha256')
+        },
+        'cutoff_at': backup_cutoff(manifest['cutoff_at'], code),
+        'backup_manifest_sha256': measured,
+        'database_bytes': manifest['database_artifact']['bytes'],
+    }
+
+
+def verify_offhost_preflight(plan, manifest, measured, source_environment):
+    authority = offhost_authority(plan['offhost_authority'], UNVERIFIED)
+    reference = plan['offhost_verification']
+    report = read_reference(reference)
+    point = backup_point_from_manifest(manifest, measured, UNVERIFIED)
+    offhost_metadata(report, point, source_environment, now(), authority, UNVERIFIED)
+    return reference['sha256']
+
+
 def preflight_inputs(active, args, entry):
     policy_name = args.release_preflight_policy.name
-    require(policy_name in (POLICY, ROLLBACK_POLICY), INVALID)
-    rollback = policy_name == ROLLBACK_POLICY
+    require(policy_name in PREFLIGHT_MODES, INVALID)
+    mode = PREFLIGHT_MODES[policy_name]
+    rollback = mode == 'ROLLBACK_CODE'
+    reconfigure = mode == RECONFIGURE_MODE
+    offhost = policy_name == OFFHOST_PREFLIGHT[mode]
     plan = read_policy(
         args.release_preflight_policy,
         args.release_preflight_policy_sha256,
@@ -236,7 +301,10 @@ def preflight_inputs(active, args, entry):
             'target_schema_directory',
             'compatibility_ref',
             *(('previous_installation', 'previous_project') if rollback else ()),
+            *(('target_access_sha256',) if reconfigure else ()),
+            *(('offhost_authority', 'offhost_verification') if offhost else ()),
         ),
+        version=2 if offhost else 1,
     )
     require(
         uuid_value(plan['operation_id'])
@@ -281,13 +349,20 @@ def preflight_inputs(active, args, entry):
         UNVERIFIED,
     )
     previous = rollback_subject(plan, source, release, target_program, entry) if rollback else None
+    if reconfigure:
+        reconfiguration_program(plan, source, release, target_program)
+        require(
+            sha_value(plan['target_access_sha256'])
+            and plan['target_access_sha256'] != source.description['access_policy_ref']['sha256'],
+            UNVERIFIED,
+        )
     accepted = compatibility(
-        plan, source, current, release, target, target_program, rollback=rollback
+        plan, source, current, release, target, target_program, retained=rollback or reconfigure
     )
     observed = {
         'format_version': 1,
         'status': 'CLOSED_RELEASE_PRECONDITIONS_VERIFIED',
-        'mode': 'ROLLBACK_CODE' if rollback else 'SAME_SCHEMA',
+        'mode': mode,
         'preflight_policy_sha256': args.release_preflight_policy_sha256,
         'operation_id': plan['operation_id'],
         'maintenance_plan_sha256': maintenance['plan_sha256'],
@@ -305,9 +380,15 @@ def preflight_inputs(active, args, entry):
         'schema_contract_sha256': target.schema_contract_sha256,
         'compatibility_id': accepted,
     }
+    if offhost:
+        observed['backup_offhost_verification_sha256'] = verify_offhost_preflight(
+            plan, package, measured, source.environment_id
+        )
     if previous is not None:
         observed['previous_fixed_deployment_id'] = previous.deployment_id
         observed['previous_installation_sha256'] = previous.anchor_sha256
+    if reconfigure:
+        observed['target_access_sha256'] = plan['target_access_sha256']
     receipt = {**observed, 'release_preflight_sha256': digest(canonical(observed))}
     return ReleasePreflight(receipt, coverage, operations)
 
@@ -315,7 +396,10 @@ def preflight_inputs(active, args, entry):
 def preflight_release_source(native, active, args, entry):
     planned = preflight_inputs(active, args, entry)
     require(
-        check_coverage(native, active, planned.capture_arguments, entry) == planned.coverage,
+        check_coverage(
+            native, active, planned.capture_arguments, entry, require_clean_database=True
+        )
+        == planned.coverage,
         UNVERIFIED,
     )
     return planned.receipt

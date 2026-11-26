@@ -1,29 +1,25 @@
 """Collect official, target-compatible wheels and install from a closed local set."""
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
-from http.client import IncompleteRead
 import importlib.metadata
 import json
 import os
-from pathlib import Path
 import re
+import runpy
 import shutil
 import subprocess
 import sys
 import sysconfig
+from concurrent.futures import ThreadPoolExecutor
+from http.client import IncompleteRead
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
 from urllib.request import urlopen
 
 PIP_VERSION = '26.2.2'
-PLATFORM = {
-    'os': 'linux',
-    'architecture': 'aarch64',
-    'distribution_id': 'ubuntu',
-    'distribution_version': '24.04',
-}
+runtime = runpy.run_path(str(Path(__file__).resolve().with_name('runtime.py')))
 PIP_CLI = (
     'import runpy, sys; sys.path.extend(sys.argv[1:3]); '
     "sys.argv = ['pip', *sys.argv[3:]]; runpy.run_module('pip', run_name='__main__')"
@@ -72,24 +68,31 @@ def collect(name, version, wheelhouse, tag_priority):
         raise ValueError(f'No admitted wheel for {name}=={version}')
     _, _, filename, tags, entry = min(choices, key=lambda item: item[:3])
     url = entry['url']
-    parsed = urlsplit(url)
-    if (
-        parsed.scheme != 'https'
-        or parsed.netloc != 'files.pythonhosted.org'
-        or parsed.path.rsplit('/', 1)[-1] != filename
-        or Path(filename).name != filename
-    ):
-        raise ValueError(f'Unexpected wheel source: {filename}')
-    target = wheelhouse / filename
+    runtime['validate_wheel_url'](url, filename)
     digest = hashlib.sha256()
-    with urlopen(url, timeout=60) as response, target.open('xb') as output:
-        if response.url != url:
-            raise ValueError(f'Unexpected wheel redirect: {filename}')
-        while chunk := response.read(1024 * 1024):
-            digest.update(chunk)
-            output.write(chunk)
-    if digest.hexdigest() != entry['digests']['sha256'] or target.stat().st_size != entry['size']:
-        raise ValueError(f'Unexpected wheel bytes: {filename}')
+    temporary = None
+    try:
+        with (
+            urlopen(url, timeout=60) as response,
+            NamedTemporaryFile(dir=wheelhouse, delete=False) as output,
+        ):
+            temporary = Path(output.name)
+            if response.url != url:
+                raise ValueError(f'Unexpected wheel redirect: {filename}')
+            while chunk := response.read(1024 * 1024):
+                digest.update(chunk)
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+        if (
+            digest.hexdigest() != entry['digests']['sha256']
+            or temporary.stat().st_size != entry['size']
+        ):
+            raise ValueError(f'Unexpected wheel bytes: {filename}')
+        os.link(temporary, wheelhouse / filename)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return {
         'name': name,
         'version': version,
@@ -101,15 +104,66 @@ def collect(name, version, wheelhouse, tag_priority):
     }
 
 
+def reuse_wheels(args, target, versions, input_data, bootstrap_source, parse_filename, tags):
+    manifest = args.wheel_manifest.absolute()
+    root = manifest.parent.parent
+    wheelhouse = args.wheelhouse.absolute()
+    if (
+        manifest != root / runtime['DEPENDENCIES']
+        or manifest.resolve(strict=True) != manifest
+        or wheelhouse.resolve(strict=True) != wheelhouse
+        or not wheelhouse.is_dir()
+    ):
+        raise ValueError('Expected an original wheel manifest and a local wheel directory')
+    original, source_lock, install_lock = runtime['read_wheel_manifest'](
+        root, args.wheel_manifest_sha256, target
+    )
+    if source_lock.read_bytes() != input_data:
+        raise ValueError('Input lock differs from the original wheel manifest')
+    installer = original['installer']
+    runtime['object_fields'](installer, 'name', 'version', 'bootstrap_wheel')
+    previous_bootstrap = runtime['artifact'](root, installer['bootstrap_wheel'])
+    if (
+        installer['name'] != 'pip'
+        or installer['version'] != PIP_VERSION
+        or previous_bootstrap != root / 'metadata' / bootstrap_source.name
+        or runtime['sha256'](bootstrap_source) != installer['bootstrap_wheel']['sha256']
+    ):
+        raise ValueError('Bootstrap wheel differs from the original build')
+
+    records = original['wheels']
+    if type(records) is not list or len(records) != len(versions):
+        raise ValueError('Wheel set does not match the input lock')
+    identities = [runtime['wheel_identity'](row, parse_filename, tags) for row in records]
+    if identities != sorted(versions.items()):
+        raise ValueError('Wheel set does not match the input lock')
+    if install_lock.read_bytes() != runtime['wheel_lock_content'](records):
+        raise ValueError('Install lock differs from the original wheel manifest')
+    if {entry.name for entry in wheelhouse.iterdir()} != {row['filename'] for row in records}:
+        raise ValueError('Wheel directory differs from the original manifest')
+    for row in records:
+        runtime['artifact'](
+            wheelhouse,
+            {'path': row['filename'], 'sha256': row['sha256'], 'bytes': row['bytes']},
+        )
+    return records
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input_lock', type=Path)
     parser.add_argument('wheelhouse', type=Path)
+    parser.add_argument('--architecture', choices=runtime['BUILD_ARCHITECTURES'], default='aarch64')
+    parser.add_argument(
+        '--wheel-manifest', type=Path, help='rebuild using an existing, fixed wheel directory'
+    )
+    parser.add_argument('--wheel-manifest-sha256', help='required SHA256 pin for --wheel-manifest')
     args = parser.parse_args()
+    if (args.wheel_manifest is None) != (args.wheel_manifest_sha256 is None):
+        parser.error('--wheel-manifest and --wheel-manifest-sha256 must be supplied together')
     if not (sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode):
         raise ValueError('Run the target interpreter with -I -B -S')
-    if sys.version_info[:3] != (3, 13, 18) or os.uname().machine != 'aarch64':
-        raise ValueError('This recipe targets CPython 3.13.18 on Linux ARM64')
+    platform = runtime['require_build_target'](args.architecture)
     prefix = Path(sys.base_prefix)
     metadata = prefix / 'metadata'
     site_packages = Path(sysconfig.get_path('purelib'))
@@ -124,7 +178,7 @@ def main():
     bootstrap = metadata / pip_name
     sys.path.append(str(bootstrap_source))
     from pip._vendor.packaging.tags import sys_tags
-    from pip._vendor.packaging.utils import canonicalize_name
+    from pip._vendor.packaging.utils import canonicalize_name, parse_wheel_filename
 
     input_data = args.input_lock.read_bytes()
     versions = {}
@@ -141,25 +195,33 @@ def main():
     if len(versions) != 31:
         raise ValueError('Expected the 31 pinned business dependencies')
 
-    args.wheelhouse.mkdir(mode=0o700, parents=False)
     tag_priority = {tag: position for position, tag in enumerate(sys_tags())}
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        requests = [
-            executor.submit(collect, name, version, args.wheelhouse, tag_priority)
-            for name, version in sorted(versions.items())
-        ]
-        records = [request.result() for request in requests]
+    if args.wheel_manifest is None:
+        args.wheelhouse.mkdir(mode=0o700, parents=False)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            requests = [
+                executor.submit(collect, name, version, args.wheelhouse, tag_priority)
+                for name, version in sorted(versions.items())
+            ]
+            records = [request.result() for request in requests]
+    else:
+        records = reuse_wheels(
+            args,
+            platform,
+            versions,
+            input_data,
+            bootstrap_source,
+            parse_wheel_filename,
+            tag_priority.keys(),
+        )
     with bootstrap_source.open('rb') as source, bootstrap.open('xb') as output:
         shutil.copyfileobj(source, output)
     source_lock = metadata / 'requirements.input.lock'
-    install_lock = metadata / 'requirements-linux-aarch64-cp313.lock'
+    install_lock = metadata / runtime['wheel_lock_name'](platform)
     with source_lock.open('xb') as output:
         output.write(input_data)
-    with install_lock.open('x', encoding='utf-8', newline='\n') as output:
-        for record in records:
-            output.write(
-                f'{record["name"]}=={record["version"]} --hash=sha256:{record["sha256"]}\n'
-            )
+    with install_lock.open('xb') as output:
+        output.write(runtime['wheel_lock_content'](records))
 
     env = {
         'HOME': os.environ['HOME'],
@@ -200,8 +262,8 @@ def main():
 
     manifest = {
         'format_version': 1,
-        'platform': PLATFORM,
-        'python_version': '3.13.18',
+        'platform': platform,
+        'python_version': runtime['PYTHON_VERSION'],
         'input_lock': artifact(prefix, source_lock),
         'install_lock': artifact(prefix, install_lock),
         'installer': {

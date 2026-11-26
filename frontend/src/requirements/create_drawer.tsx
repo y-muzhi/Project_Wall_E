@@ -1,10 +1,11 @@
 import { Icon, BusyIndicator } from '../shared/icon.tsx';
-import { useId, useLayoutEffect, useRef } from 'react';
+import { useContext, useId, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { registerModal, trapModalTab } from '../shared/modal.ts';
 import { requirementCatalog } from './catalog.ts';
 import type { CreateDraft, CreateState } from './create.ts';
 import { SingleSelect } from '../shared/single-select.tsx';
+import { ApplicationConnectionNotice } from '../application/connection-notice.ts';
 import { useMotionPresence } from '../shared/motion-react.ts';
 
 export function CreateRequirementDrawer({
@@ -26,6 +27,7 @@ export function CreateRequirementDrawer({
     composing = useRef(false),
     id = useId();
   const present = useMotionPresence(open);
+  const connectionNotice = useContext(ApplicationConnectionNotice);
   const locked = !open || state.busy || state.unknown;
   useLayoutEffect(() => {
     if (!open) return;
@@ -75,6 +77,7 @@ export function CreateRequirementDrawer({
     <dialog
       ref={dialog}
       className="create-drawer"
+      data-environment-connection-owner=""
       tabIndex={-1}
       inert={!open}
       aria-hidden={!open}
@@ -110,6 +113,7 @@ export function CreateRequirementDrawer({
             <Icon name="close" />
           </button>
         </header>
+        {open && connectionNotice}
         {state.error && (
           <p role="alert" className="inline-error create-feedback">
             ! {state.error}

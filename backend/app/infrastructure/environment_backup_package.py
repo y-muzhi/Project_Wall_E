@@ -1,8 +1,8 @@
 """Verify a sealed ordinary backup independently of its source installation."""
 
-from contextlib import contextmanager
 import fcntl
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -64,12 +64,12 @@ EVIDENCE = {
 }
 
 
-def read_policy(path, expected, filename, fields):
+def read_policy(path, expected, filename, fields, *, version=1):
     require(path.is_absolute() and path.name == filename and sha_value(expected), INVALID)
     raw = read_protected(path)
     require(digest(raw) == expected, INVALID)
     record = exact(decode(raw, INVALID), ('format_version', *fields), INVALID)
-    require(type(record['format_version']) is int and record['format_version'] == 1, INVALID)
+    require(type(record['format_version']) is int and record['format_version'] == version, INVALID)
     return record
 
 

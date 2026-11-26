@@ -1,7 +1,7 @@
 """Observe a stopped source and prepared target through the fixed host entry."""
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -10,15 +10,23 @@ from backend.app.infrastructure.environment_control import normal_stop, read_con
 from backend.app.infrastructure.environment_files import canonical, digest, exact, require
 from backend.app.infrastructure.environment_installation import (
     CAPABILITIES,
+    GATEWAY_VERIFIER_REQUIRED,
     WORKSPACE_PURPOSES,
     Installation,
+    access_scope,
     database_identity,
+    gateway_verifier_names,
+    read_access_policy,
     sha_value,
     uuid_value,
 )
 from backend.app.infrastructure.environment_lock import NativeEnvironmentFiles
 from backend.app.infrastructure.environment_release_deployment import check_stable_resources
-from backend.app.infrastructure.environment_release_preflight import compatibility
+from backend.app.infrastructure.environment_release_preflight import (
+    compatibility,
+    reconfiguration_program,
+    rollback_subject,
+)
 
 from .attachment_observation import (
     FRESH_MS,
@@ -84,7 +92,7 @@ def admitted_pair(config, runtime_sha, entry):
     binding = target.description.get('deployment_slot')
     require(
         binding is not None
-        and binding['authorization_mode'] == 'SAME_SCHEMA'
+        and binding['authorization_mode'] == config.deployment_mode
         and binding['release_id'] == config.release_ref == manifest['release_id']
         and binding['manifest_sha256'] == manifest_sha
         and manifest_file.parent / 'application' == target.project
@@ -97,17 +105,47 @@ def admitted_pair(config, runtime_sha, entry):
         and source.environment_root == target.environment_root
         and source.database == target.database
         and source.description['purpose'] == target.description['purpose']
+        and (source.description['access_policy_ref'] != target.description['access_policy_ref'])
+        == (config.target_access_sha256 is not None)
         and source.description['purpose'] in WORKSPACE_PURPOSES
         and all('recovery_replica' not in item.description for item in (source, target)),
         RESOURCE,
     )
+    proof = {
+        'compatibility_ref': compatibility_reference(config),
+        'target_manifest': config.manifest_reference,
+        'target_schema_directory': str(target.schema),
+    }
+    if config.target_access_sha256 is not None:
+        access = read_access_policy(target)
+        require(
+            target.description['access_policy_ref']['sha256'] == config.target_access_sha256
+            and access_scope(read_access_policy(source)) == access_scope(access)
+            and any(
+                item['client_kind'] == 'WEB' and item['permission'] == 'DEVELOP'
+                for item in access['principals']
+            ),
+            RESOURCE,
+        )
+        reconfiguration_program(
+            proof, source, manifest, target.description['program_source']['sha256']
+        )
+    elif config.rollback_source is not None:
+        rollback_subject(
+            {**proof, **config.rollback_source},
+            source,
+            manifest,
+            target.description['program_source']['sha256'],
+            entry,
+        )
     compatibility(
-        {'compatibility_ref': compatibility_reference(config)},
+        proof,
         source,
         source_schema,
         manifest,
         target_schema,
         target.description['program_source']['sha256'],
+        retained=config.rollback_source is not None or config.target_access_sha256 is not None,
     )
     return ReleasePair(source, target)
 
@@ -140,6 +178,9 @@ def capture_release_source(catalog, args, entry):
     require(os.geteuid() == 0, RESOURCE)
     registered = read_configuration(catalog, args.release_configuration_ref)
     pair = admitted_pair(registered, args.sha256, entry)
+    if pair.target.ingress_group is not None:
+        access = read_access_policy(pair.target)
+        require(gateway_verifier_names(access), GATEWAY_VERIFIER_REQUIRED)
     native = NativeEnvironmentFiles(args.root)
     check_stable_resources(pair.target, native)
     boot, started = machine_clock()
@@ -219,6 +260,10 @@ def observed_configuration(catalog, registered, *, fresh):
     require(
         source['deployment_id'] != target['deployment_id']
         and source['data_generation'] == target['data_generation']
+        and (
+            registered.target_access_sha256 is None
+            or source['program_sha256'] == target['program_sha256']
+        )
         and source['installation_sha256'] == registered.source['installation']['sha256']
         and target['installation_sha256'] == registered.target['installation']['sha256']
         and version(source['control_revision'])

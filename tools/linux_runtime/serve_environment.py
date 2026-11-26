@@ -1,16 +1,16 @@
 """Launch admitted ordinary or recovery-only applications, or manage start intents."""
 
 import argparse
-from contextlib import ExitStack, contextmanager
 import json
 import os
-from pathlib import Path
 import runpy
 import signal
 import socket
 import stat
 import subprocess
 import sys
+from contextlib import ExitStack, contextmanager
+from pathlib import Path
 
 
 def prebind(scope, resources, *, name='walle.sock', private=False):
@@ -34,6 +34,37 @@ def prebind(scope, resources, *, name='walle.sock', private=False):
     resources.callback(remove_our_socket)
     os.chmod(path, 0o600 if private or scope.installation.ingress_group is None else 0o660)
     return listener
+
+
+def serve_application(app, listener):
+    from uvicorn import Config, Server
+
+    from backend.app.infrastructure.owned_server import run_owned_server
+
+    class OrdinaryServer(Server):
+        @contextmanager
+        def capture_signals(self):
+            def shutdown(_number, _frame):
+                self.should_exit = True
+
+            signals = (signal.SIGINT, signal.SIGTERM)
+            previous = {event: signal.signal(event, shutdown) for event in signals}
+            try:
+                yield
+            finally:
+                for event, handler in previous.items():
+                    signal.signal(event, handler)
+
+    server = OrdinaryServer(
+        Config(
+            app,
+            proxy_headers=False,
+            lifespan='on',
+            access_log=False,
+            timeout_graceful_shutdown=10,
+        )
+    )
+    return run_owned_server(server, listener)
 
 
 def target(args, entry, environment):
@@ -94,21 +125,6 @@ def target(args, entry, environment):
         require_retained_data_inaccessible(installation)
 
     from backend.app.service import create_app
-    from uvicorn import Config, Server
-
-    class OrdinaryServer(Server):
-        @contextmanager
-        def capture_signals(self):
-            def shutdown(_number, _frame):
-                self.should_exit = True
-
-            signals = (signal.SIGINT, signal.SIGTERM)
-            previous = {event: signal.signal(event, shutdown) for event in signals}
-            try:
-                yield
-            finally:
-                for event, handler in previous.items():
-                    signal.signal(event, handler)
 
     with ExitStack() as resources:
         if args.action == '_serve-release-open':
@@ -162,17 +178,7 @@ def target(args, entry, environment):
             )
             app = create_app(ordinary=scope, frontend_directory=installation.path('frontend'))
             listener = prebind(scope, resources)
-        server = OrdinaryServer(
-            Config(
-                app,
-                proxy_headers=False,
-                lifespan='on',
-                access_log=False,
-                timeout_graceful_shutdown=10,
-            )
-        )
-        server.run(sockets=[listener])
-        return 0 if server.started else 2
+        return serve_application(app, listener)
 
 
 def main():

@@ -12,16 +12,27 @@ import { WorkbenchView } from '../requirements/workbench-view.tsx';
 import { RequirementDetail } from '../requirements/detail.tsx';
 import { ApplicationNavigation } from './navigation.tsx';
 import { ApplicationHeaderHost } from './header.tsx';
+import { activeModal, subscribeModal } from '../shared/modal.ts';
+import { ApplicationConnectionNotice } from './connection-notice.ts';
 import { ScopeRecovery } from './scope-recovery.tsx';
+import { BrowserArchive } from './browser-archive-view.tsx';
+import type { ArchivedDraftValidator } from './browser-archive.ts';
 import type { RequirementDetailOwner } from '../requirements/detail-owner.ts';
 
 export function Application({
   router,
   connection,
-}: Readonly<{ router: ApplicationRouter; connection: EnvironmentConnection }>) {
+  validateArchivedDraft,
+}: Readonly<{
+  router: ApplicationRouter;
+  connection: EnvironmentConnection;
+  validateArchivedDraft: ArchivedDraftValidator;
+}>) {
   const state = useSyncExternalStore(router.subscribe, router.getSnapshot);
   const { phase, environment } = useSyncExternalStore(connection.subscribe, connection.getSnapshot);
   const writeReason = connection.blockReason(true);
+  const modal = useSyncExternalStore(subscribeModal, activeModal);
+  const connectionNoticeInModal = modal?.hasAttribute('data-environment-connection-owner') ?? false;
   const route = state.route.kind;
   const unavailable =
     route === 'CODE_SETTINGS' || route === 'TESTING_SETTINGS'
@@ -72,7 +83,35 @@ export function Application({
     window.addEventListener('scroll', capture, { passive: true });
     return () => window.removeEventListener('scroll', capture);
   }, [router]);
-  return (
+  const connectionNotice =
+    phase === 'READY' ? null : (
+      <section className="application-warning environment-connection" aria-label="环境连接">
+        <p role={phase === 'CHECKING' ? 'status' : 'alert'}>
+          {phase === 'CHECKING' ? '正在重新核对环境和权限…' : environmentMessages[phase]}{' '}
+          页面内容来自上次读取。
+        </p>
+        {phase === 'SCOPE_CHANGED' ? (
+          <ScopeRecovery scope={environment.scope} router={router} detailOwner={detailOwner} />
+        ) : (
+          <div className="application-entry-actions">
+            {phase === 'ACCESS' && (
+              <a className="ui-button" href="/" target="_blank" rel="noopener noreferrer">
+                打开登录入口
+              </a>
+            )}
+            <button
+              className="ui-button"
+              type="button"
+              disabled={phase === 'CHECKING'}
+              onClick={() => void connection.recheck()}
+            >
+              {phase === 'CHECKING' ? '核对中…' : '重新核对连接'}
+            </button>
+          </div>
+        )}
+      </section>
+    );
+  const page = (
     <div
       className="application"
       style={{ '--application-header-height': `${headerHeight}px` } as CSSProperties}
@@ -115,50 +154,22 @@ export function Application({
       />
       <ApplicationHeaderHost.Provider value={headerHost}>
         <div className="application-main" data-page={state.route.kind}>
-          <p className="application-warning">
-            {environmentPurposeNames[environment.purpose]}
-            {environment.displayName !== environmentPurposeNames[environment.purpose] &&
-              ` · ${environment.displayName}`}
-            {environment.userPermission === 'READ_ONLY' && !environment.recovery
-              ? ' · 当前身份仅可查看'
-              : ''}
-          </p>
+          <BrowserArchive scope={environment.scope} validate={validateArchivedDraft}>
+            <span>
+              {environmentPurposeNames[environment.purpose]}
+              {environment.displayName !== environmentPurposeNames[environment.purpose] &&
+                ` · ${environment.displayName}`}
+              {environment.userPermission === 'READ_ONLY' && !environment.recovery
+                ? ' · 当前身份仅可查看'
+                : ''}
+            </span>
+          </BrowserArchive>
           {phase === 'READY' && environment.recovery && (
             <p className="application-warning" role="status">
               恢复核对中。已核验的需求、文档与历史可查看。
             </p>
           )}
-          {phase !== 'READY' && (
-            <section className="application-warning environment-connection" aria-label="环境连接">
-              <p role={phase === 'CHECKING' ? 'status' : 'alert'}>
-                {phase === 'CHECKING' ? '正在重新核对环境和权限…' : environmentMessages[phase]}{' '}
-                页面内容来自上次读取。
-              </p>
-              {phase === 'SCOPE_CHANGED' ? (
-                <ScopeRecovery
-                  scope={environment.scope}
-                  router={router}
-                  detailOwner={detailOwner}
-                />
-              ) : (
-                <div className="application-entry-actions">
-                  {phase === 'ACCESS' && (
-                    <a className="ui-button" href="/" target="_blank" rel="noopener noreferrer">
-                      打开登录入口
-                    </a>
-                  )}
-                  <button
-                    className="ui-button"
-                    type="button"
-                    disabled={phase === 'CHECKING'}
-                    onClick={() => void connection.recheck()}
-                  >
-                    {phase === 'CHECKING' ? '核对中…' : '重新核对连接'}
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
+          {!connectionNoticeInModal && connectionNotice}
           {state.warning && (
             <p className="application-warning" role="status">
               <strong>提示：</strong>
@@ -215,5 +226,10 @@ export function Application({
         </div>
       </ApplicationHeaderHost.Provider>
     </div>
+  );
+  return (
+    <ApplicationConnectionNotice.Provider value={connectionNotice}>
+      {page}
+    </ApplicationConnectionNotice.Provider>
   );
 }

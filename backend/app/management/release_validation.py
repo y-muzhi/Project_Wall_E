@@ -1,7 +1,8 @@
 """Prepare the fixed ordinary installation for one independent release validation."""
 
-from dataclasses import dataclass
 import os
+from contextlib import ExitStack
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 from backend.app.infrastructure.environment_files import (
@@ -17,17 +18,19 @@ from backend.app.infrastructure.environment_files import (
 from backend.app.infrastructure.environment_installation import (
     ANCHOR_NAME,
     CANDIDATE_PURPOSE,
+    business_origin,
     identity_record,
     load_installation,
+    read_access_policy,
     sha_value,
     uuid_value,
 )
 
-from .attachment_observation import directory_facts, invoke_observer
+from .attachment_observation import directory_facts
 from .operation_contract import installed_record, path_reference
+from .registry_installation import managed_id
 from .release_artifacts import MANIFEST, indexed_files, snapshot_file, verify_release_details
 from .release_candidates import installed_candidate
-from .registry_installation import managed_id
 
 POLICY = 'candidate-validation-policy.v1.json'
 UNVERIFIED = 'CANDIDATE_VALIDATION_UNVERIFIED'
@@ -42,12 +45,15 @@ class CandidateInstallation:
     schema_sha: str
     host_identity: dict
     binding: dict
+    public_origin: str
 
 
 def load_policy(path, expected, catalog, registry):
     require(path.is_absolute() and path.name == POLICY and sha_value(expected), UNVERIFIED)
+    loaded = installed_record(path, expected, code=UNVERIFIED)
+    endpoint_field = ('business_endpoint',) if 'business_endpoint' in loaded else ()
     record = exact(
-        installed_record(path, expected, code=UNVERIFIED),
+        loaded,
         (
             'format_version',
             *catalog.scope,
@@ -62,6 +68,7 @@ def load_policy(path, expected, catalog, registry):
             'maintenance_uid',
             'shared_gid',
             'ingress_gid',
+            *endpoint_field,
         ),
         UNVERIFIED,
     )
@@ -83,6 +90,15 @@ def load_policy(path, expected, catalog, registry):
         and len({record['shared_gid'], record['ingress_gid'], registry.gid}) == 3,
         UNVERIFIED,
     )
+    try:
+        endpoint = (
+            exact(record['business_endpoint'], ('domain', 'port'), UNVERIFIED)
+            if endpoint_field
+            else {}
+        )
+        public_origin = business_origin(record['environment_id'], **endpoint)
+    except EnvironmentFailure as error:
+        raise EnvironmentFailure(UNVERIFIED) from error
     location = exact(record['host_root'], ('path', 'identity'), UNVERIFIED)
     identity_record(location['identity'], UNVERIFIED)
     host = absolute(location['path'], UNVERIFIED)
@@ -97,7 +113,7 @@ def load_policy(path, expected, catalog, registry):
     with protected_directory(host) as fd:
         require(identity(os.fstat(fd)) == location['identity'], UNVERIFIED)
         check_ext4(fd)
-    return record, host
+    return record, host, public_origin
 
 
 def check_bound_candidate(expected, observation, checked):
@@ -129,7 +145,9 @@ def check_bound_candidate(expected, observation, checked):
     )
 
 
-def inspect_candidate(catalog, registry, args, plan, tool):
+def inspect_candidate(catalog, registry, args, plan, tool, *, host):
+    from .release_publication import checked_root, disjoint, observe_candidate, publication_inputs
+
     descriptor = installed_candidate(catalog, plan['release_id'], plan['candidate_sha256'])
     anchor, manifest_sha = path_reference(descriptor['manifest_ref'])
     schema, schema_sha = path_reference(descriptor['schema_ref'])
@@ -138,40 +156,25 @@ def inspect_candidate(catalog, registry, args, plan, tool):
         and descriptor['delivery_operation_id'] == plan['delivery_operation_id'],
         UNVERIFIED,
     )
-    observed = invoke_observer(
-        registry.uid,
-        registry.gid,
-        [
-            tool,
-            'candidate',
-            '--root',
-            args.root,
-            '--project',
-            args.project,
-            '--runtime-entry',
-            args.runtime_entry,
-            '--anchor',
-            args.anchor,
-            '--sha256',
-            args.sha256,
-            '--program-sha256',
-            args.program_sha256,
-            '--anchor-sha256',
-            args.anchor_sha256,
-            '--catalog',
-            args.catalog,
-            '--catalog-sha256',
-            args.catalog_sha256,
-            '--release-candidate',
-            plan['release_id'],
-            '--release-candidate-sha256',
-            plan['candidate_sha256'],
-        ],
-        catalog.directory / 'observations',
-    )
-    checked, manifest = verify_release_details(anchor, manifest_sha, args.sha256)
-    check_bound_candidate(plan, observed, checked)
-    require(checked['schema_manifest_sha256'] == schema_sha, UNVERIFIED)
+    staged = getattr(args, 'release_publication_policy', None) is not None
+    with ExitStack() as roots:
+        if staged:
+            publication, source, output, staged_descriptor, pin = publication_inputs(catalog, args)
+            require(
+                publication['release_id'] == plan['release_id']
+                and publication['candidate_sha256'] == plan['candidate_sha256']
+                and staged_descriptor == descriptor
+                and pin == manifest_sha
+                and disjoint(host, output),
+                UNVERIFIED,
+            )
+            roots.enter_context(checked_root(source, publication['build_root']['identity']))
+            roots.enter_context(checked_root(output, publication['publication_root']['identity']))
+            anchor = source / MANIFEST
+        observed = observe_candidate(catalog, registry, args, plan, tool, staged=staged)
+        checked, manifest = verify_release_details(anchor, manifest_sha, args.sha256)
+        check_bound_candidate(plan, observed, checked)
+        require(checked['schema_manifest_sha256'] == schema_sha, UNVERIFIED)
     return anchor, schema, manifest
 
 
@@ -221,7 +224,8 @@ def existing_candidate_installation(args, validation):
             and description['release_validation'] == validation.binding
             and description['program_source']
             == {'kind': 'FIXED_RELEASE', 'sha256': validation.program_sha}
-            and description['schema_manifest_sha256'] == validation.schema_sha,
+            and description['schema_manifest_sha256'] == validation.schema_sha
+            and read_access_policy(current)['public_origin'] == validation.public_origin,
             CONFLICT,
         )
         directory_facts(current)
@@ -242,8 +246,10 @@ def prepare_candidate_validation(catalog, registry, args, entry, tool):
 
     require(os.geteuid() == 0, UNVERIFIED)
     policy_sha = args.candidate_validation_policy_sha256
-    plan, host = load_policy(args.candidate_validation_policy, policy_sha, catalog, registry)
-    anchor, schema, manifest = inspect_candidate(catalog, registry, args, plan, tool)
+    plan, host, public_origin = load_policy(
+        args.candidate_validation_policy, policy_sha, catalog, registry
+    )
+    anchor, schema, manifest = inspect_candidate(catalog, registry, args, plan, tool, host=host)
     protected_inputs = (anchor.parent, schema, args.root, args.project, args.anchor.parent)
     require(
         all(
@@ -275,6 +281,7 @@ def prepare_candidate_validation(catalog, registry, args, entry, tool):
         manifest['schema_manifest_sha256'],
         plan['host_root']['identity'],
         binding,
+        public_origin,
     )
     installed = provision(
         SimpleNamespace(

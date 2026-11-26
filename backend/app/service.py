@@ -8,66 +8,68 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from starlette.responses import JSONResponse
 
-from backend.app.code_tasks.authorization_api import authorization_router
-from backend.app.code_tasks.check_set_api import check_set_router
-from backend.app.code_tasks.command_api import COMMAND_CONTROL_PATHS, command_router
-from backend.app.code_tasks.configuration_api import (
-    configuration_router,
-    is_configuration_path,
-)
-from backend.app.code_tasks.design_revisions import design_revision_router, is_design_revision_path
-from backend.app.code_tasks.execution_profile_api import execution_profile_router
-from backend.app.code_tasks.repository_observations import (
-    is_repository_observation_path,
-    repository_observation_router,
-)
-from backend.app.code_tasks.repository_operations import (
-    is_repository_operation_path,
-    repository_operation_router,
-)
-from backend.app.code_tasks.repository_reads import is_repository_read_path, repository_read_router
-from backend.app.code_tasks.repository_registration_api import (
-    is_repository_write_path,
-    repository_registration_router,
-)
-from backend.app.code_tasks.repository_snapshot_reads import (
-    is_repository_snapshot_path,
-    repository_snapshot_router,
-)
-from backend.app.code_tasks.task_creation_api import (
-    is_document_code_tasks_path,
-    task_creation_router,
-)
-from backend.app.code_tasks.task_defects import defect_router
-from backend.app.code_tasks.task_delivery_api import delivery_command_router
-from backend.app.code_tasks.task_delivery_reads import delivery_reads_router
-from backend.app.code_tasks.task_read_api import is_code_task_detail_path, task_read_router
-from backend.app.code_tasks.task_repairs import repair_router
-from backend.app.code_tasks.task_start_api import is_task_start_path, task_start_router
-from backend.app.code_tasks.task_start_workspace import recover_workspace_starts
-from backend.app.code_tasks.task_stop import serve_task_stops
-from backend.app.code_tasks.task_stop_api import is_task_stop_path, task_stop_router
 from backend.app.comments.api import comment_router
 from backend.app.documents.api import doc_router
-from backend.app.guide.api import guide_router
 from backend.app.guide.orchestrator import _native
-from backend.app.guide.worker import GuideWorker
-from backend.app.infrastructure.database import Database, configured_path
 from backend.app.infrastructure.execution_lease import ExecutionLease, LeasedDatabase
-from backend.app.infrastructure.idempotency import Idempotency
-from backend.app.infrastructure.resources import ResourceCatalog
-from backend.app.infrastructure.schema_v20_release import load_release
+from backend.app.infrastructure.resources import DocumentResources, ResourceCatalog
 from backend.app.messages.api import message_router
 from backend.app.requirements.api import req_router
 from backend.app.revisions.api import rev_router
 from backend.app.shared.http_boundary import HttpRuntime
-from backend.app.shared.http_errors import error_response, new_request_id
-from backend.app.suggestions.api import batch_router
-from backend.app.testing.plan_api import TEST_PLAN_ROUTER, is_testing_plan_path
-from backend.app.testing.planning_worker import recover_drafts, serve_testing_plans
-from backend.app.testing.policy_api import is_testing_policy_path, testing_policy_router
+
+
+def _build_app(lifespan, routers, frontend_directory):
+    app = FastAPI(
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        redirect_slashes=False,
+    )
+    for router in routers:
+        app.include_router(router)
+    if frontend_directory is not None:
+        from .frontend import install_frontend
+
+        install_frontend(app, frontend_directory)
+    return app
+
+
+def _recovery_app(recovery, catalog, frontend_directory):
+    from backend.app.infrastructure.environment_http import api_admission
+    from backend.app.requirements.discussion import discussion_resources
+
+    def load_document_resources():
+        return DocumentResources(default_collaboration=discussion_resources())
+
+    @asynccontextmanager
+    async def lifespan(app):
+        resources = await _native(load_document_resources) if catalog is None else catalog
+        lease = ExecutionLease()
+        await _native(recovery.start)
+        app.state.walle_runtime = HttpRuntime(LeasedDatabase(recovery.database, lease), resources)
+        try:
+            yield
+        finally:
+            recovery.drain()
+            try:
+                await _native(lease.retire_and_wait)
+            finally:
+                app.state.walle_runtime = None
+
+    app = _build_app(
+        lifespan,
+        (req_router, doc_router, rev_router, comment_router, message_router),
+        frontend_directory,
+    )
+
+    @app.middleware('http')
+    async def admission(request, call_next):
+        return await api_admission(request, call_next, recovery, recovery=True)
+
+    return app
 
 
 def create_app(
@@ -89,26 +91,71 @@ def create_app(
             for input_value in (database, worker_factory, registration_installation)
         ):
             raise TypeError('Installed execution must use its own admitted database and worker')
+    if recovery is not None:
+        return _recovery_app(recovery, catalog, frontend_directory)
+
+    from backend.app.code_tasks.authorization_api import authorization_router
+    from backend.app.code_tasks.check_set_api import check_set_router
+    from backend.app.code_tasks.command_api import COMMAND_CONTROL_PATHS, command_router
+    from backend.app.code_tasks.configuration_api import (
+        configuration_router,
+        is_configuration_path,
+    )
+    from backend.app.code_tasks.design_revisions import (
+        design_revision_router,
+        is_design_revision_path,
+    )
+    from backend.app.code_tasks.execution_profile_api import execution_profile_router
+    from backend.app.code_tasks.repository_observations import (
+        is_repository_observation_path,
+        repository_observation_router,
+    )
+    from backend.app.code_tasks.repository_operations import (
+        is_repository_operation_path,
+        repository_operation_router,
+    )
+    from backend.app.code_tasks.repository_reads import (
+        is_repository_read_path,
+        repository_read_router,
+    )
+    from backend.app.code_tasks.repository_registration_api import (
+        is_repository_write_path,
+        repository_registration_router,
+    )
+    from backend.app.code_tasks.repository_snapshot_reads import (
+        is_repository_snapshot_path,
+        repository_snapshot_router,
+    )
+    from backend.app.code_tasks.task_creation_api import (
+        is_document_code_tasks_path,
+        task_creation_router,
+    )
+    from backend.app.code_tasks.task_defects import defect_router
+    from backend.app.code_tasks.task_delivery_api import delivery_command_router
+    from backend.app.code_tasks.task_delivery_reads import delivery_reads_router
+    from backend.app.code_tasks.task_read_api import is_code_task_detail_path, task_read_router
+    from backend.app.code_tasks.task_repairs import repair_router
+    from backend.app.code_tasks.task_start_api import is_task_start_path, task_start_router
+    from backend.app.code_tasks.task_start_workspace import recover_workspace_starts
+    from backend.app.code_tasks.task_stop import serve_task_stops
+    from backend.app.code_tasks.task_stop_api import is_task_stop_path, task_stop_router
+    from starlette.responses import JSONResponse
+    from backend.app.guide.api import guide_router
+    from backend.app.guide.worker import GuideWorker
+    from backend.app.infrastructure.database import Database, configured_path
+    from backend.app.infrastructure.idempotency import Idempotency
+    from backend.app.infrastructure.schema_v20_release import load_release
+    from backend.app.shared.http_errors import error_response, new_request_id
+    from backend.app.suggestions.api import batch_router
+    from backend.app.testing.plan_api import TEST_PLAN_ROUTER, is_testing_plan_path
+    from backend.app.testing.planning_worker import recover_drafts, serve_testing_plans
+    from backend.app.testing.policy_api import is_testing_policy_path, testing_policy_router
+
     if registration_installation is not None:
         from backend.app.code_tasks.repository_registration_worker import RegistrationInstallation
 
         if type(registration_installation) is not RegistrationInstallation:
             raise TypeError('Trusted registration installation inputs required')
-
-    @asynccontextmanager
-    async def recovery_lifespan(app):
-        resources = await _native(ResourceCatalog) if catalog is None else catalog
-        lease = ExecutionLease()
-        await _native(recovery.start)
-        app.state.walle_runtime = HttpRuntime(LeasedDatabase(recovery.database, lease), resources)
-        try:
-            yield
-        finally:
-            recovery.drain()
-            try:
-                await _native(lease.retire_and_wait)
-            finally:
-                app.state.walle_runtime = None
 
     @asynccontextmanager
     async def lifespan(app):
@@ -228,56 +275,46 @@ def create_app(
             finally:
                 app.state.walle_runtime = None
 
-    app = FastAPI(
-        lifespan=recovery_lifespan if recovery is not None else lifespan,
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
-        redirect_slashes=False,
+    app = _build_app(
+        lifespan,
+        (
+            req_router,
+            doc_router,
+            rev_router,
+            comment_router,
+            batch_router,
+            guide_router,
+            message_router,
+            command_router,
+            configuration_router,
+            check_set_router,
+            execution_profile_router,
+            authorization_router,
+            repository_observation_router,
+            repository_operation_router,
+            repository_read_router,
+            repository_registration_router,
+            repository_snapshot_router,
+            design_revision_router,
+            task_creation_router,
+            task_read_router,
+            defect_router,
+            delivery_command_router,
+            delivery_reads_router,
+            repair_router,
+            task_start_router,
+            task_stop_router,
+            testing_policy_router,
+            TEST_PLAN_ROUTER,
+        ),
+        frontend_directory,
     )
-    for router in (
-        req_router,
-        doc_router,
-        rev_router,
-        comment_router,
-        batch_router,
-        guide_router,
-        message_router,
-        command_router,
-        configuration_router,
-        check_set_router,
-        execution_profile_router,
-        authorization_router,
-        repository_observation_router,
-        repository_operation_router,
-        repository_read_router,
-        repository_registration_router,
-        repository_snapshot_router,
-        design_revision_router,
-        task_creation_router,
-        task_read_router,
-        defect_router,
-        delivery_command_router,
-        delivery_reads_router,
-        repair_router,
-        task_start_router,
-        task_stop_router,
-        testing_policy_router,
-        TEST_PLAN_ROUTER,
-    ):
-        app.include_router(router)
-    if frontend_directory is not None:
-        from .frontend import install_frontend
 
-        install_frontend(app, frontend_directory)
-
-    if ordinary is not None or recovery is not None:
+    if ordinary is not None:
         from backend.app.infrastructure.environment_http import api_admission
 
     @app.middleware('http')
     async def admission(request, call_next):
-        if recovery is not None:
-            return await api_admission(request, call_next, recovery, recovery=True)
         if ordinary is not None:
             return await api_admission(request, call_next, ordinary)
         runtime = getattr(request.app.state, 'walle_runtime', None)

@@ -1,7 +1,6 @@
 """Private Unix-channel authentication and P1 application action admission."""
 
 import re
-from functools import lru_cache
 from urllib.parse import urlsplit
 
 from starlette.concurrency import run_in_threadpool
@@ -9,8 +8,8 @@ from starlette.responses import JSONResponse
 
 from backend.app.shared.http_errors import new_request_id
 
-from .environment_files import EnvironmentFailure, decode, read_protected
-from .environment_installation import ACCESS_NAME, uuid_value
+from .environment_files import EnvironmentFailure
+from .environment_installation import read_access_policy, uuid_value
 
 DOCUMENT_READ = re.compile(
     r'/api/v1/(?:requirements(?:/[^/]+(?:/(?:current-document|manual-draft|revisions|'
@@ -79,14 +78,11 @@ def reject(scope, code):
     )
 
 
-def load_access_policy(path):
-    contents = decode(read_protected(path), 'INVALID_ENVIRONMENT_ACCESS')
+def installed_identities(installation):
+    contents = read_access_policy(installation)
     return contents['public_origin'], {
         item['principal_id']: item for item in contents['principals']
     }
-
-
-access_policy = lru_cache(maxsize=8)(load_access_policy)
 
 
 def source_matches(request, access, origin):
@@ -208,14 +204,10 @@ async def recovery_available(scope):
 
 async def api_admission(request, call_next, scope, *, recovery=False):
     """The listener is reachable only through its owner-protected Unix directory."""
-    path = scope.installation.anchor.parent / ACCESS_NAME
-    if recovery:
-        try:
-            origin, identities = load_access_policy(path)
-        except (EnvironmentFailure, OSError, ValueError, KeyError, TypeError):
-            return reject(scope, 'ENVIRONMENT_NOT_READY')
-    else:
-        origin, identities = access_policy(path)
+    try:
+        origin, identities = await run_in_threadpool(installed_identities, scope.installation)
+    except (EnvironmentFailure, OSError, ValueError, KeyError, TypeError):
+        return reject(scope, 'ENVIRONMENT_NOT_READY')
     principal = single(request, 'x-wall-e-auth-principal')
     access = identities.get(principal)
     if (

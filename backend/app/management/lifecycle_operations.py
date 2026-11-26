@@ -162,7 +162,7 @@ def accept_runtime(connection, lock, catalog, generation, principal, key, intent
         return operation_result(connection, operation_by_key(connection, generation, key))
 
 
-def dispatch_start(connection, lock, catalog, request):
+def check_start_request_shape(request):
     exact(
         request,
         (
@@ -192,12 +192,16 @@ def dispatch_start(connection, lock, catalog, request):
         and all(
             sha_value(request[key])
             for key in ('configuration_sha256', 'capacity_sha256', 'start_policy_sha256')
-        )
-        and request['boot_id'] == machine_clock()[0],
+        ),
         INVALID,
     )
     usage = exact(request['limits'], DIMENSIONS, INVALID)
     require(all(type(value) is int for value in usage.values()), INVALID)
+
+
+def dispatch_start(connection, lock, catalog, request):
+    check_start_request_shape(request)
+    require(request['boot_id'] == machine_clock()[0], INVALID)
     with mutation(connection, lock):
         operation = connection.execute(
             'SELECT * FROM management_operations WHERE operation_id=? AND registry_generation=?',

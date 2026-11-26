@@ -1,9 +1,9 @@
 """Fixed management inputs and the administrator-installed catalog."""
 
+import re
 from dataclasses import dataclass, field
 from ipaddress import IPv4Address
 from pathlib import Path
-import re
 from urllib.parse import urlsplit
 
 from backend.app.infrastructure.content_manifest import git_oid
@@ -31,6 +31,10 @@ UNAVAILABLE = 'ACTION_NOT_AVAILABLE'
 SCOPE_FIELDS = ('manager_id', 'host_id', 'registry_generation')
 PRINCIPAL = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}')
 PURPOSES = ('DEVELOPMENT', 'INTEGRATION')
+RELEASE = 'RELEASE'
+RECONFIGURE = 'RECONFIGURE'
+ROLLBACK_CODE = 'ROLLBACK_CODE'
+RELEASE_ACTIONS = (RELEASE, ROLLBACK_CODE, RECONFIGURE)
 
 
 def version(value):
@@ -124,6 +128,7 @@ class Catalog:
     business_entries: dict[str, dict] = field(default_factory=dict)
     prior_result_grants: dict[tuple[str, str], dict] = field(default_factory=dict)
     restore_configurations: dict[str, str] = field(default_factory=dict)
+    capacity_policy_location: str | None = None
 
     def access(self, identifier):
         require(type(identifier) is str and identifier in self.principals, DENIED)
@@ -238,6 +243,7 @@ def catalog_from_record(record, directory, installation):
         key
         for key in (
             'capacity_policy_sha256',
+            'capacity_policy_location',
             'release_candidates',
             'backup_indexes',
             'release_configurations',
@@ -265,6 +271,11 @@ def catalog_from_record(record, directory, installation):
     )
     if 'capacity_policy_sha256' in value:
         require(sha_value(value['capacity_policy_sha256']), INVALID)
+    if 'capacity_policy_location' in value:
+        require(
+            value['capacity_policy_location'] == 'CATALOG' and 'capacity_policy_sha256' in value,
+            INVALID,
+        )
     scope = identity_scope(installation)
     require(all(value[key] == actual for key, actual in scope.items()), SCOPE)
     require(type(value['format_version']) is int and value['format_version'] == 1, INVALID)
@@ -301,6 +312,7 @@ def catalog_from_record(record, directory, installation):
         load_business_entries(value.get('business_entries', {})),
         load_prior_result_grants(value.get('prior_result_grants', []), principals),
         index(value.get('restore_configurations', {})),
+        capacity_policy_location=value.get('capacity_policy_location'),
     )
 
 

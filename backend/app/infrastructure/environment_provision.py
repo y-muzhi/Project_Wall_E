@@ -1,12 +1,12 @@
 """Privileged creation of a new P1 host installation, without opening SQLite."""
 
 import argparse
-from contextlib import ExitStack, contextmanager
 import fcntl
 import json
 import os
-from pathlib import Path
 import stat
+from contextlib import ExitStack, contextmanager
+from pathlib import Path
 from uuid import uuid4
 
 from .environment_files import (
@@ -25,19 +25,31 @@ from .environment_files import (
 from .environment_installation import (
     ACCESS_NAME,
     ANCHOR_NAME,
-    CAPABILITIES,
     CANDIDATE_PURPOSE,
+    CAPABILITIES,
     CONFIG_NAME,
+    DEFAULT_BUSINESS_DOMAIN,
+    DEFAULT_BUSINESS_PORT,
     DIRECTORIES,
     HOLD_NAME,
     WORKSPACE_PURPOSES,
     Installation,
+    business_origin,
+    check_business_listener,
     sha_value,
+    validate_business_origin,
 )
 from .environment_lock import LOCK_NAME, PROTOCOL
 
 
-def provision(args, *, validation=None):
+def provision(
+    args,
+    *,
+    validation=None,
+    business_domain=DEFAULT_BUSINESS_DOMAIN,
+    business_port=DEFAULT_BUSINESS_PORT,
+    with_gateway_verifier=False,
+):
     require(os.geteuid() == 0, 'INSTALLER_IDENTITY_NOT_ADMITTED')
     require(
         (
@@ -56,6 +68,11 @@ def provision(args, *, validation=None):
         or (1 <= args.ingress_group < 2**31 and args.ingress_group != args.group),
         'INSTALLER_IDENTITIES_INVALID',
     )
+    require(
+        not with_gateway_verifier or (validation is None and args.ingress_group is not None),
+        'GATEWAY_VERIFIER_NOT_ADMITTED',
+    )
+    check_business_listener(business_domain, business_port)
     require(sha_value(args.runtime_sha256), 'RUNTIME_MANIFEST_MISMATCH')
     with ExitStack() as resources:
         for path in (args.host_root, args.project, args.schema, args.frontend_input):
@@ -75,7 +92,14 @@ def provision(args, *, validation=None):
             if existing is not None:
                 return existing
         _reserve_identities(args)
-        return create_installation_files(args, host_fd, validation)
+        return create_installation_files(
+            args,
+            host_fd,
+            validation,
+            business_domain=business_domain,
+            business_port=business_port,
+            with_gateway_verifier=with_gateway_verifier,
+        )
 
 
 @contextmanager
@@ -162,13 +186,28 @@ def _frontend_copy(source, target, *, fixed=False):
         os.fsync(fd)
 
 
-def create_installation_files(args, host_fd, validation=None, *, replica=None, staging=None):
+def create_installation_files(
+    args,
+    host_fd,
+    validation=None,
+    *,
+    replica=None,
+    staging=None,
+    business_domain=DEFAULT_BUSINESS_DOMAIN,
+    business_port=DEFAULT_BUSINESS_PORT,
+    with_gateway_verifier=False,
+):
     if replica is not None:
         environment_id, data_generation, deployment_id = replica.identities
     elif validation is not None:
         environment_id, data_generation, deployment_id = validation.identities
     else:
         environment_id, data_generation, deployment_id = (str(uuid4()) for _ in range(3))
+    origin = (
+        business_origin(environment_id, business_domain, business_port)
+        if validation is None
+        else validate_business_origin(validation.public_origin, environment_id)
+    )
     destination = args.host_root / environment_id
     root = destination if staging is None else staging
     anchor = destination / ANCHOR_NAME
@@ -240,24 +279,29 @@ def create_installation_files(args, host_fd, validation=None, *, replica=None, s
     with protected_directory(lock_file.parent) as lock_fd:
         os.fsync(lock_fd)
 
+    principals = [
+        {'principal_id': f'web-{environment_id}', 'client_kind': 'WEB', 'permission': permission},
+        {
+            'principal_id': f'automation-{environment_id}',
+            'client_kind': 'AUTOMATION',
+            'permission': permission,
+        },
+    ]
+    if with_gateway_verifier:
+        principals.append(
+            {
+                'principal_id': f'gateway-check-{environment_id}',
+                'client_kind': 'AUTOMATION',
+                'permission': 'READ_ONLY',
+            }
+        )
     access = canonical(
         {
             'format_version': 1,
             'environment_id': environment_id,
-            'public_origin': f'https://e-{environment_id}.walle-dev.test:9443',
+            'public_origin': origin,
             'upstream_socket': str(destination / 'runtime' / 'walle.sock'),
-            'principals': [
-                {
-                    'principal_id': f'web-{environment_id}',
-                    'client_kind': 'WEB',
-                    'permission': permission,
-                },
-                {
-                    'principal_id': f'automation-{environment_id}',
-                    'client_kind': 'AUTOMATION',
-                    'permission': permission,
-                },
-            ],
+            'principals': principals,
         }
     )
     config = canonical(
@@ -325,10 +369,18 @@ def main(argv=None):
         parser.add_argument(f'--{argument}', type=int, required=True)
     parser.add_argument('--runtime-sha256', required=True)
     parser.add_argument('--ingress-group', type=int)
+    parser.add_argument('--with-gateway-verifier', action='store_true')
+    parser.add_argument('--business-domain', default=DEFAULT_BUSINESS_DOMAIN)
+    parser.add_argument('--business-port', type=int, default=DEFAULT_BUSINESS_PORT)
     parser.add_argument('--purpose', choices=sorted(WORKSPACE_PURPOSES), required=True)
     args = parser.parse_args(argv)
     try:
-        result = provision(args)
+        result = provision(
+            args,
+            business_domain=args.business_domain,
+            business_port=args.business_port,
+            with_gateway_verifier=args.with_gateway_verifier,
+        )
     except EnvironmentFailure as error:
         print(json.dumps({'status': 'BLOCKED', 'reason_code': error.code}))
         return 3 if error.uncertain else 2
@@ -337,3 +389,7 @@ def main(argv=None):
         return 3
     print(json.dumps(result, sort_keys=True))
     return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

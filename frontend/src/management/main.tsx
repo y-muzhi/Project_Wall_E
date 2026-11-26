@@ -13,16 +13,17 @@ import {
   PendingList,
   OperationReconcile,
   ReleaseForm,
-  RuntimeForm,
+  EnvironmentActionForm,
   commandReason,
 } from './command-panels.tsx';
-import type { PendingCommand } from './command-intent.ts';
+import type { EnvironmentAction, PendingCommand } from './command-intent.ts';
 import { RestoreForm } from './restore-panel.tsx';
 import { PriorResults } from './prior-result-panel.tsx';
 import { Panel, ReadStatus, useRead } from './ui.tsx';
 import type { Filter, Session } from './api.ts';
 import { operationStates, uuid } from './model.ts';
 import type { environment, operationDetail } from './model.ts';
+import type { ReleaseAction } from './release-model.ts';
 import './styles.css';
 
 const client = new ManagementClient(window.location.origin);
@@ -58,7 +59,10 @@ const actionNames: Readonly<Record<string, string>> = {
   REGISTER_DELIVERY: '交付登记',
   START: '普通启动',
   STOP: '正常停止',
+  ARCHIVE: '归档环境',
   RELEASE: '固定发布',
+  ROLLBACK_CODE: '程序回退',
+  RECONFIGURE: '切换配置',
   BACKUP: '独立备份',
   RESTORE: '恢复环境',
 };
@@ -345,11 +349,19 @@ function BackupHistory({ id }: { id: string }) {
           />
           {attempt?.reason && attempt.status !== 'SUCCEEDED' && (
             <p className="muted">
-              本次尝试的原因代码 <code>{attempt.reason}</code>
+              {attempt.reason === 'OFFHOST_VERIFICATION_REQUIRED' ? (
+                '本机恢复点已核验，等待独立宿主取回快照。'
+              ) : (
+                <>
+                  本次尝试的原因代码 <code>{attempt.reason}</code>
+                </>
+              )}
             </p>
           )}
           {current.entries.length ? (
-            <DataTable labels={['原截止时间', '来源代次', '本机核验', '本地快照', '备份资料']}>
+            <DataTable
+              labels={['原截止时间', '来源代次', '本机核验', '本地快照', '异机副本', '备份资料']}
+            >
               {current.entries.map((item) => (
                 <tr key={item.id}>
                   <td>{at(item.cutoff)}</td>
@@ -365,6 +377,16 @@ function BackupHistory({ id }: { id: string }) {
                   </td>
                   <td>
                     {item.retrieval ? '已取回 · ' + at(item.retrieval.retrievedAt) : '尚无取回记录'}
+                  </td>
+                  <td>
+                    {item.offhost ? (
+                      <>
+                        <Badge label="异机副本已验证" tone="positive" />
+                        <small>{at(item.offhost.retrievedAt)}</small>
+                      </>
+                    ) : (
+                      '尚未核实'
+                    )}
                   </td>
                   <td>
                     <details>
@@ -407,6 +429,17 @@ function BackupHistory({ id }: { id: string }) {
                                   </code>,
                                 ] as const,
                               ]
+                            : []),
+                          ...(item.offhost
+                            ? ([
+                                ['异机核验证据编号', <code>{item.offhost.id}</code>],
+                                [
+                                  '异机快照摘要',
+                                  <code title={item.offhost.snapshot}>
+                                    {short(item.offhost.snapshot)}
+                                  </code>,
+                                ],
+                              ] as const)
                             : []),
                         ]}
                       />
@@ -568,6 +601,53 @@ function MaintenanceDetails({
   );
 }
 
+function PreparedDeploymentAction({
+  target,
+  action,
+  unavailable,
+  apply,
+}: {
+  target: Environment;
+  action: Exclude<ReleaseAction, 'RELEASE'>;
+  unavailable: string | null;
+  apply: () => void;
+}) {
+  const query = useCallback(
+    (signal: AbortSignal) => client.releaseOptions(target.id, signal, action),
+    [target.id, action],
+  );
+  const options = useRead(
+    target.id + '|' + target.recordVersion + '|' + target.generation + '|' + action,
+    query,
+  );
+  const current =
+    options.value?.recordVersion === target.recordVersion &&
+    options.value.generation === target.generation;
+  let reason: string | null = null;
+  const subject = action === 'ROLLBACK_CODE' ? '回退候选' : '访问配置';
+  if (unavailable) reason = unavailable;
+  else if (options.waiting) reason = '正在核对' + subject;
+  else if (options.error) reason = '暂时无法核对' + subject;
+  else if (!current) reason = '环境登记已变化，请重新读取';
+  else if (!options.value?.options.some((option) => option.state === 'READY'))
+    reason =
+      action === 'ROLLBACK_CODE' ? '当前没有可回退的前一固定程序' : '当前没有可采用的访问配置';
+  const reasonId = 'deployment-action-reason-' + action + '-' + target.id;
+  return (
+    <span className="runtime-action">
+      <button
+        type="button"
+        disabled={reason !== null}
+        aria-describedby={reason ? reasonId : undefined}
+        onClick={apply}
+      >
+        {actionNames[action]}
+      </button>
+      {reason && <small id={reasonId}>{reason}</small>}
+    </span>
+  );
+}
+
 function EnvironmentDetail({
   id,
   back,
@@ -576,17 +656,19 @@ function EnvironmentDetail({
   startRelease,
   startBackup,
   startRestore,
-  startRuntime,
+  changeEnvironment,
+  reattach,
   deliver,
 }: {
   id: string;
   back: () => void;
   showOperations: () => void;
   showReleaseOperation: (operation: string) => void;
-  startRelease: ((environment: Environment) => void) | undefined;
+  startRelease: ((environment: Environment, action: ReleaseAction) => void) | undefined;
   startBackup: ((environment: Environment) => void) | undefined;
   startRestore: ((environment: Environment) => void) | undefined;
-  startRuntime: ((environment: Environment, action: 'START' | 'STOP') => void) | undefined;
+  changeEnvironment: ((environment: Environment, action: EnvironmentAction) => void) | undefined;
+  reattach: (() => void) | undefined;
   deliver: ((target: Environment) => void) | undefined;
 }) {
   const query = useCallback((signal: AbortSignal) => client.environment(id, signal), [id]);
@@ -601,6 +683,16 @@ function EnvironmentDetail({
           <div className="summary-line">
             <Badge label={purposeNames[item.purpose] ?? item.purpose} />
             <Badge label={progress[item.preparation] ?? item.preparation} />
+            {item.registration === 'ARCHIVED' && <Badge label="已归档" />}
+            {item.registration === 'ARCHIVED' && reattach && (
+              <button
+                type="button"
+                disabled={state.waiting || Boolean(state.error)}
+                onClick={reattach}
+              >
+                重新登记环境
+              </button>
+            )}
             <Runtime data={item.observation} />
             <button type="button" onClick={showOperations}>
               查看原操作
@@ -623,11 +715,12 @@ function EnvironmentDetail({
               delivery.reason !== 'MANAGEMENT_ACCESS_DENIED' && (
                 <small id="delivery-reason">{commandReason(delivery.reason)}</small>
               )}
-            {startRuntime &&
+            {changeEnvironment &&
               item.actions.map((action) => {
                 const name = action.action;
                 if (
-                  (name !== 'START' && name !== 'STOP') ||
+                  (name !== 'START' && name !== 'STOP' && name !== 'ARCHIVE') ||
+                  (name === 'ARCHIVE' && item.registration !== 'ACTIVE') ||
                   action.reason === 'MANAGEMENT_ACCESS_DENIED'
                 )
                   return null;
@@ -636,16 +729,17 @@ function EnvironmentDetail({
                   : action.reason === 'MANAGEMENT_RESOURCE_UNVERIFIED'
                     ? name === 'START'
                       ? '宿主尚未核对为正常停止。'
-                      : '尚无可确认的当前运行。'
+                      : name === 'STOP'
+                        ? '尚无可确认的当前运行。'
+                        : '宿主尚未核对为正常停止，归档不可用。'
                     : commandReason(action.reason);
-                const reasonId =
-                  name === 'START' ? 'ordinary-start-reason' : 'ordinary-stop-reason';
+                const reasonId = 'environment-action-reason-' + name.toLowerCase();
                 return (
                   <span className="runtime-action" key={name}>
                     <button
                       type="button"
                       disabled={!action.enabled || state.waiting || Boolean(state.error)}
-                      onClick={() => startRuntime(item, name)}
+                      onClick={() => changeEnvironment(item, name)}
                       aria-describedby={reason ? reasonId : undefined}
                     >
                       {actionNames[name]}
@@ -658,11 +752,24 @@ function EnvironmentDetail({
               <button
                 type="button"
                 disabled={state.waiting || Boolean(state.error)}
-                onClick={() => startRelease(item)}
+                onClick={() => startRelease(item, 'RELEASE')}
               >
                 固定发布
               </button>
             )}
+            {startRelease &&
+              (item.purpose === 'INTEGRATION' || item.purpose === 'DEVELOPMENT') &&
+              (['ROLLBACK_CODE', 'RECONFIGURE'] as const).map((action) => (
+                <PreparedDeploymentAction
+                  key={action}
+                  target={item}
+                  action={action}
+                  unavailable={
+                    state.error ? '环境详情暂时无法读取' : state.waiting ? '正在读取环境详情' : null
+                  }
+                  apply={() => startRelease(item, action)}
+                />
+              ))}
             {startBackup && (item.purpose === 'INTEGRATION' || item.purpose === 'DEVELOPMENT') && (
               <button
                 type="button"
@@ -959,6 +1066,7 @@ function StepDetail({
     RELEASE_DEPLOYMENT: '发布核对',
     BACKUP_RECOVERY_POINT: '恢复点核对',
     RESTORE_ENVIRONMENT: '恢复开放核对',
+    ENVIRONMENT_ARCHIVED: '归档核对',
     RUNTIME_START_CANCELLED: '取消启动核对',
     RUNTIME_PREPARATION_CANCELLED: '取消启动准备核对',
   }[step.kind];
@@ -994,6 +1102,16 @@ function StepDetail({
             ['控制版本', result.controlRevision],
             ['核对时间', at(result.observed)],
             ['证据编号', result.proof],
+          ]}
+        />
+      )}
+      {result?.kind === 'ENVIRONMENT_ARCHIVED' && (
+        <Definitions
+          values={[
+            ['登记状态', '已归档'],
+            ['归档时间', at(result.archivedAt)],
+            ['环境记录版本', result.recordVersion],
+            ['保留内容', '工作区、数据库及原操作回执'],
           ]}
         />
       )}
@@ -1035,6 +1153,9 @@ function StepDetail({
             ['恢复点编号', result.point.id],
             ['截止时间', at(result.point.cutoff)],
             ['本机验证', at(result.point.local?.verifiedAt ?? null)],
+            ...(result.point.offhost
+              ? [['异机取回', at(result.point.offhost.retrievedAt)] as const]
+              : []),
             ['源数据代次', result.point.generation],
           ]}
         />
@@ -1279,6 +1400,16 @@ function OperationRecord({
   const state = useRead([target.id, target.byKey, target.priorGeneration].join('|'), query);
   const result = state.value;
   const recoveryDisposition = result?.recoveryDisposition;
+  const recoveryDispositionLabels = {
+    BACKUP_COMPLETED: '已核实原备份完成。使用备份前须另行核验恢复资产。',
+    STOP_COMPLETED: '已核实原停止完成。',
+    RESTORE_RETIRED: '已核实原恢复在选择目标前撤回。',
+    RELEASE_RETIRED: '已核实原部署变更在选择目标前撤回。',
+    OPENED_DEPLOYMENT_ADOPTED: '已将正常停止的目标部署登记到所选管理代次。',
+    UNDISPATCHED_CANCELLED: '已核实未派发，等待已结束。',
+    UNDISPATCHED_RESERVED_CANCELLED: '已核实未派发，原启动和额度保留已结束。',
+    UNSTARTED_OPERATION_CANCELLED: '已核实原操作未派发，已结束等待。',
+  };
   const action = result?.original.action;
   const waitingCapacity = action === 'START' && result?.original.state === 'WAITING_CAPACITY';
   const permitted =
@@ -1288,8 +1419,11 @@ function OperationRecord({
         result?.original.by === reconcile.commands.session.principal));
   const controlAction =
     action === 'RELEASE' ||
+    action === 'ROLLBACK_CODE' ||
+    action === 'RECONFIGURE' ||
     action === 'START' ||
     action === 'STOP' ||
+    action === 'ARCHIVE' ||
     action === 'BACKUP' ||
     action === 'RESTORE'
       ? action
@@ -1313,12 +1447,7 @@ function OperationRecord({
                 ],
                 ...(recoveryDisposition
                   ? ([
-                      [
-                        '恢复核对',
-                        recoveryDisposition.kind === 'BACKUP_COMPLETED'
-                          ? '已核实原备份完成。使用备份前须另行核验恢复资产。'
-                          : '已核实未派发，等待已结束。',
-                      ],
+                      ['恢复核对', recoveryDispositionLabels[recoveryDisposition.kind]],
                       ['处置记录时间', at(recoveryDisposition.recordedAt)],
                     ] as const)
                   : []),
@@ -1361,6 +1490,9 @@ function OperationRecord({
                   (waitingCapacity ||
                     (reconcile.commands.session.role === 'MANAGER' &&
                       (controlAction === 'RELEASE' ||
+                        controlAction === 'ROLLBACK_CODE' ||
+                        controlAction === 'RECONFIGURE' ||
+                        controlAction === 'ARCHIVE' ||
                         controlAction === 'BACKUP' ||
                         controlAction === 'RESTORE') &&
                       result.original.state === 'ACCEPTED'))
@@ -1371,7 +1503,10 @@ function OperationRecord({
             )}
           {(result.original.action === 'START' ||
             result.original.action === 'STOP' ||
+            result.original.action === 'ARCHIVE' ||
             result.original.action === 'RELEASE' ||
+            result.original.action === 'ROLLBACK_CODE' ||
+            result.original.action === 'RECONFIGURE' ||
             result.original.action === 'BACKUP' ||
             result.original.action === 'RESTORE') && (
             <ControlLookup
@@ -1418,12 +1553,12 @@ function CapacityPage() {
 }
 
 type CommandView =
-  | { kind: 'ATTACH' }
+  | { kind: 'ATTACH'; archivedEnvironment?: string }
   | { kind: 'DELIVERY'; target: Environment }
-  | { kind: 'RELEASE'; target: Environment }
+  | { kind: 'RELEASE'; target: Environment; action: ReleaseAction }
   | { kind: 'BACKUP'; target: Environment }
   | { kind: 'RESTORE'; target: Environment }
-  | { kind: 'RUNTIME'; target: Environment; action: 'START' | 'STOP' }
+  | { kind: 'ENVIRONMENT_ACTION'; target: Environment; action: EnvironmentAction }
   | { kind: 'PENDING' }
   | { kind: 'ORIGINAL'; record: PendingCommand };
 
@@ -1547,7 +1682,9 @@ function ManagementWorkspace({
         )}
         {commands && commandView?.kind === 'ATTACH' && (
           <AttachForm
+            key={commandView.archivedEnvironment ?? 'new-attachment'}
             commands={commands}
+            archivedEnvironment={commandView.archivedEnvironment}
             back={closeCommand}
             changed={changed}
             openReceipt={openReceipt}
@@ -1562,8 +1699,8 @@ function ManagementWorkspace({
             openReceipt={openReceipt}
           />
         )}
-        {commands && commandView?.kind === 'RUNTIME' && (
-          <RuntimeForm
+        {commands && commandView?.kind === 'ENVIRONMENT_ACTION' && (
+          <EnvironmentActionForm
             commands={commands}
             target={commandView.target}
             action={commandView.action}
@@ -1585,6 +1722,7 @@ function ManagementWorkspace({
           <ReleaseForm
             commands={commands}
             target={commandView.target}
+            action={commandView.action}
             back={closeCommand}
             changed={changed}
             openReceipt={openReceipt}
@@ -1628,9 +1766,15 @@ function ManagementWorkspace({
                   ? undefined
                   : (target) => setCommandView({ kind: 'DELIVERY', target })
               }
-              startRuntime={
+              changeEnvironment={
                 session.role !== 'VIEWER' && session.phase !== 'BLOCKED'
-                  ? (target, action) => setCommandView({ kind: 'RUNTIME', target, action })
+                  ? (target, action) =>
+                      setCommandView({ kind: 'ENVIRONMENT_ACTION', target, action })
+                  : undefined
+              }
+              reattach={
+                session.role === 'MANAGER' && session.phase !== 'BLOCKED'
+                  ? () => setCommandView({ kind: 'ATTACH', archivedEnvironment: environment })
                   : undefined
               }
               startBackup={
@@ -1645,7 +1789,7 @@ function ManagementWorkspace({
               }
               startRelease={
                 session.role === 'MANAGER' && session.phase !== 'BLOCKED'
-                  ? (target) => setCommandView({ kind: 'RELEASE', target })
+                  ? (target, action) => setCommandView({ kind: 'RELEASE', target, action })
                   : undefined
               }
               showReleaseOperation={(id) => {

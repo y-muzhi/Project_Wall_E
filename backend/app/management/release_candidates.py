@@ -2,8 +2,8 @@
 
 from backend.app.infrastructure.environment_files import (
     EnvironmentFailure,
-    protected_directory,
     exact,
+    protected_directory,
     require,
 )
 from backend.app.infrastructure.environment_installation import sha_value, uuid_value
@@ -104,7 +104,7 @@ def resolve_sources(connection, generation, integration):
     return sources
 
 
-def verify_resources(catalog, delivery, manifest):
+def admitted_resources(catalog, delivery):
     accepted = delivery.get('resource_refs')
     require(type(accepted) is list, UNVERIFIED)
     expected = {}
@@ -115,6 +115,11 @@ def verify_resources(catalog, delivery, manifest):
         actual = admitted_reference(catalog, reference, delivery, delivery, check=False)
         require(actual == item, UNVERIFIED)
         expected[reference] = actual['sha256']
+    return expected
+
+
+def verify_resources(catalog, delivery, manifest):
+    expected = admitted_resources(catalog, delivery)
     require(
         {item['ref']: item['sha256'] for item in manifest['resource_refs']} == expected, UNVERIFIED
     )
@@ -174,13 +179,18 @@ def check_build(catalog, descriptor, release, manifest, delivery):
     return pin
 
 
+def integration_delivery(connection, catalog, operation_id):
+    generation = catalog.scope['registry_generation']
+    delivery = original_delivery(connection, generation, operation_id, 'INTEGRATION')
+    return delivery, resolve_sources(connection, generation, delivery)
+
+
 def candidate_inputs(connection, catalog, release_id, expected):
     descriptor = installed_candidate(catalog, release_id, expected)
-    generation = catalog.scope['registry_generation']
-    delivery = original_delivery(
-        connection, generation, descriptor['delivery_operation_id'], 'INTEGRATION'
+    delivery, sources = integration_delivery(
+        connection, catalog, descriptor['delivery_operation_id']
     )
-    return descriptor, delivery, resolve_sources(connection, generation, delivery)
+    return descriptor, delivery, sources
 
 
 def verify_candidate(catalog, release_id, expected, runtime_sha, inputs, *, staged_root=None):
@@ -195,16 +205,15 @@ def verify_candidate(catalog, release_id, expected, runtime_sha, inputs, *, stag
     )
     schema, schema_sha = path_reference(descriptor['schema_ref'])
     require(schema_sha == checked['schema_manifest_sha256'], UNVERIFIED)
+    application = anchor.parent / 'application'
     try:
         with protected_directory(schema):
-            explicit_schema = load_release(schema, schema_sha, runtime_sha)
+            explicit_schema = load_release(schema, schema_sha, runtime_sha, source_root=application)
     except (ValueError, OSError, RuntimeError) as error:
         raise EnvironmentFailure(UNVERIFIED) from error
     resources = verify_resources(catalog, delivery, manifest)
     build_sha = check_build(catalog, descriptor, checked, manifest, delivery)
-    state, checks = verification_evidence(
-        catalog, manifest, delivery, anchor.parent / 'application'
-    )
+    state, checks = verification_evidence(catalog, manifest, delivery, application)
     return {
         **checked,
         'status': 'RELEASE_CANDIDATE_PACKAGED',

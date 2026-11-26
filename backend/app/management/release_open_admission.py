@@ -25,15 +25,19 @@ OPEN_AUTHORIZED = 'RELEASE_OPEN_AUTHORIZED'
 OPEN_BLOCKED = 'RELEASE_OPEN_CAPACITY_BLOCKED'
 
 
-def check_open_request(request):
+def check_open_request_shape(request):
     exact(request, ('operation_id', 'run_id', 'boot_id', 'limits', *TARGET, *PINS), INVALID)
     require(
         all(uuid_value(request[key]) for key in ('operation_id', 'run_id', 'boot_id', *TARGET[:3]))
         and request['run_id'] != request['operation_id']
-        and all(sha_value(request[key]) for key in ('configuration_sha256', *PINS))
-        and request['boot_id'] == machine_clock()[0],
+        and all(sha_value(request[key]) for key in ('configuration_sha256', *PINS)),
         INVALID,
     )
+
+
+def check_open_request(request):
+    check_open_request_shape(request)
+    require(request['boot_id'] == machine_clock()[0], INVALID)
 
 
 def check_selected_record(catalog, grant, request):

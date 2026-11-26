@@ -7,11 +7,12 @@ import {
   commandIntent,
   recoverIntent,
   type ManagementControl,
+  type EnvironmentAction,
   type PendingCommand,
 } from './command-intent.ts';
 import type { candidateCatalog, environment } from './model.ts';
 import { Panel, ReadStatus, useRead } from './ui.tsx';
-import type { releasePlan, ReleaseSelection } from './release-model.ts';
+import type { ReleaseAction, releasePlan, ReleaseSelection } from './release-model.ts';
 import type { backupPlan } from './backup-model.ts';
 
 type Candidate = ReturnType<typeof candidateCatalog>[number];
@@ -36,10 +37,13 @@ const titles: Readonly<Record<PendingCommand['action'], string>> = {
   ATTACH: '环境登记',
   REGISTER_DELIVERY: '交付登记',
   RELEASE: '固定发布',
+  ROLLBACK_CODE: '程序回退',
+  RECONFIGURE: '切换配置',
   BACKUP: '独立备份',
   RESTORE: '恢复环境',
   START: '普通启动',
   STOP: '正常停止',
+  ARCHIVE: '归档环境',
   RECONCILE: '原结果核对',
   CANCEL: '原操作撤回',
   CONTINUE: '原启动额度复核',
@@ -100,13 +104,13 @@ function isPrepared(candidate: Candidate) {
   return candidate.state === 'READY' || candidate.state === 'REATTACH_READY';
 }
 
-export function AttachForm(props: Common) {
-  const { commands, back, changed, openReceipt } = props;
+export function AttachForm(props: Common & { archivedEnvironment: string | undefined }) {
+  const { commands, back, changed, openReceipt, archivedEnvironment } = props;
   const query = useCallback(
-    (signal: AbortSignal) => commands.client.catalog(signal),
-    [commands.client],
+    (signal: AbortSignal) => commands.client.catalog(signal, archivedEnvironment),
+    [commands.client, archivedEnvironment],
   );
-  const state = useRead(commands.store.scopeId, query);
+  const state = useRead(commands.store.scopeId + '|' + (archivedEnvironment ?? ''), query);
   const prepare = usePreparation();
   const work = useWork();
   const [selection, choose] = useState('');
@@ -150,7 +154,11 @@ export function AttachForm(props: Common) {
       <OriginalCommand {...props} original={original} performing={work.busy} notice={work.error} />
     );
   return (
-    <Panel title="登记已有环境" back={back} backLabel="返回环境">
+    <Panel
+      title={archivedEnvironment ? '重新登记环境' : '登记已有环境'}
+      back={back}
+      backLabel="返回环境"
+    >
       <ReadStatus state={state} />
       {state.value?.length === 0 && (
         <EmptyState icon="workbench" message="宿主暂未提供可核对的候选。" />
@@ -173,6 +181,20 @@ export function AttachForm(props: Common) {
               ))}
             </select>
           </label>
+          {candidate?.state === 'REATTACH_READY' && (
+            <dl className="definitions">
+              <div>
+                <dt>原环境编号</dt>
+                <dd>
+                  <code>{candidate.environment}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>当前登记版本</dt>
+                <dd>{candidate.version}</dd>
+              </div>
+            </dl>
+          )}
           {candidate?.at && (
             <small>最近一次准备核对 {new Date(candidate.at).toLocaleString('zh-HK')}</small>
           )}
@@ -429,7 +451,11 @@ function ReleaseComparison({
         </div>
         <div>
           <dt>恢复要求</dt>
-          <dd>本机恢复点须核验</dd>
+          <dd>
+            {plan.recovery === 'OFFHOST_VERIFIED'
+              ? '本机恢复点与异机副本均须核验'
+              : '本机恢复点须核验'}
+          </dd>
         </div>
         <div>
           <dt>计划完成状态</dt>
@@ -459,6 +485,14 @@ function ReleaseComparison({
               <code>{plan.manifest}</code>
             </dd>
           </div>
+          {plan.accessPolicy && (
+            <div>
+              <dt>目标访问策略摘要</dt>
+              <dd>
+                <code>{plan.accessPolicy}</code>
+              </dd>
+            </div>
+          )}
           <div>
             <dt>计划摘要</dt>
             <dd>
@@ -471,13 +505,22 @@ function ReleaseComparison({
   );
 }
 
-export function ReleaseForm(props: Common & { target: Environment }) {
-  const { target, commands, back, changed, openReceipt } = props;
+export function ReleaseForm(props: Common & { target: Environment; action: ReleaseAction }) {
+  const { target, commands, back, changed, openReceipt, action } = props;
+  const rollback = action === 'ROLLBACK_CODE';
+  const configure = action === 'RECONFIGURE';
+  const title = titles[action];
+  const operation = { RELEASE: '发布', ROLLBACK_CODE: '回退', RECONFIGURE: '配置切换' }[action];
+  const choiceLabel = {
+    RELEASE: '固定发布候选',
+    ROLLBACK_CODE: '前一固定程序',
+    RECONFIGURE: '访问配置',
+  }[action];
   const query = useCallback(
-    (signal: AbortSignal) => commands.client.releaseOptions(target.id, signal),
-    [commands.client, target.id],
+    (signal: AbortSignal) => commands.client.releaseOptions(target.id, signal, action),
+    [commands.client, target.id, action],
   );
-  const state = useRead(commands.store.scopeId + '|' + target.id, query);
+  const state = useRead(commands.store.scopeId + '|' + target.id + '|' + action, query);
   const prepare = usePreparation();
   const work = useWork();
   const [selection, choose] = useState('');
@@ -516,10 +559,12 @@ export function ReleaseForm(props: Common & { target: Environment }) {
         commands.session,
         {
           ...selected.refs,
+          ...(rollback && { repair_of_operation_id: null }),
           expected_record_version: target.recordVersion,
           expected_assignment_generation: target.generation,
         },
         AbortSignal.any([signal, AbortSignal.timeout(20000)]),
+        action,
       );
       if (
         planned.manifest !== selected.manifest ||
@@ -536,7 +581,7 @@ export function ReleaseForm(props: Common & { target: Environment }) {
   function confirm() {
     if (!plan || !enabled || expired || new Date(plan.expires).getTime() <= Date.now()) return;
     const input = {
-      action: 'RELEASE',
+      action,
       ...plan.variables,
       plan_id: plan.id,
       plan_sha256: plan.digest,
@@ -560,7 +605,7 @@ export function ReleaseForm(props: Common & { target: Environment }) {
       <OriginalCommand {...props} original={original} performing={work.busy} notice={work.error} />
     );
   return (
-    <Panel title="固定发布" back={back} backLabel="返回环境">
+    <Panel title={title} back={back} backLabel="返回环境">
       <ReadStatus state={state} />
       {work.error && (
         <p role="alert" className="feedback error">
@@ -569,17 +614,26 @@ export function ReleaseForm(props: Common & { target: Environment }) {
       )}
       {work.busy && (
         <p role="status" className="feedback">
-          正在核对发布计划…
+          正在核对{operation}计划…
         </p>
       )}
       {state.value?.options.length === 0 && (
-        <EmptyState icon="workbench" message="此环境尚无已登记的发布候选。" />
+        <EmptyState
+          icon="workbench"
+          message={
+            {
+              RELEASE: '此环境尚无已登记的发布候选。',
+              ROLLBACK_CODE: '此环境暂无已登记的前一固定程序。',
+              RECONFIGURE: '此环境暂无已登记的访问配置。',
+            }[action]
+          }
+        />
       )}
       {state.value && state.value.options.length > 0 && (
         <form className="card command-form" onSubmit={preview}>
           <strong>{target.name}</strong>
           <label>
-            固定发布候选
+            {choiceLabel}
             <select
               value={selection}
               required
@@ -592,8 +646,11 @@ export function ReleaseForm(props: Common & { target: Environment }) {
               <option value="">请选择</option>
               {state.value.options.map((option) => (
                 <option key={option.refs.configuration_ref} value={option.refs.configuration_ref}>
-                  {option.commit?.slice(0, 12) ?? option.refs.release_ref.slice(0, 12)} ·{' '}
-                  {option.architecture ?? '平台待核验'} · {releaseStates[option.state]}
+                  {(configure
+                    ? option.refs.configuration_ref
+                    : (option.commit ?? option.refs.configuration_ref)
+                  ).slice(0, 12)}{' '}
+                  · {option.architecture ?? '平台待核验'} · {releaseStates[option.state]}
                 </option>
               ))}
             </select>
@@ -604,13 +661,15 @@ export function ReleaseForm(props: Common & { target: Environment }) {
           )}
           {!plan && (
             <button type="submit" className="command-primary" disabled={!enabled || work.busy}>
-              生成发布计划
+              生成{operation}计划
             </button>
           )}
           {plan && selected && (
             <>
               <ReleaseComparison plan={plan} selected={selected} />
-              {expired && <p role="alert">发布计划已过期，请重新生成。</p>}
+              {rollback && <p>使用前一固定程序，保留当前数据库和数据代次。</p>}
+              {configure && <p>采用所选访问策略，保留当前程序、数据库和数据代次。</p>}
+              {expired && <p role="alert">计划已过期，请重新生成。</p>}
               <div className="summary-line">
                 <button
                   type="button"
@@ -628,7 +687,7 @@ export function ReleaseForm(props: Common & { target: Environment }) {
                   disabled={!enabled || expired || work.busy}
                   onClick={confirm}
                 >
-                  确认发布计划
+                  确认{operation}计划
                 </button>
               </div>
             </>
@@ -664,7 +723,7 @@ export function BackupForm(props: Common & { target: Environment }) {
     !state.waiting &&
     !state.error;
   const optionLabels = {
-    READY: '可创建本机恢复点',
+    READY: '可生成备份计划',
     SOURCE_UNVERIFIED: '源环境尚未核对为正常停止',
     ENVIRONMENT_BUSY: '源环境已有未决操作',
     OFFHOST_REQUIRED: '需要异机核验，当前尚未准入',
@@ -704,9 +763,10 @@ export function BackupForm(props: Common & { target: Environment }) {
         planned.source.deployment !== target.work.deployment ||
         planned.source.generation !== target.work.generation ||
         planned.source.configuration !== target.configuration ||
-        planned.source.program !== target.program
+        planned.source.program !== target.program ||
+        planned.verification !== choice.verification
       )
-        throw new ManagementReadError('STALE', '备份源环境已变化，请重新读取。');
+        throw new ManagementReadError('STALE', '备份源环境或策略已变化，请重新读取。');
       if (!signal.aborted) setPlan(planned);
     });
   }
@@ -770,7 +830,9 @@ export function BackupForm(props: Common & { target: Environment }) {
               <option value="">请选择</option>
               {state.value.options.map((item) => (
                 <option key={item.policy} value={item.policy}>
-                  {item.policy.slice(0, 8)} · {optionLabels[item.state]}
+                  {item.policy.slice(0, 8)} ·{' '}
+                  {item.verification === 'OFFHOST_VERIFIED' ? '异机备份' : '本机备份'} ·{' '}
+                  {optionLabels[item.state]}
                 </option>
               ))}
             </select>
@@ -805,7 +867,11 @@ export function BackupForm(props: Common & { target: Environment }) {
                 </div>
                 <div>
                   <dt>验证要求</dt>
-                  <dd>本机封存和独立恢复核验</dd>
+                  <dd>
+                    {plan.verification === 'OFFHOST_VERIFIED'
+                      ? '本机封存、恢复演练和独立宿主取回'
+                      : '本机封存和独立恢复核验'}
+                  </dd>
                 </div>
                 <div>
                   <dt>完成后</dt>
@@ -849,7 +915,9 @@ export function BackupForm(props: Common & { target: Environment }) {
   );
 }
 
-export function RuntimeForm(props: Common & { target: Environment; action: 'START' | 'STOP' }) {
+export function EnvironmentActionForm(
+  props: Common & { target: Environment; action: EnvironmentAction },
+) {
   const { commands, back, changed, openReceipt, target, action } = props;
   const prepare = usePreparation();
   const work = useWork();
@@ -863,14 +931,14 @@ export function RuntimeForm(props: Common & { target: Environment; action: 'STAR
   const status = actual?.actions.find((item) => item.action === action);
   const versionMatches =
     actual?.recordVersion === target.recordVersion && actual.generation === target.generation;
-  const sameRun =
-    action === 'START'
-      ? actual?.configuration === target.configuration &&
-        actual?.work.deployment === target.work.deployment
-      : actual?.observation.run !== null && actual?.observation.run === target.observation.run;
+  const sameTarget =
+    action === 'STOP'
+      ? actual?.observation.run !== null && actual?.observation.run === target.observation.run
+      : actual?.configuration === target.configuration &&
+        actual?.work.deployment === target.work.deployment;
   const reason = !actual
     ? null
-    : !versionMatches || !sameRun
+    : !versionMatches || !sameTarget
       ? '环境登记或原运行已变化，请返回环境重新读取。'
       : commands.session.phase === 'BLOCKED'
         ? '管理入口暂不可用。'
@@ -881,12 +949,28 @@ export function RuntimeForm(props: Common & { target: Environment; action: 'STAR
     actual &&
     status?.enabled &&
     versionMatches &&
-    sameRun &&
+    sameTarget &&
     reason === null &&
     !state.waiting &&
     !state.error,
   );
-  const title = action === 'START' ? '普通启动' : '正常停止';
+  const details = {
+    START: {
+      title: '普通启动',
+      context: '启动当前登记的部署。宿主核对原控制与运行额度后会执行。',
+      confirm: '确认启动',
+    },
+    STOP: {
+      title: '正常停止',
+      context: '只停止下列原运行。宿主核对该进程组正常退出后会登记停止结果。',
+      confirm: '确认正常停止',
+    },
+    ARCHIVE: {
+      title: '归档环境',
+      context: '归档后退出活动列表。工作区、数据库及原操作回执会保留。',
+      confirm: '提交归档',
+    },
+  }[action];
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -899,7 +983,9 @@ export function RuntimeForm(props: Common & { target: Environment; action: 'STAR
     const input =
       action === 'START'
         ? { ...scope, action, expected_configuration_sha256: actual.configuration }
-        : { ...scope, action, target: { kind: 'RUN', run_id: actual.observation.run } };
+        : action === 'STOP'
+          ? { ...scope, action, target: { kind: 'RUN', run_id: actual.observation.run } }
+          : { ...scope, action };
     work.run(async (signal) => {
       const command = await commands.prepare(input, prepare());
       if (signal.aborted) return;
@@ -919,21 +1005,17 @@ export function RuntimeForm(props: Common & { target: Environment; action: 'STAR
       <OriginalCommand {...props} original={original} performing={work.busy} notice={work.error} />
     );
   return (
-    <Panel title={title} back={back} backLabel="返回环境">
+    <Panel title={details.title} back={back} backLabel="返回环境">
       <ReadStatus state={state} />
       {actual && (
         <form className="card command-form" onSubmit={submit}>
           <strong>{actual.name}</strong>
-          <p>
-            {action === 'START'
-              ? '启动当前登记的部署。宿主核对原控制与运行额度后会执行。'
-              : '只停止下列原运行。宿主核对该进程组正常退出后会登记停止结果。'}
-          </p>
+          <p>{details.context}</p>
           <dl className="definitions">
             <div>
-              <dt>{action === 'START' ? '当前部署' : '原运行'}</dt>
+              <dt>{action === 'STOP' ? '原运行' : '当前部署'}</dt>
               <dd>
-                <code>{action === 'START' ? actual.work.deployment : actual.observation.run}</code>
+                <code>{action === 'STOP' ? actual.observation.run : actual.work.deployment}</code>
               </dd>
             </div>
             <div>
@@ -957,7 +1039,7 @@ export function RuntimeForm(props: Common & { target: Environment; action: 'STAR
             disabled={!allowed || work.busy}
             aria-describedby={reason ? 'runtime-action-reason' : undefined}
           >
-            {action === 'START' ? '确认启动' : '确认正常停止'}
+            {details.confirm}
           </button>
         </form>
       )}
@@ -967,10 +1049,13 @@ export function RuntimeForm(props: Common & { target: Environment; action: 'STAR
 
 const reconciliationText = {
   RELEASE: { title: '发布结果核对', waiting: '已核对，原发布仍等待宿主开放凭证。' },
+  ROLLBACK_CODE: { title: '回退结果核对', waiting: '已核对，原回退仍等待宿主开放凭证。' },
+  RECONFIGURE: { title: '配置切换结果核对', waiting: '已核对，原配置切换仍等待宿主开放凭证。' },
   BACKUP: { title: '备份结果核对', waiting: '已核对，仍等待原恢复点的验证。' },
   RESTORE: { title: '恢复结果核对', waiting: '已核对，原恢复仍等待宿主开放凭证。' },
   START: { title: '运行结果核对', waiting: '已核对，仍等待原运行结果。' },
   STOP: { title: '运行结果核对', waiting: '已核对，仍等待原运行结果。' },
+  ARCHIVE: { title: '归档状态核对', waiting: '等待宿主核对实际停止与资源归属。' },
 } as const;
 
 export function OperationReconcile({
@@ -985,7 +1070,7 @@ export function OperationReconcile({
   openOriginal,
   refresh,
 }: {
-  action: 'RELEASE' | 'START' | 'STOP' | 'BACKUP' | 'RESTORE';
+  action: ReleaseAction | 'BACKUP' | 'RESTORE' | EnvironmentAction;
   commands: ManagementCommands;
   operation: string;
   revision: number;
@@ -1042,10 +1127,18 @@ export function OperationReconcile({
         <h2 id="operation-reconciliation-heading">{reconciliationText[action].title}</h2>
         <button
           type="button"
-          onClick={() => sendControl(waitingCapacity ? 'CONTINUE' : 'RECONCILE')}
+          onClick={
+            action === 'ARCHIVE'
+              ? refresh
+              : () => sendControl(waitingCapacity ? 'CONTINUE' : 'RECONCILE')
+          }
           disabled={disabled || work.busy || !!pending || confirmWithdraw}
         >
-          {waitingCapacity ? '重新核对额度并继续启动' : '核对原结果'}
+          {action === 'ARCHIVE'
+            ? '刷新归档状态'
+            : waitingCapacity
+              ? '重新核对额度并继续启动'
+              : '核对原结果'}
         </button>
         {canWithdraw && !confirmWithdraw && (
           <button
@@ -1062,6 +1155,7 @@ export function OperationReconcile({
           </button>
         )}
       </div>
+      {action === 'ARCHIVE' && <p className="muted">{reconciliationText.ARCHIVE.waiting}</p>}
       {confirmWithdraw && canWithdraw && (
         <div>
           <p>仅能撤回尚未派发的原操作。宿主取得执行授权后仍可核对原结果。</p>
@@ -1116,8 +1210,11 @@ export function OriginalCommand(
     commands.session.role !== 'VIEWER' &&
     ((original.action !== 'ATTACH' &&
       original.action !== 'RELEASE' &&
+      original.action !== 'ROLLBACK_CODE' &&
+      original.action !== 'RECONFIGURE' &&
       original.action !== 'BACKUP' &&
-      original.action !== 'RESTORE') ||
+      original.action !== 'RESTORE' &&
+      original.action !== 'ARCHIVE') ||
       commands.session.role === 'MANAGER') &&
     commands.session.phase !== 'BLOCKED' &&
     (original.action !== 'ATTACH' || commands.session.phase === 'READY');
@@ -1196,9 +1293,16 @@ export function OriginalCommand(
             原备份计划 <code>{intent.plan_id}</code>
           </p>
         )}
-        {intent?.action === 'RELEASE' && (
+        {(intent?.action === 'RELEASE' ||
+          intent?.action === 'ROLLBACK_CODE' ||
+          intent?.action === 'RECONFIGURE') && (
           <p>
-            原发布计划 <code>{intent.plan_id}</code>
+            {
+              { RELEASE: '原发布计划', ROLLBACK_CODE: '原回退计划', RECONFIGURE: '原配置切换计划' }[
+                intent.action
+              ]
+            }{' '}
+            <code>{intent.plan_id}</code>
           </p>
         )}
         {intent?.action === 'RESTORE' && (

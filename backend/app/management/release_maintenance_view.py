@@ -220,7 +220,8 @@ def confirmed_current_control(catalog, row):
 def release_progress(connection, catalog, identifier):
     operation = connection.execute(
         'SELECT * FROM management_operations WHERE registry_generation=? AND environment_id=? '
-        "AND action IN ('RELEASE','RESTORE') AND status IN ('ACCEPTED','RUNNING','UNKNOWN') "
+        "AND action IN ('RELEASE','ROLLBACK_CODE','RECONFIGURE','RESTORE') "
+        "AND status IN ('ACCEPTED','RUNNING','UNKNOWN') "
         'ORDER BY created_at DESC,operation_id DESC LIMIT 1',
         (catalog.scope['registry_generation'], identifier),
     ).fetchone()

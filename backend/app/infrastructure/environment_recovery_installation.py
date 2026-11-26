@@ -1,11 +1,11 @@
 """Prepare a detached, permanently read-only replica from one rehearsed backup."""
 
-from contextlib import ExitStack
-from dataclasses import dataclass
 import fcntl
 import os
-from pathlib import Path
 import stat
+from contextlib import ExitStack, nullcontext
+from dataclasses import dataclass
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
@@ -56,8 +56,12 @@ from .environment_provision import (
 )
 from .environment_recovery_read import (
     POLICY as READ_POLICY,
+)
+from .environment_recovery_read import (
     SCOPES,
     TUPLE_FIELDS,
+)
+from .environment_recovery_read import (
     read_policy as read_scope,
 )
 from .environment_restore import RECEIPT
@@ -438,10 +442,13 @@ def prepare_recovery_replica(args, entry, runtime_hosts):
     indexed_files(front_index, target.frontend_input, 'frontend')
     with ExitStack() as resources:
         prepared = target.restore_preparation
+        source_lock = None
         if prepared is not None:
             from .environment_recovery_restore import lock_frozen_source
 
-            lock_frozen_source(resources, args, entry, runtime_hosts, source, prepared)
+            source_lock = lock_frozen_source(
+                resources, args, entry, runtime_hosts, source, prepared
+            )
         host_fd = resources.enter_context(
             installer_lock(target.host_root, expected_identity=plan['host_identity'])
         )
@@ -476,8 +483,8 @@ def prepare_recovery_replica(args, entry, runtime_hosts):
         )
         binding = replica_binding(plan, receipt, args.anchor_sha256)
         final = target.host_root / source.environment_id
-        _initialize_host(host_fd, target.host_root)
         if os.path.lexists(final):
+            _initialize_host(host_fd, target.host_root)
             os.fsync(host_fd)
             return read_prepared(final, target, plan, identities, binding, index_raw)
         _reserve_identities(target)
@@ -502,10 +509,15 @@ def prepare_recovery_replica(args, entry, runtime_hosts):
                     index_raw,
                     binding,
                 )
-                publish_directory(work, final)
-                published = True
-                os.fsync(host_fd)
-                os.fsync(staging_fd)
+                admission = source.host_admission() if source_lock is not None else nullcontext()
+                with admission:
+                    if source_lock is not None:
+                        source_lock.assert_owned()
+                    _initialize_host(host_fd, target.host_root)
+                    publish_directory(work, final)
+                    published = True
+                    os.fsync(host_fd)
+                    os.fsync(staging_fd)
                 observed = read_prepared(final, target, plan, identities, binding, index_raw)
                 require(observed == expected, UNVERIFIED)
                 return observed

@@ -40,6 +40,14 @@ function RestoreComparison({ plan }: { plan: RestorePlan }) {
             <time dateTime={plan.backup.cutoff}>{shownTime(plan.backup.cutoff)}</time>
           </dd>
         </div>
+        {plan.offhost ? (
+          <div>
+            <dt>异机取回核验</dt>
+            <dd>
+              <time dateTime={plan.offhost.retrieved}>{shownTime(plan.offhost.retrieved)}</time>
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt>源数据代次</dt>
           <dd>
@@ -81,6 +89,14 @@ function RestoreComparison({ plan }: { plan: RestorePlan }) {
               <code>{plan.manifest}</code>
             </dd>
           </div>
+          {plan.offhost ? (
+            <div>
+              <dt>异机快照</dt>
+              <dd>
+                <code>{plan.offhost.snapshot}</code>
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt>计划摘要</dt>
             <dd>

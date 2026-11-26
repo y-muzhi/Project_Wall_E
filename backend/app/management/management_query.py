@@ -1,9 +1,9 @@
 """Role-scoped, path-free projections of the independent management registry."""
 
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 import binascii
-from datetime import datetime, timezone
 import re
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from datetime import UTC, datetime
 
 from backend.app.infrastructure.environment_control import normal_stop
 from backend.app.infrastructure.environment_files import (
@@ -14,12 +14,21 @@ from backend.app.infrastructure.environment_files import (
     exact,
     require,
 )
-from backend.app.infrastructure.environment_installation import uuid_value
+from backend.app.infrastructure.environment_installation import sha_value, uuid_value
 
 from .attachment_observation import candidate_environment, now, observe_for_attach
 from .host_capacity import available_memory_bytes
-from .operation_contract import CONFLICT, DENIED, INVALID, MISSING, RESOURCE, UNAVAILABLE
+from .operation_contract import (
+    CONFLICT,
+    DENIED,
+    INVALID,
+    MISSING,
+    RELEASE_ACTIONS,
+    RESOURCE,
+    UNAVAILABLE,
+)
 from .operation_store import (
+    attachment_claims,
     conflicting_action,
     decoded,
     environment_row,
@@ -34,7 +43,16 @@ from .release_maintenance_view import confirmed_current_control
 from .runtime_capacity import capacity_totals, held_capacity, load_capacity
 from .runtime_observation import project_runtime
 
-READ_ACTIONS = ('ATTACH', 'REGISTER_DELIVERY', 'START', 'STOP', 'RELEASE', 'BACKUP', 'RESTORE')
+READ_ACTIONS = (
+    'ATTACH',
+    'REGISTER_DELIVERY',
+    'START',
+    'STOP',
+    'ARCHIVE',
+    *RELEASE_ACTIONS,
+    'BACKUP',
+    'RESTORE',
+)
 STATUSES = (
     'WAITING_CAPACITY',
     'ACCEPTED',
@@ -52,22 +70,27 @@ ENVIRONMENT_FILTERS = {
 OPERATION_FILTERS = {'environment_id': None, 'status': STATUSES}
 
 
-def available_actions(principal, *, candidates=False, delivery_row=None, busy=False, runtime=None):
+def available_actions(
+    principal, *, candidates=False, delivery_row=None, busy=False, runtime=None, archive=UNAVAILABLE
+):
     attach = DENIED
     if principal.role == 'MANAGER':
         attach = None if candidates else RESOURCE
     delivery = DENIED
-    if principal.role in ('MANAGER', 'DEVELOPER') and delivery_row is not None:
-        if delivery_row['writer_principal'] == principal.id:
-            available = (
-                delivery_row['purpose'] in ('DEVELOPMENT', 'INTEGRATION')
-                and delivery_row['registration_state'] == 'ACTIVE'
-                and delivery_row['preparation_state'] == 'PREPARED'
-                and delivery_row['assignment_control_state'] == 'OPEN'
-            )
-            delivery = UNAVAILABLE
-            if available:
-                delivery = CONFLICT if busy else None
+    if (
+        principal.role in ('MANAGER', 'DEVELOPER')
+        and delivery_row is not None
+        and delivery_row['writer_principal'] == principal.id
+    ):
+        available = (
+            delivery_row['purpose'] in ('DEVELOPMENT', 'INTEGRATION')
+            and delivery_row['registration_state'] == 'ACTIVE'
+            and delivery_row['preparation_state'] == 'PREPARED'
+            and delivery_row['assignment_control_state'] == 'OPEN'
+        )
+        delivery = UNAVAILABLE
+        if available:
+            delivery = CONFLICT if busy else None
     reasons = {
         'CREATE': UNAVAILABLE,
         'ATTACH': attach,
@@ -75,7 +98,7 @@ def available_actions(principal, *, candidates=False, delivery_row=None, busy=Fa
         'STOP': UNAVAILABLE if runtime is None else runtime['STOP'],
         'HANDOFF': UNAVAILABLE,
         'REGISTER_DELIVERY': delivery,
-        'ARCHIVE': UNAVAILABLE,
+        'ARCHIVE': archive,
         'CLEANUP': UNAVAILABLE,
     }
     return [
@@ -166,7 +189,7 @@ def prepare_observation(connection, environment):
     evidence = decoded(rows['result_json'])
     at = evidence['observed_at']
     require(is_timestamp(at), INVALID)
-    elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(at)).total_seconds()
+    elapsed = (datetime.now(UTC) - datetime.fromisoformat(at)).total_seconds()
     return {
         'source': 'ATTACHMENT',
         'observed_at': at,
@@ -240,6 +263,8 @@ def business_entry(catalog, row, work):
 
 
 def environment_summary(connection, catalog, row, principal):
+    from .environment_archive import archive_reason, has_capacity
+
     work = decoded(row['work_package_json'])
     observation = project_runtime(catalog, row, work)
     busy = conflicting_action(connection, row['environment_id'])
@@ -267,6 +292,13 @@ def environment_summary(connection, catalog, row, principal):
             delivery_row=row,
             busy=busy,
             runtime=runtime_actions(catalog, principal, row, busy, observation),
+            archive=archive_reason(
+                catalog,
+                principal,
+                row,
+                busy,
+                capacity_held=has_capacity(connection, row['environment_id']),
+            ),
         ),
         'business_url': business_entry(catalog, row, work),
     }
@@ -404,21 +436,24 @@ def operation_detail(connection, catalog, principal, identity, *, by_key):
     return operation_result(connection, row)
 
 
-def candidate_projection(connection, catalog, reference, expected, runtime_sha):
-    candidate = catalog.candidate(reference, expected)
+def candidate_projection(connection, catalog, reference, expected, runtime_sha, *, archived=None):
+    candidate = catalog.candidate(reference, expected) if archived is None else None
     view = {
         'candidate_ref': reference,
         'sha256': expected,
-        'display_name': candidate['display_name'],
-        'environment_id': None,
-        'record_version': None,
+        'display_name': (candidate if archived is None else archived)['display_name'],
+        'environment_id': None if archived is None else archived['environment_id'],
+        'record_version': None if archived is None else archived['record_version'],
         'observed_at': None,
         'state': 'EVIDENCE_REQUIRED',
     }
     intent = {'candidate_ref': reference, 'expected_candidate_sha256': expected}
     try:
+        if candidate is None:
+            candidate = catalog.candidate(reference, expected)
         environment = candidate_environment(candidate, runtime_sha)
         current = environment_row(connection, environment.environment_id)
+        require(archived is None or current == archived, RESOURCE)
         if current is not None:
             view['environment_id'] = current['environment_id']
             view['record_version'] = current['record_version']
@@ -432,6 +467,13 @@ def candidate_projection(connection, catalog, reference, expected, runtime_sha):
         require(owner.role in ('MANAGER', 'DEVELOPER'), DENIED)
         proof = observe_for_attach(catalog, intent, candidate, runtime_sha)
         require(is_timestamp(proof['observed_at']), RESOURCE)
+        if current is not None:
+            reattach = {
+                **intent,
+                'environment_id': current['environment_id'],
+                'expected_record_version': current['record_version'],
+            }
+            attachment_claims(connection, reattach, candidate, proof)
         view['observed_at'] = proof['observed_at']
         view['state'] = 'REATTACH_READY' if current is not None else 'READY'
     except (EnvironmentFailure, OSError, ValueError, KeyError, TypeError):
@@ -446,7 +488,24 @@ def catalog_projection(connection, catalog, principal, runtime_sha):
         'candidates': [
             candidate_projection(connection, catalog, ref, expected, runtime_sha)
             for ref, expected in sorted(catalog.candidates.items())
-        ]
+        ],
+    }
+
+
+def archived_attachment(connection, catalog, principal, identifier, runtime_sha):
+    require(principal.role == 'MANAGER', DENIED)
+    require(uuid_value(identifier), INVALID)
+    row = environment_row(connection, identifier)
+    require(row is not None, MISSING)
+    require(row['registration_state'] == 'ARCHIVED', UNAVAILABLE)
+    require(row['configuration_ref'] is not None, RESOURCE)
+    attachment = exact(decoded(row['configuration_ref']), ('candidate_ref', 'sha256'), RESOURCE)
+    reference, pin = attachment['candidate_ref'], attachment['sha256']
+    require(uuid_value(reference) and sha_value(pin), RESOURCE)
+    return {
+        'candidates': [
+            candidate_projection(connection, catalog, reference, pin, runtime_sha, archived=row),
+        ],
     }
 
 

@@ -2,6 +2,8 @@ import { exact, positiveInteger } from './wire-shape.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const VALIDATION_PORT = ':9443';
 const ENTRY_LIMIT = 16 * 1024;
 const ENTRY_TIMEOUT = 30_000;
 
@@ -114,16 +116,29 @@ export function parseEnvironmentJson(text: string): unknown {
   return parsed;
 }
 
+function matchesBusinessOrigin(origin: string, environmentId: string): boolean {
+  const prefix = `https://e-${environmentId}.`;
+  if (!origin.startsWith(prefix)) return false;
+  const authority = origin.slice(prefix.length);
+  const domain = authority.endsWith(VALIDATION_PORT)
+    ? authority.slice(0, -VALIDATION_PORT.length)
+    : authority;
+  const labels = domain.split('.');
+  return (
+    domain.length <= 214 &&
+    labels.length >= 2 &&
+    labels.every((label) => DNS_LABEL.test(label)) &&
+    /[a-z]/.test(labels.at(-1) ?? '')
+  );
+}
+
 function publicRecord(value: unknown, origin: string) {
   const record = exact(value, CONFIG_FIELDS);
   if (record.format_version !== 1 || record.binding_protocol !== 1)
     throw new EnvironmentEntryError('PROTOCOL');
   const environment_id = uuid(record.environment_id);
   const data_generation = uuid(record.data_generation);
-  if (
-    record.public_origin !== origin ||
-    origin !== 'https://e-' + environment_id + '.walle-dev.test:9443'
-  )
+  if (record.public_origin !== origin || !matchesBusinessOrigin(origin, environment_id))
     throw new EnvironmentEntryError('SCOPE_CHANGED');
   if (
     record.api_base !== '/api/v1' ||
@@ -262,11 +277,12 @@ function handshakeRecord(
     config.scope.environment_id !== actual.environment ||
     config.scope.data_generation !== actual.generation ||
     runId !== actual.run ||
-    record.purpose !== config.purpose ||
-    record.configuration_sha256 !== config.configurationSha256
+    record.purpose !== config.purpose
   )
     throw new EnvironmentEntryError('SCOPE_CHANGED');
-  if (record.phase !== 'READY') throw new EnvironmentEntryError('NOT_READY');
+  const configurationMatches = sha256(record.configuration_sha256) === config.configurationSha256;
+  if (record.phase !== 'READY' || !configurationMatches)
+    throw new EnvironmentEntryError('NOT_READY');
   utc(record.observed_at);
   const recovery = readMaintenance(record.maintenance, config.scope);
   readCapabilities(record.capabilities, recovery !== undefined);

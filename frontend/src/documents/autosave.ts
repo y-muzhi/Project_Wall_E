@@ -89,6 +89,7 @@ export class ManualDraftAutosave {
   private closed = false;
   private paused = false;
   private environmentPaused = false;
+  private environmentRevision = 0;
   constructor(
     draft: DocumentReadModel,
     ledger: DraftSaveLedger,
@@ -260,6 +261,7 @@ export class ManualDraftAutosave {
   setEnvironmentWritable(writable: boolean): void {
     if (this.closed || this.environmentPaused === !writable) return;
     this.environmentPaused = !writable;
+    this.environmentRevision += 1;
     if (!writable) this.requireExplicitSave();
   }
 
@@ -274,12 +276,18 @@ export class ManualDraftAutosave {
       this.value.status === 'VALIDATION_ERROR'
     )
       return this.pending ?? Promise.resolve();
-    if (userRequested && this.value.resume_required) this.publish({ resume_required: false });
+    const resumeRevision = this.value.resume_required ? this.environmentRevision : undefined;
     this.clearTimers();
     this.requested = true;
-    if (this.pending) return this.pending;
+    if (this.pending) {
+      if (resumeRevision === undefined) return this.pending;
+      return this.pending.then(() => {
+        if (resumeRevision === this.environmentRevision && this.value.resume_required)
+          return this.flush(true);
+      });
+    }
     this.pending = Promise.resolve()
-      .then(() => this.drive())
+      .then(() => this.drive(resumeRevision))
       .finally(() => {
         this.pending = undefined;
       });
@@ -306,6 +314,21 @@ export class ManualDraftAutosave {
       document.created_at === this.confirmed.created_at
     );
   }
+  /** A detail read can preserve access to the original save recovery. */
+  canReconcileObservedDraft(document: DocumentReadModel): boolean {
+    const pending = this.value.status === 'SAVING' || this.value.status === 'UNKNOWN';
+    return (
+      pending &&
+      this.value.resume_required &&
+      this.validIdentity(document) &&
+      [...this.tickets.keys()].some(
+        (ticket) =>
+          ticket.expected_version === this.confirmed.content_version &&
+          corresponds(ticket, document),
+      )
+    );
+  }
+
   private acknowledge(ticket: ManualDraftSubmission, document: DocumentReadModel): void {
     if (!this.validIdentity(document)) throw new TypeError('Another draft receipt');
     this.observed = this.ledger.acknowledgeSave(ticket, editorReadModel(document));
@@ -342,15 +365,30 @@ export class ManualDraftAutosave {
   /** Reading the old version does not prove an earlier HTTP write cannot
    * still commit. Retain its proof and never advance the expected version.
    */
-  private async reconcile(): Promise<'OLD' | 'ACK' | 'STOP'> {
+  private async reconcile(resuming = false): Promise<'OLD' | 'ACK' | 'STOP'> {
+    const environmentRevision = this.environmentRevision;
     let document: DocumentReadModel;
     try {
       document = await this.api.read();
     } catch {
-      if (!this.closed) this.later('UNKNOWN', '保存结果待核实，正在重新读取草稿');
+      if (!this.closed && !this.paused && environmentRevision === this.environmentRevision) {
+        if (resuming) {
+          this.requireExplicitSave();
+          this.publish({ error: '暂时无法核对原草稿，当前内容已保留' });
+        } else {
+          this.later('UNKNOWN', '保存结果待核实，正在重新读取草稿');
+        }
+      }
       return 'STOP';
     }
-    if (this.closed || this.environmentPaused || this.value.resume_required) return 'STOP';
+    if (
+      this.closed ||
+      this.paused ||
+      this.environmentPaused ||
+      environmentRevision !== this.environmentRevision ||
+      (this.value.resume_required && !resuming)
+    )
+      return 'STOP';
     if (!this.validIdentity(document)) {
       this.conflict(null);
       return 'STOP';
@@ -362,6 +400,13 @@ export class ManualDraftAutosave {
         value.expected_version === this.confirmed.content_version &&
         (old || corresponds(value, document)),
     );
+    if (!ticket && (!old || this.tickets.size !== 0)) {
+      this.conflict(document);
+      return 'STOP';
+    }
+    if (resuming) this.publish({ resume_required: false });
+    if (this.closed || this.paused || environmentRevision !== this.environmentRevision)
+      return 'STOP';
     if (ticket) {
       // A matching GET is only an observation. The port retains the original
       // keyed action for this exact ticket; its receipt confirms our save.
@@ -386,11 +431,22 @@ export class ManualDraftAutosave {
         return 'STOP';
       }
     }
-    if (old && !this.tickets.size) return 'OLD';
-    this.conflict(document);
-    return 'STOP';
+    return 'OLD';
   }
-  private async drive(): Promise<void> {
+  private async drive(resumeRevision?: number): Promise<void> {
+    if (this.value.resume_required) {
+      if (
+        resumeRevision !== this.environmentRevision ||
+        this.closed ||
+        this.paused ||
+        this.environmentPaused
+      )
+        return;
+      this.requested = false;
+      const result = await this.reconcile(true);
+      if (result === 'STOP') return;
+      if (result === 'OLD') this.requested = true;
+    }
     while (
       this.requested &&
       !this.closed &&

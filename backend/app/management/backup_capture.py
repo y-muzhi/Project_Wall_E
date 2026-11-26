@@ -1,6 +1,7 @@
 """Dispatch the confirmed stopped source through the original SQLite backup operation."""
 
 import os
+from subprocess import TimeoutExpired
 
 from backend.app.infrastructure.environment_backup import capture_policy, capture_status
 from backend.app.infrastructure.environment_files import (
@@ -12,6 +13,7 @@ from backend.app.infrastructure.environment_files import (
     require,
 )
 from backend.app.infrastructure.environment_installation import sha_value, uuid_value
+from backend.app.infrastructure.environment_lock import NativeEnvironmentFiles
 
 from .attachment_observation import candidate_environment, invoke_observer
 from .backup_operations import ACTION, LIMITS, STEP, backup_policy, confirmed_backup, stopped_source
@@ -58,7 +60,7 @@ def backup_record(connection, catalog, operation_id):
 
 
 def capture_grant(catalog, operation, preview, record):
-    return {
+    grant = {
         'format_version': 1,
         **catalog.scope,
         'operation_id': operation['operation_id'],
@@ -76,41 +78,60 @@ def capture_grant(catalog, operation, preview, record):
         },
         'limits': {key: record[key] for key in LIMITS},
     }
+    if 'offhost_authority' in record:
+        require(preview['minimum_verification'] == 'OFFHOST_VERIFIED', CHANGED)
+        grant['offhost_authority'] = record['offhost_authority']
+    return grant
+
+
+def backup_grant(connection, catalog, operation_id):
+    operation, step = backup_record(connection, catalog, operation_id)
+    principal = catalog.access(operation['principal'])
+    require(principal.role == 'MANAGER', DENIED)
+    intent = decoded(operation['intent_json'])
+    plan = raw_plan(connection, intent['plan_id'])
+    preview = confirmed_backup(plan, principal.id, intent)
+    require(plan['execution_operation_id'] == operation_id, CHANGED)
+    policy, pin = backup_policy(catalog, preview['backup_policy_ref'], operation['environment_id'])
+    require(pin == preview['backup_policy_sha256'], CHANGED)
+    grant = capture_grant(catalog, operation, preview, policy)
+    if step['external_identity_json'] is not None:
+        existing = decoded(step['external_identity_json'])
+        require(
+            operation['status'] in ('RUNNING', 'SUCCEEDED')
+            and not operation['cancel_requested']
+            and existing.get('capture') == grant,
+            RESOURCE,
+        )
+        return grant, None
+    require(
+        operation['status'] == 'ACCEPTED'
+        and step['status'] == 'PLANNED'
+        and operation['revision'] < MAX_REVISION
+        and not operation['cancel_requested'],
+        UNAVAILABLE,
+    )
+    current, attachment, _, _ = stopped_source(connection, catalog, principal, intent)
+    require(current == grant['source'] and attachment == grant['source_attachment'], CHANGED)
+    return grant, operation
+
+
+def observe_backup(connection, catalog, request):
+    exact(request, ('operation_id', 'allow_pending'), INVALID)
+    require(type(request['allow_pending']) is bool, INVALID)
+    grant, pending = backup_grant(connection, catalog, request['operation_id'])
+    require(request['allow_pending'] or pending is None, RESOURCE)
+    return grant
 
 
 def claim_backup(connection, lock, catalog, request):
-    exact(request, ('operation_id',), INVALID)
+    exact(request, ('operation_id', 'grant_sha256'), INVALID)
+    require(sha_value(request['grant_sha256']), INVALID)
     with mutation(connection, lock):
-        operation, step = backup_record(connection, catalog, request['operation_id'])
-        principal = catalog.access(operation['principal'])
-        require(principal.role == 'MANAGER', DENIED)
-        intent = decoded(operation['intent_json'])
-        plan = raw_plan(connection, intent['plan_id'])
-        preview = confirmed_backup(plan, principal.id, intent)
-        require(plan['execution_operation_id'] == operation['operation_id'], CHANGED)
-        policy, pin = backup_policy(
-            catalog, preview['backup_policy_ref'], operation['environment_id']
-        )
-        require(pin == preview['backup_policy_sha256'], CHANGED)
-        grant = capture_grant(catalog, operation, preview, policy)
-        if step['external_identity_json'] is not None:
-            existing = decoded(step['external_identity_json'])
-            require(
-                operation['status'] in ('RUNNING', 'SUCCEEDED')
-                and not operation['cancel_requested']
-                and existing.get('capture') == grant,
-                RESOURCE,
-            )
+        grant, operation = backup_grant(connection, catalog, request['operation_id'])
+        require(digest(canonical(grant)) == request['grant_sha256'], CHANGED)
+        if operation is None:
             return grant
-        require(
-            operation['status'] == 'ACCEPTED'
-            and step['status'] == 'PLANNED'
-            and operation['revision'] < MAX_REVISION
-            and not operation['cancel_requested'],
-            UNAVAILABLE,
-        )
-        current, attachment, _, _ = stopped_source(connection, catalog, principal, intent)
-        require(current == grant['source'] and attachment == grant['source_attachment'], CHANGED)
         dispatched = connection.execute(
             "UPDATE management_operations SET status='RUNNING',revision=revision+1 "
             "WHERE operation_id=? AND status='ACCEPTED' AND revision=?",
@@ -125,14 +146,14 @@ def claim_backup(connection, lock, catalog, request):
         return grant
 
 
-def admitted_backup(catalog, registry, args, launcher):
+def admitted_backup(catalog, registry, args, launcher, *, allow_pending=False):
     operation = args.backup_operation_id
     grant = invoke_observer(
         registry.uid,
         registry.gid,
-        manager_command('_claim-managed-backup', args, launcher),
+        manager_command('_observe-managed-backup', args, launcher),
         catalog.directory / 'observations',
-        input_bytes=canonical({'operation_id': operation}),
+        input_bytes=canonical({'operation_id': operation, 'allow_pending': allow_pending}),
     )
     require(
         grant['operation_id'] == operation
@@ -261,7 +282,12 @@ def capture_managed_backup(catalog, registry, args, launcher):
     operation = args.backup_operation_id
     require(os.geteuid() == 0 and uuid_value(operation), DENIED)
     with execution_directory(catalog, EXECUTIONS, operation, create=True) as (_, fd):
-        grant, source = admitted_backup(catalog, registry, args, launcher)
+        previous = optional_fact(fd, CAPTURE_ISSUED)
+        known = optional_fact(fd, CAPTURED)
+        require(known is None or previous is not None, RESOURCE)
+        grant, source = admitted_backup(
+            catalog, registry, args, launcher, allow_pending=previous is None
+        )
         policy = capture_policy(args.capture_policy, args.capture_sha256)
         check_capture_plan(policy, grant, source)
         identity = {
@@ -271,17 +297,36 @@ def capture_managed_backup(catalog, registry, args, launcher):
             'grant_sha256': digest(canonical(grant)),
             'capture_policy_sha256': args.capture_sha256,
         }
-        previous = optional_fact(fd, CAPTURE_ISSUED)
-        if previous is None:
-            current = confirmed_control((source,))
-            require(digest(canonical(current)) == grant['source']['control_sha256'], CHANGED)
-            write_fact(fd, CAPTURE_ISSUED, identity)
-        else:
+        if previous is not None:
             require(previous == identity, CHANGED)
-        known = optional_fact(fd, CAPTURED)
+        else:
+            native = NativeEnvironmentFiles(args.root)
+            with source.lock(native) as lock, source.host_admission():
+                current = confirmed_control((source,))
+                require(digest(canonical(current)) == grant['source']['control_sha256'], CHANGED)
+                lock.assert_owned()
+                try:
+                    claimed = invoke_observer(
+                        registry.uid,
+                        registry.gid,
+                        manager_command('_claim-managed-backup', args, launcher),
+                        catalog.directory / 'observations',
+                        input_bytes=canonical(
+                            {'operation_id': operation, 'grant_sha256': identity['grant_sha256']}
+                        ),
+                    )
+                    require(claimed == grant, CHANGED)
+                    write_fact(fd, CAPTURE_ISSUED, identity)
+                except (OSError, RuntimeError, TimeoutExpired, ValueError) as error:
+                    raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
         if known is not None:
             require(all(known[key] == value for key, value in identity.items()), RESOURCE)
-            return checked_capture_receipt(known, grant)
+            receipt = checked_capture_receipt(known, grant)
+            try:
+                os.fsync(fd)
+            except OSError as error:
+                raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
+            return receipt
         try:
             measured = invoke_observer(
                 source.maintenance_uid,
@@ -301,6 +346,6 @@ def capture_managed_backup(catalog, registry, args, launcher):
             )
             receipt = captured_result(measured, grant, args.capture_sha256, policy)
             write_fact(fd, CAPTURED, receipt)
-        except (EnvironmentFailure, OSError, RuntimeError, ValueError) as error:
+        except (OSError, RuntimeError, TimeoutExpired, ValueError) as error:
             raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
         return receipt

@@ -21,20 +21,30 @@ from .backup_capture import CAPTURED, EXECUTIONS, admitted_backup, checked_captu
 from .operation_contract import DENIED, INVALID, RESOURCE, installed_record, path_reference
 from .recovery_catalog import local_metadata
 from .recovery_evidence import backup_cutoff
+from .recovery_offhost import offhost_metadata
 from .release_configuration import CHANGED
 from .release_execution import execution_directory, optional_fact, write_fact
 
 POLICY = 'managed-backup-result.v1.json'
+OFFHOST_POLICY = 'managed-backup-result.v2.json'
+LOCAL_STAGE = 'local-verified.v1.json'
+LOCAL_STATUS = 'MANAGED_BACKUP_WAITING_OFFHOST'
 COMPLETE = 'verified.v1.json'
 COMPLETE_STATUS = 'MANAGED_BACKUP_LOCAL_VERIFIED'
+OFFHOST_COMPLETE = 'MANAGED_BACKUP_OFFHOST_VERIFIED'
 UNVERIFIED = 'MANAGED_BACKUP_RESULT_UNVERIFIED'
 
 
-def load_result(catalog, args):
+def load_result(catalog, args, *, offhost=False):
     path = args.managed_backup_result_policy
-    require(path.is_absolute() and path.name == POLICY, INVALID)
+    require(path.is_absolute() and path.name == (OFFHOST_POLICY if offhost else POLICY), INVALID)
     raw = installed_record(path, args.managed_backup_result_policy_sha256)
-    version_record(raw, (*catalog.scope, 'operation_id', 'package', 'local_verification'), INVALID)
+    fields = (*catalog.scope, 'operation_id', 'package', 'local_verification')
+    if offhost:
+        exact(raw, ('format_version', *fields, 'offhost_verification'), INVALID)
+        require(type(raw['format_version']) is int and raw['format_version'] == 2, INVALID)
+    else:
+        version_record(raw, fields, INVALID)
     require(
         raw['operation_id'] == args.backup_operation_id
         and all(raw[key] == value for key, value in catalog.scope.items()),
@@ -44,7 +54,10 @@ def load_result(catalog, args):
     folder, pin = path_reference({'path': package['path'], 'sha256': package['sha256']})
     identity_record(package['identity'], INVALID)
     proof, witness = path_reference(raw['local_verification'])
-    return folder, pin, package['identity'], proof, witness
+    reference = raw.get('offhost_verification')
+    return (folder, pin, package['identity'], proof, witness), (
+        None if reference is None else path_reference(reference)
+    )
 
 
 def point_from_package(source, grant, captured, inputs, observed_at):
@@ -96,6 +109,39 @@ def point_from_package(source, grant, captured, inputs, observed_at):
     }
 
 
+def protect_local_stage(fd, binding, inputs, point, observed, policy_sha):
+    folder, manifest, identity, note, proof = inputs
+    subject = {
+        **binding,
+        'status': LOCAL_STATUS,
+        'local_inputs_sha256': digest(
+            canonical(
+                {
+                    'package_directory': str(folder),
+                    'backup_manifest_sha256': manifest,
+                    'package_identity': identity,
+                    'local_verification': str(note),
+                    'local_verification_sha256': proof,
+                }
+            )
+        ),
+        'point': point,
+    }
+    previous = optional_fact(fd, LOCAL_STAGE)
+    if previous is not None:
+        require(
+            all(previous.get(key) == value for key, value in subject.items())
+            and set(previous) == {*subject, 'observed_at', 'local_policy_sha256'}
+            and sha_value(previous['local_policy_sha256']),
+            CHANGED,
+        )
+        os.fsync(fd)
+        return previous
+    staged = {**subject, 'observed_at': observed, 'local_policy_sha256': policy_sha}
+    write_fact(fd, LOCAL_STAGE, staged)
+    return staged
+
+
 def complete_managed_backup(catalog, registry, args, launcher):
     operation = args.backup_operation_id
     require(os.geteuid() == 0 and uuid_value(operation), DENIED)
@@ -104,23 +150,54 @@ def complete_managed_backup(catalog, registry, args, launcher):
         captured = optional_fact(fd, CAPTURED)
         require(captured is not None, RESOURCE)
         checked_capture_receipt(captured, grant)
-        record = {
+        authority = grant.get('offhost_authority')
+        binding = {
             'format_version': 1,
-            'status': COMPLETE_STATUS,
             **catalog.scope,
             'operation_id': operation,
             'grant_sha256': digest(canonical(grant)),
             'capture_sha256': digest(canonical(captured)),
+        }
+        record = {
+            **binding,
+            'status': COMPLETE_STATUS if authority is None else OFFHOST_COMPLETE,
             'result_policy_sha256': args.managed_backup_result_policy_sha256,
         }
         require(sha_value(record['result_policy_sha256']), INVALID)
         known = optional_fact(fd, COMPLETE)
         if known is not None:
-            require(all(known[key] == value for key, value in record.items()), CHANGED)
-            return known
-        inputs = load_result(catalog, args)
+            if all(known[key] == value for key, value in record.items()):
+                os.fsync(fd)
+                return known
+            staged = optional_fact(fd, LOCAL_STAGE) if authority is not None else None
+            require(
+                staged is not None
+                and staged['local_policy_sha256'] == record['result_policy_sha256']
+                and all(staged[key] == value for key, value in binding.items()),
+                CHANGED,
+            )
+            os.fsync(fd)
+            return staged
+        inputs, reference = load_result(catalog, args, offhost=authority is not None)
         observed = now()
         point = point_from_package(source, grant, captured, inputs, observed)
+        if authority is not None:
+            local = protect_local_stage(
+                fd, binding, inputs, point, observed, record['result_policy_sha256']
+            )
+            if reference is None:
+                return local
+            proof, pin = reference
+            report = installed_record(proof, pin)
+            verified = offhost_metadata(
+                report, point, grant['environment_id'], observed, authority, UNVERIFIED
+            )
+            point = {
+                **point,
+                'verification_status': 'OFFHOST_VERIFIED',
+                'offhost_verification': verified,
+            }
+            record['offhost_verification_sha256'] = pin
         result = {**record, 'observed_at': observed, 'point': point}
         write_fact(fd, COMPLETE, result)
         return result

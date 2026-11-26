@@ -1,15 +1,15 @@
 """Prepare, start and reconcile one ordinary Linux service through its fixed host unit."""
 
-from contextlib import contextmanager
 import fcntl
 import grp
 import os
-from pathlib import Path
 import pwd
 import re
 import stat
 import subprocess
 import time
+from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 from backend.app.infrastructure.environment_admission import read_start
@@ -48,17 +48,23 @@ from .registry import is_timestamp
 from .runtime_capacity import load_capacity
 from .runtime_observation import (
     CGROUP_ROOT,
-    NOT_READY as APPLICATION_UNREADY,
-    POLICY as RUNTIME_POLICY,
-    READY as APPLICATION_READY,
-    SYSTEMCTL,
     SYSTEM_PYTHON,
+    SYSTEMCTL,
     capture_runtime,
     cgroup_processes,
     expected_command,
     launch_wrapper,
     trusted_executable,
     unit_facts,
+)
+from .runtime_observation import (
+    NOT_READY as APPLICATION_UNREADY,
+)
+from .runtime_observation import (
+    POLICY as RUNTIME_POLICY,
+)
+from .runtime_observation import (
+    READY as APPLICATION_READY,
 )
 
 START_POLICY = 'managed-start.v1.json'
@@ -76,6 +82,7 @@ def load_start(catalog, path, expected):
     cancellation = (
         ('previous_cancel_control_key',) if 'previous_cancel_control_key' in record else ()
     )
+    adoption = ('previous_registry_adoption',) if 'previous_registry_adoption' in record else ()
     plan = exact(
         record,
         (
@@ -86,6 +93,7 @@ def load_start(catalog, path, expected):
             'start_operation_id',
             'previous_stop_operation_id',
             *cancellation,
+            *adoption,
             'launcher',
             'home',
             'temporary',
@@ -132,7 +140,23 @@ def load_start(catalog, path, expected):
         and 25 <= plan['cpu_percent'] <= 200,
         INVALID,
     )
+    if adoption:
+        from .registry_recovery_restart import recovery_predecessor
+
+        recovery_predecessor(plan)
     return plan
+
+
+def verify_application_groups(environment):
+    try:
+        user = pwd.getpwuid(environment.application_uid)
+    except KeyError as error:
+        raise EnvironmentFailure(RESOURCE) from error
+    require(
+        user.pw_gid == environment.group
+        and set(os.getgrouplist(user.pw_name, user.pw_gid)) == {environment.group},
+        RESOURCE,
+    )
 
 
 def verify_accounts_and_paths(plan, environment):
@@ -190,7 +214,7 @@ def control_directory(environment):
             os.close(fd)
 
 
-def prepared(environment, operation):
+def prepared(environment, operation, *, require_closed=False):
     with control_directory(environment) as fd:
         control = read_control(fd, environment)
         try:
@@ -226,7 +250,14 @@ def prepared(environment, operation):
                 )
             )
             and version(result['control_revision'])
-            and result['control_revision'] <= control['control_revision'],
+            and result['control_revision'] <= control['control_revision']
+            and (
+                not require_closed
+                or (
+                    normal_stop(control)
+                    and result['control_revision'] == control['control_revision']
+                )
+            ),
             UNVERIFIED,
         )
         return {**result, 'start_sha256': digest(raw)}
@@ -278,12 +309,16 @@ def original_record(fd, name, common):
     return found
 
 
-def check_environment_lease(fd, name, common, plan, catalog, environment):
+def check_environment_lease(fd, name, common, plan, catalog, environment, *, verify_recovery=None):
     lease = record_at(fd, name)
     claim = {
         key: common[key] for key in ('environment_id', 'start_operation_id', 'start_policy_sha256')
     }
     if lease == claim:
+        return lease, claim
+    if 'previous_registry_adoption' in plan:
+        require(lease is None and verify_recovery is not None, CONFLICT)
+        verify_recovery()
         return lease, claim
     previous_id = plan['previous_stop_operation_id']
     previous_cancel = plan.get('previous_cancel_control_key')
@@ -389,7 +424,11 @@ def preparation_baseline(fd, common, boot):
 
 def capture_preparation(fd, common, boot, environment, native):
     baseline = preparation_baseline(fd, common, boot)
-    with environment.lock(native) as lock, control_directory(environment) as control:
+    with (
+        environment.lock(native) as lock,
+        environment.host_admission(),
+        control_directory(environment) as control,
+    ):
         before = read_control(control, environment)
         require(
             normal_stop(before)
@@ -605,11 +644,13 @@ def finish_preparation(fd, common, plan, environment, command, *, launch):
     name = 'prepare-' + original + '.v1.json'
     record = preparation_record(fd, expected)
     if launch:
-        require(
-            record is None and unit_facts(unit)['LoadState'] == 'not-found', PREPARATION_UNVERIFIED
-        )
-        record = {**expected, 'state': 'ISSUED', 'invocation_id': None, 'receipt_sha256': None}
-        write_record(fd, name, record)
+        with environment.host_admission():
+            require(
+                record is None and unit_facts(unit)['LoadState'] == 'not-found',
+                PREPARATION_UNVERIFIED,
+            )
+            record = {**expected, 'state': 'ISSUED', 'invocation_id': None, 'receipt_sha256': None}
+            write_record(fd, name, record)
         launch_preparation_unit(unit, properties, command)
     require(record is not None, PREPARATION_UNVERIFIED)
     receipt = prepared(environment, original)
@@ -887,6 +928,22 @@ def authorize_host_start(
     return decision['dispatch_allowed']
 
 
+def record_application_dispatch(fd, name, record, environment, native, booted, unit):
+    with environment.lock(native) as lock, environment.host_admission():
+        require(
+            record['boot_id'] == machine_clock()[0]
+            and prepared(environment, record['start_operation_id'], require_closed=True) == booted
+            and not os.path.lexists(environment.path('runtime') / 'walle.sock')
+            and unit_facts(unit)['LoadState'] == 'not-found',
+            UNVERIFIED,
+        )
+        verify_application_groups(environment)
+        lock.assert_owned()
+        starting = {**record, 'state': 'STARTING', 'prepared': booted}
+        write_record(fd, name, starting, replace=True)
+        return starting
+
+
 def start_runtime(catalog, args, entry, registry, program):
     require(os.geteuid() == 0, RESOURCE)
     plan = load_start(catalog, args.start_policy, args.start_policy_sha256)
@@ -922,6 +979,8 @@ def start_runtime(catalog, args, entry, registry, program):
             trusted_executable(SYSTEMD_RUN, plan['systemd_run_sha256'])
             trusted_executable(SETPRIV, plan['setpriv_sha256'])
             verify_accounts_and_paths(plan, environment)
+            if record is None or record['state'] in ('RESERVED', 'PREPARING'):
+                verify_application_groups(environment)
             environment.check_hold()
             require(
                 entry['verify_program'](environment.project)
@@ -936,7 +995,17 @@ def start_runtime(catalog, args, entry, registry, program):
             if record is None or record['state'] == 'RESERVED':
                 available_memory(plan['memory_bytes'])
                 require(unit_facts(unit)['LoadState'] == 'not-found', CONFLICT)
-            lease, bound = check_environment_lease(fd, claim, common, plan, catalog, environment)
+
+            def verify_recovery():
+                from .registry_recovery_restart import verify_adopted_restart
+
+                verify_adopted_restart(
+                    NativeEnvironmentFiles(args.root), registry, args, catalog, environment, plan
+                )
+
+            lease, bound = check_environment_lease(
+                fd, claim, common, plan, catalog, environment, verify_recovery=verify_recovery
+            )
             policy = load_capacity(catalog)
             allowed = authorize_host_start(
                 args, entry, registry, policy, plan, environment, program, executable, boot
@@ -1002,15 +1071,19 @@ def start_runtime(catalog, args, entry, registry, program):
                         CONFLICT,
                     )
                     available_memory(plan['memory_bytes'])
-                    require(unit_facts(unit)['LoadState'] == 'not-found', CONFLICT)
-                    record = {**record, 'state': 'STARTING', 'prepared': booted}
-                    write_record(fd, name, record, replace=True)
-                    run_bounded(
-                        startup_command(
-                            args, plan, booted, environment, launcher, executable, unit
-                        ),
-                        15,
+                    command = startup_command(
+                        args, plan, booted, environment, launcher, executable, unit
                     )
+                    record = record_application_dispatch(
+                        fd,
+                        name,
+                        record,
+                        environment,
+                        NativeEnvironmentFiles(args.root),
+                        booted,
+                        unit,
+                    )
+                    run_bounded(command, 15)
                 ref, observation = runtime_result(
                     catalog,
                     args,

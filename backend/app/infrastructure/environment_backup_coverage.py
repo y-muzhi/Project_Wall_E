@@ -1,12 +1,16 @@
 """Verify ordinary backup asset coverage while the original database stays closed."""
 
-from contextlib import closing, contextmanager, ExitStack
-from dataclasses import dataclass
 import os
-import sqlite3
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
 
 from .data_retention import quote_identifier
-from .environment_backup import SNAPSHOT, capture_inputs, original_receipt, recovery_directory
+from .environment_backup import (
+    SNAPSHOT,
+    capture_inputs,
+    original_receipt,
+    recovery_directory,
+)
 from .environment_backup_assets import (
     AUDIT_UNSUPPORTED,
     audit_directory,
@@ -15,10 +19,15 @@ from .environment_backup_assets import (
     scan_audit,
     source_index,
 )
-from .environment_binding import EnvironmentBinding, verify_binding
+from .environment_binding import EnvironmentBinding
 from .environment_control import read_control, stopped_for_policy
 from .environment_files import canonical, digest, require
-from .environment_initialize import assert_database
+from .environment_initialize import (
+    assert_database,
+    database_has_sidecars,
+    read_locked_database,
+    verify_locked_binding,
+)
 from .environment_installation import Installation, database_identity
 from .environment_lock import EnvironmentLock
 from .environment_restore import archived_facts, reopen_archive
@@ -132,12 +141,8 @@ def compare_count_audit(data_fd, installation, plan, index):
 
 
 def source_facts(installation, release, binding):
-    with closing(
-        sqlite3.connect(installation.database.as_uri() + '?mode=ro', uri=True, isolation_level=None)
-    ) as source:
-        source.execute('PRAGMA query_only=ON')
-        source.execute('BEGIN')
-        verify_binding(source, release, binding)
+    with read_locked_database(installation.database) as source:
+        verify_locked_binding(source, installation.database, release, binding)
         require_supported_tables(source)
         return archived_facts(source, release, binding)
 
@@ -153,7 +158,7 @@ class LockedBackupCoverage:
 
 
 @contextmanager
-def locked_coverage(native, active, args, entry):
+def locked_coverage(native, active, args, entry, *, require_clean_database=False):
     plan, installation, release = capture_inputs(active, args, entry)
     require(plan['format_version'] == 2, UNVERIFIED)
     binding = EnvironmentBinding(installation.environment_id, installation.data_generation)
@@ -172,6 +177,9 @@ def locked_coverage(native, active, args, entry):
         original = database_identity(installation, data_fd)
         require(original is not None, STALE)
         require_supported_directory(data_fd, installation, original)
+        require(
+            not require_clean_database or not database_has_sidecars(installation.database), STALE
+        )
         folder, sealed_fd = resources.enter_context(recovery_directory(plan, installation))
         receipt = original_receipt(sealed_fd, plan, installation, args.capture_sha256)
         require(receipt is not None, UNVERIFIED)
@@ -182,6 +190,9 @@ def locked_coverage(native, active, args, entry):
         compare_count_audit(data_fd, installation, plan, audit)
         lock.assert_owned()
         require_supported_directory(data_fd, installation, original)
+        require(
+            not require_clean_database or not database_has_sidecars(installation.database), STALE
+        )
         require(
             read_control(control_fd, installation) == control
             and stopped_for_policy(control_fd, control, plan.get('maintenance'))
@@ -223,6 +234,8 @@ def locked_coverage(native, active, args, entry):
         yield LockedBackupCoverage(facts, installation, control_fd, control, lock, original)
 
 
-def check_coverage(native, active, args, entry):
-    with locked_coverage(native, active, args, entry) as source:
+def check_coverage(native, active, args, entry, *, require_clean_database=False):
+    with locked_coverage(
+        native, active, args, entry, require_clean_database=require_clean_database
+    ) as source:
         return source.facts

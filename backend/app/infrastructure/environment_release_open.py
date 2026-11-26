@@ -1,7 +1,8 @@
 """Promote the independently verified ordinary program under its original maintenance lock."""
 
-from datetime import datetime, timezone
 import os
+from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from backend.app.management.attachment_observation import now
 from backend.app.management.registry import is_timestamp
@@ -25,10 +26,13 @@ from .environment_files import (
     read_protected,
     require,
 )
-from .environment_installation import ACCESS_NAME, sha_value, uuid_value
+from .environment_initialize import database_has_sidecars
+from .environment_installation import read_access_policy, sha_value, uuid_value
 from .environment_ordinary import check_external_effects
 from .environment_release_gateway_check import (
     VERIFIED as GATEWAY_PROOF,
+)
+from .environment_release_gateway_check import (
     listener_inodes,
     process_epoch,
 )
@@ -107,7 +111,7 @@ def exact_open_time(actual, expected):
     return timestamp
 
 
-def assert_gateway(proof):
+def assert_gateway(proof, port):
     require(is_timestamp(proof['verified_at']), UNVERIFIED)
     stamp = datetime.fromisoformat(proof['verified_at'])
     require(
@@ -128,11 +132,14 @@ def assert_gateway(proof):
         and process['listener_inode'].isdigit(),
         UNVERIFIED,
     )
-    require(
-        process_epoch(process['pid']) == (process['start_ticks'], process['boot_id'])
-        and listener_inodes(os.getpid(), 9443) == {process['listener_inode']},
-        UNVERIFIED,
-    )
+    expected_epoch = (process['start_ticks'], process['boot_id'])
+    expected_listener = {process['listener_inode']}
+    try:
+        same_process = process_epoch(process['pid']) == expected_epoch
+        matches = same_process and listener_inodes(os.getpid(), port) == expected_listener
+    except OSError as error:
+        raise EnvironmentFailure(UNVERIFIED) from error
+    require(matches, UNVERIFIED)
 
 
 def opening_evidence(plan, installation, transition):
@@ -161,18 +168,19 @@ def opening_evidence(plan, installation, transition):
         'current_asset_sha256',
         'previous_asset_sha256',
     )
-    access = decode(read_protected(installation.anchor.parent / ACCESS_NAME), UNVERIFIED)
+    access = read_access_policy(installation)
+    origin = access['public_origin']
     require(
         set(gateway) == {*expected, *more, 'origin', 'gateway_process', 'verified_at'}
         and all(canonical(gateway[key]) == canonical(value) for key, value in expected.items())
         and all(sha_value(gateway[key]) for key in more)
-        and gateway['origin'] == access['public_origin']
+        and gateway['origin'] == origin
         and plan['run_id'] != release['run_id']
         and is_timestamp(gateway['verified_at'])
         and gateway['verified_at'] >= release['verified_at'],
         UNVERIFIED,
     )
-    assert_gateway(gateway)
+    assert_gateway(gateway, urlsplit(origin).port or 443)
 
 
 class ReleaseOpenScope(OrdinaryScope):
@@ -208,6 +216,11 @@ class ReleaseOpenScope(OrdinaryScope):
             'control_revision': control['control_revision'],
         }
 
+    def preflight(self):
+        self.lock.assert_owned()
+        require(not database_has_sidecars(self.database.path), UNVERIFIED)
+        super().preflight()
+
     def before_recovery(self):
         self.lock.assert_owned()
         self.installation.check_hold()
@@ -218,13 +231,7 @@ class ReleaseOpenScope(OrdinaryScope):
             database = self.database
             database._check_file()
             require(database.identity == self.transition['database_identity'], UNVERIFIED)
-            require(
-                all(
-                    not os.path.lexists(database.path.with_name(database.path.name + suffix))
-                    for suffix in ('-wal', '-shm', '-journal')
-                ),
-                UNVERIFIED,
-            )
+            require(not database_has_sidecars(database.path), UNVERIFIED)
             _, facts = reopen_archive(database.path, database.schema_release, database.binding)
             require(facts.sha256 == self.transition['logical_content_sha256'], UNVERIFIED)
             database._check_file()
@@ -237,17 +244,13 @@ class ReleaseOpenScope(OrdinaryScope):
         database = self.database
         database._check_file()
         require(database.identity == self.transition['database_identity'], UNVERIFIED)
-        sidecars = tuple(
-            database.path.with_name(database.path.name + suffix)
-            for suffix in ('-wal', '-shm', '-journal')
-        )
-        require(not any(os.path.lexists(path) for path in sidecars), UNVERIFIED)
+        require(not database_has_sidecars(database.path), UNVERIFIED)
         _, facts = reopen_archive(
             database.path, database.schema_release, database.binding, inspect=check_external_effects
         )
         require(
             facts.sha256 == self.transition['logical_content_sha256']
-            and not any(os.path.lexists(path) for path in sidecars),
+            and not database_has_sidecars(database.path),
             UNVERIFIED,
         )
         database._check_file()
@@ -295,7 +298,7 @@ class ReleaseOpenScope(OrdinaryScope):
 
 def observe_release_open(native, installation, plan, plan_sha):
     installation.check_identity(maintenance=True)
-    installation.check_hold()
+    installation.check_hold(offline=True)
     with installation.directory(native, 'control') as fd:
         transition = observed_transition(fd, installation, plan)
         first = read_control(fd, installation)

@@ -2,15 +2,28 @@
 
 import re
 
-from backend.app.infrastructure.environment_files import MAX_REVISION, exact, require
+from backend.app.infrastructure.environment_files import (
+    MAX_REVISION,
+    canonical,
+    digest,
+    exact,
+    require,
+)
 from backend.app.infrastructure.environment_installation import (
     sha_value,
     uuid_value,
     version_record,
 )
+from backend.app.infrastructure.environment_restic_contract import (
+    PUBLISHED,
+    RETRIEVED,
+    VERSION,
+    publication_intent,
+)
 
 from .operation_contract import RESOURCE, installed_record
 from .recovery_evidence import parse_local_recovery
+from .recovery_offhost import offhost_authority, offhost_freshness, offhost_view
 from .registry import is_timestamp
 
 POINT_FIELDS = (
@@ -101,6 +114,8 @@ def retrieval_view(directory, point, ceiling):
         return None
     evidence = directory / f'{point["backup_id"]}.retrieval.v1.json'
     proof = installed_record(evidence, pin, code=RESOURCE)
+    publication = proof.get('status') == PUBLISHED
+    launch_facts = ('policy_sha256', 'publication_intent_sha256') if publication else ()
     version_record(
         proof,
         (
@@ -115,16 +130,25 @@ def retrieval_view(directory, point, ceiling):
             'restic_version',
             'snapshot_bytes',
             'snapshot_entries',
+            *launch_facts,
         ),
         RESOURCE,
     )
     require(
-        proof['status'] == 'LOCAL_SNAPSHOT_RETRIEVED'
+        (publication or proof['status'] == RETRIEVED)
         and uuid_value(proof['operation_id'])
+        and (
+            not publication
+            or (
+                sha_value(proof['policy_sha256'])
+                and proof['publication_intent_sha256']
+                == digest(canonical(publication_intent(proof)))
+            )
+        )
         and proof['backup_id'] == point['backup_id']
         and proof['backup_manifest_sha256'] == point['backup_manifest_sha256']
         and all(sha_value(proof[key]) for key in ('snapshot_id', 'repository_id', 'restic_sha256'))
-        and proof['restic_version'] == '0.19.1'
+        and proof['restic_version'] == VERSION
         and type(proof['snapshot_bytes']) is int
         and proof['snapshot_bytes'] >= point['database_bytes']
         and type(proof['snapshot_entries']) is int
@@ -136,8 +160,9 @@ def retrieval_view(directory, point, ceiling):
     return {'snapshot_id': proof['snapshot_id'], 'retrieved_at': proof['retrieved_at']}
 
 
-def point_view(directory, environment, raw, ceiling):
-    point = exact(raw, POINT_FIELDS, RESOURCE)
+def point_view(directory, environment, raw, ceiling, authority=None):
+    fields = POINT_FIELDS if authority is None else (*POINT_FIELDS, 'offhost_verification_sha256')
+    point = exact(raw, fields, RESOURCE)
     require(
         all(
             uuid_value(point[field])
@@ -166,13 +191,21 @@ def point_view(directory, environment, raw, ceiling):
     )
     local = local_view(directory, point, environment, ceiling)
     retrieval = retrieval_view(directory, point, ceiling)
-    return {
+    offhost = (
+        None
+        if authority is None
+        else offhost_view(directory, point, environment, ceiling, authority, local)
+    )
+    result = {
         **{field: point[field] for field in POINT_FIELDS[:-2]},
         'source_environment_id': environment,
         'verification_status': 'LOCAL_VERIFIED' if local is not None else 'UNVERIFIED',
         'local_verification': local,
         'local_snapshot_retrieval': retrieval,
     }
+    if offhost is not None:
+        result.update(verification_status='OFFHOST_VERIFIED', offhost_verification=offhost)
+    return result
 
 
 def read_backup_index(catalog, environment, reference, as_of):
@@ -190,18 +223,21 @@ def read_backup_index(catalog, environment, reference, as_of):
         return record, []
     path, pin = reference
     raw = installed_record(path, pin, code=RESOURCE)
-    version_record(
-        raw,
-        (
-            *catalog.scope,
-            'environment_id',
-            'indexed_at',
-            'backup_policy',
-            'latest_attempt',
-            'points',
-        ),
-        RESOURCE,
+    fields = (
+        *catalog.scope,
+        'environment_id',
+        'indexed_at',
+        'backup_policy',
+        'latest_attempt',
+        'points',
     )
+    version = raw.get('format_version')
+    if type(version) is int and version == 2:
+        exact(raw, ('format_version', *fields, 'offhost_authority'), RESOURCE)
+        authority = offhost_authority(raw['offhost_authority'])
+    else:
+        version_record(raw, fields, RESOURCE)
+        authority = None
     require(
         all(raw[key] == value for key, value in catalog.scope.items())
         and raw['environment_id'] == environment
@@ -217,7 +253,9 @@ def read_backup_index(catalog, environment, reference, as_of):
         latest_attempt=attempt_view(raw['latest_attempt'], ceiling),
     )
     evidence = path.parent / 'backup-evidence'
-    points = [point_view(evidence, environment, value, ceiling) for value in raw['points']]
+    points = [
+        point_view(evidence, environment, value, ceiling, authority) for value in raw['points']
+    ]
     require(len({point['backup_id'] for point in points}) == len(points), RESOURCE)
     points.sort(key=lambda point: (point['cutoff_at'], point['backup_id']), reverse=True)
     latest = next((point for point in points if point['local_verification'] is not None), None)
@@ -227,4 +265,11 @@ def read_backup_index(catalog, environment, reference, as_of):
             'cutoff_at': latest['cutoff_at'],
             'verified_at': latest['local_verification']['verified_at'],
         }
+    if authority is not None:
+        record['latest_offhost'], record['rpo_status'] = offhost_freshness(
+            next((point for point in points if 'offhost_verification' in point), None),
+            as_of,
+            record['rpo_target_seconds'],
+            authority['observation_max_age_seconds'],
+        )
     return record, points

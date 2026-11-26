@@ -1,14 +1,17 @@
 """Observe the host bindings named by a sealed registry recovery inventory."""
 
-from contextlib import contextmanager
 import os
-from pathlib import Path
 import stat
+from contextlib import contextmanager
+from functools import cache
+from pathlib import Path
+from subprocess import SubprocessError
 from tempfile import TemporaryDirectory
 
 from backend.app.infrastructure.environment_control import read_control
 from backend.app.infrastructure.environment_files import (
     EnvironmentFailure,
+    absolute,
     canonical,
     check_ext4,
     decode,
@@ -30,6 +33,7 @@ from backend.app.infrastructure.environment_installation import (
 from backend.app.infrastructure.schema_v22_publish import publish_directory
 
 from .attachment_observation import (
+    FRESH_MS,
     candidate_environment,
     directory_facts,
     machine_clock,
@@ -37,17 +41,30 @@ from .attachment_observation import (
     path_resource,
     private_control,
     public_facts,
+    public_origin_resource,
     require_fresh,
+    resource,
+    verified_workspace,
 )
-from .operation_contract import load_catalog
+from .operation_contract import load_catalog, path_reference
 from .registry import is_timestamp
 from .registry_dispatch import dispatch_lock
 from .registry_installation import require_registry_root
 from .registry_recovery import recovery_scope, verify_pause
-from .registry_recovery_effects import helper_observation, resource_observation
+from .registry_recovery_effects import (
+    DEPLOYMENT_STEPS,
+    checked_deployment_opening,
+    current_runtime_unit,
+    deployment_step_binding,
+    helper_observation,
+    resource_observation,
+    unit_observation,
+)
 from .registry_recovery_installation import HOST_OBSERVATIONS
 from .registry_recovery_inventory import (
     DIRECTORY as INVENTORY,
+)
+from .registry_recovery_inventory import (
     inventory_readiness,
     inventory_scope,
     protected_projection,
@@ -55,15 +72,23 @@ from .registry_recovery_inventory import (
     write_records,
 )
 from .registry_recovery_readiness import prepared_slot
+from .registry_recovery_retained_data import retained_data_observation
+from .registry_recovery_stop import stopped_runtime_unit
 from .registry_snapshot import snapshot_directory
-from .runtime_capacity import POLICY_PATH
-from .runtime_observation import SYSTEMCTL, runtime_observation, trusted_executable
+from .runtime_capacity import capacity_policy_path
+from .runtime_observation import (
+    READY,
+    SYSTEMCTL,
+    controlled_release,
+    runtime_observation,
+    trusted_executable,
+)
 
 MANIFEST = 'registry-recovery-observation.v1.json'
 OBSERVATIONS = 'observations.jsonl'
 OBSERVED = 'MANAGEMENT_REGISTRY_RECOVERY_HOST_OBSERVED'
 UNVERIFIED = 'MANAGEMENT_REGISTRY_RECOVERY_HOST_UNVERIFIED'
-OBSERVATION_ERRORS = (EnvironmentFailure, OSError, ValueError, KeyError, TypeError)
+OBSERVATION_ERRORS = (EnvironmentFailure, OSError, ValueError, KeyError, TypeError, SubprocessError)
 
 
 def artifact_references(catalog):
@@ -85,7 +110,12 @@ def artifact_references(catalog):
             path, pin = grant['index']
             yield 'prior-results', environment + '/' + generation, path, pin
     if catalog.capacity_policy_sha256 is not None:
-        yield 'capacity', 'ordinary-capacity', POLICY_PATH, catalog.capacity_policy_sha256
+        yield (
+            'capacity',
+            'ordinary-capacity',
+            capacity_policy_path(catalog),
+            catalog.capacity_policy_sha256,
+        )
 
 
 def asset_observations(catalog):
@@ -149,6 +179,7 @@ def observed_stopped(native, environment, lock):
             database = database_identity(environment, data)
             require(database is not None, UNVERIFIED)
         root, roots = directory_facts(environment)
+        retained = retained_data_observation(native, environment, database)
         lock.assert_owned()
         require(read_control(control_directory, environment) == control, UNVERIFIED)
     return {
@@ -160,6 +191,7 @@ def observed_stopped(native, environment, lock):
         'database_identity': database,
         'root_identities': roots,
         'paths': observed_paths(environment, root, roots, database, None),
+        'retained_paths': retained,
     }
 
 
@@ -174,6 +206,7 @@ def observed_running(native, catalog, environment, reference):
     require(
         proof is not None
         and proof['state'] == 'RUNNING'
+        and proof['reason_code'] == READY
         and proof['candidate_ref'] == reference
         and all(
             proof[key] == getattr(environment, key)
@@ -195,12 +228,14 @@ def observed_running(native, catalog, environment, reference):
     root, roots = directory_facts(environment)
     with environment.directory(native, 'data') as data:
         database = database_identity(environment, data)
+        require(database is not None, UNVERIFIED)
+        retained = retained_data_observation(native, environment, database)
         require(
-            database is not None
-            and private_control(environment) == control
+            private_control(environment) == control
             and observed_socket(environment) == upstream
             and directory_facts(environment) == (root, roots)
             and database_identity(environment, data) == database
+            and retained_data_observation(native, environment, database) == retained
             and runtime_observation(catalog, environment.environment_id) == proof
             and environment.lock(native).observer_pid() == pid,
             UNVERIFIED,
@@ -210,15 +245,49 @@ def observed_running(native, catalog, environment, reference):
         'state': 'RUNNING_OBSERVED',
         'proof_id': proof['proof_id'],
         'run_id': proof['run_id'],
+        'policy_sha256': proof['policy_sha256'],
         'lock_pid': pid,
         'control_sha256': digest(canonical(control)),
         'database_identity': database,
         'root_identities': roots,
         'paths': observed_paths(environment, root, roots, database, upstream),
+        'retained_paths': retained,
     }
 
 
-def observe_environment(native, catalog, row, runtime_sha, entry):
+def observed_assignment(environment, candidate, observe_workspace):
+    origin = public_origin_resource(environment)
+    claims = {'PUBLIC_ORIGIN': origin}
+    try:
+        repository, live = observe_workspace(*path_reference(candidate['workspace']))
+        registered = next(
+            row
+            for row in repository['worktrees']
+            if row['environment_id'] == environment.environment_id
+        )
+        worktree = next(
+            row for row in live['worktrees'] if row['environment_id'] == environment.environment_id
+        )
+        require(
+            registered['purpose'] == worktree['purpose'] == environment.description['purpose']
+            and registered['branch'] == worktree['branch']
+            and repository['repository_ref'] == live['repository_ref'],
+            UNVERIFIED,
+        )
+        claims.update(
+            WORKTREE=path_resource(
+                'WORKTREE', absolute(registered['path'], UNVERIFIED), registered['identity']
+            ),
+            GIT_BRANCH=resource(
+                'GIT_BRANCH', 'REPOSITORY:' + live['repository_ref'], worktree['branch']
+            ),
+        )
+        return claims, worktree['head']
+    except (*OBSERVATION_ERRORS, StopIteration):
+        return claims, None
+
+
+def observe_environment(native, catalog, row, runtime_sha, entry, observe_workspace):
     scope = {'kind': 'ENVIRONMENT', 'environment_id': row['environment_id']}
     try:
         require(
@@ -248,14 +317,177 @@ def observe_environment(native, catalog, row, runtime_sha, entry):
             if error.code != 'ENVIRONMENT_ALREADY_RUNNING':
                 raise
             observed = observed_running(native, catalog, environment, reference)
+        claims, head = observed_assignment(environment, candidate, observe_workspace)
         return {
             **scope,
             'binding': public,
+            'configuration_attachment': attachment,
             'installation_sha256': environment.anchor_sha256,
+            'assignment_claims': claims,
+            'worktree_head': head,
             **observed,
         }
     except OBSERVATION_ERRORS as error:
         return {**scope, 'state': 'UNKNOWN', 'reason_code': getattr(error, 'code', UNVERIFIED)}
+
+
+def original_deployment_scope(row, step, scope, grant):
+    plan = grant['confirmation'] if step['original_action'] == 'RESTORE' else grant
+    source = plan['source']
+    registered = registered_subject(row)
+    require(
+        registered['environment_id'] == scope['environment_id']
+        and row['host_id'] == grant['host_id']
+        and row['registration_state'] == 'ACTIVE'
+        and row['preparation_state'] == 'PREPARED'
+        and row['assignment_control_state'] == 'OPEN'
+        and type(row['configuration_ref']) is str
+        and decode(row['configuration_ref'].encode('utf-8'), UNVERIFIED)
+        == plan['source_attachment']
+        and all(
+            registered[key] == source[key]
+            for key in (
+                'data_generation',
+                'deployment_id',
+                'configuration_sha256',
+                'program_sha256',
+            )
+        )
+        and (source['data_generation'] != scope['data_generation'])
+        == (step['original_action'] == 'RESTORE')
+        and source['deployment_id'] != scope['deployment_id'],
+        UNVERIFIED,
+    )
+    return registered, plan['source_attachment']
+
+
+def measured_opening_control(native, environment, policy, receipt, current, *, stopped):
+    opened = receipt['opening']
+    with environment.directory(native, 'control') as fd:
+        control, revision = controlled_release(fd, environment, policy)
+        name = f'open-{opened["run_id"]}.v1.json'
+        require(
+            control['open_receipt_ref'] == name
+            and revision + 1 == opened['control_revision']
+            and control['control_revision'] == opened['control_revision'] + (2 if stopped else 0)
+            and digest(canonical(control)) == current['control_sha256'],
+            UNVERIFIED,
+        )
+        raw = read_entry(fd, name, owner=environment.application_uid, group=environment.group)
+        require(digest(raw) == opened['open_receipt_sha256'], UNVERIFIED)
+
+
+def opened_target_state(native, catalog, environment, attachment, binding, receipt, policy):
+    unit = stopped_runtime_unit(binding['environment_id'], receipt['opening']['operation_id'])
+    before = unit_observation(unit)
+    try:
+        with environment.lock(native) as lock:
+            closed = observed_stopped(native, environment, lock)
+            require(
+                closed['closed_reason'] == 'NORMAL_STOP'
+                and before['state'] in ('ABSENT_OBSERVED', 'QUIET_OBSERVED')
+                and before['main_pid'] == 0
+                and before['cgroup_empty'] is True
+                and before['invocation_id'] in (None, '0' * 32, policy['invocation_id']),
+                UNVERIFIED,
+            )
+            measured_opening_control(native, environment, policy, receipt, closed, stopped=True)
+            require(unit_observation(unit) == before, UNVERIFIED)
+            lock.assert_owned()
+            return {
+                'state': 'OPENED_STOPPED',
+                'closed_control_sha256': closed['control_sha256'],
+                'database_identity': closed['database_identity'],
+            }
+    except EnvironmentFailure as error:
+        if error.code != 'ENVIRONMENT_ALREADY_RUNNING':
+            raise
+
+    live = observed_running(native, catalog, environment, attachment['candidate_ref'])
+    claim = {
+        'opening_binding': binding,
+        'runtime_authority': {
+            'policy_sha256': receipt['runtime']['sha256'],
+            'invocation_id': policy['invocation_id'],
+        },
+    }
+    require(
+        before['state'] == 'PRESENT_OBSERVED'
+        and current_runtime_unit(claim, before, {**live, 'binding': public_facts(environment)}),
+        UNVERIFIED,
+    )
+    measured_opening_control(native, environment, policy, receipt, live, stopped=False)
+    require(
+        unit_observation(unit) == before
+        and environment.lock(native).observer_pid() == live['lock_pid'],
+        UNVERIFIED,
+    )
+    return {'state': 'OPENED_RUNNING'}
+
+
+def pending_deployment_observation(native, catalog, row, step, runtime_sha, entry):
+    evidence = {'state': 'OPENING_UNVERIFIED', 'action': step['original_action']}
+    try:
+        require(
+            row is not None
+            and step['status'] == 'DISPATCHING'
+            and step['original_operation_status'] == 'RUNNING'
+            and step['cancel_requested'] == 0
+            and step['result_json'] is None
+            and type(step['external_identity_json']) is str,
+            UNVERIFIED,
+        )
+        original = deployment_step_binding(step, catalog)
+        if original is None:
+            payload = exact(
+                decode(step['external_identity_json'].encode('utf-8'), UNVERIFIED),
+                ('maintenance',),
+                UNVERIFIED,
+            )
+            grant = payload['maintenance']
+            plan = grant['confirmation'] if step['original_action'] == 'RESTORE' else grant
+            require(
+                plan['operation_id'] == step['operation_id']
+                and plan['environment_id'] == row['environment_id']
+                and all(grant[key] == value for key, value in catalog.scope.items()),
+                UNVERIFIED,
+            )
+            return {**evidence, 'state': 'MAINTENANCE_WITHOUT_OPENING'}
+        binding, grant, request = original
+        source, source_attachment = original_deployment_scope(row, step, binding, grant)
+        evidence.update(source=source, target=binding)
+        verified = checked_deployment_opening(catalog, step, grant, request)
+        if verified is None:
+            return {**evidence, 'state': 'OPENING_UNCONFIRMED'}
+        receipt, attachment, policy = verified
+        evidence.update(
+            state='OPENED_RUNTIME_UNVERIFIED',
+            opened_receipt_sha256=digest(canonical(receipt)),
+            opened_at=receipt['opening']['opened_at'],
+        )
+        original_candidate = catalog.candidate(
+            source_attachment['candidate_ref'], source_attachment['sha256']
+        )
+        target_candidate = catalog.candidate(attachment['candidate_ref'], attachment['sha256'])
+        previous = candidate_environment(original_candidate, runtime_sha)
+        current = candidate_environment(target_candidate, runtime_sha)
+        expected = {**source, **{key: binding[key] for key in source if key in binding}}
+        require(
+            public_facts(previous) == source
+            and public_facts(current) == expected
+            and previous.environment_root == current.environment_root
+            and previous.roots['control'] == current.roots['control']
+            and previous.lock_identity == current.lock_identity
+            and entry['verify_program'](current.project) == expected['program_sha256'],
+            UNVERIFIED,
+        )
+        current.check_hold(offline=True)
+        evidence.update(
+            opened_target_state(native, catalog, current, attachment, binding, receipt, policy)
+        )
+    except OBSERVATION_ERRORS:
+        pass
+    return evidence
 
 
 def inventory_rows(directory, name):
@@ -266,18 +498,40 @@ def inventory_rows(directory, name):
             yield decode(line, UNVERIFIED)
 
 
-def host_observations(directory, native, catalog, runtime_sha, entry):
+def workspace_observer(args, catalog):
+    @cache
+    def observe_workspace(path, pin):
+        try:
+            return verified_workspace(
+                (path, pin), args, catalog.directory / 'observations', ownership_only=True
+            )
+        except OBSERVATION_ERRORS:
+            return None
+
+    return observe_workspace
+
+
+def host_observations(directory, native, catalog, args, entry):
+    observe_workspace = workspace_observer(args, catalog)
     yield from asset_observations(catalog)
     environments = {}
+    registrations = {}
     for row in inventory_rows(directory, 'environments.jsonl'):
         require(uuid_value(row.get('environment_id')), UNVERIFIED)
-        observed = observe_environment(native, catalog, row, runtime_sha, entry)
+        observed = observe_environment(native, catalog, row, args.sha256, entry, observe_workspace)
         environments[row['environment_id']] = observed
+        registrations[row['environment_id']] = row
         yield observed
     for row in inventory_rows(directory, 'claims.jsonl'):
         yield resource_observation(row, environments.get(row['environment_id'], {}))
     for row in inventory_rows(directory, 'steps.jsonl'):
-        yield helper_observation(row)
+        observed = helper_observation(row, catalog)
+        if row['step_kind'] in DEPLOYMENT_STEPS and row['status'] in ('DISPATCHING', 'UNKNOWN'):
+            registered = registrations.get(row['environment_id'])
+            observed['external_deployment'] = pending_deployment_observation(
+                native, catalog, registered, row, args.sha256, entry
+            )
+        yield observed
 
 
 def observation_scope(inventory, identifier, systemctl_sha):
@@ -330,7 +584,7 @@ def read_observation(path, target, scope, *, expected=None):
 
 
 def stage_observation(parent, target, scope, observations, verify_source):
-    boot, _ = machine_clock()
+    boot, started = machine_clock()
     with TemporaryDirectory(prefix='.walle-recovery-observations-', dir=parent) as temporary:
         stage = Path(temporary)
         with protected_directory(stage) as directory:
@@ -338,7 +592,7 @@ def stage_observation(parent, target, scope, observations, verify_source):
             os.fchmod(directory, 0o2750)
             artifact = write_records(stage / OBSERVATIONS, observations, mode=0o440)
             ending_boot, finished = machine_clock()
-            require(boot == ending_boot, UNVERIFIED)
+            require(boot == ending_boot and 0 <= finished - started <= FRESH_MS, UNVERIFIED)
             body = {
                 **scope,
                 'boot_id': boot,
@@ -389,7 +643,7 @@ def capture_observation(native, target, args, entry, catalog, directory, subject
     parent = observation_parent(target)
     with protected_observations(parent, target) as parent_fd:
         if identifier not in os.listdir(parent_fd):
-            observations = host_observations(directory, native, catalog, args.sha256, entry)
+            observations = host_observations(directory, native, catalog, args, entry)
             stage_observation(parent, target, subject, observations, verify_source)
         try:
             result = read_observation(parent / identifier, target, subject)

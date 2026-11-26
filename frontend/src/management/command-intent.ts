@@ -10,6 +10,7 @@ import { restoreConfirmation } from './restore-model.ts';
 export const bodyLimit = 64 * 1024;
 
 export type ManagementControl = 'RECONCILE' | 'CANCEL' | 'CONTINUE';
+export type EnvironmentAction = 'START' | 'STOP' | 'ARCHIVE';
 
 type Attach = Readonly<{
   action: 'ATTACH';
@@ -36,19 +37,20 @@ export type ManagementIntent =
   | Attach
   | Delivery
   | ReturnType<typeof releaseConfirmation>
-  | ReturnType<typeof runtimeIntent>
+  | ReturnType<typeof environmentIntent>
   | ReturnType<typeof backupConfirmation>
   | ReturnType<typeof restoreConfirmation>;
 
-function runtimeIntent(input: Readonly<Record<string, unknown>>) {
-  const action = one(input.action, ['START', 'STOP'] as const);
+function environmentIntent(input: Readonly<Record<string, unknown>>) {
+  const action = one(input.action, ['START', 'STOP', 'ARCHIVE'] as const);
   const base = [
     'action',
     'environment_id',
     'expected_record_version',
     'expected_assignment_generation',
   ];
-  exact(input, [...base, action === 'START' ? 'expected_configuration_sha256' : 'target']);
+  const fields = { START: ['expected_configuration_sha256'], STOP: ['target'], ARCHIVE: [] };
+  exact(input, [...base, ...fields[action]]);
   const scope = {
     environment_id: uuid(input.environment_id),
     expected_record_version: positiveInteger(input.expected_record_version),
@@ -60,6 +62,7 @@ function runtimeIntent(input: Readonly<Record<string, unknown>>) {
       ...scope,
       expected_configuration_sha256: hash(input.expected_configuration_sha256),
     };
+  if (action === 'ARCHIVE') return { action, ...scope };
   const target = exact(input.target, ['kind', 'run_id']);
   return {
     action,
@@ -147,10 +150,16 @@ export function commandIntent(value: unknown): ManagementIntent {
       }),
     };
   }
-  if (input.action === 'RELEASE') return releaseConfirmation(input);
+  if (
+    input.action === 'RELEASE' ||
+    input.action === 'ROLLBACK_CODE' ||
+    input.action === 'RECONFIGURE'
+  )
+    return releaseConfirmation(input);
   if (input.action === 'BACKUP') return backupConfirmation(input);
   if (input.action === 'RESTORE') return restoreConfirmation(input);
-  if (input.action === 'START' || input.action === 'STOP') return runtimeIntent(input);
+  if (input.action === 'START' || input.action === 'STOP' || input.action === 'ARCHIVE')
+    return environmentIntent(input);
   if (input.action !== 'REGISTER_DELIVERY') throw new TypeError('Invalid management action');
   const integration = 'source_environment_ids' in input || 'source_commits' in input;
   exact(input, [
@@ -185,7 +194,7 @@ export function commandIntent(value: unknown): ManagementIntent {
 }
 
 function originalBody(intent: ManagementIntent) {
-  // The STOP target uses sorted keys from runtimeIntent. Sort the outer fields to match registry bytes.
+  // The STOP target uses sorted keys from environmentIntent. Sort the outer fields to match registry bytes.
   const fields = Object.entries(intent).sort(([first], [second]) =>
     first < second ? -1 : first > second ? 1 : 0,
   );

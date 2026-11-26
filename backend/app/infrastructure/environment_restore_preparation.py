@@ -162,6 +162,18 @@ def restore_data_result(target, receipt):
 
 def prepare_restore_data(native, active, args, entry):
     with locked_restore_target(native, active, args, entry) as target:
+        source = target.verified.source
+
+        @contextmanager
+        def receipt_admission():
+            with source.installation.host_admission():
+                source.lock.assert_owned()
+                require(
+                    read_control(source.control_fd, source.installation) == source.control,
+                    UNVERIFIED,
+                )
+                yield
+
         prepared = data_rehearsal(
             target.principal,
             target.schema,
@@ -171,6 +183,7 @@ def prepare_restore_data(native, active, args, entry):
             target.backup,
             active,
             target.policy_sha256,
+            receipt_admission=receipt_admission,
         )
         require(
             prepared['original_result_index_sha256']

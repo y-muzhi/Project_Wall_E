@@ -328,9 +328,11 @@ def prepare_restore_generation(args, entry, hosts):
         home = source.environment_root / GENERATIONS
         stable = resources.enter_context(protected_directory(source.environment_root))
         if not os.path.lexists(home):
-            home.mkdir(mode=0o755)
-            home.chmod(0o755)
-            os.fsync(stable)
+            with source.host_admission():
+                lock.assert_owned()
+                home.mkdir(mode=0o755)
+                home.chmod(0o755)
+                os.fsync(stable)
         parent = resources.enter_context(protected_directory(home))
         check_ext4(parent)
         metadata = os.fstat(parent)
@@ -370,8 +372,6 @@ def prepare_restore_generation(args, entry, hosts):
                 require(set(os.listdir(directory)) == {'data', RECEIPT}, UNVERIFIED)
             observed = {**common, **read_generation(final, source, restored, audit)}
             require(read_protected(final / RECEIPT) == canonical(observed), UNVERIFIED)
-            os.fsync(parent)
-            os.fsync(stable)
             return {**observed, 'restore_generation_sha256': digest(canonical(observed))}
 
         if os.path.lexists(final):
@@ -392,17 +392,26 @@ def prepare_restore_generation(args, entry, hosts):
                 audit,
                 published=False,
             )
-            return confirm()
+            result = confirm()
+            os.fsync(parent)
+            os.fsync(stable)
+            return result
         with TemporaryDirectory(prefix='.restore-generation-', dir=home) as temporary:
             staging = Path(temporary) / 'generation'
             populate_generation(staging, source, archive, restored, audit)
             record = {**common, **read_generation(staging, source, restored, audit)}
             with protected_directory(staging) as private:
                 persisted_write(private, RECEIPT, canonical(record), mode=0o444)
-            lock.assert_owned()
-            source.check_hold()
-            publish_directory(staging, final)
+            published = False
             try:
+                with source.host_admission():
+                    lock.assert_owned()
+                    publish_directory(staging, final)
+                    published = True
+                    os.fsync(parent)
+                    os.fsync(stable)
                 return confirm()
             except (OSError, RuntimeError, ValueError, KeyError, TypeError) as error:
-                raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
+                if published:
+                    raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
+                raise

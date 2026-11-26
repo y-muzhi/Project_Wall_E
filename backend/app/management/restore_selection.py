@@ -25,9 +25,9 @@ from .attachment_observation import candidate_environment, invoke_observer
 from .operation_contract import (
     INVALID,
     RESOURCE,
-    UNAVAILABLE,
     RESTORE_ATTACHMENT,
     RESTORE_ATTACHMENTS,
+    UNAVAILABLE,
     candidate_record,
 )
 from .release_configuration import CHANGED
@@ -99,6 +99,12 @@ def check_restore_preflight(receipt, preview, hold, preflight, readiness):
         'schema_contract_sha256': preview['schema_contract_sha256'],
         'outbound_hold_required': True,
     }
+    if preview['recovery_requirement'] == 'OFFHOST_VERIFIED':
+        expected['selected_offhost_verification_sha256'] = preview['offhost_recovery'][
+            'verification_sha256'
+        ]
+    else:
+        require('selected_offhost_verification_sha256' not in receipt, CHANGED)
     observed = {key: value for key, value in receipt.items() if key != 'restore_preflight_sha256'}
     require(
         all(canonical(receipt.get(key)) == canonical(value) for key, value in expected.items())

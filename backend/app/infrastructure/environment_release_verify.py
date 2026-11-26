@@ -1,9 +1,9 @@
 """Independently attest one actual selected program under a closed release transition."""
 
-from contextlib import ExitStack
 import fcntl
-from functools import partial
 import os
+from contextlib import ExitStack
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -12,9 +12,11 @@ from backend.app.management.attachment_observation import now
 from backend.app.management.registry import is_timestamp
 
 from .environment_backup_package import private_root, read_policy, validate_location
+from .environment_command import admission_inputs
 from .environment_control import read_control, read_release_transition
 from .environment_files import (
     MAX_REVISION,
+    absolute,
     canonical,
     check_ext4,
     decode,
@@ -25,14 +27,20 @@ from .environment_files import (
     read_entry,
     require,
 )
-from .environment_installation import ANCHOR_NAME, sha_value, uuid_value, validate_target_file
+from .environment_installation import (
+    ANCHOR_NAME,
+    read_installation_anchor,
+    sha_value,
+    uuid_value,
+    validate_target_file,
+)
 from .environment_lock import NativeEnvironmentFiles
-from .environment_command import admission_inputs
 from .environment_recovery_installation import checked_ref
 from .environment_recovery_probe import check_application
 from .environment_recovery_read import TUPLE_FIELDS, file_signature
 from .environment_recovery_verify import FixedReadProbe, probe_fixed_reader
-from .environment_release_check import CHECK_SOCKET, POLICY as CHECK_POLICY, check_inputs
+from .environment_release_check import CHECK_SOCKET, check_inputs
+from .environment_release_check import POLICY as CHECK_POLICY
 from .environment_release_preflight import read_reference
 
 POLICY = 'release-verification-policy.v1.json'
@@ -41,7 +49,7 @@ UNVERIFIED = 'RELEASE_VERIFICATION_UNVERIFIED'
 CONFLICT = 'RELEASE_VERIFICATION_CONFLICT'
 
 
-def verification_subject(args):
+def verification_subject(args, entry):
     plan = read_policy(
         args.anchor,
         args.anchor_sha256,
@@ -74,15 +82,19 @@ def verification_subject(args):
     )
     anchor, pin = checked_ref(plan['installation'], ANCHOR_NAME)
     policy, check_pin = checked_ref(plan['check_policy'], CHECK_POLICY)
+    target = read_installation_anchor(anchor, pin)
+    project = absolute(target['project'], INVALID)
+    program_sha = entry['verify_program'](project)
     installation, _ = admission_inputs(
-        SimpleNamespace(anchor=anchor, anchor_sha256=pin, project=args.project),
+        SimpleNamespace(anchor=anchor, anchor_sha256=pin, project=project),
         SimpleNamespace(runtime_manifest_sha256=args.sha256),
-        args.program_sha256,
+        program_sha,
         offline=True,
     )
     parameters = check_inputs(installation, plan['operation_id'], policy, check_pin)
     reserved = (
         installation.environment_root,
+        project,
         args.project,
         args.root,
         args.anchor.parent,
@@ -205,7 +217,7 @@ def verified_release_receipt(reference, installation, transition):
 def verify_release_deployment(args, entry):
     require(os.geteuid() == 0, INVALID)
     plan, installation, home, temporary, evidence, policy, check_pin, parameters = (
-        verification_subject(args)
+        verification_subject(args, entry)
     )
     native = NativeEnvironmentFiles(args.root)
     principal = SimpleNamespace(

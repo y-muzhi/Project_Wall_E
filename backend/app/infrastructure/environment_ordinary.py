@@ -1,9 +1,17 @@
 """Ordinary Linux database ownership and fail-closed recovery preconditions."""
 
+from contextlib import closing
+
 from .database import Database, StorageUnavailable
 from .environment_binding import EnvironmentBinding, verify_binding
 from .environment_files import EnvironmentFailure, identity, require
-from .environment_initialize import assert_database, inspect_database
+from .environment_initialize import (
+    assert_database,
+    database_has_sidecars,
+    inspect_database,
+    read_locked_database,
+    verify_locked_binding,
+)
 from .environment_installation import database_identity
 
 EXTERNAL_EFFECTS = (
@@ -70,6 +78,7 @@ class OrdinaryDatabase(Database):
 
     def preflight(self):
         self.installation.check_hold()
+        self._check_file()
         timestamp = inspect_database(
             self.installation, self.data_fd, self.identity, self.schema_release, self.binding
         )
@@ -77,8 +86,23 @@ class OrdinaryDatabase(Database):
 
     def check_recovery(self):
         self.installation.check_hold()
-        with self.transaction() as connection:
+        self._check_file()
+        with read_locked_database(self.path) as connection:
+            verify_locked_binding(connection, self.path, self.schema_release, self.binding)
             check_external_effects(connection)
+        self._check_file()
+
+    def checkpoint_for_stop(self):
+        self._check_file()
+        if database_has_sidecars(self.path):
+            with closing(self._connect()) as connection:
+                connection.execute('BEGIN')
+                self._check_schema(connection)
+                connection.rollback()
+                result = connection.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+                require(tuple(result) == (0, 0, 0), 'ENVIRONMENT_STOP_UNVERIFIED')
+        self._check_file()
+        require(not database_has_sidecars(self.path), 'ENVIRONMENT_STOP_UNVERIFIED')
 
 
 def check_external_effects(connection):

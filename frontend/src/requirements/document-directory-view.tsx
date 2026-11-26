@@ -20,6 +20,7 @@ import { Icon } from '../shared/icon.tsx';
 import { NameEditor } from '../shared/name-editor.tsx';
 import { ordinaryInput } from '../shared/text.ts';
 import { useMotionPresence } from '../shared/motion-react.ts';
+import { ApplicationConnectionNotice } from '../application/connection-notice.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 
 type CreationDefaults = Readonly<{
@@ -33,9 +34,11 @@ export function useDocumentCreation() {
 }
 export function DocumentCreationProvider({
   owner,
+  writeReason,
   children,
 }: {
   owner: RequirementDetailOwner;
+  writeReason: string | null;
   children: import('react').ReactNode;
 }) {
   const [state, setState] = useState({
@@ -58,6 +61,7 @@ export function DocumentCreationProvider({
           key={state.identity}
           owner={owner}
           open={state.open}
+          writeReason={writeReason}
           defaults={state.defaults}
           close={() => setState((previous) => ({ ...previous, open: false }))}
         />
@@ -68,11 +72,13 @@ export function DocumentCreationProvider({
 function CreateDocumentDialog({
   owner,
   open,
+  writeReason,
   close,
   defaults,
 }: {
   owner: RequirementDetailOwner;
   open: boolean;
+  writeReason: string | null;
   close(): void;
   defaults: CreationDefaults;
 }) {
@@ -91,6 +97,8 @@ function CreateDocumentDialog({
     pending = useRef(false);
   const id = useId();
   const locked = !open || ['SUBMITTING', 'UNKNOWN', 'CONFIRMED'].includes(state.phase);
+  const connectionNotice = useContext(ApplicationConnectionNotice);
+  const blockedReason = state.phase === 'CONFIRMED' ? null : writeReason;
   const requestClose = () => {
     if (locked) return;
     if (name.length > 0 || kind !== 'REQUIREMENT_BRIEF' || framework) setDiscard(true);
@@ -134,7 +142,8 @@ function CreateDocumentDialog({
     };
   }, [open]);
   const submit = async () => {
-    if (pending.current || composing.current) return;
+    if (pending.current || composing.current || connectionNotice !== null || blockedReason !== null)
+      return;
     if (!locked) {
       try {
         ordinaryInput(name, '文档名称', 1, 80, false);
@@ -175,6 +184,7 @@ function CreateDocumentDialog({
         <dialog
           ref={dialog}
           className="create-drawer"
+          data-environment-connection-owner=""
           tabIndex={-1}
           inert={!open}
           aria-hidden={!open}
@@ -210,6 +220,12 @@ function CreateDocumentDialog({
                 <Icon name="close" />
               </button>
             </header>
+            {connectionNotice}
+            {connectionNotice === null && blockedReason !== null && (
+              <p role="status" className="inline-error">
+                {blockedReason}
+              </p>
+            )}
             <div className="create-fields">
               <div>
                 <label htmlFor={id + '-name'}>文档名称</label>
@@ -277,7 +293,12 @@ function CreateDocumentDialog({
               <button
                 className="ui-button primary"
                 type="submit"
-                disabled={state.phase === 'SUBMITTING'}
+                disabled={
+                  connectionNotice !== null ||
+                  blockedReason !== null ||
+                  state.phase === 'SUBMITTING'
+                }
+                title={blockedReason ?? undefined}
               >
                 {state.phase === 'UNKNOWN'
                   ? '核实创建结果'

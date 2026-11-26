@@ -42,17 +42,37 @@ PROJECTIONS = {
         'FROM managed_environments ORDER BY environment_id'
     ),
     'claims.jsonl': (
-        'SELECT resource_id,environment_id,operation_id,kind,scope_ref,locator,identity_json,quota '
-        'FROM resource_claims WHERE released_at IS NULL ORDER BY resource_id'
+        'SELECT claim.resource_id,claim.environment_id,claim.operation_id,'
+        'claim.kind,claim.scope_ref,'
+        'claim.locator,claim.identity_json,claim.quota,op.action AS original_action,'
+        'op.status AS original_operation_status '
+        'FROM resource_claims AS claim JOIN management_operations AS op USING(operation_id) '
+        'WHERE claim.released_at IS NULL ORDER BY claim.resource_id'
     ),
     'operations.jsonl': (
         'SELECT operation_id,registry_generation,action,environment_id,status,revision,intent_sha256 '
         'FROM management_operations AS op WHERE {pending} ORDER BY operation_id'
     ),
     'steps.jsonl': (
+        'WITH cancelled AS (SELECT registry_generation,operation_id,COUNT(*) AS control_count,'
+        'MIN(control_key) AS control_key,MIN(receipt_json) AS receipt_json,'
+        'MIN(intent_sha256) AS control_intent_sha256 FROM management_controls '
+        "WHERE command='CANCEL' GROUP BY registry_generation,operation_id) "
         'SELECT step.operation_id,step.ordinal,step.step_kind,step.status,step.executor_ref,'
-        'step.external_identity_json,op.environment_id,op.registry_generation '
+        'step.external_identity_json,step.result_json,op.environment_id,op.registry_generation,'
+        'op.action AS original_action,op.status AS original_operation_status,'
+        'op.revision AS original_revision,'
+        'op.cancel_requested,original.status AS original_start_status,'
+        'original.external_identity_json AS original_start_identity_json,'
+        'cancel.control_count,cancel.control_key,cancel.receipt_json AS control_receipt_json,'
+        'cancel.control_intent_sha256,'
+        "CASE WHEN op.action='STOP' THEN "
+        "json_extract(op.intent_json,'$.target.run_id') END AS stop_run_id "
         'FROM management_steps AS step JOIN management_operations AS op USING(operation_id) '
+        'LEFT JOIN management_steps AS original ON original.operation_id=op.operation_id '
+        'AND original.ordinal=1 '
+        'LEFT JOIN cancelled AS cancel ON cancel.operation_id=op.operation_id '
+        'AND cancel.registry_generation=op.registry_generation AND step.ordinal=2 '
         'WHERE {pending_step} '
         'ORDER BY step.operation_id,step.ordinal'
     ),
@@ -162,7 +182,7 @@ def stage_inventory(native, target, proof, data, scope, readiness, lock):
             )
             database.row_factory = sqlite3.Row
             conditions = {
-                'pending': pending_operation_clause(database, include_completed_backups=True),
+                'pending': pending_operation_clause(database, include_completed_effects=True),
                 'pending_step': pending_step_clause(database),
             }
             indexes = {

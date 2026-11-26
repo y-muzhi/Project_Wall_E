@@ -1,7 +1,7 @@
 """Select the confirmed fixed deployment while its stable environment remains closed."""
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,8 +17,8 @@ from .environment_control import (
     selected_release_control,
 )
 from .environment_files import (
-    EnvironmentFailure,
     MAX_REVISION,
+    EnvironmentFailure,
     absolute,
     canonical,
     digest,
@@ -28,19 +28,20 @@ from .environment_files import (
 from .environment_installation import (
     ANCHOR_NAME,
     DEPLOYMENTS,
+    GATEWAY_VERIFIER_REQUIRED,
+    RECONFIGURE_MODE,
     RESTORE_MODE,
     Installation,
+    access_scope,
+    gateway_verifier_names,
+    read_access_policy,
     sha_value,
     uuid_value,
 )
 from .environment_maintenance import write_fact
 from .environment_recovery_installation import checked_ref
-from .environment_release_preflight import (
-    POLICY as PREFLIGHT_POLICY,
-    ROLLBACK_POLICY,
-    preflight_inputs,
-)
-from .environment_restore_preflight import POLICY as RESTORE_PREFLIGHT_POLICY
+from .environment_release_preflight import PREFLIGHT_MODES, preflight_inputs
+from .environment_restore_preflight import POLICIES as RESTORE_PREFLIGHT_POLICIES
 from .environment_restore_readiness import POLICY as RESTORE_READINESS_POLICY
 
 POLICY = 'release-switch-policy.v1.json'
@@ -86,7 +87,7 @@ def selection_inputs(active, args, entry):
         and sha_value(plan[preflight_digest]),
         INVALID,
     )
-    source, _ = admission_inputs(args, active, args.program_sha256)
+    source, _ = admission_inputs(args, active, args.program_sha256, offline=True)
     source.check_identity(maintenance=True)
     target_anchor, target_pin = checked_ref(plan['target_installation'], ANCHOR_NAME)
     target_project = absolute(plan['target_project'], INVALID)
@@ -95,6 +96,7 @@ def selection_inputs(active, args, entry):
         SimpleNamespace(anchor=target_anchor, anchor_sha256=target_pin, project=target_project),
         active,
         target_program,
+        offline=True,
     )
     binding = target.description.get('deployment_slot')
     require(
@@ -112,7 +114,7 @@ def selection_inputs(active, args, entry):
     readiness = None
     if restore:
         require(
-            name == RESTORE_PREFLIGHT_POLICY
+            name in RESTORE_PREFLIGHT_POLICIES
             and binding['authorization_mode'] == RESTORE_MODE
             and target.data_generation != source.data_generation
             and target.roots['data'] != source.roots['data'],
@@ -121,14 +123,26 @@ def selection_inputs(active, args, entry):
         readiness = checked_ref(plan['readiness_policy'], RESTORE_READINESS_POLICY)
     else:
         require(
-            name in (PREFLIGHT_POLICY, ROLLBACK_POLICY)
-            and binding['authorization_mode']
-            == ('ROLLBACK_CODE' if name == ROLLBACK_POLICY else 'SAME_SCHEMA')
+            name in PREFLIGHT_MODES
+            and binding['authorization_mode'] == PREFLIGHT_MODES[name]
             and target.data_generation == source.data_generation
             and target.roots['data'] == source.roots['data']
             and target.restore_generation_sha256 == source.restore_generation_sha256,
             INVALID,
         )
+    source_access = source.description.get('access_policy_ref')
+    target_access = target.description.get('access_policy_ref')
+    if binding['authorization_mode'] == RECONFIGURE_MODE:
+        require(
+            source.project == target.project
+            and source.schema == target.schema
+            and source_access != target_access
+            and access_scope(read_access_policy(source))
+            == access_scope(read_access_policy(target)),
+            INVALID,
+        )
+    else:
+        require(source_access == target_access, INVALID)
     preflight_path, preflight_pin = checked_ref(plan['preflight_policy'], name)
     preflight = SimpleNamespace(
         anchor=args.anchor,
@@ -201,23 +215,27 @@ def selected_receipt(fd, selection, transition):
 def commit_selection(selection, before, fd, lock, **evidence):
     target = selection.target
     source = selection.source
-    target.check_hold()
-    after = selected_release_control(before, target)
-    transition = {
-        'format_version': 1,
-        **selection_subject(selection),
-        **evidence,
-        'before_sha256': digest(canonical(before)),
-        'before': before,
-        'after_sha256': digest(canonical(after)),
-        'after': after,
-    }
-    write_fact(fd, source, release_transition_name(selection.operation_id), transition, create=True)
-    require(original_transition(fd, selection) == transition, UNVERIFIED)
-    lock.assert_owned()
-    require(read_control(fd, source) == before, DIFFERENT)
-    persisted_write(fd, CONTROL_NAME, canonical(after), mode=0o640, replace=True)
-    return selected_receipt(fd, selection, transition)
+    with target.host_admission():
+        lock.assert_owned()
+        require(read_control(fd, source) == before, DIFFERENT)
+        after = selected_release_control(before, target)
+        transition = {
+            'format_version': 1,
+            **selection_subject(selection),
+            **evidence,
+            'before_sha256': digest(canonical(before)),
+            'before': before,
+            'after_sha256': digest(canonical(after)),
+            'after': after,
+        }
+        write_fact(
+            fd, source, release_transition_name(selection.operation_id), transition, create=True
+        )
+        require(original_transition(fd, selection) == transition, UNVERIFIED)
+        lock.assert_owned()
+        require(read_control(fd, source) == before, DIFFERENT)
+        persisted_write(fd, CONTROL_NAME, canonical(after), mode=0o640, replace=True)
+        return selected_receipt(fd, selection, transition)
 
 
 def select_release_deployment(native, active, args, entry):
@@ -232,7 +250,10 @@ def select_release_deployment(native, active, args, entry):
             if raw == canonical(previous['after']):
                 return selected_receipt(fd, selection, previous)
             require(raw == canonical(previous['before']), DIFFERENT)
+        elif target.ingress_group is not None:
+            require(gateway_verifier_names(read_access_policy(target)), GATEWAY_VERIFIER_REQUIRED)
 
+    source.check_hold()
     if selection.restore_readiness is not None:
         from .environment_restore_switch import select_restore_deployment
 
@@ -248,10 +269,16 @@ def select_release_deployment(native, active, args, entry):
         and observed['target_release_id'] == binding['release_id']
         and observed['target_release_manifest_sha256'] == binding['manifest_sha256']
         and observed['target_program_snapshot_sha256']
-        == target.description['program_source']['sha256'],
+        == target.description['program_source']['sha256']
+        and (
+            observed['mode'] != RECONFIGURE_MODE
+            or observed['target_access_sha256'] == target.description['access_policy_ref']['sha256']
+        ),
         DIFFERENT,
     )
-    with locked_coverage(native, active, planned.capture_arguments, entry) as checked:
+    with locked_coverage(
+        native, active, planned.capture_arguments, entry, require_clean_database=True
+    ) as checked:
         before = checked.control
         fd = checked.control_fd
         require(

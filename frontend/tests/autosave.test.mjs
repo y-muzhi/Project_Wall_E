@@ -171,17 +171,104 @@ test('connection pause preserves local edits and never flushes on reconnection o
   rig.controller.dispose();
 });
 
+test('explicit save after reconnect rechecks the original draft before sending a new write', async () => {
+  const sent = [];
+  const native = draft('changed by another page', 2);
+  let reads = 0;
+  const rig = setup({
+    async save(ticket) { sent.push(ticket); return draft(ticket.markdown_content, 2); },
+    async read() { reads++; return native; },
+  });
+
+  rig.edit('local work');
+  rig.controller.setEnvironmentWritable(false);
+  rig.controller.setEnvironmentWritable(true);
+  await rig.controller.flush(true);
+  assert.equal(reads, 1);
+  assert.deepEqual(sent, []);
+  assert.equal(rig.controller.state.status, 'CONFLICT');
+  assert.equal(rig.controller.state.confirmed_version, 1);
+  assert.equal(rig.controller.state.server_conflict, native);
+  assert.equal(rig.controller.localSnapshot.markdown_content, 'local work');
+  assert.equal(rig.writes.at(-1)[2].markdown_content, 'local work');
+  rig.controller.dispose();
+});
+
+test('a failed resume read leaves the draft local until another explicit check', async () => {
+  const observed = [];
+  const rig = setup({
+    async read() {
+      observed.push('read');
+      if (observed.length === 1) throw Error('isolated read failure');
+      return draft();
+    },
+    async save(ticket) {
+      observed.push('save');
+      return draft(ticket.markdown_content, ticket.expected_version + 1);
+    },
+  });
+
+  rig.edit('retained');
+  rig.controller.setEnvironmentWritable(false);
+  rig.controller.setEnvironmentWritable(true);
+  await rig.controller.flush(true);
+  assert.deepEqual(observed, ['read']);
+  assert.deepEqual(rig.timing.live(), []);
+  assert.equal(rig.controller.state.resume_required, true);
+  assert.equal(rig.controller.localSnapshot.markdown_content, 'retained');
+  await rig.controller.flush();
+  assert.deepEqual(observed, ['read']);
+  await rig.controller.flush(true);
+  assert.deepEqual(observed, ['read', 'read', 'save']);
+  assert.equal(rig.controller.state.status, 'SAVED');
+  rig.controller.dispose();
+});
+
+test('another disconnection invalidates an in-flight resume read and requires a new explicit check', async () => {
+  const first = deferred();
+  const observed = [];
+  const rig = setup({
+    async read() {
+      observed.push('read');
+      return observed.length === 1 ? first.promise : draft();
+    },
+    async save(ticket) {
+      observed.push('save');
+      return draft(ticket.markdown_content, ticket.expected_version + 1);
+    },
+  });
+
+  rig.edit('retained across two checks');
+  rig.controller.setEnvironmentWritable(false);
+  rig.controller.setEnvironmentWritable(true);
+  const verifying = rig.controller.flush(true);
+  await settle();
+  assert.deepEqual(observed, ['read']);
+  rig.controller.setEnvironmentWritable(false);
+  rig.controller.setEnvironmentWritable(true);
+  first.resolve(draft());
+  await verifying;
+  assert.deepEqual(observed, ['read']);
+  assert.equal(rig.controller.state.resume_required, true);
+  await rig.controller.flush(true);
+  assert.deepEqual(observed, ['read', 'read', 'save']);
+  assert.equal(rig.controller.state.status, 'SAVED');
+  rig.controller.dispose();
+});
+
 test('in-flight failure during disconnect keeps the exact unsolved ticket for explicit recovery', async () => {
   const active = deferred();
   const sent = [];
+  const observed = draft('original', 2);
   const rig = setup({
     async save(ticket) {
       sent.push(ticket);
       if (sent.length === 1) return active.promise;
       return draft(ticket.markdown_content, ticket.expected_version + 1);
     },
-    async read() { return draft(); },
+    async read() { return observed; },
   });
+  assert.equal(rig.controller.canReconcileObservedDraft(observed), false);
   rig.edit('original');
   const inflight = rig.controller.flush();
   await settle();
@@ -194,6 +281,12 @@ test('in-flight failure during disconnect keeps the exact unsolved ticket for ex
   await rig.controller.flush();
   assert.equal(sent.length, 1);
   assert.equal(rig.controller.state.resume_required, true);
+  assert.equal(rig.controller.canReconcileObservedDraft(observed), true);
+  assert.equal(rig.controller.canReconcileObservedDraft({ ...observed, id: 9 }), false);
+  assert.equal(rig.controller.canReconcileObservedDraft(draft('another edit', 2)), false);
+  assert.equal(rig.controller.canReconcileObservedDraft(draft('original', 3)), false);
+  assert.equal(rig.controller.state.confirmed_version, 1);
+  assert.equal(rig.controller.state.status, 'UNKNOWN');
   await rig.controller.flush(true);
   assert.equal(sent.length, 2);
   assert.equal(sent[1], sent[0]);

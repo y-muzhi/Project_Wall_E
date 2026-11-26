@@ -1,6 +1,7 @@
 """Dispatch a selected, verified release through its original fixed host unit."""
 
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from subprocess import SubprocessError
@@ -24,6 +25,8 @@ from backend.app.infrastructure.environment_lock import NativeEnvironmentFiles
 from backend.app.infrastructure.environment_release_check import CHECK_SOCKET
 from backend.app.infrastructure.environment_release_open import (
     POLICY as OPEN_POLICY,
+)
+from backend.app.infrastructure.environment_release_open import (
     observed_transition,
     open_inputs,
     opening_evidence,
@@ -41,11 +44,13 @@ from .release_execution import (
     release_execution,
     write_fact,
 )
-from .release_open_admission import OPEN_AUTHORIZED, OPEN_BLOCKED, TARGET
+from .release_open_admission import OPEN_AUTHORIZED, OPEN_BLOCKED, TARGET, check_open_request_shape
 from .release_selection import read_selection
 from .runtime_capacity import DIMENSIONS, load_capacity
 from .runtime_observation import (
     POLICY as RUNTIME_POLICY,
+)
+from .runtime_observation import (
     READY,
     SYSTEMCTL,
     trusted_executable,
@@ -58,6 +63,7 @@ from .runtime_start import (
     runtime_result,
     startup_command,
     verify_accounts_and_paths,
+    verify_application_groups,
 )
 
 POLICY = 'managed-release-open.v1.json'
@@ -104,20 +110,29 @@ def load_launch(catalog, args, environment):
     )
     for key in PATHS:
         absolute(policy[key], INVALID)
-    launcher, launcher_pin = path_reference(policy['launcher'])
+    launcher, _ = path_reference(policy['launcher'])
     require(launcher == environment.project / 'tools/linux_runtime/serve_environment.py', RESOURCE)
     open_path, open_pin = path_reference(policy['release_open_policy'])
     require(open_path.name == OPEN_POLICY, INVALID)
-    trusted_executable(launcher, launcher_pin, script=True)
-    trusted_executable(SYSTEMCTL, policy['systemctl_sha256'])
-    trusted_executable(SYSTEMD_RUN, policy['systemd_run_sha256'])
-    verify_accounts_and_paths(policy, environment)
     return policy, launcher, open_path, open_pin
 
 
-def check_closed(args, environment, unit, plan, selected):
+def verify_live_launch(policy, environment, launcher, *, dispatch):
+    trusted_executable(launcher, policy['launcher']['sha256'], script=True)
+    trusted_executable(SYSTEMCTL, policy['systemctl_sha256'])
+    if dispatch:
+        trusted_executable(SYSTEMD_RUN, policy['systemd_run_sha256'])
+    verify_accounts_and_paths(policy, environment)
+
+
+@contextmanager
+def verified_closed(args, environment, unit, plan, selected):
     native = NativeEnvironmentFiles(args.root)
-    with environment.lock(native) as lock, control_directory(environment) as fd:
+    with (
+        environment.lock(native) as lock,
+        environment.host_admission(),
+        control_directory(environment) as fd,
+    ):
         transition = observed_transition(fd, environment, plan)
         control = read_control(fd, environment)
         require(
@@ -133,8 +148,10 @@ def check_closed(args, environment, unit, plan, selected):
             CHANGED,
         )
         opening_evidence(plan, environment, transition)
+        verify_application_groups(environment)
         lock.assert_owned()
         require(read_control(fd, environment) == control, CHANGED)
+        yield
 
 
 def confirmed_opening(opened, runtime, observation, request, selection):
@@ -246,35 +263,39 @@ def start_selected_deployment(catalog, registry, args, entry, manager, fd, targe
     }
     unit = f'walle-env-{environment.environment_id}-{operation}.service'
     previous = optional_fact(fd, DISPATCH)
-    if previous is not None:
+    if previous is None:
+        capacity = load_capacity(catalog)
+        limits = capacity.profile(
+            {
+                'purpose': environment.description['purpose'],
+                'profile_ref': target.profile_ref,
+            }
+        )
+        request = {
+            **original,
+            'boot_id': machine_clock()[0],
+            'limits': limits,
+            'capacity_sha256': capacity.sha256,
+        }
+    else:
+        exact(previous, ('format_version', 'unit', 'request'), CHANGED)
+        request = previous['request']
+        check_open_request_shape(request)
         require(
-            previous['format_version'] == 1
+            type(previous['format_version']) is int
+            and previous['format_version'] == 1
             and previous['unit'] == unit
-            and all(previous['request'][key] == value for key, value in original.items()),
+            and all(request[key] == value for key, value in original.items()),
             CHANGED,
         )
-        known = known_opened(fd, previous['request'], selection)
+        known = known_opened(fd, request, selection)
         if known is not None:
             os.fsync(fd)
             return known
-    capacity = load_capacity(catalog)
-    limits = capacity.profile(
-        {
-            'purpose': environment.description['purpose'],
-            'profile_ref': target.profile_ref,
-        }
-    )
-    request = {
-        **original,
-        'boot_id': machine_clock()[0],
-        'limits': limits,
-        'capacity_sha256': capacity.sha256,
-    }
-    dispatch = {'format_version': 1, 'request': request, 'unit': unit}
-    if previous is None:
-        check_closed(args, environment, unit, plan, selection)
-    else:
-        require(previous == dispatch, CHANGED)
+        if request['boot_id'] != machine_clock()[0]:
+            raise EnvironmentFailure(UNVERIFIED, uncertain=True)
+        limits = exact(request['limits'], DIMENSIONS, CHANGED)
+        require(all(type(value) is int and value > 0 for value in limits.values()), CHANGED)
     stage = {
         **policy,
         **{key: limits[key] for key in DIMENSIONS if key != 'run_slots'},
@@ -288,10 +309,16 @@ def start_selected_deployment(catalog, registry, args, entry, manager, fd, targe
         'release_open_policy': policy['release_open_policy'],
     }
     if previous is None:
+        verify_live_launch(policy, environment, launcher, dispatch=True)
+        manifest, _ = entry['verify_runtime'](args.root, args.sha256)
+        executable = args.root / manifest['python']['executable_ref']
+        command = startup_command(args, stage, booted, environment, launcher, executable, unit)
+        with verified_closed(args, environment, unit, plan, selection):
+            admission_command = manager_command(target.admission_action, args, manager)
         decision = invoke_observer(
             registry.uid,
             registry.gid,
-            manager_command(target.admission_action, args, manager),
+            admission_command,
             catalog.directory / 'observations',
             input_bytes=canonical(request),
         )
@@ -305,15 +332,15 @@ def start_selected_deployment(catalog, registry, args, entry, manager, fd, targe
             )
             return decision
         require(decision == {'status': OPEN_AUTHORIZED, 'request': request}, RESOURCE)
-        manifest, _ = entry['verify_runtime'](args.root, args.sha256)
-        executable = args.root / manifest['python']['executable_ref']
-        require(request['boot_id'] == machine_clock()[0], RESOURCE)
-        # The write precedes the external effect. Retries only observe this same unit.
-        write_fact(fd, DISPATCH, dispatch)
-        run_bounded(
-            startup_command(args, stage, booted, environment, launcher, executable, unit), 15
-        )
+        with verified_closed(args, environment, unit, plan, selection):
+            require(request['boot_id'] == machine_clock()[0], RESOURCE)
+            # The receipt is durable before launch. Retries only observe this unit.
+            write_fact(fd, DISPATCH, {'format_version': 1, 'request': request, 'unit': unit})
     try:
+        if previous is None:
+            run_bounded(command, 15)
+        else:
+            verify_live_launch(policy, environment, launcher, dispatch=False)
         result = confirm_dispatch(
             catalog,
             args,
@@ -324,7 +351,7 @@ def start_selected_deployment(catalog, registry, args, entry, manager, fd, targe
             wait=previous is None,
         )
         write_fact(fd, OPENED, result)
-    except (EnvironmentFailure, OSError, RuntimeError, ValueError, SubprocessError) as error:
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError, SubprocessError) as error:
         raise EnvironmentFailure(UNVERIFIED, uncertain=True) from error
     return known_opened(fd, request, selection)
 

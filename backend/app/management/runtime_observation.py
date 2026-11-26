@@ -1,10 +1,7 @@
 """Read bounded, actual Linux service and application facts for one original run."""
 
-from contextlib import ExitStack
-from hashlib import sha256
 import http.client
 import os
-from pathlib import Path
 import re
 import select
 import socket
@@ -12,6 +9,9 @@ import stat
 import struct
 import subprocess
 import sys
+from contextlib import ExitStack
+from hashlib import sha256
+from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -35,6 +35,7 @@ from backend.app.infrastructure.environment_lock import NativeEnvironmentFiles
 from backend.app.shared.validation import InvalidInput, strict_json_object
 
 from .attachment_observation import (
+    ANY_PREVIOUS_OBSERVATION,
     candidate_environment,
     machine_clock,
     now,
@@ -556,7 +557,7 @@ def runtime_observation(catalog, environment):
         return None
 
 
-def capture_runtime(catalog, args, entry):
+def capture_runtime(catalog, args, entry, *, expected=ANY_PREVIOUS_OBSERVATION):
     require(os.geteuid() == 0 and sys.platform == 'linux', RESOURCE)
     policy = load_policy(args.runtime_policy, args.runtime_policy_sha256, catalog)
     candidate = catalog.candidate(policy['candidate_ref'], policy['candidate_sha256'])
@@ -616,7 +617,12 @@ def capture_runtime(catalog, args, entry):
         'reason_code': reason,
         'seen_running': state == 'RUNNING' or bool(previous and previous['seen_running']),
     }
-    publish_observation(catalog, 'runtime-' + environment.environment_id, result)
+    if expected is ANY_PREVIOUS_OBSERVATION:
+        publish_observation(catalog, 'runtime-' + environment.environment_id, result)
+    else:
+        publish_observation(
+            catalog, 'runtime-' + environment.environment_id, result, expected=expected
+        )
     return {
         key: result[key]
         for key in ('proof_id', 'environment_id', 'observed_at', 'state', 'reason_code')

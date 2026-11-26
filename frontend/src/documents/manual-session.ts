@@ -342,9 +342,11 @@ export class ManualDraftSession {
       root.active_operation_type !== 'MANUAL_DRAFT' ||
       actual.activity.kind !== 'MANUAL' ||
       root.active_operation_id !== this.autosave.confirmedDocument.id ||
+      actual.activity.draft.target_document_id !== actual.activity.target.id ||
       canonical(actual.activity.target) !==
         canonical(this.initial.activity.kind === 'MANUAL' ? this.initial.activity.target : null) ||
-      canonical(actual.activity.draft) !== canonical(this.autosave.confirmedDocument)
+      (canonical(actual.activity.draft) !== canonical(this.autosave.confirmedDocument) &&
+        !this.autosave.canReconcileObservedDraft(actual.activity.draft))
     ) {
       this.editor.setReadonly(true);
       this.publish({

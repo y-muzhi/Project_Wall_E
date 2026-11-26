@@ -1,14 +1,14 @@
 """Start and independently verify the closed read-only recovery replica."""
 
-from contextlib import ExitStack
-from dataclasses import dataclass
 import fcntl
-from functools import partial
 import json
 import os
-from pathlib import Path
 import stat
 import subprocess
+from contextlib import ExitStack
+from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
 from time import monotonic, sleep
 from types import SimpleNamespace
 from urllib.parse import urlsplit
@@ -19,8 +19,8 @@ from backend.app.management.release_artifacts import snapshot_file
 from .environment_backup_package import private_root, validate_location
 from .environment_control import read_control, stopped_for_policy
 from .environment_files import (
-    EnvironmentFailure,
     MAX_REVISION,
+    EnvironmentFailure,
     canonical,
     decode,
     digest,
@@ -31,10 +31,11 @@ from .environment_files import (
     require,
 )
 from .environment_installation import (
-    ACCESS_NAME,
     ANCHOR_NAME,
     RECOVERY_EVIDENCE,
+    gateway_verifier_names,
     load_installation,
+    read_access_policy,
     sha_value,
     uuid_value,
     version_record,
@@ -44,6 +45,8 @@ from .environment_recovery_installation import INSTALL_RECEIPT, checked_ref
 from .environment_recovery_probe import check_application, unix_reply
 from .environment_recovery_read import (
     POLICY as READ_POLICY,
+)
+from .environment_recovery_read import (
     TUPLE_FIELDS,
     protected_receipt,
     read_policy,
@@ -254,6 +257,16 @@ class FixedReadProbe:
     private_socket: bool = False
 
 
+def verification_principal(access, environment_id, *, private_socket):
+    verifiers = gateway_verifier_names(access)
+    if private_socket:
+        require(verifiers, UNVERIFIED)
+        return min(verifiers)
+    principal = 'automation-' + environment_id
+    require(principal in verifiers, UNVERIFIED)
+    return principal
+
+
 def probe_fixed_reader(args, entry, installation, home, temporary, probe, check):
     native = NativeEnvironmentFiles(args.root)
     lock = installation.lock(native)
@@ -262,7 +275,7 @@ def probe_fixed_reader(args, entry, installation, home, temporary, probe, check)
     credentials, environment = private_environment(installation, args, home, temporary)
     manifest, _ = entry['verify_runtime'](args.root, args.sha256)
     executable = args.root / manifest['python']['executable_ref']
-    launcher = args.project / 'tools/linux_runtime/serve_environment.py'
+    launcher = installation.project / 'tools/linux_runtime/serve_environment.py'
     command = [
         *credentials,
         str(executable),
@@ -278,7 +291,7 @@ def probe_fixed_reader(args, entry, installation, home, temporary, probe, check)
         '--temporary',
         str(temporary),
         '--project',
-        str(args.project),
+        str(installation.project),
         '--anchor',
         str(installation.anchor),
         '--anchor-sha256',
@@ -292,13 +305,9 @@ def probe_fixed_reader(args, entry, installation, home, temporary, probe, check)
         probe.policy_flag + '-sha256',
         probe.policy_sha256,
     ]
-    access = decode(read_protected(installation.anchor.parent / ACCESS_NAME), UNVERIFIED)
-    identities = {entry['principal_id']: entry for entry in access['principals']}
-    principal = 'automation-' + installation.environment_id
-    require(
-        identities[principal]['client_kind'] == 'AUTOMATION'
-        and identities[principal]['permission'] == 'READ_ONLY',
-        UNVERIFIED,
+    access = read_access_policy(installation)
+    principal = verification_principal(
+        access, installation.environment_id, private_socket=probe.private_socket
     )
     headers = {
         'Host': urlsplit(access['public_origin']).netloc,

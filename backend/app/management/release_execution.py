@@ -22,14 +22,25 @@ from backend.app.infrastructure.environment_maintenance import ACTIVE
 from backend.app.infrastructure.environment_maintenance import POLICY as MAINTENANCE_POLICY
 
 from .attachment_observation import invoke_observer
-from .operation_contract import DENIED, INVALID, RESOURCE, UNAVAILABLE, VERSION
+from .operation_contract import (
+    DENIED,
+    INVALID,
+    RECONFIGURE,
+    RELEASE_ACTIONS,
+    RESOURCE,
+    ROLLBACK_CODE,
+    UNAVAILABLE,
+    VERSION,
+)
 from .operation_store import decoded, mutation, stored
 from .release_configuration import CHANGED, ReleaseConfiguration, read_configuration
 from .release_observation import ReleasePair, admitted_pair, deployment_subject
-from .release_operations import ACTION, STEP, confirmed_preview, raw_plan, row_for_release
+from .release_operations import STEP, confirmed_preview, raw_plan, row_for_release
 
 EXECUTIONS = 'release-executions'
 HOLD_RECEIPT = 'maintenance-closed.v1.json'
+RETIREMENT_INTENT = 'release-retirement-intent.v1.json'
+RETIREMENT = 'release-retired.v1.json'
 HOLD_EXECUTOR = 'NATIVE_RELEASE_MAINTENANCE'
 SOURCE_KEYS = ('environment_id', 'data_generation', 'deployment_id')
 
@@ -41,13 +52,14 @@ class AdmittedRelease:
     pair: ReleasePair
 
 
-def operation_record(connection, catalog, operation_id, *, action=ACTION, kind=STEP):
+def operation_record(connection, catalog, operation_id, *, action=RELEASE_ACTIONS, kind=STEP):
     require(uuid_value(operation_id), INVALID)
     row = connection.execute(
         'SELECT * FROM management_operations WHERE operation_id=? AND registry_generation=?',
         (operation_id, catalog.scope['registry_generation']),
     ).fetchone()
-    require(row is not None and row['action'] == action, RESOURCE)
+    allowed = (action,) if isinstance(action, str) else action
+    require(row is not None and row['action'] in allowed, RESOURCE)
     step = connection.execute(
         'SELECT * FROM management_steps WHERE operation_id=? AND ordinal=1 AND step_kind=?',
         (operation_id, kind),
@@ -62,7 +74,6 @@ def grant_subject(preview, operation, catalog):
         'environment_id',
         'configuration_ref',
         'configuration_record_sha256',
-        'release_ref',
         'release_manifest_sha256',
         'release_candidate_sha256',
         'schema_contract_sha256',
@@ -75,17 +86,47 @@ def grant_subject(preview, operation, catalog):
         'source',
         'target',
     )
-    return {
+    grant = {
         'format_version': 1,
         **catalog.scope,
         'operation_id': operation['operation_id'],
         'plan_sha256': decoded(operation['intent_json'])['plan_sha256'],
         **{key: preview[key] for key in fields},
     }
+    if operation['action'] == ROLLBACK_CODE:
+        return {
+            **grant,
+            'release_ref': preview['retained_release_ref'],
+            'rollback_source_sha256': preview['rollback_source_sha256'],
+            'repair_of_operation_id': preview['repair_of_operation_id'],
+        }
+    if operation['action'] == RECONFIGURE:
+        return {
+            **grant,
+            'release_ref': preview['fixed_release_ref'],
+            'target_access_sha256': preview['target_access_sha256'],
+        }
+    return {**grant, 'release_ref': preview['release_ref']}
+
+
+def retained_binding(configuration, grant):
+    target = configuration.target_access_sha256
+    if target is None:
+        if 'target_access_sha256' in grant:
+            return False
+    elif grant.get('target_access_sha256') != target:
+        return False
+    if configuration.rollback_source is None:
+        return 'rollback_source_sha256' not in grant
+    return grant.get('rollback_source_sha256') == digest(canonical(configuration.rollback_source))
 
 
 def claim_release_maintenance(connection, lock, catalog, request):
-    exact(request, ('operation_id',), INVALID)
+    require(type(request) is dict, INVALID)
+    fields = ('operation_id', 'read_retired') if 'read_retired' in request else ('operation_id',)
+    exact(request, fields, INVALID)
+    require('read_retired' not in request or request['read_retired'] is True, INVALID)
+    read_retired = 'read_retired' in request
     with mutation(connection, lock):
         operation, step = operation_record(connection, catalog, request['operation_id'])
         principal = catalog.access(operation['principal'])
@@ -97,13 +138,25 @@ def claim_release_maintenance(connection, lock, catalog, request):
         grant = grant_subject(preview, operation, catalog)
         if step['external_identity_json'] is not None:
             external = decoded(step['external_identity_json'])
-            require(
+            continuing = (
                 operation['status'] in ('RUNNING', 'UNKNOWN', 'SUCCEEDED')
-                and external.get('maintenance') == grant
-                and not operation['cancel_requested'],
+                and not operation['cancel_requested']
+            )
+            retired = (
+                read_retired
+                and operation['status'] == 'CANCELLED'
+                and operation['cancel_requested']
+                and step['status'] == 'SKIPPED'
+                and sha_value(external.get('retirement_sha256'))
+            )
+            require(
+                (continuing or retired)
+                and (not read_retired or operation['status'] in ('RUNNING', 'CANCELLED'))
+                and external.get('maintenance') == grant,
                 RESOURCE,
             )
             return grant
+        require(not read_retired, RESOURCE)
         row_for_release(connection, principal, intent)
         require(
             operation['status'] == 'ACCEPTED'
@@ -115,6 +168,8 @@ def claim_release_maintenance(connection, lock, catalog, request):
         config = read_configuration(catalog, intent['configuration_ref'])
         require(
             config.sha256 == grant['configuration_record_sha256']
+            and config.action == operation['action']
+            and retained_binding(config, grant)
             and config.source_reference == grant['source_attachment']
             and config.target_reference == grant['target_attachment']
             and config.manifest_reference['sha256'] == grant['release_manifest_sha256']
@@ -250,14 +305,16 @@ def maintenance_result(facts, grant, policy, policy_sha):
     }
 
 
-def admitted_release(catalog, registry, args, entry, launcher):
+def admitted_release(catalog, registry, args, entry, launcher, *, read_retired=False):
     operation = args.release_operation_id
     grant = invoke_observer(
         registry.uid,
         registry.gid,
         manager_command('_claim-release-maintenance', args, launcher),
         catalog.directory / 'observations',
-        input_bytes=canonical({'operation_id': operation}),
+        input_bytes=canonical(
+            {'operation_id': operation, **({'read_retired': True} if read_retired else {})}
+        ),
     )
     require(
         grant['operation_id'] == operation
@@ -268,6 +325,7 @@ def admitted_release(catalog, registry, args, entry, launcher):
     registered = read_configuration(catalog, grant['configuration_ref'])
     require(
         registered.sha256 == grant['configuration_record_sha256']
+        and retained_binding(registered, grant)
         and registered.source_reference == grant['source_attachment']
         and registered.target_reference == grant['target_attachment']
         and registered.manifest_reference['sha256'] == grant['release_manifest_sha256'],
@@ -329,6 +387,7 @@ def environment_command(action, args, launcher, installation, *arguments):
 def enter_release_maintenance(catalog, registry, args, entry, launcher):
     require(os.geteuid() == 0 and uuid_value(args.release_operation_id), INVALID)
     with release_execution(catalog, args.release_operation_id, create=True) as (root, fd):
+        require(optional_fact(fd, RETIREMENT_INTENT) is None, UNAVAILABLE)
         admitted = admitted_release(catalog, registry, args, entry, launcher)
         known = known_maintenance(fd, admitted)
         if known is not None:

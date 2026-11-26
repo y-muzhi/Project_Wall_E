@@ -179,7 +179,7 @@ def finish_stop(fd, name, original, previous, closed):
     return stop_record(fd, name, original)
 
 
-def stop_runtime(catalog, args, entry, *, allow_unready=False):
+def stop_runtime(catalog, args, entry, *, allow_unready=False, admit_new_stop=None):
     require(os.geteuid() == 0, RESOURCE)
     plan, path, pin = stop_policy(catalog, args.stop_policy, args.stop_policy_sha256)
     runtime = load_policy(path, pin, catalog)
@@ -228,6 +228,8 @@ def stop_runtime(catalog, args, entry, *, allow_unready=False):
                     raise EnvironmentFailure(UNVERIFIED, uncertain=True)
                 return finish_stop(fd, name, common, previous, current)
 
+            if admit_new_stop is not None:
+                admit_new_stop()
             current = capture_runtime(catalog, runtime_args, entry)
             if current['state'] != 'STOPPED':
                 require(

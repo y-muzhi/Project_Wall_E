@@ -123,6 +123,39 @@ test('read fixed entry before handshake with same-origin credentials', async () 
   assert(Object.isFrozen(bound.scope));
 });
 
+test('a configured validation domain is still bound to its exact environment and browser origin', async () => {
+  const customOrigin = 'https://e-' + environment + '.validation.example.test';
+  for (const expected of [customOrigin, customOrigin + ':9443']) {
+    const calls = [];
+    const bound = await loadBoundEnvironment(expected, undefined, async (path) => {
+      calls.push(path);
+      return path.startsWith('/.well-known')
+        ? response({ ...configuration, public_origin: expected })
+        : response(success(handshake));
+    });
+    assert.equal(bound.scope.origin, expected);
+    assert.deepEqual(calls, ['/.well-known/walle-environment.json', '/api/v1/environment']);
+  }
+  for (const [current, advertised] of [
+    [customOrigin, origin],
+    [customOrigin.replace(environment, other), customOrigin.replace(environment, other)],
+    [customOrigin + ':443', customOrigin + ':443'],
+    [customOrigin + '/page', customOrigin + '/page'],
+    [customOrigin.replace('validation.', '*.'), customOrigin.replace('validation.', '*.')],
+    ['https://e-' + environment + '.127.0.0.1', 'https://e-' + environment + '.127.0.0.1'],
+  ]) {
+    const calls = [];
+    await assert.rejects(
+      loadBoundEnvironment(current, undefined, async (path) => {
+        calls.push(path);
+        return response({ ...configuration, public_origin: advertised });
+      }),
+      { code: 'SCOPE_CHANGED' },
+    );
+    assert.deepEqual(calls, ['/.well-known/walle-environment.json']);
+  }
+});
+
 test('a candidate starts only when the fixed entry and live handshake agree on its purpose', async () => {
   const candidate = { ...configuration, purpose: 'CANDIDATE', display_name: '候选验证环境' };
   const fetchEntry = (purpose) => async (path) =>
@@ -495,6 +528,57 @@ test('a verified new run triggers read-only recheck, and actual permission and g
   await connection.recheck();
   assert.equal(checks, 2);
   assert.equal(sent, 1);
+  connection.dispose();
+});
+
+test('a partial configuration switch keeps the mounted scope and permits a later read-only recheck', async () => {
+  const original = await loadBoundEnvironment(origin, undefined, setupFetch());
+  const target = { ...configuration, configuration_sha256: 'e'.repeat(64) };
+  const seen = [];
+  let targetReady = false;
+  const connection = new EnvironmentConnection(original, (currentOrigin, signal) =>
+    loadBoundEnvironment(currentOrigin, signal, async (path) => {
+      seen.push(path);
+      if (path.startsWith('/.well-known')) return response(target);
+      if (!targetReady) return response(success(handshake));
+      return response(
+        success({ ...handshake, configuration_sha256: target.configuration_sha256, run_id: nextRun }),
+        { runId: nextRun },
+      );
+    }),
+  );
+  let writes = 0;
+  const api = new ApiClient(async () => {
+    writes++;
+    return response(success({ id: 1 }), { status: 201, runId: nextRun });
+  }, () => requestId, original, connection);
+  const prepared = api.prepare('POST', '/api/v1/requirements', { title: '原页面输入' }, {
+    idempotent: true,
+    success_status: 201,
+  });
+
+  await connection.recheck();
+  assert.equal(connection.getSnapshot().phase, 'NOT_READY');
+  assert.equal(connection.getSnapshot().environment, original);
+  await assert.rejects(api.commit(prepared, (value) => value), ApiNotSent);
+  assert.equal(writes, 0);
+
+  targetReady = true;
+  await connection.recheck();
+  const recovered = connection.getSnapshot();
+  assert.equal(recovered.phase, 'READY');
+  assert.deepEqual(recovered.environment.scope, original.scope);
+  assert.equal(recovered.environment.configurationSha256, target.configuration_sha256);
+  assert.equal(recovered.environment.runId, nextRun);
+  assert.equal(writes, 0);
+  assert.deepEqual(seen, [
+    '/.well-known/walle-environment.json',
+    '/api/v1/environment',
+    '/.well-known/walle-environment.json',
+    '/api/v1/environment',
+  ]);
+  await api.commit(prepared, (value) => value);
+  assert.equal(writes, 1);
   connection.dispose();
 });
 

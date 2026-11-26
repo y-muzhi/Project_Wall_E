@@ -1,10 +1,11 @@
 """Prepare a P1 startup and drive the admitted lifecycle on the stable lock."""
 
-from contextlib import ExitStack
 import os
+from contextlib import ExitStack
 from uuid import uuid4
 
-from .environment_control import CONTROL_NAME, CONTROL_ERROR, normal_stop, read_control
+from .environment_binding import EnvironmentBinding
+from .environment_control import CONTROL_ERROR, CONTROL_NAME, normal_stop, read_control
 from .environment_files import (
     MAX_REVISION,
     canonical,
@@ -14,7 +15,6 @@ from .environment_files import (
     read_entry,
     require,
 )
-from .environment_binding import EnvironmentBinding
 from .environment_initialize import confirm_initialized, inspect_database, now
 from .environment_installation import database_identity, sha_value, uuid_value
 from .environment_ordinary import OrdinaryDatabase
@@ -36,7 +36,7 @@ def prepared_start(installation, native, release, operation, expected_control_sh
     installation.check_identity(maintenance=True)
     with ExitStack() as resources:
         resources.enter_context(installation.lock(native))
-        installation.check_hold()
+        resources.enter_context(installation.host_admission())
         fd = resources.enter_context(installation.directory(native, 'control'))
         control = read_control(fd, installation)
         require(normal_stop(control), CONTROL_ERROR)
@@ -188,6 +188,9 @@ class OrdinaryScope:
         )
         return control, receipt
 
+    def preflight(self):
+        self.database.preflight()
+
     def before_recovery(self):
         self.lock.assert_owned()
         self.installation.check_hold()
@@ -234,4 +237,5 @@ class OrdinaryScope:
 
     def close(self):
         if self.control['admission'] == 'DRAINING':
+            self.database.checkpoint_for_stop()
             self.set_control('CLOSED', 'NORMAL_STOP')

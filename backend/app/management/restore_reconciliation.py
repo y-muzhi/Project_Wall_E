@@ -10,8 +10,8 @@ from .release_open_admission import TARGET
 from .release_reconciliation import adopt_opened_deployment, verify_opened_evidence
 from .release_runtime import OPENED
 from .restore_execution import EXECUTIONS, original_restore_grant, restore_operation
-from .restore_runtime import read_restore_selection, restore_registry_row
 from .restore_retirement import original_retirement, record_retirement
+from .restore_runtime import read_restore_selection, restore_registry_row
 
 
 def opened_restore(catalog, grant, request):
@@ -24,6 +24,26 @@ def opened_restore(catalog, grant, request):
     require(all(selected[key] == request[key] for key in TARGET), CHANGED)
     verify_opened_evidence(catalog, root, request, selected, selected['target_attachment'], receipt)
     return selected, receipt
+
+
+def restore_adoption(grant, selected):
+    preview = grant['confirmation']
+    return (
+        {
+            'source': preview['source'],
+            'target': preview['target'],
+            'source_attachment': preview['source_attachment'],
+            'target_attachment': selected['target_attachment'],
+            'release_ref': preview['target_release_ref'],
+            'release_manifest_sha256': preview['release_manifest_sha256'],
+        },
+        {
+            'source_data_generation': preview['source']['data_generation'],
+            'backup_id': preview['backup']['backup_id'],
+            'backup_cutoff_at': preview['backup']['cutoff_at'],
+            'restore_authorization_sha256': preview['restore_authorization_sha256'],
+        },
+    )
 
 
 def reconcile_restore(connection, catalog, principal, operation):
@@ -54,27 +74,15 @@ def reconcile_restore(connection, catalog, principal, operation):
     if opened is None:
         return
     selected, receipt = opened
-    preview = grant['confirmation']
+    adoption, recovery = restore_adoption(grant, selected)
     origin = business_entry(catalog, row, decoded(row['work_package_json']))
     adopt_opened_deployment(
         connection,
         operation,
         row,
-        {
-            'source': preview['source'],
-            'target': preview['target'],
-            'source_attachment': preview['source_attachment'],
-            'target_attachment': selected['target_attachment'],
-            'release_ref': preview['target_release_ref'],
-            'release_manifest_sha256': preview['release_manifest_sha256'],
-        },
+        adoption,
         request,
         receipt,
-        recovery={
-            'source_data_generation': preview['source']['data_generation'],
-            'backup_id': preview['backup']['backup_id'],
-            'backup_cutoff_at': preview['backup']['cutoff_at'],
-            'restore_authorization_sha256': preview['restore_authorization_sha256'],
-        },
+        recovery=recovery,
         business_entry=origin,
     )

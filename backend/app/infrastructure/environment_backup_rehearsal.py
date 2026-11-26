@@ -1,9 +1,9 @@
 """Rehearse a sealed ordinary backup into an independently reserved data generation."""
 
-from contextlib import contextmanager
-from datetime import datetime, timezone
 import fcntl
 import os
+from contextlib import contextmanager, nullcontext
+from datetime import datetime, timezone
 from sqlite3 import Error as SQLiteError
 from types import SimpleNamespace
 
@@ -152,7 +152,18 @@ def pinned_schema(active, schema, manifest):
     return release
 
 
-def data_rehearsal(principal, schema, source, target, plan, verified, active, intent):
+def data_rehearsal(
+    principal,
+    schema,
+    source,
+    target,
+    plan,
+    verified,
+    active,
+    intent,
+    *,
+    receipt_admission=nullcontext,
+):
     def inspect_package():
         return verify_contents(
             source,
@@ -194,7 +205,8 @@ def data_rehearsal(principal, schema, source, target, plan, verified, active, in
                 'restored_asset_index': asset_index,
                 'outbound_hold_required': True,
             }
-            persisted_write(target, RECEIPT, canonical(receipt), mode=0o400)
+            with receipt_admission():
+                persisted_write(target, RECEIPT, canonical(receipt), mode=0o400)
             existing = completed(target, model, common, target_plan, capture)
         else:
             os.fsync(target)

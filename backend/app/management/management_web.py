@@ -1,11 +1,11 @@
 """Independent management authentication, bindings and scoped API."""
 
-from asyncio import timeout
-from dataclasses import dataclass
-from contextlib import contextmanager
 import re
 import signal
 import sqlite3
+from asyncio import timeout
+from contextlib import contextmanager
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -28,10 +28,12 @@ from backend.app.infrastructure.environment_http import (
 )
 from backend.app.infrastructure.environment_installation import uuid_value
 from backend.app.infrastructure.environment_lock import NativeEnvironmentFiles
+from backend.app.infrastructure.owned_server import run_owned_server
 from backend.app.shared.validation import InvalidInput, strict_json_object
 
 from .attachment_observation import now
 from .management_query import (
+    archived_attachment,
     available_actions,
     capacity,
     catalog_projection,
@@ -39,26 +41,27 @@ from .management_query import (
     environment_detail,
     environments,
     operation_detail,
-    visible_filter,
     operations,
+    visible_filter,
 )
 from .operation_contract import (
-    Catalog,
     CONFLICT,
     DENIED,
     INVALID,
     MISSING,
+    RELEASE_ACTIONS,
     RESOURCE,
     SCOPE,
     UNAVAILABLE,
     VERSION,
+    Catalog,
 )
 from .operation_store import KEY_CONFLICT, execute_operation
 from .registry import read_registry, verify_registered_data
 from .registry_dispatch import PAUSED, require_dispatch_open
+from .registry_installation import RegistryInstallation
 from .release_configuration import CHANGED, INCOMPATIBLE
 from .runtime_controls import lookup_control
-from .registry_installation import RegistryInstallation
 from .web_installation import ManagementWeb, listening_socket
 
 PUBLIC_PATH = '/.well-known/walle-management.json'
@@ -68,7 +71,16 @@ AUTH = 'REQUEST_SOURCE_REJECTED'
 NOT_READY = 'MANAGEMENT_NOT_READY'
 MAX_COMMAND_BYTES = 64 * 1024
 WRITE_ACTIONS = frozenset(
-    {'ATTACH', 'REGISTER_DELIVERY', 'START', 'STOP', 'RELEASE', 'BACKUP', 'RESTORE'}
+    {
+        'ATTACH',
+        'REGISTER_DELIVERY',
+        'START',
+        'STOP',
+        'ARCHIVE',
+        *RELEASE_ACTIONS,
+        'BACKUP',
+        'RESTORE',
+    }
 )
 CONTROL_SUBMISSION = re.compile(re.escape(PREFIX) + r'operations/([^/]+)/commands')
 JSON_CONTENT = re.compile(r'application/json(?:\s*;\s*charset=utf-8)?', re.IGNORECASE)
@@ -234,6 +246,8 @@ class ManagementScope:
             filters = dict(pairs)
             require(len(pairs) == len(filters) and 'environment_id' in filters, INVALID)
             target = filters['environment_id']
+            if set(filters) == {'environment_id', 'kind'} and filters['kind'] == 'ATTACH':
+                return archived_attachment(connection, catalog, principal, target, self.runtime_sha)
             if set(filters) == {'environment_id', 'kind'} and filters['kind'] == 'BACKUP':
                 from .backup_catalog_view import backup_choices
 
@@ -242,6 +256,10 @@ class ManagementScope:
                 from .restore_catalog_view import restore_choices
 
                 return restore_choices(connection, catalog, principal, target)
+            if set(filters) == {'environment_id', 'kind'} and filters['kind'] in RELEASE_ACTIONS:
+                return release_choices(
+                    connection, catalog, principal, target, self.runtime_sha, action=filters['kind']
+                )
             require(set(filters) == {'environment_id'}, INVALID)
             return release_choices(connection, catalog, principal, target, self.runtime_sha)
         require(not parameters, INVALID)
@@ -473,7 +491,6 @@ def serve(native, installation, catalog, web, runtime_sha):
         methods = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
         app = Starlette(routes=[Route('/{path:path}', scope.respond, methods=methods)])
         server = ManagementServer(
-            Config(app, proxy_headers=False, access_log=False, log_config=None)
+            Config(app, proxy_headers=False, lifespan='on', access_log=False, log_config=None)
         )
-        server.run(sockets=[sock])
-        return 0 if server.started else 2
+        return run_owned_server(server, sock)

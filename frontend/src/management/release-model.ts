@@ -1,4 +1,4 @@
-import { exact, positiveInteger } from '../api/wire-shape.ts';
+import { exact, object, positiveInteger } from '../api/wire-shape.ts';
 import { backupStatus, hash, items, nullable, one, text, utc, uuid } from './model.ts';
 
 export const releaseChoiceStates = [
@@ -8,26 +8,44 @@ export const releaseChoiceStates = [
   'RECOVERY_NOT_ADMITTED',
   'ENVIRONMENT_BUSY',
 ] as const;
-const releaseRefFields = [
-  'environment_id',
-  'release_ref',
-  'configuration_ref',
-  'compatibility_ref',
-  'recovery_policy_ref',
-] as const;
+export const releaseActions = ['RELEASE', 'ROLLBACK_CODE', 'RECONFIGURE'] as const;
+export type ReleaseAction = (typeof releaseActions)[number];
+
+const sharedRefFields = ['environment_id', 'configuration_ref'] as const;
+const releaseRefFields = {
+  RELEASE: [...sharedRefFields, 'compatibility_ref', 'release_ref', 'recovery_policy_ref'],
+  ROLLBACK_CODE: [...sharedRefFields, 'compatibility_ref', 'retained_release_ref'],
+  RECONFIGURE: [...sharedRefFields, 'recovery_policy_ref'],
+} as const;
 const releaseVersionFields = ['expected_record_version', 'expected_assignment_generation'] as const;
 
-function releaseRefs(row: Readonly<Record<string, unknown>>) {
-  return {
+function confirmationFields(action: ReleaseAction) {
+  return [
+    ...releaseRefFields[action],
+    ...releaseVersionFields,
+    ...(action === 'ROLLBACK_CODE' ? ['repair_of_operation_id'] : []),
+  ];
+}
+
+function releaseRefs(row: Readonly<Record<string, unknown>>, action: ReleaseAction) {
+  const scope = {
     environment_id: uuid(row.environment_id),
-    release_ref: uuid(row.release_ref),
     configuration_ref: uuid(row.configuration_ref),
-    compatibility_ref: uuid(row.compatibility_ref),
+  };
+  if (action === 'RECONFIGURE')
+    return { ...scope, recovery_policy_ref: uuid(row.recovery_policy_ref) };
+  const compatibility_ref = uuid(row.compatibility_ref);
+  if (action === 'ROLLBACK_CODE')
+    return { ...scope, compatibility_ref, retained_release_ref: uuid(row.retained_release_ref) };
+  return {
+    ...scope,
+    compatibility_ref,
+    release_ref: uuid(row.release_ref),
     recovery_policy_ref: uuid(row.recovery_policy_ref),
   };
 }
 
-export function releaseCatalog(value: unknown, id: string) {
+export function releaseCatalog(value: unknown, id: string, action: ReleaseAction = 'RELEASE') {
   const row = exact(value, [
     'environment_id',
     'record_version',
@@ -39,14 +57,14 @@ export function releaseCatalog(value: unknown, id: string) {
     row.release_options,
     (value) => {
       const option = exact(value, [
-        ...releaseRefFields,
+        ...releaseRefFields[action],
         'state',
         'manifest_sha256',
         'commit',
         'target_os',
         'target_arch',
       ]);
-      const refs = releaseRefs(option);
+      const refs = releaseRefs(option, action);
       const state = one(option.state, releaseChoiceStates);
       const commit = nullable(option.commit, (oid) => hash(oid, [40, 64]));
       const os = nullable(option.target_os, (os) => text(os, 40));
@@ -74,26 +92,26 @@ export function releaseCatalog(value: unknown, id: string) {
 export type ReleaseSelection = ReturnType<typeof releaseCatalog>['options'][number];
 export type ReleaseVariables = ReturnType<typeof releaseVariables>;
 
-export function releaseVariables(input: Readonly<Record<string, unknown>>) {
+export function releaseVariables(
+  input: Readonly<Record<string, unknown>>,
+  action: ReleaseAction = 'RELEASE',
+) {
   return {
-    ...releaseRefs(input),
+    ...releaseRefs(input, action),
     expected_record_version: positiveInteger(input.expected_record_version),
     expected_assignment_generation: positiveInteger(input.expected_assignment_generation),
+    ...(action === 'ROLLBACK_CODE' && {
+      repair_of_operation_id: nullable(input.repair_of_operation_id, uuid),
+    }),
   };
 }
 
 export function releaseConfirmation(value: unknown) {
-  const input = exact(value, [
-    'action',
-    ...releaseRefFields,
-    ...releaseVersionFields,
-    'plan_id',
-    'plan_sha256',
-  ]);
-  if (input.action !== 'RELEASE') throw new TypeError('Invalid release action');
+  const action = one(object(value).action, releaseActions);
+  const input = exact(value, ['action', ...confirmationFields(action), 'plan_id', 'plan_sha256']);
   return {
-    action: 'RELEASE' as const,
-    ...releaseVariables(input),
+    action,
+    ...releaseVariables(input, action),
     plan_id: uuid(input.plan_id),
     plan_sha256: hash(input.plan_sha256),
   };
@@ -104,14 +122,19 @@ function attachmentRef(value: unknown) {
   return { id: uuid(ref.candidate_ref), manifest: hash(ref.sha256) };
 }
 
-export function releasePlan(value: unknown, expected: ReleaseVariables) {
+export function releasePlan(
+  value: unknown,
+  expected: ReleaseVariables,
+  action: ReleaseAction = 'RELEASE',
+) {
   const envelope = exact(value, ['plan_id', 'plan_sha256', 'expires_at', 'preview']);
   const preview = exact(envelope.preview, [
     'kind',
     'plan_id',
     'expires_at',
-    ...releaseRefFields,
-    ...releaseVersionFields,
+    ...confirmationFields(action),
+    ...(action === 'ROLLBACK_CODE' ? ['rollback_source_sha256'] : []),
+    ...(action === 'RECONFIGURE' ? ['target_access_sha256', 'fixed_release_ref'] : []),
     'configuration_record_sha256',
     'release_candidate_sha256',
     'release_manifest_sha256',
@@ -133,14 +156,16 @@ export function releasePlan(value: unknown, expected: ReleaseVariables) {
     'compatibility_mode',
     'completion',
   ]);
-  const variables = releaseVariables(preview);
+  const variables = releaseVariables(preview, action);
+  if (action === 'ROLLBACK_CODE') hash(preview.rollback_source_sha256);
+  if (action === 'RECONFIGURE') uuid(preview.fixed_release_ref);
   const id = uuid(envelope.plan_id);
   const expires = utc(envelope.expires_at);
   if (
-    preview.kind !== 'RELEASE' ||
+    preview.kind !== action ||
     preview.plan_id !== id ||
     preview.expires_at !== expires ||
-    JSON.stringify(variables) !== JSON.stringify(releaseVariables(expected))
+    JSON.stringify(variables) !== JSON.stringify(releaseVariables(expected, action))
   )
     throw new TypeError('Release plan changed');
   const current = exact(preview.source, [
@@ -172,7 +197,9 @@ export function releasePlan(value: unknown, expected: ReleaseVariables) {
   if (
     source.generation !== target.generation ||
     source.id === target.id ||
-    sourceAttachment.id === targetAttachment.id
+    sourceAttachment.id === targetAttachment.id ||
+    (action === 'RECONFIGURE' &&
+      (source.program !== target.program || source.configuration === target.configuration))
   )
     throw new TypeError('Release plan changes the data boundary');
   return {
@@ -182,11 +209,12 @@ export function releasePlan(value: unknown, expected: ReleaseVariables) {
     digest: hash(envelope.plan_sha256),
     source,
     target,
+    accessPolicy: action === 'RECONFIGURE' ? hash(preview.target_access_sha256) : null,
     controlRevision: positiveInteger(current.control_revision),
     observed: utc(preview.source_observed_at),
     manifest: hash(preview.release_manifest_sha256),
     compatibility: one(preview.compatibility_mode, ['SAME_SCHEMA'] as const),
-    recovery: one(preview.recovery_requirement, ['LOCAL_VERIFIED'] as const),
+    recovery: one(preview.recovery_requirement, ['LOCAL_VERIFIED', 'OFFHOST_VERIFIED'] as const),
     completion: one(preview.completion, ['OPEN_TARGET'] as const),
     verified: one(preview.verification_state, ['REQUIRED_EVIDENCE_RECORDED'] as const),
     capabilities: items(

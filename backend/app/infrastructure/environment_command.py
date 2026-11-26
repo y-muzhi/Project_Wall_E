@@ -1,8 +1,8 @@
 """Admitted Linux maintenance and read-only diagnostics."""
 
-from contextlib import ExitStack
 import json
 import os
+from contextlib import ExitStack
 
 from .database import SchemaMismatch
 from .environment_binding import EnvironmentBinding
@@ -41,6 +41,7 @@ def admission_inputs(args, active, program_sha, *, offline=False):
             installation.schema,
             installation.description['schema_manifest_sha256'],
             active.runtime_manifest_sha256,
+            source_root=installation.project,
         )
     except (OSError, SchemaMismatch, ValueError) as error:
         raise EnvironmentFailure('SCHEMA_RELEASE_MISMATCH') from error

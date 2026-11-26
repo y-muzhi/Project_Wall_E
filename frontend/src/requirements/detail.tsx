@@ -232,7 +232,7 @@ function LoadedDetail({
     geometry.right_tab,
   ]);
   return (
-    <DocumentCreationProvider owner={owner}>
+    <DocumentCreationProvider owner={owner} writeReason={writeReason}>
       <div className="detail-product" ref={product} data-requirement-id={actual.requirement.id}>
         <DetailFrame
           layout={regions.layout}

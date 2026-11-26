@@ -15,6 +15,7 @@ from .operation_contract import (
     DENIED,
     INVALID,
     MISSING,
+    RELEASE_ACTIONS,
     RESOURCE,
     UNAVAILABLE,
     VERSION,
@@ -27,6 +28,7 @@ from .operation_store import (
     may_read_operation,
     mutation,
     operation_result,
+    reject_historical_key,
     stored,
 )
 from .runtime_capacity import cancel_reservation, reserve_capacity
@@ -153,7 +155,12 @@ def cancel_unstarted_maintenance(connection, principal, operation):
 
 
 def apply_control(connection, catalog, principal, operation, command, key):
-    if command == 'CANCEL' and operation['action'] in ('RELEASE', 'BACKUP', 'RESTORE'):
+    if command == 'CANCEL' and operation['action'] in (
+        *RELEASE_ACTIONS,
+        'BACKUP',
+        'RESTORE',
+        'ARCHIVE',
+    ):
         return cancel_unstarted_maintenance(connection, principal, operation)
     if operation['action'] == 'BACKUP':
         from .backup_reconciliation import reconcile_backup
@@ -161,7 +168,7 @@ def apply_control(connection, catalog, principal, operation, command, key):
         require(command == 'RECONCILE', UNAVAILABLE)
         reconcile_backup(connection, catalog, principal, operation)
         return 'RECONCILED'
-    if operation['action'] == 'RELEASE':
+    if operation['action'] in RELEASE_ACTIONS:
         from .release_reconciliation import reconcile_release
 
         require(command == 'RECONCILE', UNAVAILABLE)
@@ -208,6 +215,7 @@ def control_operation(connection, lock, catalog, principal, key, raw):
             )
             return controlled_result(connection, operation, decoded(previous['receipt_json'])), True
         require(principal.role in ('DEVELOPER', 'MANAGER'), DENIED)
+        reject_historical_key(connection, catalog.scope['registry_generation'], key, control=True)
         require(operation['revision'] == raw['expected_revision'], VERSION)
         result = apply_control(connection, catalog, principal, operation, command, key)
         operation = original(connection, catalog, principal, raw['operation_id'])

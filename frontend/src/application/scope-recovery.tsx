@@ -30,20 +30,28 @@ export function ScopeRecovery({
     let alive = true;
     async function check(): Promise<void> {
       const route = router.getSnapshot();
-      const session =
+      const detail =
         route.route.kind === 'DETAIL' &&
         detailOwner?.getSnapshot().detail?.requirement.id === route.route.id
-          ? detailOwner.documents.getSnapshot().manual
+          ? detailOwner
           : null;
+      const session = detail?.documents.getSnapshot().manual;
       const draft = session ? await session.scopeRecoverySnapshot() : null;
       const creation = route.creation;
       const store = new CommandRecoveryStore({ scope });
       let pending: number | null;
       try {
+        const storedCommands = await store.list();
+        const regions = detail?.regions;
+        const directoryPhase = regions?.directory.getSnapshot().phase;
+        const historyRestore = detail?.documents.getSnapshot().restore;
         pending =
-          (await store.list()).length +
+          storedCommands.length +
           (draft?.pending ?? 0) +
-          Number(!!creation && (creation.state.unknown || creation.state.busy));
+          Number(!!creation && (creation.state.unknown || creation.state.busy)) +
+          Number(directoryPhase === 'SUBMITTING' || directoryPhase === 'UNKNOWN') +
+          (regions?.header.pendingScopeOperations ?? 0) +
+          Number(historyRestore?.awaitingOriginalResult === true);
       } catch {
         pending = null;
       } finally {

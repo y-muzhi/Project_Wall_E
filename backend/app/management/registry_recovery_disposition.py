@@ -31,6 +31,7 @@ from .registry_dispatch import (
     require_current_dispatch_anchor,
 )
 from .registry_recovery_backup import completed_backup_evidence
+from .registry_recovery_capacity import settle_capacity
 from .registry_recovery_history import (
     historical_snapshot,
     retained_snapshot_metadata,
@@ -39,18 +40,34 @@ from .registry_recovery_history import (
 )
 from .registry_recovery_outcome import (
     COLUMNS,
+    OPENED_DEPLOYMENT,
     ORIGINAL_STATES,
+    RELEASE_RETIRED,
+    RESERVED_START,
+    RESTORE_RETIRED,
+    STOP_COMPLETED,
+    UNSTARTED_OPERATION,
     UNVERIFIED,
     add_outcome,
+    disposition_schema,
     outcome_for_operation,
 )
+from .registry_recovery_release_retirement import retired_release_evidence
 from .registry_recovery_reobserve import original_catalog
+from .registry_recovery_restore_retirement import retired_restore_evidence
+from .registry_recovery_stop import (
+    completed_stop_evidence,
+    settle_stop_capacity,
+    stop_capacity_evidence,
+)
 from .registry_recovery_undispatched import (
     ORIGINAL_FIELDS,
     UNDISPATCHED,
+    reserved_start_capacity,
+    reserved_start_evidence,
     undispatched_start_evidence,
 )
-from .registry_schema import RECOVERY_RESOLUTION_SCHEMA_VERSION
+from .registry_recovery_unstarted import unstarted_operation_evidence
 from .registry_snapshot import snapshot_directory
 
 POLICY = 'registry-recovery-disposition-policy.v1.json'
@@ -58,20 +75,17 @@ RECEIPTS = 'registry-recovery-dispositions'
 RECORDED = 'MANAGEMENT_REGISTRY_RECOVERY_DISPOSITION_RECORDED'
 CURRENT_FIELDS = ('manager_id', 'host_id', 'registry_generation', 'registry_anchor_sha256')
 PINS = ('selection_receipt_sha256', 'source_snapshot_sha256', 'source_catalog_sha256')
-FIELDS = (
+SOURCE_FIELDS = (
     *CURRENT_FIELDS,
     'recovery_operation_id',
     *ORIGINAL_FIELDS,
     *PINS,
     'source_catalog_directory_identity',
-    'disposition',
 )
+FIELDS = (*SOURCE_FIELDS, 'disposition')
 
 
-def disposition_policy(installation, args):
-    record = read_policy(
-        args.registry_disposition_policy, args.registry_disposition_policy_sha256, POLICY, FIELDS
-    )
+def validate_source_scope(installation, args, record):
     require(
         record['manager_id'] == installation.manager_id
         and record['host_id'] == installation.host_id
@@ -85,13 +99,24 @@ def disposition_policy(installation, args):
         and all(sha_value(record[key]) for key in (*PINS, 'source_intent_sha256'))
         and record['source_catalog_sha256'] == args.catalog_sha256
         and type(record['source_revision']) is int
-        and 1 <= record['source_revision'] <= MAX_REVISION
-        and type(record['disposition']) is str
-        and record['disposition'] in ORIGINAL_STATES,
+        and 1 <= record['source_revision'] <= MAX_REVISION,
         UNVERIFIED,
     )
     identity_record(record['source_catalog_directory_identity'], UNVERIFIED)
     return record
+
+
+def disposition_policy(installation, args):
+    record = read_policy(
+        args.registry_disposition_policy, args.registry_disposition_policy_sha256, POLICY, FIELDS
+    )
+    require(
+        type(record['disposition']) is str
+        and record['disposition'] in ORIGINAL_STATES
+        and record['disposition'] != OPENED_DEPLOYMENT,
+        UNVERIFIED,
+    )
+    return validate_source_scope(installation, args, record)
 
 
 def original_disposition_source(native, current, root, args, policy):
@@ -133,6 +158,7 @@ def require_no_start_publication(catalog, evidence):
                     continue
                 raise EnvironmentFailure(UNVERIFIED)
     except FileNotFoundError:
+        require(evidence['disposition'] != RESERVED_START, UNVERIFIED)
         return
     try:
         lease = installed_record(observations / f'start-claim-{evidence["environment_id"]}.v1.json')
@@ -180,10 +206,22 @@ def receipt_bytes(directory, identifier, installation):
 
 
 def disposition_evidence(connection, catalog, policy):
+    if policy['disposition'] == UNSTARTED_OPERATION:
+        return unstarted_operation_evidence(connection, catalog, policy)
     if policy['disposition'] == UNDISPATCHED:
         evidence = undispatched_start_evidence(connection, policy)
         require_no_start_publication(catalog, evidence)
         return evidence
+    if policy['disposition'] == RESERVED_START:
+        evidence = reserved_start_evidence(connection, catalog, policy)
+        require_no_start_publication(catalog, evidence)
+        return evidence
+    if policy['disposition'] == STOP_COMPLETED:
+        return completed_stop_evidence(connection, catalog, policy)
+    if policy['disposition'] == RESTORE_RETIRED:
+        return retired_restore_evidence(connection, catalog, policy)
+    if policy['disposition'] == RELEASE_RETIRED:
+        return retired_release_evidence(connection, catalog, policy)
     return completed_backup_evidence(connection, catalog, policy)
 
 
@@ -192,7 +230,27 @@ def record_disposition(connection, lock, directory, current, catalog, policy, ex
     previous = receipt_bytes(directory, identifier, current)
     with mutation(connection, lock):
         outcome = outcome_for_operation(connection, identifier)
-        require(disposition_evidence(connection, catalog, policy) == evidence, UNVERIFIED)
+        bound = disposition_evidence(connection, catalog, policy)
+        if expected['disposition'] == STOP_COMPLETED:
+            require({**bound, 'capacity': evidence['capacity']} == evidence, UNVERIFIED)
+            settle_stop_capacity(connection, evidence, recorded=outcome is not None)
+        elif expected['disposition'] == RESERVED_START:
+            require({**bound, 'capacity': evidence['capacity']} == evidence, UNVERIFIED)
+            released = {
+                'recovery_operation_id': policy['recovery_operation_id'],
+                'disposition': RESERVED_START,
+                'reason_code': 'START_NOT_DISPATCHED',
+            }
+            settle_capacity(
+                connection,
+                identifier,
+                evidence['environment_id'],
+                evidence['capacity'],
+                released,
+                recorded=outcome is not None,
+            )
+        else:
+            require(bound == evidence, UNVERIFIED)
         if outcome is None:
             require(previous is None, UNVERIFIED)
             outcome = {**expected, 'recorded_at': now()}
@@ -221,6 +279,10 @@ def settle_registry_recovery_disposition(native, installation, args):
         with historical_snapshot(native, source, selected, args.sha256) as (connection, _, pin):
             require(pin == policy['source_snapshot_sha256'], UNVERIFIED)
             evidence = disposition_evidence(connection, catalog, policy)
+            if evidence['disposition'] == STOP_COMPLETED:
+                evidence['capacity'] = stop_capacity_evidence(connection, evidence)
+            elif evidence['disposition'] == RESERVED_START:
+                evidence['capacity'] = reserved_start_capacity(connection, evidence)
         outcome = disposition_outcome(
             installation, pin, args.registry_disposition_policy_sha256, policy, evidence
         )
@@ -228,7 +290,11 @@ def settle_registry_recovery_disposition(native, installation, args):
             verified_locked_registry(native, installation, lock, read_only=False) as connection,
             installation.private_directory(native, 'proof') as proof,
         ):
-            require(registry_version(connection) == RECOVERY_RESOLUTION_SCHEMA_VERSION, UNVERIFIED)
+            require(
+                registry_version(connection)
+                >= disposition_schema(evidence['disposition'], action=evidence.get('action')),
+                UNVERIFIED,
+            )
             try:
                 os.mkdir(RECEIPTS, mode=0o700, dir_fd=proof)
             except FileExistsError:

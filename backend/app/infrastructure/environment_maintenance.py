@@ -1,9 +1,9 @@
 """Apply or release the original maintenance hold on a stopped ordinary installation."""
 
-from contextlib import ExitStack
 import os
-from pathlib import Path
 import sqlite3
+from contextlib import ExitStack
+from pathlib import Path
 from types import SimpleNamespace
 
 from .environment_admission import read_start
@@ -16,10 +16,11 @@ from .environment_control import (
     normal_stop,
     read_control,
     read_maintenance_intent,
+    release_transition_name,
 )
 from .environment_files import (
-    EnvironmentFailure,
     MAX_REVISION,
+    EnvironmentFailure,
     absolute,
     canonical,
     decode,
@@ -172,7 +173,13 @@ def observe(fd, installation, control, plan, intent):
 
 
 def verify_stopped(native, installation, release, resources, fd, control, lock):
-    require(not os.path.lexists(installation.path('runtime') / 'walle.sock'), STALE)
+    require(
+        not any(
+            os.path.lexists(installation.path('runtime') / name)
+            for name in ('walle.sock', 'walle-check.sock')
+        ),
+        STALE,
+    )
     try:
         raw = read_start(fd, installation, control['operation_id'])
     except FileNotFoundError:
@@ -198,6 +205,29 @@ def verify_stopped(native, installation, release, resources, fd, control, lock):
     database.check_recovery()
 
 
+def verify_source(native, installation, release, resources, fd, control, lock, plan):
+    verify_stopped(native, installation, release, resources, fd, control, lock)
+    expected_data = plan.get('expected_database_identity_sha256')
+    if expected_data is not None:
+        with installation.directory(native, 'data') as data_fd:
+            current_database = database_identity(installation, data_fd)
+        require(
+            current_database is not None and digest(canonical(current_database)) == expected_data,
+            STALE,
+        )
+    installation.check_hold()
+    lock.assert_owned()
+    require(read_control(fd, installation) == control, STALE)
+
+
+def require_before_selection(fd, operation):
+    try:
+        os.stat(release_transition_name(operation), dir_fd=fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    raise EnvironmentFailure(UNKNOWN)
+
+
 def select_maintenance(native, installation, release, plan, plan_sha, action):
     operation = plan['operation_id']
     with ExitStack() as resources:
@@ -213,50 +243,48 @@ def select_maintenance(native, installation, release, plan, plan_sha, action):
             if intent is not None:
                 request_name, _, record = cancellation_facts(intent)
                 require(not write_fact(fd, installation, request_name, record), UNKNOWN)
-            verify_stopped(native, installation, release, resources, fd, control, lock)
-            expected_data = plan.get('expected_database_identity_sha256')
-            if expected_data is not None:
-                with installation.directory(native, 'data') as data_fd:
-                    current_database = database_identity(installation, data_fd)
-                require(
-                    current_database is not None
-                    and digest(canonical(current_database)) == expected_data,
-                    STALE,
-                )
-            installation.check_hold()
-            lock.assert_owned()
-            require(read_control(fd, installation) == control, STALE)
-            if intent is None:
-                intent = {
-                    'format_version': 1,
-                    'operation_id': operation,
-                    'plan_sha256': plan_sha,
-                    'before_sha256': plan['expected_control_sha256'],
-                    'before': control,
-                }
-                persisted_write(fd, maintenance_name(operation), canonical(intent), mode=0o440)
-            desired = maintained_control(control, operation, plan_sha)
-            persisted_write(fd, CONTROL_NAME, canonical(desired), mode=0o640, replace=True)
-            control = read_control(fd, installation)
-            require(control == desired, UNKNOWN)
-            status = ACTIVE
-        elif action == 'cancel':
-            require(status in (ACTIVE, CANCELLED), UNKNOWN)
-            if status == ACTIVE:
-                require(not os.path.lexists(installation.path('runtime') / 'walle.sock'), STALE)
-                installation.check_hold()
-                request_name, _, record = cancellation_facts(intent)
-                write_fact(fd, installation, request_name, record, create=True)
+            verify_source(native, installation, release, resources, fd, control, lock, plan)
+            with installation.host_admission():
                 lock.assert_owned()
                 require(read_control(fd, installation) == control, STALE)
-                desired = released_control(intent['before'])
+                if intent is None:
+                    intent = {
+                        'format_version': 1,
+                        'operation_id': operation,
+                        'plan_sha256': plan_sha,
+                        'before_sha256': plan['expected_control_sha256'],
+                        'before': control,
+                    }
+                    persisted_write(fd, maintenance_name(operation), canonical(intent), mode=0o440)
+                lock.assert_owned()
+                require(read_control(fd, installation) == control, STALE)
+                desired = maintained_control(control, operation, plan_sha)
                 persisted_write(fd, CONTROL_NAME, canonical(desired), mode=0o640, replace=True)
                 control = read_control(fd, installation)
                 require(control == desired, UNKNOWN)
-                status = CANCELLED
-            if control == released_control(intent['before']):
-                _, proof_name, record = cancellation_facts(intent)
-                write_fact(fd, installation, proof_name, record, create=True)
+                status = ACTIVE
+        elif action == 'cancel':
+            require(status in (ACTIVE, CANCELLED), UNKNOWN)
+            if status == ACTIVE:
+                require_before_selection(fd, operation)
+                verify_source(native, installation, release, resources, fd, control, lock, plan)
+            desired = released_control(intent['before'])
+            if status == ACTIVE or control == desired:
+                with installation.host_admission():
+                    lock.assert_owned()
+                    require(read_control(fd, installation) == control, STALE)
+                    request_name, proof_name, record = cancellation_facts(intent)
+                    if status == ACTIVE:
+                        write_fact(fd, installation, request_name, record, create=True)
+                        lock.assert_owned()
+                        require(read_control(fd, installation) == control, STALE)
+                        persisted_write(
+                            fd, CONTROL_NAME, canonical(desired), mode=0o640, replace=True
+                        )
+                        control = read_control(fd, installation)
+                        require(control == desired, UNKNOWN)
+                        status = CANCELLED
+                    write_fact(fd, installation, proof_name, record, create=True)
 
         if status == ACTIVE:
             effective_revision = intent['before']['control_revision'] + 1
@@ -274,13 +302,12 @@ def select_maintenance(native, installation, release, plan, plan_sha, action):
 def maintenance_authorization(plan, policy_sha, installation):
     if 'restore_plan' not in plan:
         return policy_sha
-    from .environment_restore_preflight import POLICY as RESTORE_PLAN
-    from .environment_restore_preflight import restore_authorization, restore_plan
+    from .environment_restore_preflight import POLICIES, restore_authorization, restore_plan
 
     reference = exact(plan['restore_plan'], ('path', 'sha256'), INVALID)
     path = absolute(reference['path'], INVALID)
     require(
-        path.name == RESTORE_PLAN
+        path.name in POLICIES
         and sha_value(reference['sha256'])
         and 'expected_database_identity_sha256' in plan,
         INVALID,
@@ -308,6 +335,7 @@ def run_maintenance(native, active, args, entry):
         SimpleNamespace(anchor=args.anchor, anchor_sha256=args.anchor_sha256, project=program),
         active,
         program_sha,
+        offline=args.maintenance_action == 'observe',
     )
     require('recovery_replica' not in installation.description, 'RECOVERY_REPLICA_READ_ONLY')
     installation.check_identity(maintenance=True)

@@ -1,8 +1,8 @@
 """Append-only management receipts and atomic environment registration."""
 
+import sqlite3
 from contextlib import contextmanager
 from pathlib import PurePosixPath
-import sqlite3
 from uuid import uuid4
 
 from backend.app.infrastructure.environment_files import (
@@ -17,13 +17,20 @@ from backend.app.infrastructure.environment_files import (
 )
 from backend.app.infrastructure.environment_installation import identity_record, uuid_value
 
-from .attachment_observation import PATH_SCOPE, now, observe_for_attach, require_fresh
+from .attachment_observation import (
+    ATTACHMENT_RESOURCE_KINDS,
+    PATH_SCOPE,
+    now,
+    observe_for_attach,
+    require_fresh,
+)
 from .delivery_evidence import prepare_delivery
 from .operation_contract import (
     CONFLICT,
     DENIED,
     INVALID,
     MISSING,
+    RELEASE_ACTIONS,
     RESOURCE,
     UNAVAILABLE,
     VERSION,
@@ -31,8 +38,9 @@ from .operation_contract import (
     delivery_intent,
     operation_request,
 )
-from .registry import REGISTRY_ERROR, read_registry, verified_registry
+from .registry import REGISTRY_ERROR, read_registry, registry_version, verified_registry
 from .registry_recovery_outcome import pending_operation_clause
+from .registry_schema import SCHEMA_VERSION
 
 KEY_CONFLICT = 'MANAGEMENT_KEY_CONFLICT'
 MANAGEMENT_NOT_READY = 'MANAGEMENT_NOT_READY'
@@ -68,6 +76,25 @@ def operation_by_key(connection, generation, request_key):
         'SELECT * FROM management_operations WHERE registry_generation = ? AND request_key = ?',
         (generation, request_key),
     ).fetchone()
+
+
+def reject_historical_key(connection, generation, key, *, control=False):
+    if registry_version(connection) == SCHEMA_VERSION:
+        return
+    prior_generations = (
+        'SELECT registry_generation FROM registry_generations WHERE registry_generation != ?'
+    )
+    if control:
+        query = (
+            'SELECT 1 FROM management_controls '
+            f'WHERE registry_generation IN ({prior_generations}) AND control_key = ? LIMIT 1'
+        )
+    else:
+        query = (
+            'SELECT 1 FROM management_operations '
+            f'WHERE registry_generation IN ({prior_generations}) AND request_key = ? LIMIT 1'
+        )
+    require(connection.execute(query, (generation, key)).fetchone() is None, KEY_CONFLICT)
 
 
 def environment_row(connection, environment_id):
@@ -277,10 +304,8 @@ def prepare_attachment(catalog, principal, intent, runtime_sha):
     return candidate, proof
 
 
-def save_attachment(connection, generation, principal, key, intent, candidate, proof):
-    require_fresh(proof)
+def attachment_claims(connection, intent, candidate, proof):
     environment_id = proof['environment_id']
-    require_no_conflicting_action(connection, environment_id)
     previous = environment_row(connection, environment_id)
     included = intent.get('environment_id')
     if included is None:
@@ -294,15 +319,41 @@ def save_attachment(connection, generation, principal, key, intent, candidate, p
             and previous['configuration_sha256'] == proof['configuration_sha256']
             and previous['task_id'] == candidate['task_id']
             and previous['writer_principal'] == candidate['owner_principal']
-            and previous['purpose'] == proof['purpose'],
+            and previous['purpose'] == proof['purpose']
+            and previous['host_id'] == proof['host_id']
+            and previous['program_source'] == proof['program_sha256']
+            and previous['profile_ref'] == candidate['profile_ref'],
             VERSION,
         )
+        work = decoded(previous['work_package_json'])
+        require(
+            all(
+                work[field] == proof[field]
+                for field in ('repository_ref', 'branch', 'data_generation', 'deployment_id')
+            ),
+            RESOURCE,
+        )
+        require(
+            type(proof['claims']) is list
+            and len(proof['claims']) == len(ATTACHMENT_RESOURCE_KINDS)
+            and {claim['kind'] for claim in proof['claims']} == ATTACHMENT_RESOURCE_KINDS,
+            RESOURCE,
+        )
+    fresh = unclaimed(connection, environment_id, proof['claims'])
+    require(previous is None or not fresh, RESOURCE)
+    return previous, fresh
+
+
+def save_attachment(connection, generation, principal, key, intent, candidate, proof):
+    require_fresh(proof)
+    environment_id = proof['environment_id']
+    require_no_conflicting_action(connection, environment_id)
+    previous, claims = attachment_claims(connection, intent, candidate, proof)
     other_task = connection.execute(
         'SELECT 1 FROM managed_environments WHERE task_id = ? AND environment_id <> ?',
         (candidate['task_id'], environment_id),
     ).fetchone()
     require(other_task is None, CONFLICT)
-    claims = unclaimed(connection, environment_id, proof['claims'])
     attachment = {
         key: candidate[key] for key in ('goal', 'scope', 'checks', 'owner_label', 'baseline_commit')
     }
@@ -516,7 +567,7 @@ def execute_operation(native, installation, catalog, request, runtime_sha):
         attach_intent(raw)
     elif action == 'REGISTER_DELIVERY':
         delivery_intent(raw)
-    elif action == 'RELEASE':
+    elif action in RELEASE_ACTIONS:
         from .release_operations import release_input
 
         release_input(raw, confirmation=True)
@@ -530,6 +581,11 @@ def execute_operation(native, installation, catalog, request, runtime_sha):
         from .restore_operations import restore_input
 
         restore_input(raw, confirmed=True)
+        require(principal.role == 'MANAGER', DENIED)
+    elif action == 'ARCHIVE':
+        from .environment_archive import archive_intent
+
+        archive_intent(raw)
         require(principal.role == 'MANAGER', DENIED)
     elif action in ('START', 'STOP'):
         from .lifecycle_operations import lifecycle_intent
@@ -559,7 +615,8 @@ def execute_operation(native, installation, catalog, request, runtime_sha):
             return result, True
         if action == 'LOOKUP':
             raise EnvironmentFailure(MISSING)
-        if action == 'RELEASE':
+        reject_historical_key(connection, generation, key)
+        if action in RELEASE_ACTIONS:
             from .release_operations import accept_release
 
             return accept_release(connection, lock, catalog, principal, key, raw), False
@@ -573,6 +630,10 @@ def execute_operation(native, installation, catalog, request, runtime_sha):
             return accept_restore(
                 connection, lock, catalog, principal, key, raw, runtime_sha
             ), False
+        if action == 'ARCHIVE':
+            from .environment_archive import accept_archive
+
+            return accept_archive(connection, lock, catalog, principal, key, raw), False
         if action in ('START', 'STOP'):
             from .lifecycle_operations import accept_runtime
 

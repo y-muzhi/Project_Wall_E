@@ -1,15 +1,15 @@
 """Observe the actual local HTTPS gateway while the selected rollout remains closed."""
 
-from base64 import b64encode
-from contextlib import closing
 import fcntl
-from http.client import HTTPConnection
 import os
-from pathlib import Path
 import re
 import socket
 import ssl
 import stat
+from base64 import b64encode
+from contextlib import closing
+from http.client import HTTPConnection
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
@@ -32,11 +32,13 @@ from .environment_files import (
     relative,
     require,
 )
-from .environment_installation import ACCESS_NAME
+from .environment_installation import gateway_verifier_names, read_access_policy
 from .environment_lock import NativeEnvironmentFiles
 from .environment_recovery_installation import checked_ref
 from .environment_release_gateway import (
     RECEIPT as STAGE,
+)
+from .environment_release_gateway import (
     load_site,
     same_previous_installation,
     static_entries,
@@ -124,7 +126,8 @@ def gateway_process(pid, uid, executable, config, port):
 
 
 def https_get(host, port, context, route, credential=None):
-    headers = {'Host': f'{host}:{port}', 'Accept-Encoding': 'identity', 'Connection': 'close'}
+    authority = host if port == 443 else f'{host}:{port}'
+    headers = {'Host': authority, 'Accept-Encoding': 'identity', 'Connection': 'close'}
     if credential is not None:
         headers['Authorization'] = 'Basic ' + credential
     with closing(HTTPConnection(host, port, timeout=6)) as client:
@@ -181,13 +184,8 @@ def credentials_pair(reference, access):
     actual, contents = snapshot_file(path, 0o400, capture=True)
     require(actual == expected, INVALID)
     info = exact(decode(contents, INVALID), ('name', 'password'), INVALID)
-    permitted = {
-        principal['principal_id']
-        for principal in access['principals']
-        if principal['permission'] == 'READ_ONLY' and principal['client_kind'] == 'AUTOMATION'
-    }
     require(
-        info['name'] in permitted
+        info['name'] in gateway_verifier_names(access)
         and type(info['password']) is str
         and 8 <= len(info['password']) <= 160
         and info['password'].isascii()
@@ -276,11 +274,11 @@ def observe_gateway(args, entry):
         ),
         INVALID,
     )
-    access = decode(read_protected(target.anchor.parent / ACCESS_NAME), UNVERIFIED)
+    access = read_access_policy(target)
     credential = credentials_pair(plan['credential'], access)
     origin = access['public_origin']
     server = urlsplit(origin)
-    require(server.scheme == 'https' and server.port == 9443, INVALID)
+    port = server.port or 443
     ca_path = exact_file(plan['tls_ca'], modes=(0o444,), name='root.crt')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.load_verify_locations(cadata=read_protected(ca_path).decode('ascii'))
@@ -288,18 +286,16 @@ def observe_gateway(args, entry):
     before = selected_state(target, native, stage)
     _, transition, _ = before
     require(same_previous_installation(previous, transition), INVALID)
-    process = gateway_process(
-        plan['gateway_pid'], plan['gateway_uid'], executable, config, server.port
-    )
+    process = gateway_process(plan['gateway_pid'], plan['gateway_uid'], executable, config, port)
 
     def fetch(route, *, authenticated=True):
         return https_get(
-            server.hostname, server.port, context, route, credential if authenticated else None
+            server.hostname, port, context, route, credential if authenticated else None
         )
 
     check_gateway_wire(fetch, target, origin, current, original, new_asset, previous_asset)
     require(
-        gateway_process(plan['gateway_pid'], plan['gateway_uid'], executable, config, server.port)
+        gateway_process(plan['gateway_pid'], plan['gateway_uid'], executable, config, port)
         == process
         and digest(read_protected(config)) == stage['gateway_configuration_sha256']
         and selected_state(target, native, stage) == before,

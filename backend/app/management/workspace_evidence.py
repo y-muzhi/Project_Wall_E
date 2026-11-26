@@ -1,13 +1,13 @@
 """Verify fixed Git worktree and selected commit facts for external integration."""
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from hashlib import sha256
 import os
-from pathlib import Path
 import selectors
 import stat
 import subprocess
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from hashlib import sha256
+from pathlib import Path
 from time import monotonic
 
 from backend.app.infrastructure.content_manifest import git_oid
@@ -266,7 +266,7 @@ def worktree_link(repo, workspace):
         raise EnvironmentFailure(CHECKOUT_ERROR) from error
 
 
-def source_evidence(repo):
+def source_evidence(repo, *, ownership_only=False):
     require(os.geteuid() == repo.uid and repo.uid != 0, INPUT_ERROR)
     with protected_directory(repo.git.parent):
         git_meta = repo.git.stat(follow_symlinks=False)
@@ -337,25 +337,24 @@ def source_evidence(repo):
             row is not None
             and not (row.bare or row.detached or row.prunable)
             and row.branch_ref == item.branch
-            and branches.get(item.branch) == item.expected_head
-            and row.head_oid == item.expected_head,
+            and branches.get(item.branch) == row.head_oid,
             CHECKOUT_ERROR,
         )
-        git_oid(item.commit, config_facts.object_format)
-        require(git('cat-file', '-t', item.commit) == b'commit\n', CHECKOUT_ERROR)
-        tree = git('rev-parse', '--verify', item.commit + '^{tree}').strip().decode('ascii')
-        tree = git_oid(tree, config_facts.object_format)
-        require(git('cat-file', '-t', tree) == b'tree\n', CHECKOUT_ERROR)
-        records.append(
-            {
-                'environment_id': item.environment_id,
-                'purpose': item.purpose,
-                'branch': item.branch,
-                'head': item.expected_head,
-                'commit': item.commit,
-                'tree': tree,
-            }
-        )
+        record = {
+            'environment_id': item.environment_id,
+            'purpose': item.purpose,
+            'branch': item.branch,
+            'head': row.head_oid,
+        }
+        if not ownership_only:
+            require(row.head_oid == item.expected_head, CHECKOUT_ERROR)
+            git_oid(item.commit, config_facts.object_format)
+            require(git('cat-file', '-t', item.commit) == b'commit\n', CHECKOUT_ERROR)
+            tree = git('rev-parse', '--verify', item.commit + '^{tree}').strip().decode('ascii')
+            tree = git_oid(tree, config_facts.object_format)
+            require(git('cat-file', '-t', tree) == b'tree\n', CHECKOUT_ERROR)
+            record.update(commit=item.commit, tree=tree)
+        records.append(record)
     check_directory(repo.common, repo.uid, repo.identity, INPUT_CHANGED)
     require(
         original_links == [worktree_link(repo, item) for item in repo.worktrees]
@@ -375,5 +374,5 @@ def source_evidence(repo):
     return {
         **captured,
         'evidence_sha256': digest(canonical(captured)),
-        'observed_at': utc_milliseconds(datetime.now(timezone.utc)),
+        'observed_at': utc_milliseconds(datetime.now(UTC)),
     }

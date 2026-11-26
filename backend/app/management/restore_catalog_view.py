@@ -12,18 +12,19 @@ from .operation_contract import DENIED, INVALID, path_reference
 from .operation_store import conflicting_action, decoded
 from .release_maintenance_view import confirmed_current_control
 from .release_operations import no_live_reservation
-from .restore_operations import operation_exists, registered_restore
+from .restore_operations import (
+    checked_restore_point,
+    operation_exists,
+    registered_restore,
+    restore_recovery_policy,
+)
 
 
 def eligible_options(connection, catalog, row, current):
     attachment = decoded(row['configuration_ref'])
-    _, points = managed_backup_history(connection, catalog, row['environment_id'], now())
-    verified = {
-        item['backup_id']: item
-        for item in points
-        if item['verification_status'] == 'LOCAL_VERIFIED'
-        and item['source_environment_id'] == row['environment_id']
-    }
+    ceiling = now()
+    _, points = managed_backup_history(connection, catalog, row['environment_id'], ceiling)
+    backups = {item['backup_id']: item for item in points}
     options = []
     for reference in catalog.restore_configurations:
         try:
@@ -36,11 +37,11 @@ def eligible_options(connection, catalog, row, current):
                 continue
             template_path, pin = path_reference(record['preflight_template'])
             template = restore_plan(template_path, pin)
-            point = verified.get(template['selected']['backup_id'])
+            restore_recovery_policy(catalog, record['recovery_policy'], template)
+            point = backups.get(template['selected']['backup_id'])
+            checked_restore_point(point, row['environment_id'], template, ceiling)
             if (
-                point is None
-                or point['cutoff_at'] != template['accepted_backup_cutoff_at']
-                or template['source_data_generation'] != current['data_generation']
+                template['source_data_generation'] != current['data_generation']
                 or template['source_deployment_id'] != current['deployment_id']
                 or template['source_configuration_sha256'] != current['configuration_sha256']
                 or template['source_control_revision'] != current['control_revision'] + 1

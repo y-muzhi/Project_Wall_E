@@ -23,6 +23,7 @@ import {
   maintenanceDetails,
   releaseCatalog,
   releasePlan,
+  type ReleaseAction,
   type ReleaseVariables,
 } from './release-model.ts';
 
@@ -74,21 +75,56 @@ function originalRecoveryDisposition(
     kind === 'UNDISPATCHED_CANCELLED' &&
     original.action === 'START' &&
     original.state === 'WAITING_CAPACITY';
+  const unstartedOperation =
+    kind === 'UNSTARTED_OPERATION_CANCELLED' &&
+    ['ARCHIVE', 'RELEASE', 'ROLLBACK_CODE', 'RECONFIGURE', 'BACKUP', 'RESTORE'].includes(
+      original.action,
+    ) &&
+    original.state === 'ACCEPTED';
   const completedBackup =
     kind === 'BACKUP_COMPLETED' &&
     original.action === 'BACKUP' &&
     (original.state === 'RUNNING' ||
       original.state === 'UNKNOWN' ||
       original.state === 'SUCCEEDED');
+  const confirmedStop =
+    kind === 'STOP_COMPLETED' &&
+    original.action === 'STOP' &&
+    (original.state === 'SUCCEEDED' ||
+      original.state === 'ACCEPTED' ||
+      original.state === 'UNKNOWN');
+  const retiredRestore =
+    kind === 'RESTORE_RETIRED' &&
+    original.action === 'RESTORE' &&
+    (original.state === 'RUNNING' || original.state === 'CANCELLED');
+  const retiredRelease =
+    kind === 'RELEASE_RETIRED' &&
+    ['RELEASE', 'ROLLBACK_CODE', 'RECONFIGURE'].includes(original.action) &&
+    (original.state === 'RUNNING' || original.state === 'CANCELLED');
+  const adoptedDeployment =
+    kind === 'OPENED_DEPLOYMENT_ADOPTED' &&
+    ['RELEASE', 'ROLLBACK_CODE', 'RECONFIGURE', 'RESTORE'].includes(original.action) &&
+    original.state === 'RUNNING';
+  const undispatchedReservation =
+    kind === 'UNDISPATCHED_RESERVED_CANCELLED' &&
+    original.action === 'START' &&
+    original.state === 'ACCEPTED';
   if (
     uuid(record.operation_id) !== original.id ||
     uuid(record.source_registry_generation) !== wire.source ||
     positiveInteger(record.source_revision) !== original.revision ||
     uuid(record.recorded_registry_generation) === wire.source ||
-    (!undispatched && !completedBackup)
+    (!undispatched &&
+      !unstartedOperation &&
+      !completedBackup &&
+      !confirmedStop &&
+      !retiredRestore &&
+      !retiredRelease &&
+      !adoptedDeployment &&
+      !undispatchedReservation)
   )
     throw new TypeError('Original recovery disposition differs from the preserved operation');
-  return { recordedAt: utc(record.recorded_at), kind };
+  return { recordedAt: utc(record.recorded_at), kind } as const;
 }
 
 export class ManagementReadError extends Error {
@@ -397,26 +433,51 @@ export class ManagementClient {
     return restorePlan(envelope(await body(response, 65536), response.status, [201]), variables);
   }
 
-  releaseOptions(id: string, signal: AbortSignal) {
+  releaseOptions(id: string, signal: AbortSignal, action: ReleaseAction = 'RELEASE') {
     const target = uuid(id);
     return this.read(
-      '/catalog' + this.parameters({ environment_id: target }),
-      (value) => releaseCatalog(value, target),
+      '/catalog' +
+        this.parameters({
+          environment_id: target,
+          ...(action !== 'RELEASE' && { kind: action }),
+        }),
+      (value) => releaseCatalog(value, target, action),
       signal,
     );
   }
 
-  async planRelease(original: Session, variables: ReleaseVariables, signal: AbortSignal) {
+  async planRelease(
+    original: Session,
+    variables: ReleaseVariables,
+    signal: AbortSignal,
+    action: ReleaseAction = 'RELEASE',
+  ) {
     this.requireWriteSession(original);
     const response = await this.request(root + '/plans', signal, original, {
-      body: JSON.stringify({ kind: 'RELEASE', ...variables }),
+      body: JSON.stringify({ kind: action, ...variables }),
     });
     await this.checkResponse(response, original, signal);
-    return releasePlan(envelope(await body(response, 65536), response.status, [201]), variables);
+    return releasePlan(
+      envelope(await body(response, 65536), response.status, [201]),
+      variables,
+      action,
+    );
   }
 
-  catalog(signal: AbortSignal) {
-    return this.read('/catalog', candidateCatalog, signal);
+  catalog(signal: AbortSignal, archivedEnvironment?: string) {
+    if (!archivedEnvironment) return this.read('/catalog', candidateCatalog, signal);
+    const target = uuid(archivedEnvironment);
+    const filters = new URLSearchParams({ environment_id: target, kind: 'ATTACH' });
+    return this.read(
+      '/catalog?' + filters.toString(),
+      (value) => {
+        const candidates = candidateCatalog(value);
+        if (candidates.length !== 1 || candidates[0]?.environment !== target)
+          throw new TypeError('Archived attachment belongs to a different environment');
+        return candidates;
+      },
+      signal,
+    );
   }
 
   private parameters(filter: Filter): string {
