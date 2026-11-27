@@ -30,7 +30,10 @@ from .environment_initialize import (
 )
 from .environment_installation import Installation, database_identity
 from .environment_lock import EnvironmentLock
+from .environment_ordinary import check_external_effects
 from .environment_restore import archived_facts, reopen_archive
+from .environment_result_archive import FORMATION_DISCUSS_CAPABILITY
+from .schema_v22_release import DocumentAiSchemaRelease
 
 UNVERIFIED = 'BACKUP_COVERAGE_UNVERIFIED'
 STALE = 'BACKUP_COVERAGE_SOURCE_CHANGED'
@@ -74,21 +77,73 @@ ORDINARY_RECEIPT_CAPABILITIES = (
 )
 
 
-def require_supported_tables(connection):
+# The fixed document AI layout stores these records entirely in the database.
+# Its separate counting audit is retained through the existing asset capture.
+DOCUMENT_AI_INLINE_TABLES = frozenset(
+    {
+        'guide_runs',
+        'llm_uses',
+        'formation_schema_state',
+        'formation_heads',
+        'formation_steps',
+        'formation_results',
+        'formation_step_edges',
+        'formation_step_topics',
+        'formation_branches',
+        'formation_branch_topics',
+        'formation_issues',
+        'formation_artifacts',
+        'formation_artifact_results',
+        'formation_artifact_ranges',
+        'formation_assessments',
+        'formation_recommendations',
+        'formation_proposal_index',
+        'formation_event_refs',
+        'formation_event_changes',
+        'formation_closures',
+        'formation_closure_items',
+        'formation_closure_evidence',
+        'formation_event_members',
+        'formation_artifact_reviews',
+    }
+)
+DOCUMENT_AI_RECEIPT_CAPABILITIES = (
+    FORMATION_DISCUSS_CAPABILITY,
+    'APP-GUIDE-CMD-C01',
+    'APP-GUIDE-CMD-C02',
+    'APP-GUIDE-CMD-C03',
+    'APP-GUIDE-CMD-C04',
+    'APP-GUIDE-CMD-C05',
+    'APP-GUIDE-CMD-C06',
+    'APP-BATCH-CMD-C01',
+    'APP-BATCH-CMD-C02',
+    'APP-BATCH-CMD-C03',
+    'APP-BATCH-CMD-C04',
+    'APP-BATCH-CMD-C05',
+)
+
+
+def require_supported_tables(connection, *, document_ai=False):
+    inline_tables = ORDINARY_INLINE_TABLES
+    capabilities = ORDINARY_RECEIPT_CAPABILITIES
+    if document_ai:
+        inline_tables = inline_tables | DOCUMENT_AI_INLINE_TABLES
+        capabilities += DOCUMENT_AI_RECEIPT_CAPABILITIES
+        check_external_effects(connection)
     tables = connection.execute(
         "SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name"
     ).fetchall()
     for (table,) in tables:
-        if table not in ORDINARY_INLINE_TABLES:
+        if table not in inline_tables:
             name = quote_identifier(table)
             require(
                 connection.execute(f'SELECT 1 FROM {name} LIMIT 1').fetchone() is None,
                 AUDIT_UNSUPPORTED,
             )
-    marks = ','.join('?' for _ in ORDINARY_RECEIPT_CAPABILITIES)
+    marks = ','.join('?' for _ in capabilities)
     unfamiliar = connection.execute(
         f'SELECT 1 FROM idempotency_records WHERE capability_id NOT IN ({marks}) LIMIT 1',
-        ORDINARY_RECEIPT_CAPABILITIES,
+        capabilities,
     ).fetchone()
     require(unfamiliar is None, AUDIT_UNSUPPORTED)
 
@@ -143,7 +198,10 @@ def compare_count_audit(data_fd, installation, plan, index):
 def source_facts(installation, release, binding):
     with read_locked_database(installation.database) as source:
         verify_locked_binding(source, installation.database, release, binding)
-        require_supported_tables(source)
+        document_ai = installation.description['purpose'] == 'DEVELOPMENT' and isinstance(
+            release, DocumentAiSchemaRelease
+        )
+        require_supported_tables(source, document_ai=document_ai)
         return archived_facts(source, release, binding)
 
 

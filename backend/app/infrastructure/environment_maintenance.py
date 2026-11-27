@@ -299,10 +299,17 @@ def select_maintenance(native, installation, release, plan, plan_sha, action):
         }
 
 
-def maintenance_authorization(plan, policy_sha, installation):
+def maintenance_authorization(plan, policy_sha, installation, *, executor=None, active=None):
     if 'restore_plan' not in plan:
+        require(executor is None, INVALID)
         return policy_sha
-    from .environment_restore_preflight import POLICIES, restore_authorization, restore_plan
+    from .environment_release_preflight import candidate_target
+    from .environment_restore_preflight import (
+        DOCUMENT_AI_POLICY,
+        POLICIES,
+        restore_authorization,
+        restore_plan,
+    )
 
     reference = exact(plan['restore_plan'], ('path', 'sha256'), INVALID)
     path = absolute(reference['path'], INVALID)
@@ -322,6 +329,12 @@ def maintenance_authorization(plan, policy_sha, installation):
         and restore['source_control_revision'] == plan['expected_control_revision'] + 1,
         INVALID,
     )
+    if executor is not None:
+        require(path.name == DOCUMENT_AI_POLICY, INVALID)
+        _, _, _, program = candidate_target(restore, active)
+        require(
+            installation.description['purpose'] == 'DEVELOPMENT' and executor == program, INVALID
+        )
     return restore_authorization(restore)
 
 
@@ -346,7 +359,13 @@ def run_maintenance(native, active, args, entry):
             installation,
             release,
             plan,
-            maintenance_authorization(plan, args.maintenance_policy_sha256, installation),
+            maintenance_authorization(
+                plan,
+                args.maintenance_policy_sha256,
+                installation,
+                executor=getattr(args, 'restore_executor_sha256', None),
+                active=active,
+            ),
             args.maintenance_action,
         )
     except sqlite3.Error as error:

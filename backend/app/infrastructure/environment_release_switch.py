@@ -14,6 +14,7 @@ from .environment_control import (
     read_control,
     read_release_transition,
     release_transition_name,
+    require_release_not_reverting,
     selected_release_control,
 )
 from .environment_files import (
@@ -41,11 +42,13 @@ from .environment_installation import (
 from .environment_maintenance import write_fact
 from .environment_recovery_installation import checked_ref
 from .environment_release_preflight import PREFLIGHT_MODES, preflight_inputs
+from .environment_restore_preflight import DOCUMENT_AI_POLICY as DOCUMENT_AI_PREFLIGHT_POLICY
 from .environment_restore_preflight import POLICIES as RESTORE_PREFLIGHT_POLICIES
 from .environment_restore_readiness import POLICY as RESTORE_READINESS_POLICY
 
 POLICY = 'release-switch-policy.v1.json'
 RESTORE_SWITCH_POLICY = 'restore-switch-policy.v1.json'
+DOCUMENT_AI_REVERT_POLICY = 'document-ai-restore-revert.v1.json'
 INVALID = 'RELEASE_SWITCH_INTENT_MISMATCH'
 UNVERIFIED = 'RELEASE_SWITCH_UNVERIFIED'
 DIFFERENT = 'RELEASE_SWITCH_REPLAN_REQUIRED'
@@ -64,8 +67,8 @@ class ReleaseSelection:
 
 def selection_inputs(active, args, entry):
     policy = args.release_switch_policy.name
-    require(policy in (POLICY, RESTORE_SWITCH_POLICY), INVALID)
-    restore = policy == RESTORE_SWITCH_POLICY
+    require(policy in (POLICY, RESTORE_SWITCH_POLICY, DOCUMENT_AI_REVERT_POLICY), INVALID)
+    restore = policy != POLICY
     preflight_digest = 'restore_preflight_sha256' if restore else 'release_preflight_sha256'
     plan = read_policy(
         args.release_switch_policy,
@@ -112,6 +115,10 @@ def selection_inputs(active, args, entry):
     )
     name = Path(plan['preflight_policy']['path']).name
     readiness = None
+    executor = getattr(args, 'restore_executor_sha256', None)
+    if policy == DOCUMENT_AI_REVERT_POLICY or executor is not None:
+        require(restore and name == DOCUMENT_AI_PREFLIGHT_POLICY, INVALID)
+        require(executor is None or executor == target_program, INVALID)
     if restore:
         require(
             name in RESTORE_PREFLIGHT_POLICIES
@@ -157,6 +164,7 @@ def selection_inputs(active, args, entry):
     if restore:
         preflight.restore_preflight_policy = preflight_path
         preflight.restore_preflight_policy_sha256 = preflight_pin
+        preflight.restore_executor_sha256 = executor
     return ReleaseSelection(
         args.release_switch_policy_sha256,
         plan['operation_id'],
@@ -228,6 +236,7 @@ def commit_selection(selection, before, fd, lock, **evidence):
             'after_sha256': digest(canonical(after)),
             'after': after,
         }
+        require_release_not_reverting(fd, transition, DIFFERENT)
         write_fact(
             fd, source, release_transition_name(selection.operation_id), transition, create=True
         )
@@ -242,10 +251,15 @@ def select_release_deployment(native, active, args, entry):
     selection = selection_inputs(active, args, entry)
     source = selection.source
     target = selection.target
+    if args.release_switch_policy.name == DOCUMENT_AI_REVERT_POLICY:
+        from .environment_restore_switch import revert_closed_document_ai
+
+        return revert_closed_document_ai(native, active, selection)
     # A lost acknowledgement is reconciled before re-reading obsolete source data.
     with source.lock(native), source.directory(native, 'control') as fd:
         previous = original_transition(fd, selection)
         if previous is not None:
+            require_release_not_reverting(fd, previous, DIFFERENT)
             _, raw = control_bytes(fd, source)
             if raw == canonical(previous['after']):
                 return selected_receipt(fd, selection, previous)

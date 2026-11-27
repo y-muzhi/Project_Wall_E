@@ -284,6 +284,44 @@ function closedHandshake() {
   return actual;
 }
 
+test('document AI opens only the exact guide paths for an authenticated development editor', async () => {
+  const actual = structuredClone(handshake);
+  actual.capabilities[2] = { code: 'DOCUMENT_AI', state: 'READY', reason_code: null };
+  const bound = await loadBoundEnvironment(origin, undefined, setupFetch(undefined, actual));
+  assert.equal(bound.documentAiReady, true);
+
+  const calls = [];
+  const connection = new EnvironmentConnection(bound);
+  const api = new ApiClient(async (path) => {
+    calls.push(path);
+    return response(success({}));
+  }, undefined, bound, connection);
+  await api.read('/api/v1/requirements/3/guide-runs', (value) => value);
+  await assert.rejects(api.read('/api/v1/code-tasks/3', (value) => value), ApiNotSent);
+  assert.deepEqual(calls, ['/api/v1/requirements/3/guide-runs']);
+  assert(allowsOrdinaryRequest('POST', '/api/v1/guide-runs/3/cancel', true));
+  assert(!allowsOrdinaryRequest('DELETE', '/api/v1/guide-runs/3/cancel', true));
+  assert(!allowsOrdinaryRequest('POST', '/api/v1/guide-runs/3/unknown', true));
+  connection.dispose();
+
+  const variant = (purpose, permission, base = structuredClone(actual)) => async (path) => {
+    base.capabilities[2] = actual.capabilities[2];
+    return path.startsWith('/.well-known')
+      ? response({ ...configuration, purpose })
+      : response(success({ ...base, purpose, access: { client_kind: 'WEB', permission } }));
+  };
+  for (const [purpose, permission, base] of [
+    ['INTEGRATION', 'DEVELOP', undefined],
+    ['CANDIDATE', 'DEVELOP', undefined],
+    ['DEVELOPMENT', 'READ_ONLY', undefined],
+    ['DEVELOPMENT', 'READ_ONLY', closedHandshake()],
+  ]) {
+    await assert.rejects(loadBoundEnvironment(origin, undefined, variant(purpose, permission, base)), {
+      code: 'NOT_READY',
+    });
+  }
+});
+
 test('closed maintenance entry requires a matching current verification and read-only access', async () => {
   const actual = closedHandshake();
   const bound = await loadBoundEnvironment(origin, undefined, setupFetch(undefined, actual));

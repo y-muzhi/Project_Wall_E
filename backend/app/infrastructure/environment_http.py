@@ -25,6 +25,28 @@ WRITE = {
     'PUT': re.compile(r'/api/v1/requirements/[^/]+/manual-draft'),
     'DELETE': re.compile(r'/api/v1/requirements/[^/]+/manual-draft'),
 }
+DOCUMENT_AI_ROUTES = {
+    'GET': re.compile(
+        r'/api/v1/(?:requirements/[1-9][0-9]*/(?:guide-runs|documents/[1-9][0-9]*/'
+        r'(?:pending-suggestion|formation/(?:'
+        r'(?:steps|branches|issues|artifacts|proposals)(?:/[A-Za-z0-9_.-]+)?'
+        r'|steps/s[1-9][0-9]*/relations|artifacts/a[1-9][0-9]*/(?:ranges|lineage)'
+        r'|events(?:/[1-9][0-9]*/(?:changes(?:/[1-9][0-9]*/members)?|closure-items'
+        r'(?:/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+/evidence)?))?)))'
+        r'|guide-runs/[1-9][0-9]*(?:/model-calls)?'
+        r'|(?:model-calls|suggestion-batches)/[1-9][0-9]*)'
+    ),
+    'POST': re.compile(
+        r'/api/v1/(?:requirements/[1-9][0-9]*/(?:guide-runs|documents/[1-9][0-9]*/formation/path-preview)'
+        r'|guide-runs/[1-9][0-9]*/(?:cancel|continue|retry)|comments/[1-9][0-9]*/guide-runs'
+        r'|conversation-messages/[1-9][0-9]*/responses'
+        r'|suggestion-batches/[1-9][0-9]*/(?:accept-pending|discard|complete))'
+    ),
+    'PUT': re.compile(
+        r'/api/v1/(?:suggestions/[1-9][0-9]*/decision'
+        r'|suggestion-batches/[1-9][0-9]*/groups/[1-9][0-9]*/decision)'
+    ),
+}
 CAPABILITIES = (
     'DOCUMENT_READ',
     'DOCUMENT_WRITE',
@@ -123,7 +145,7 @@ def binding_error(request, scope):
     return None
 
 
-def handshake(scope, access, *, recovery=False):
+def handshake(scope, access, *, recovery=False, document_ai=False):
     installation = scope.installation
     revision = scope.control['control_revision']
     access_view = {key: access[key] for key in ('client_kind', 'permission')}
@@ -149,6 +171,8 @@ def handshake(scope, access, *, recovery=False):
     capability_reasons = dict.fromkeys(CAPABILITIES, 'CONFIG_DISABLED')
     capability_reasons['DOCUMENT_READ'] = None
     capability_reasons['DOCUMENT_WRITE'] = None
+    if document_ai:
+        capability_reasons['DOCUMENT_AI'] = None
     if recovery:
         access_view['permission'] = 'READ_ONLY'
         capability_reasons['DOCUMENT_WRITE'] = 'RECOVERY_READ_ONLY'
@@ -202,7 +226,7 @@ async def recovery_available(scope):
     return True
 
 
-async def api_admission(request, call_next, scope, *, recovery=False):
+async def api_admission(request, call_next, scope, *, recovery=False, document_ai=False):
     """The listener is reachable only through its owner-protected Unix directory."""
     try:
         origin, identities = await run_in_threadpool(installed_identities, scope.installation)
@@ -232,11 +256,19 @@ async def api_admission(request, call_next, scope, *, recovery=False):
             return reject(scope, error)
     if not scope.active or (not recovery and not request.app.state.walle_worker.accepting):
         return reject(scope, 'ENVIRONMENT_NOT_READY')
+    ai_available = (
+        document_ai
+        and not recovery
+        and not scope.control['outbound_hold']
+        and scope.installation.description['purpose'] == 'DEVELOPMENT'
+        and access['client_kind'] == 'WEB'
+        and access['permission'] == 'DEVELOP'
+    )
     if is_handshake:
         return JSONResponse(
             {
                 'success': True,
-                'data': handshake(scope, access, recovery=recovery),
+                'data': handshake(scope, access, recovery=recovery, document_ai=ai_available),
                 'error': None,
                 'meta': {'request_id': new_request_id()},
             },
@@ -249,7 +281,9 @@ async def api_admission(request, call_next, scope, *, recovery=False):
         return reject(scope, 'RECOVERY_READ_ONLY')
     writable = WRITE.get(request.method)
     write = writable is not None and writable.fullmatch(route)
-    if not read and not write:
+    ai_routes = DOCUMENT_AI_ROUTES.get(request.method) if ai_available else None
+    ai_request = ai_routes is not None and ai_routes.fullmatch(route)
+    if not read and not write and not ai_request:
         return reject(scope, 'ENVIRONMENT_CAPABILITY_DISABLED')
     if write and access['permission'] != 'DEVELOP':
         return reject(scope, 'ENVIRONMENT_ACCESS_DENIED')

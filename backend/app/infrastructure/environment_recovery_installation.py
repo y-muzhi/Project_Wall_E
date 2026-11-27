@@ -64,7 +64,7 @@ from .environment_recovery_read import (
 from .environment_recovery_read import (
     read_policy as read_scope,
 )
-from .environment_restore import RECEIPT
+from .environment_restore import DOCUMENT_AI, RECEIPT, restoration_status
 from .environment_result_archive import read_sealed
 from .schema_v22_publish import publish_directory
 
@@ -207,7 +207,9 @@ def rehearsal_receipt(fd, source, pin, *, prepared=None):
     identity_record(artifact['identity'], UNVERIFIED)
     require(
         record['format_version'] == 2
-        and record['status'] == 'DATABASE_AND_COUNT_AUDIT_RESTORE_VERIFIED'
+        and record['status']
+        == restoration_status(2, document_ai=prepared is not None and DOCUMENT_AI in prepared)
+        and (DOCUMENT_AI not in record or source.description['purpose'] == 'DEVELOPMENT')
         and record['source_environment_id'] == source.environment_id
         and (record['source_data_generation'], record['source_deployment_id']) == original
         and uuid_value(record['target_data_generation'])

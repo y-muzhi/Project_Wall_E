@@ -1,16 +1,16 @@
 """Seal and read minimal original-command receipts from a verified stopped snapshot."""
 
-from contextlib import closing
 import fcntl
 import os
-from pathlib import Path
 import re
 import sqlite3
+from contextlib import closing
+from pathlib import Path
 
 from .environment_backup import SNAPSHOT, capture_policy, original_receipt, recovery_directory
 from .environment_files import (
-    EnvironmentFailure,
     MAX_RECORD_SIZE,
+    EnvironmentFailure,
     absolute,
     canonical,
     decode,
@@ -21,8 +21,8 @@ from .environment_files import (
     read_protected,
     require,
 )
-from .idempotency import generation_namespace
 from .environment_installation import identity_record, load_installation, sha_value, uuid_value
+from .idempotency import generation_namespace
 
 POLICY = 'original-result-index-policy.v1.json'
 INDEX = 'original-result-index.v1.json'
@@ -30,6 +30,7 @@ INVALID = 'ORIGINAL_RESULT_INDEX_INTENT_MISMATCH'
 UNVERIFIED = 'ORIGINAL_RESULT_INDEX_UNVERIFIED'
 LIMIT = 'ORIGINAL_RESULT_INDEX_LIMIT'
 CAPABILITY = re.compile(r'APP-[A-Z]+-CMD-C[0-9]{2}')
+FORMATION_DISCUSS_CAPABILITY = 'formation.discuss'
 BUCKET = re.compile(r'[0-9a-f]{2}')
 SOURCE_FIELDS = ('environment_id', 'data_generation', 'deployment_id', 'control_revision')
 
@@ -79,7 +80,7 @@ def scope_key(capability, target, key, code):
     require(
         type(capability) is str
         and len(capability) <= 64
-        and CAPABILITY.fullmatch(capability)
+        and (CAPABILITY.fullmatch(capability) or capability == FORMATION_DISCUSS_CAPABILITY)
         and type(target) is str
         and 0 < len(target) <= 512
         and target.isascii()

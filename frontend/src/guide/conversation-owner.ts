@@ -80,7 +80,7 @@ export class RequirementConversation {
     )
       throw TypeError('Actual owned CURRENT required');
     this.api = api;
-    this.actionsDisabled = api.environmentScope !== undefined;
+    this.actionsDisabled = api.environmentScope !== undefined && !api.documentAiAvailable;
     this.modelCalls = new ModelCallCache(detail.requirement.id);
     this.readActual = readActual;
     this.adoptActual = adoptActual;

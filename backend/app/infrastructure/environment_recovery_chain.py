@@ -10,7 +10,16 @@ from .environment_backup_coverage import check_coverage
 from .environment_binding import EnvironmentBinding
 from .environment_files import absolute, canonical, decode, digest, exact, read_protected, require
 from .environment_installation import Installation, sha_value, uuid_value
-from .environment_restore import completed, load_restore, planned_restore, reopen_archive
+from .environment_restore import (
+    DOCUMENT_AI,
+    archived_document_ai_source,
+    completed,
+    document_ai_release,
+    load_restore,
+    planned_restore,
+    reopen_archive,
+    reopen_document_ai_target,
+)
 from .environment_result_archive import load_inputs as load_index_inputs, read_index, read_shard
 
 POLICY = 'recovery-chain-policy.v1.json'
@@ -55,21 +64,36 @@ def load_chain_policy(path, expected):
     return value
 
 
-def read_restore_component(target, installation, release, common, plan, capture, coverage, pin):
+def read_restore_component(
+    target, installation, release, common, plan, capture, coverage, pin, *, ai_release=None
+):
     with recovery_directory(target, installation) as (folder, fd):
         receipt = completed(fd, installation, common, plan, capture)
         require(
             receipt is not None
             and digest(canonical(receipt)) == pin
-            and receipt['content_sha256'] == coverage['logical_content_sha256']
             and receipt['restored_asset_index'] == coverage['asset_index'],
             UNVERIFIED,
         )
         restored = EnvironmentBinding(installation.environment_id, plan['target_data_generation'])
-        initialized, content = reopen_archive(folder / SNAPSHOT, release, restored)
+        if ai_release is None:
+            initialized, content = reopen_archive(folder / SNAPSHOT, release, restored)
+            require(content.sha256 == coverage['logical_content_sha256'], UNVERIFIED)
+        else:
+            original = EnvironmentBinding(
+                installation.environment_id, plan['source_data_generation']
+            )
+            with recovery_directory(capture, installation) as (source, _):
+                original_file = source / SNAPSHOT
+                _, coverage_content = reopen_archive(original_file, release, original)
+                require(coverage_content.sha256 == coverage['logical_content_sha256'], UNVERIFIED)
+                source_facts = archived_document_ai_source(original_file, release, original)
+            initialized, content = reopen_document_ai_target(
+                folder / SNAPSHOT, ai_release, restored, plan['operation_id'], source_facts
+            )
         require(
             initialized == receipt['initialized_at']
-            and content.sha256 == coverage['logical_content_sha256']
+            and content.sha256 == receipt['content_sha256']
             and completed(fd, installation, common, plan, capture) == receipt,
             UNVERIFIED,
         )
@@ -133,6 +157,7 @@ def inspect_recovery_chain(native, active, args, entry):
         index,
         plan['result_index_sha256'],
     )
+    ai_release = document_ai_release(restore, installation, release, active, entry)
     result = read_restore_component(
         restore_target,
         installation,
@@ -142,6 +167,7 @@ def inspect_recovery_chain(native, active, args, entry):
         capture,
         coverage,
         plan['restore_receipt_sha256'],
+        ai_release=ai_release,
     )
     verified = {
         'format_version': 1,
@@ -163,6 +189,12 @@ def inspect_recovery_chain(native, active, args, entry):
         'logical_content_sha256': coverage['logical_content_sha256'],
         'outbound_hold_required': result['outbound_hold_required'],
     }
+    if ai_release is not None:
+        verified.update(
+            status='DOCUMENT_AI_RECOVERY_COMPONENTS_MATCHED',
+            document_ai_schema=result[DOCUMENT_AI],
+            target_logical_content_sha256=result['content_sha256'],
+        )
     proof = {**verified, 'recovery_chain_sha256': digest(canonical(verified))}
     return RecoveryComponents(
         proof,

@@ -40,6 +40,7 @@ export type BoundEnvironment = Readonly<{
   configurationSha256: string;
   runId: string;
   userPermission: 'READ_ONLY' | 'DEVELOP';
+  documentAiReady: boolean;
   recovery?: RecoveryObservation;
   onRunChanged?: (runId: string) => void;
 }>;
@@ -234,20 +235,29 @@ function readMaintenance(value: unknown, scope: EnvironmentScope): RecoveryObser
   });
 }
 
-function readCapabilities(value: unknown, recovery: boolean) {
+function readCapabilities(value: unknown, recovery: boolean, allowsDocumentAi: boolean) {
   if (!Array.isArray(value) || value.length !== CAPABILITIES.length)
     throw new TypeError('Unexpected capability list');
+  let documentAiReady = false;
   for (const [index, expected] of CAPABILITIES.entries()) {
     const row = exact(value[index], ['code', 'state', 'reason_code']);
-    const ready = index === 0 || (index === 1 && !recovery);
-    const reason = ready ? null : index === 1 ? 'RECOVERY_READ_ONLY' : 'CONFIG_DISABLED';
+    const documentAi = expected === 'DOCUMENT_AI' && allowsDocumentAi && row.state === 'READY';
+    const ready =
+      expected === 'DOCUMENT_READ' || (expected === 'DOCUMENT_WRITE' && !recovery) || documentAi;
+    const reason = ready
+      ? null
+      : expected === 'DOCUMENT_WRITE'
+        ? 'RECOVERY_READ_ONLY'
+        : 'CONFIG_DISABLED';
     if (
       row.code !== expected ||
       row.state !== (ready ? 'READY' : 'DISABLED') ||
       row.reason_code !== reason
     )
       throw new EnvironmentEntryError('NOT_READY');
+    if (documentAi) documentAiReady = true;
   }
+  return documentAiReady;
 }
 
 function responseIdentity(headers: Headers) {
@@ -285,7 +295,6 @@ function handshakeRecord(
     throw new EnvironmentEntryError('NOT_READY');
   utc(record.observed_at);
   const recovery = readMaintenance(record.maintenance, config.scope);
-  readCapabilities(record.capabilities, recovery !== undefined);
   const access = exact(record.access, ['client_kind', 'permission']);
   if (
     access.client_kind !== 'WEB' ||
@@ -293,7 +302,12 @@ function handshakeRecord(
     (recovery !== undefined && access.permission !== 'READ_ONLY')
   )
     throw new EnvironmentEntryError('PERMISSION');
-  const result = { ...config, runId, userPermission: access.permission } as const;
+  const documentAiReady = readCapabilities(
+    record.capabilities,
+    recovery !== undefined,
+    recovery === undefined && config.purpose === 'DEVELOPMENT' && access.permission === 'DEVELOP',
+  );
+  const result = { ...config, runId, userPermission: access.permission, documentAiReady } as const;
   return Object.freeze(recovery === undefined ? result : { ...result, recovery });
 }
 

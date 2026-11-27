@@ -3,7 +3,7 @@
 import fcntl
 import os
 from contextlib import contextmanager, nullcontext
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from sqlite3 import Error as SQLiteError
 from types import SimpleNamespace
 
@@ -34,7 +34,16 @@ from .environment_files import (
     require,
 )
 from .environment_installation import sha_value, uuid_value
-from .environment_restore import RECEIPT, completed, convert, reopen_archive, restoration_status
+from .environment_restore import (
+    DOCUMENT_AI,
+    RECEIPT,
+    archived_document_ai_source,
+    completed,
+    convert,
+    reopen_archive,
+    reopen_document_ai_target,
+    restoration_status,
+)
 from .schema_v22_release import load_release
 
 POLICY = 'backup-package-rehearsal.v1.json'
@@ -98,7 +107,7 @@ def rehearsal_inputs(args):
     return plan, verified, source, target, schema
 
 
-def recovery_contract(plan, verified, manifest, evidence):
+def recovery_contract(plan, verified, manifest, evidence, *, conversion=None):
     capture = evidence['capture_receipt_ref']
     previous_restore = evidence['restore_verification_ref']
     require(
@@ -123,6 +132,9 @@ def recovery_contract(plan, verified, manifest, evidence):
         'expected_database_sha256': manifest['database_artifact']['sha256'],
         'expected_asset_index_sha256': manifest['asset_index_ref']['sha256'],
     }
+    if conversion is not None:
+        common[DOCUMENT_AI] = conversion.document_ai_schema
+        common['max_target_database_bytes'] = conversion.maximum_bytes
     target_plan = {**common, 'capture_policy': {'sha256': capture['intent_sha256']}}
     source_limits = {
         **{
@@ -136,20 +148,43 @@ def recovery_contract(plan, verified, manifest, evidence):
             )
         },
         **LIMITS,
-        'max_database_bytes': manifest['database_artifact']['bytes'],
+        'max_database_bytes': (
+            manifest['database_artifact']['bytes']
+            if conversion is None
+            else conversion.maximum_bytes
+        ),
     }
     return target_plan, source_limits, common
 
 
-def pinned_schema(active, schema, manifest):
+def pinned_schema(active, schema, manifest, *, source_root=None):
     program = manifest['program_and_configuration_refs']
     require(program['runtime_manifest_sha256'] == active.runtime_manifest_sha256, INVALID)
     with protected_directory(schema):
         release = load_release(
-            schema, program['schema_manifest_sha256'], active.runtime_manifest_sha256
+            schema,
+            program['schema_manifest_sha256'],
+            active.runtime_manifest_sha256,
+            **({'source_root': source_root} if source_root is not None else {}),
         )
     require(release.schema_contract_sha256 == program['schema_contract_sha256'], UNVERIFIED)
     return release
+
+
+def reopen_rehearsal(source, target, release, common, expected_sha256, *, conversion=None):
+    new = EnvironmentBinding(common['source_environment_id'], common['target_data_generation'])
+    if conversion is None:
+        facts = reopen_archive(target / SNAPSHOT, release, new)
+        require(facts[1].sha256 == expected_sha256, UNVERIFIED)
+        return facts
+    old = EnvironmentBinding(common['source_environment_id'], common['source_data_generation'])
+    original = source / SNAPSHOT
+    _, prior = reopen_archive(original, release, old)
+    require(prior.sha256 == expected_sha256, UNVERIFIED)
+    retained = archived_document_ai_source(original, release, old)
+    return reopen_document_ai_target(
+        target / SNAPSHOT, conversion.release, new, common['operation_id'], retained
+    )
 
 
 def data_rehearsal(
@@ -163,6 +198,7 @@ def data_rehearsal(
     intent,
     *,
     receipt_admission=nullcontext,
+    conversion=None,
 ):
     def inspect_package():
         return verify_contents(
@@ -174,9 +210,16 @@ def data_rehearsal(
 
     manifest = inspect_package()
     evidence = read_evidence(source, principal, manifest)
-    target_plan, capture, common = recovery_contract(plan, verified, manifest, evidence)
+    target_plan, capture, common = recovery_contract(
+        plan, verified, manifest, evidence, conversion=conversion
+    )
     common['rehearsal_policy_sha256'] = intent
-    release = pinned_schema(active, schema, manifest)
+    release = pinned_schema(
+        active,
+        schema,
+        manifest,
+        **({'source_root': conversion.source_program} if conversion is not None else {}),
+    )
     model = SimpleNamespace(
         environment_id=common['source_environment_id'],
         maintenance_uid=principal.maintenance_uid,
@@ -188,17 +231,36 @@ def data_rehearsal(
         existing = completed(target, model, common, target_plan, capture)
         if existing is None:
             facts, artifact = convert(
-                model, release, target_plan, capture, source_path, target_path, target, common
+                model,
+                release,
+                target_plan,
+                capture,
+                source_path,
+                target_path,
+                target,
+                common,
+                ai_release=None if conversion is None else conversion.release,
             )
-            require(facts[1].sha256 == manifest['logical_content_sha256'], UNVERIFIED)
+            require(
+                reopen_rehearsal(
+                    source_path,
+                    target_path,
+                    release,
+                    common,
+                    manifest['logical_content_sha256'],
+                    conversion=conversion,
+                )
+                == facts,
+                UNVERIFIED,
+            )
             asset_index = restore_count_audit(
                 model, source, target, capture, evidence['capture_receipt_ref']
             )
             require(inspect_package() == manifest, UNVERIFIED)
             receipt = {
                 **common,
-                'status': restoration_status(2),
-                'restored_at': utc_milliseconds(datetime.now(timezone.utc)),
+                'status': restoration_status(2, document_ai=conversion is not None),
+                'restored_at': utc_milliseconds(datetime.now(UTC)),
                 'initialized_at': facts[0],
                 'content_sha256': facts[1].sha256,
                 'database_artifact': artifact,
@@ -210,14 +272,18 @@ def data_rehearsal(
             existing = completed(target, model, common, target_plan, capture)
         else:
             os.fsync(target)
-        binding = EnvironmentBinding(
-            common['source_environment_id'], common['target_data_generation']
+        initialized, content = reopen_rehearsal(
+            source_path,
+            target_path,
+            release,
+            common,
+            manifest['logical_content_sha256'],
+            conversion=conversion,
         )
-        initialized, content = reopen_archive(target_path / SNAPSHOT, release, binding)
         require(
             existing is not None
             and initialized == existing['initialized_at']
-            and content.sha256 == existing['content_sha256'] == manifest['logical_content_sha256']
+            and content.sha256 == existing['content_sha256']
             and completed(target, model, common, target_plan, capture) == existing,
             UNVERIFIED,
         )

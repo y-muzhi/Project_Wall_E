@@ -1,13 +1,15 @@
 """Bind a fresh Schema200 database to one explicit environment and data generation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import re
 
 from backend.app.shared.time import utc_milliseconds
 
+from .data_retention import capture_retained_data, original_projections
 from .database import SchemaMismatch, _statements
 from .schema_inspection import verify_integrity, verify_schema
+from .schema_v22_release import DocumentAiSchemaRelease
 
 UUID_V4 = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}')
 
@@ -30,6 +32,43 @@ def _valid_time(value):
         return False
 
 
+def _core_facts(release):
+    if isinstance(release, DocumentAiSchemaRelease):
+        return release.core_fresh_checksum, release.core_contract_sha256
+    return release.fresh_checksum, release.schema_contract_sha256
+
+
+def _verify_formation(connection, release, migrations, initialized_at):
+    rows = connection.execute('SELECT * FROM formation_schema_state').fetchall()
+    if len(rows) != 1 or len(migrations) != 2:
+        raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
+    owner = tuple(rows[0])
+    committed_at = owner[7]
+    lifecycle = owner[4:7]
+    if lifecycle == ('FRESH_V21', None, None):
+        checksum = release.fresh_checksum
+        if committed_at != initialized_at:
+            raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
+    elif (
+        lifecycle[0] == 'UPGRADED_V200'
+        and type(lifecycle[1]) is str
+        and UUID_V4.fullmatch(lifecycle[1])
+        and type(lifecycle[2]) is str
+        and re.fullmatch(r'[a-f0-9]{64}', lifecycle[2])
+    ):
+        checksum = release.formation_checksum
+        if committed_at < initialized_at:
+            raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
+    else:
+        raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
+    if (
+        owner[:4] != (1, 210, release.schema_contract_sha256, release.core_contract_sha256)
+        or tuple(migrations[1]) != (210, checksum, committed_at)
+        or not _valid_time(committed_at)
+    ):
+        raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
+
+
 def verify_snapshot_binding(connection, release, binding):
     """Verify persisted Schema200 history and owner within one transaction."""
     if not connection.in_transaction:
@@ -45,17 +84,21 @@ def verify_snapshot_binding(connection, release, binding):
     owners = connection.execute(
         'SELECT singleton_id,environment_id,data_generation,initialized_at FROM environment_binding'
     ).fetchall()
-    if len(migrations) != 1 or len(states) != 1 or len(owners) != 1:
+    if not migrations or len(states) != 1 or len(owners) != 1:
         raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
 
     initialized_at = owners[0][3]
+    checksum, contract = _core_facts(release)
     if (
-        tuple(migrations[0]) != (200, release.fresh_checksum, initialized_at)
-        or tuple(states[0])
-        != (1, 200, release.schema_contract_sha256, 'FRESH_V20', None, None, initialized_at)
+        tuple(migrations[0]) != (200, checksum, initialized_at)
+        or tuple(states[0]) != (1, 200, contract, 'FRESH_V20', None, None, initialized_at)
         or tuple(owners[0]) != (1, binding.environment_id, binding.data_generation, initialized_at)
         or not _valid_time(initialized_at)
     ):
+        raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
+    if isinstance(release, DocumentAiSchemaRelease):
+        _verify_formation(connection, release, migrations, initialized_at)
+    elif len(migrations) != 1:
         raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
     return initialized_at
 
@@ -66,6 +109,95 @@ def verify_binding(connection, release, binding):
     if connection.execute('PRAGMA journal_mode').fetchone()[0] != 'wal':
         raise SchemaMismatch('ENVIRONMENT_BINDING_MISMATCH')
     return initialized_at
+
+
+def write_formation_marker(connection, release, committed_at, *, operation=None, source=None):
+    checksum = release.fresh_checksum
+    origin = 'FRESH_V21'
+    if operation is not None:
+        checksum = release.formation_checksum
+        origin = 'UPGRADED_V200'
+    connection.execute(
+        'INSERT INTO schema_migrations(version,checksum,applied_at) VALUES (210,?,?)',
+        (checksum, committed_at),
+    )
+    connection.execute(
+        'INSERT INTO formation_schema_state(singleton_id,schema_version,schema_contract_sha256,'
+        'core_contract_sha256,origin,upgrade_id,source_data_sha256,committed_at) '
+        'VALUES (1,210,?,?,?,?,?,?)',
+        (
+            release.schema_contract_sha256,
+            release.core_contract_sha256,
+            origin,
+            operation,
+            source,
+            committed_at,
+        ),
+    )
+
+
+def document_ai_source_facts(connection):
+    original = tuple(
+        replace(projection, migration_ceiling=None)
+        for projection in original_projections(connection)
+    )
+    retained = tuple(
+        projection
+        for projection in original
+        if projection.table not in ('environment_binding', 'schema_migrations')
+    )
+    return capture_retained_data(connection, original), capture_retained_data(connection, retained)
+
+
+def verify_document_ai_copy(connection, release, binding, operation, source, retained):
+    initialized = verify_snapshot_binding(connection, release, binding)
+    verify_integrity(connection)
+    record = connection.execute(
+        'SELECT origin,upgrade_id,source_data_sha256 FROM formation_schema_state'
+    ).fetchone()
+    projections = tuple(item.projection for item in retained.tables)
+    if (
+        record is None
+        or tuple(record) != ('UPGRADED_V200', operation, source.sha256)
+        or capture_retained_data(connection, projections) != retained
+    ):
+        raise SchemaMismatch('DOCUMENT_AI_CONVERSION_CHANGED_SOURCE_ROWS')
+    return initialized
+
+
+def extend_document_ai_copy(
+    connection, source_release, target_release, old_binding, new_binding, operation, committed_at
+):
+    """Extend an isolated ordinary copy in the caller's exclusive transaction."""
+    if (
+        isinstance(source_release, DocumentAiSchemaRelease)
+        or not isinstance(target_release, DocumentAiSchemaRelease)
+        or _core_facts(source_release) != _core_facts(target_release)
+        or old_binding.environment_id != new_binding.environment_id
+        or old_binding.data_generation == new_binding.data_generation
+        or type(operation) is not str
+        or not UUID_V4.fullmatch(operation)
+        or not _valid_time(committed_at)
+    ):
+        raise SchemaMismatch('DOCUMENT_AI_CONVERSION_MISMATCH')
+    initialized_at = verify_binding(connection, source_release, old_binding)
+    if committed_at < initialized_at:
+        raise SchemaMismatch('DOCUMENT_AI_CONVERSION_MISMATCH')
+    verify_integrity(connection)
+    source, retained = document_ai_source_facts(connection)
+    for statement in _statements(target_release.formation_sql):
+        connection.execute(statement)
+    changed = connection.execute(
+        'UPDATE environment_binding SET data_generation=? WHERE environment_id=? AND data_generation=?',
+        (new_binding.data_generation, old_binding.environment_id, old_binding.data_generation),
+    )
+    if changed.rowcount != 1:
+        raise SchemaMismatch('DOCUMENT_AI_CONVERSION_MISMATCH')
+    write_formation_marker(
+        connection, target_release, committed_at, operation=operation, source=source.sha256
+    )
+    verify_document_ai_copy(connection, target_release, new_binding, operation, source, retained)
+    return source.sha256
 
 
 def write_initial_schema(connection, release, binding):
@@ -90,20 +222,23 @@ def write_initial_schema(connection, release, binding):
     for statement in _statements(release.fresh):
         connection.execute(statement)
     initialized_at = utc_milliseconds(datetime.now(timezone.utc))
+    checksum, contract = _core_facts(release)
     connection.execute(
         'INSERT INTO schema_migrations(version,checksum,applied_at) VALUES (200,?,?)',
-        (release.fresh_checksum, initialized_at),
+        (checksum, initialized_at),
     )
     connection.execute(
         'INSERT INTO code_schema_state(singleton_id,schema_version,schema_contract_sha256,'
         'origin,upgrade_id,source_data_sha256,committed_at) '
         "VALUES (1,200,?,'FRESH_V20',NULL,NULL,?)",
-        (release.schema_contract_sha256, initialized_at),
+        (contract, initialized_at),
     )
     connection.execute(
         'INSERT INTO environment_binding(singleton_id,environment_id,data_generation,initialized_at) '
         'VALUES (1,?,?,?)',
         (binding.environment_id, binding.data_generation, initialized_at),
     )
+    if isinstance(release, DocumentAiSchemaRelease):
+        write_formation_marker(connection, release, initialized_at)
     verify_binding(connection, release, binding)
     verify_integrity(connection)

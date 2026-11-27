@@ -348,6 +348,12 @@ export class WalleApi {
     return this.client.environmentConnection;
   }
 
+  get documentAiAvailable(): boolean {
+    if (!this.environmentScope) return true;
+    const current = this.environmentConnection?.getSnapshot();
+    return current?.phase === 'READY' && current.environment.documentAiReady;
+  }
+
   commandReceipt<T>(
     original: CommandIdentity,
     policy: OriginalResultPolicy<T>,

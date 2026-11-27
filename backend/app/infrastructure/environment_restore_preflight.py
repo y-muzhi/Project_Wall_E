@@ -14,6 +14,7 @@ from .environment_backup_rehearsal import POLICY as DATA_POLICY
 from .environment_files import (
     MAX_REVISION,
     EnvironmentFailure,
+    absolute,
     canonical,
     decode,
     digest,
@@ -21,8 +22,9 @@ from .environment_files import (
     read_protected,
     require,
 )
-from .environment_installation import sha_value, uuid_value, version_record
+from .environment_installation import identity_record, sha_value, uuid_value, version_record
 from .environment_recovery_installation import checked_ref
+from .environment_release_compatibility import checked_schema
 from .environment_release_preflight import (
     CAPTURE_POLICY,
     backup_point_from_manifest,
@@ -30,11 +32,14 @@ from .environment_release_preflight import (
     read_reference,
     verified_backup,
 )
+from .environment_restore import DOCUMENT_AI, require_document_ai_extension
 from .schema_v22_release import SchemaRelease
 
 POLICY = 'restore-source-preflight.v1.json'
 OFFHOST_POLICY = 'restore-source-preflight.v2.json'
-POLICIES = {POLICY: 1, OFFHOST_POLICY: 2}
+DOCUMENT_AI_POLICY = 'document-ai-restore-preflight.v1.json'
+DOCUMENT_AI_DATA_HANDLING = 'EXTEND_CURRENT_DEVELOPMENT_DATABASE'
+POLICIES = {POLICY: 1, OFFHOST_POLICY: 2, DOCUMENT_AI_POLICY: 1}
 OFFHOST_FIELDS = ('offhost_authority', 'offhost_verification')
 INVALID = 'RESTORE_PREFLIGHT_INTENT_MISMATCH'
 UNVERIFIED = 'RESTORE_PREFLIGHT_UNVERIFIED'
@@ -65,7 +70,19 @@ def restore_plan(path, expected):
         'target_configuration_sha256',
         'data_preparation',
     )
-    if version == 2:
+    document_ai = path.name == DOCUMENT_AI_POLICY
+    if document_ai:
+        version_record(plan, (*fields, 'data_target'), INVALID)
+        target = exact(plan['data_target'], ('path', 'identity', 'max_database_bytes'), INVALID)
+        target_path = absolute(target['path'], INVALID)
+        identity_record(target['identity'], INVALID)
+        require(
+            target_path.name == plan['operation_id']
+            and type(target['max_database_bytes']) is int
+            and 0 < target['max_database_bytes'] <= 1024**4,
+            INVALID,
+        )
+    elif version == 2:
         exact(plan, ('format_version', *fields, *OFFHOST_FIELDS), INVALID)
         require(type(plan['format_version']) is int and plan['format_version'] == 2, INVALID)
         offhost_authority(plan['offhost_authority'], INVALID)
@@ -74,7 +91,20 @@ def restore_plan(path, expected):
     else:
         version_record(plan, fields, INVALID)
     preserved = exact(plan['preserved'], ('backup_id', 'capture_policy', 'verification'), INVALID)
-    selected = exact(plan['selected'], ('backup_id', 'verification', 'local_verification'), INVALID)
+    selected_fields = ('backup_id', 'verification')
+    if not document_ai:
+        selected_fields += ('local_verification',)
+    selected = exact(plan['selected'], selected_fields, INVALID)
+    if document_ai:
+        require(
+            selected['backup_id'] == preserved['backup_id'] != plan['operation_id']
+            and selected['verification'] == preserved['verification'],
+            INVALID,
+        )
+    else:
+        require(
+            len({plan['operation_id'], preserved['backup_id'], selected['backup_id']}) == 3, INVALID
+        )
     require(
         all(
             uuid_value(plan[key])
@@ -88,7 +118,6 @@ def restore_plan(path, expected):
         )
         and uuid_value(preserved['backup_id'])
         and uuid_value(selected['backup_id'])
-        and len({plan['operation_id'], preserved['backup_id'], selected['backup_id']}) == 3
         and all(
             sha_value(plan[key])
             for key in (
@@ -100,7 +129,8 @@ def restore_plan(path, expected):
         and type(plan['source_control_revision']) is int
         and 1 <= plan['source_control_revision'] < MAX_REVISION
         and is_timestamp(plan['accepted_backup_cutoff_at'])
-        and plan['data_handling'] == 'PRESERVE_CURRENT_SOURCE',
+        and plan['data_handling']
+        == (DOCUMENT_AI_DATA_HANDLING if document_ai else 'PRESERVE_CURRENT_SOURCE'),
         INVALID,
     )
     require(
@@ -118,6 +148,10 @@ def restore_authorization(plan):
         **plan,
         'preserved': {'backup_id': plan['preserved']['backup_id']},
     }
+    if plan['data_handling'] == DOCUMENT_AI_DATA_HANDLING:
+        # Manifest, cutoff and preparation pins are observed only after freezing the source.
+        chosen['selected'] = {'backup_id': plan['selected']['backup_id']}
+        del chosen['accepted_backup_cutoff_at'], chosen['data_preparation']
     return digest(canonical(chosen))
 
 
@@ -127,6 +161,7 @@ class RestorePreflight:
     receipt: dict
     schema: SchemaRelease
     source: LockedBackupCoverage
+    document_ai_schema: dict | None = None
 
 
 def confirm_current_source(plan, source):
@@ -161,13 +196,24 @@ def selected_offhost_report(plan, point, environment_id, ceiling, code):
     return {**metadata, 'verification_sha256': reference['sha256']}
 
 
-def verify_selection(args, plan, source, target_schema):
+def verify_selection(args, plan, source, target_schema, *, document_ai=False):
     preserved = plan['preserved']
     chosen = plan['selected']
     before, before_sha, before_coverage = verified_backup(
         args, preserved['verification'], preserved['backup_id']
     )
     require(before_coverage == source.facts, UNVERIFIED)
+    if document_ai:
+        require(
+            chosen['backup_id'] == preserved['backup_id']
+            and chosen['verification'] == preserved['verification']
+            and backup_cutoff(before['cutoff_at'], UNVERIFIED) == plan['accepted_backup_cutoff_at']
+            and before['database_artifact']['bytes'] <= plan['data_target']['max_database_bytes']
+            and before['logical_content_sha256'] == before_coverage['logical_content_sha256']
+            and before_coverage['schema_contract_sha256'] == target_schema.core_contract_sha256,
+            UNVERIFIED,
+        )
+        return before, before_sha, before, before_sha, {}
     selected, selected_sha, selected_coverage = verified_backup(
         args, chosen['verification'], chosen['backup_id']
     )
@@ -213,11 +259,35 @@ def verify_selection(args, plan, source, target_schema):
     return before, before_sha, selected, selected_sha, offhost
 
 
+def verify_document_ai_candidate(plan, source, schema, program, runtime_sha):
+    installation = source.installation
+    original = checked_schema(
+        installation.schema,
+        source.facts['schema_manifest_sha256'],
+        runtime_sha,
+        installation.project,
+    )
+    require_document_ai_extension(installation, original, schema, UNVERIFIED)
+    return {
+        'directory': plan['target_schema_directory'],
+        'contract_sha256': schema.schema_contract_sha256,
+        'manifest_sha256': schema.manifest_sha256,
+        'program': str(absolute(plan['target_manifest']['path'], INVALID).parent / 'application'),
+        'program_sha256': program,
+    }
+
+
 @contextmanager
 def locked_restore_preflight(native, active, args, entry):
     plan = restore_plan(args.restore_preflight_policy, args.restore_preflight_policy_sha256)
     require(plan['installation_sha256'] == args.anchor_sha256, INVALID)
     candidate, release, schema, program = candidate_target(plan, active)
+    executor = getattr(args, 'restore_executor_sha256', None)
+    require(
+        executor is None
+        or (plan['data_handling'] == DOCUMENT_AI_DATA_HANDLING and executor == program),
+        INVALID,
+    )
     capture_path, capture_sha = checked_ref(plan['preserved']['capture_policy'], CAPTURE_POLICY)
     capture = SimpleNamespace(
         anchor=args.anchor,
@@ -225,10 +295,29 @@ def locked_restore_preflight(native, active, args, entry):
         capture_policy=capture_path,
         capture_sha256=capture_sha,
     )
-    with locked_coverage(native, active, capture, entry) as source:
+    document_ai = plan['data_handling'] == DOCUMENT_AI_DATA_HANDLING
+    with locked_coverage(
+        native, active, capture, entry, require_clean_database=document_ai
+    ) as source:
         confirm_current_source(plan, source)
+        document_ai_schema = (
+            verify_document_ai_candidate(
+                plan, source, schema, program, active.runtime_manifest_sha256
+            )
+            if document_ai
+            else None
+        )
         before, before_sha, selected, selected_sha, offhost = verify_selection(
-            args, plan, source, schema
+            args, plan, source, schema, document_ai=document_ai
+        )
+        selection_evidence = (
+            {DOCUMENT_AI: document_ai_schema}
+            if document_ai
+            else {
+                'selected_local_verification_sha256': plan['selected']['local_verification'][
+                    'sha256'
+                ]
+            }
         )
         source.lock.assert_owned()
         observed = {
@@ -256,7 +345,7 @@ def locked_restore_preflight(native, active, args, entry):
             'selected_result_index_sha256': selected['original_result_index_ref']['sha256'],
             'selected_logical_content_sha256': selected['logical_content_sha256'],
             'selected_backup_cutoff_at': plan['accepted_backup_cutoff_at'],
-            'selected_local_verification_sha256': plan['selected']['local_verification']['sha256'],
+            **selection_evidence,
             **offhost,
             'data_handling': plan['data_handling'],
             'target_release_id': release['release_id'],
@@ -271,7 +360,7 @@ def locked_restore_preflight(native, active, args, entry):
             'outbound_hold_required': True,
         }
         receipt = {**observed, 'restore_preflight_sha256': digest(canonical(observed))}
-        yield RestorePreflight(plan, receipt, schema, source)
+        yield RestorePreflight(plan, receipt, schema, source, document_ai_schema)
 
 
 def preflight_restore(native, active, args, entry):

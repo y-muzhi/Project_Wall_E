@@ -175,7 +175,9 @@ def publication(request, tmp_path, monkeypatch):
             stage(path)
             (path / 'data').mkdir()
 
-        monkeypatch.setattr(module, 'generation_plan', lambda _: (source, prepared, ready, root))
+        monkeypatch.setattr(
+            module, 'generation_plan', lambda _: (source, prepared, ready, root, None)
+        )
         monkeypatch.setattr(module, 'lock_frozen_source', lock_source)
         monkeypatch.setattr(module, 'private_root', lambda *_: nullcontext(root))
         monkeypatch.setattr(module, 'rehearsal_receipt', lambda *_, **kwargs: (restored, b''))
@@ -368,7 +370,7 @@ def restore_receipt(request, tmp_path, monkeypatch):
     }
     facts = '2026-11-24T15:11:00.000Z', SimpleNamespace(sha256='f' * 64)
 
-    def convert(*_):
+    def convert(*_, **_options):
         observations.private_copy.write_bytes(b'private target')
         if observations.freezes_after_private_copy:
             host.freeze()
@@ -411,7 +413,9 @@ def restore_receipt(request, tmp_path, monkeypatch):
         )
         target = SimpleNamespace(
             verified=SimpleNamespace(
-                receipt={'selected_result_index_sha256': 'a' * 64}, source=source
+                receipt={'selected_result_index_sha256': 'a' * 64},
+                source=source,
+                document_ai_schema=None,
             ),
             principal=installation,
             schema=object(),
@@ -420,6 +424,7 @@ def restore_receipt(request, tmp_path, monkeypatch):
             plan=plan,
             backup=backup,
             policy_sha256='a' * 64,
+            conversion=lambda: None,
         )
 
         def restore_result(_, receipt):
@@ -428,7 +433,9 @@ def restore_receipt(request, tmp_path, monkeypatch):
 
         monkeypatch.setattr(module, 'verify_contents', lambda *_, **kwargs: (manifest,))
         monkeypatch.setattr(module, 'read_evidence', lambda *_: {'capture_receipt_ref': 'archived'})
-        monkeypatch.setattr(module, 'recovery_contract', lambda *_: (plan, capture, dict(common)))
+        monkeypatch.setattr(
+            module, 'recovery_contract', lambda *_, **options: (plan, capture, dict(common))
+        )
         monkeypatch.setattr(module, 'pinned_schema', lambda *_: object())
         monkeypatch.setattr(module, 'anchored_path', lambda path: path)
         monkeypatch.setattr(module, 'reopen_archive', lambda *_: facts)

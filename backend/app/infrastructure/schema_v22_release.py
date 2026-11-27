@@ -64,6 +64,8 @@ BASE_RELEASE_DIRECTORY = 'db20-r50'
 BASE_MANIFEST_SHA256 = '10ff02e670eb705e6ac537eb9335449a72de9dbc93eeffbe46b16d7d74557f31'
 NEW_OBJECTS = {('table', 'environment_binding'), ('trigger', 'code_snapshots_origin_guard_insert')}
 UPDATED_OBJECTS = {('table', 'code_snapshots'), ('trigger', 'code_snapshots_identity_fixed')}
+FORMATION_SQL = 'backend/app/infrastructure/schemas/v2_1/db21-r8/upgrade-200.v1.sql'
+FORMATION_SQL_SHA256 = 'd20f6672fdcac32638105db7dd4259c50ddc0e0ade76ff8056a10360a1b00c98'
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,17 @@ class FreshSchemaRelease(SchemaRelease):
     @property
     def upgrade_checksum(self) -> str:
         raise SchemaMismatch('SCHEMA_UPGRADE_NOT_ADMITTED')
+
+
+@dataclass(frozen=True)
+class DocumentAiSchemaRelease(FreshSchemaRelease):
+    core_contract_sha256: str
+    core_fresh_checksum: str
+    formation_sql: str
+
+    @property
+    def formation_checksum(self) -> str:
+        return digest(self.formation_sql.encode('utf-8'))
 
 
 def _source_hashes(source_root):
@@ -173,14 +186,40 @@ def _construct(sql):
         connection.close()
 
 
-def build_candidate(release_id, runtime_sha256):
+def _document_ai_layout(core_sql, core, source_root):
+    extension = _read(source_root / FORMATION_SQL)
+    if digest(extension) != FORMATION_SQL_SHA256:
+        raise SchemaMismatch('Frozen document formation SQL differs')
+    formation = extension.decode('utf-8')
+    sql = core_sql + '\n' + formation
+    snapshot = _construct(sql)
+    original = {(item.kind, item.name): item for item in core.objects}
+    combined = {(item.kind, item.name): item for item in snapshot.objects}
+    if (
+        any(combined.get(key) != item for key, item in original.items())
+        or len(combined) - len(original) != 74
+    ):
+        raise SchemaMismatch('Document formation changed the ordinary environment schema')
+    facts = {
+        'version': 210,
+        'core_contract_sha256': digest(canonical_bytes(asdict(core))),
+        'core_fresh_checksum': digest(core_sql.encode('utf-8')),
+        'extension_sha256': FORMATION_SQL_SHA256,
+    }
+    return sql, snapshot, facts, formation
+
+
+def build_candidate(release_id, runtime_sha256, *, document_ai=False):
     """Construct and inspect the full fresh SQL with the caller's admitted SQLite."""
-    manifest = _bound_fields(release_id, runtime_sha256)
-    base = _base_schema()
+    bound = _bound_fields(release_id, runtime_sha256)
+    manifest = dict(bound)
     sql = fresh_sql()
     snapshot = _construct(sql)
-    _check_delta(base, snapshot)
-    if manifest != _bound_fields(release_id, runtime_sha256):
+    _check_delta(_base_schema(), snapshot)
+    if document_ai:
+        sql, snapshot, facts, _ = _document_ai_layout(sql, snapshot, ROOT)
+        manifest['document_formation'] = facts
+    if bound != _bound_fields(release_id, runtime_sha256):
         raise SchemaMismatch('Schema source inputs changed during construction')
     resources = {OBJECTS: canonical_bytes(asdict(snapshot)), FRESH_SQL: sql.encode('utf-8')}
     manifest['schema_contract_sha256'] = digest(resources[OBJECTS])
@@ -203,18 +242,26 @@ def load_release(
     bound = _bound_fields(directory.name, runtime_sha256, source_root)
     resources = {name: _read(directory / name) for name in (OBJECTS, FRESH_SQL)}
     contract = digest(resources[OBJECTS])
-    expected_bytes = canonical_bytes(
-        {**bound, 'schema_contract_sha256': contract, 'resources': _facts(resources)}
-    )
-    if raw != expected_bytes:
-        raise SchemaMismatch('SCHEMA_RELEASE_MISMATCH')
+    expected = {**bound, 'schema_contract_sha256': contract, 'resources': _facts(resources)}
     snapshot = _snapshot(json.loads(resources[OBJECTS]))
-    _check_delta(_base_schema(source_root), snapshot)
-    return FreshSchemaRelease(
-        directory.name,
-        contract,
-        snapshot,
-        resources[FRESH_SQL].decode('utf-8'),
-        None,
-        expected_digest,
+    sql = resources[FRESH_SQL].decode('utf-8')
+    args = directory.name, contract, snapshot, sql, None, expected_digest
+    manifest = json.loads(raw)
+    if 'document_formation' not in manifest:
+        if raw != canonical_bytes(expected):
+            raise SchemaMismatch('SCHEMA_RELEASE_MISMATCH')
+        _check_delta(_base_schema(source_root), snapshot)
+        return FreshSchemaRelease(*args)
+
+    core_sql = fresh_sql()
+    core = _construct(core_sql)
+    _check_delta(_base_schema(source_root), core)
+    expected_sql, expected_snapshot, facts, formation = _document_ai_layout(
+        core_sql, core, source_root
+    )
+    expected['document_formation'] = facts
+    if raw != canonical_bytes(expected) or sql != expected_sql or snapshot != expected_snapshot:
+        raise SchemaMismatch('SCHEMA_RELEASE_MISMATCH')
+    return DocumentAiSchemaRelease(
+        *args, facts['core_contract_sha256'], facts['core_fresh_checksum'], formation
     )

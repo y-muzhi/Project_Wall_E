@@ -1,8 +1,8 @@
 """Admit a fixed recovery replica under a closed, outbound-held installation."""
 
-from hashlib import sha256
 import os
 import stat
+from hashlib import sha256
 
 from backend.app.management.attachment_observation import now
 from backend.app.management.release_artifacts import indexed_files, snapshot_file
@@ -31,7 +31,8 @@ from .environment_installation import (
     sha_value,
     uuid_value,
 )
-from .environment_restore import RECEIPT, reopen_archive
+from .environment_restore import DOCUMENT_AI, RECEIPT, reopen_archive, restoration_status
+from .schema_v22_release import DocumentAiSchemaRelease
 
 POLICY = 'recovery-read-policy.v1.json'
 INVALID = 'RECOVERY_READ_INTENT_MISMATCH'
@@ -293,10 +294,26 @@ class RecoveryScope(ClosedReadScope):
         self.database_signature = self.snapshot_signature(verify_payload=self.verify_database_bytes)
         receipt = decode(protected_receipt(self.plan['rehearsal_receipt']), UNVERIFIED)
         artifact = receipt['database_artifact']
+        document_ai = DOCUMENT_AI in receipt
+        if document_ai:
+            require(
+                self.replica is not None
+                and self.installation.description['purpose'] == 'DEVELOPMENT'
+                and isinstance(self.release, DocumentAiSchemaRelease)
+                and receipt[DOCUMENT_AI]
+                == {
+                    'directory': str(self.installation.schema),
+                    'contract_sha256': self.release.schema_contract_sha256,
+                    'manifest_sha256': self.release.manifest_sha256,
+                    'program': str(self.installation.project),
+                    'program_sha256': self.installation.description['program_source']['sha256'],
+                },
+                UNVERIFIED,
+            )
         require(
             type(receipt['format_version']) is int
             and receipt['format_version'] == 2
-            and receipt['status'] == 'DATABASE_AND_COUNT_AUDIT_RESTORE_VERIFIED'
+            and receipt['status'] == restoration_status(2, document_ai=document_ai)
             and receipt['source_environment_id'] == self.installation.environment_id
             and receipt['target_data_generation'] == self.installation.data_generation
             and receipt['source_data_generation'] != self.installation.data_generation

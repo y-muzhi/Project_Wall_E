@@ -529,6 +529,7 @@ def main():
         parser.add_argument(f'--{path}', type=Path)
     for field in ('sha256', 'program-sha256'):
         parser.add_argument(f'--{field}', required=True)
+    parser.add_argument('--restore-executor-sha256')
     parser.add_argument('--anchor-sha256')
     parser.add_argument('--registry-recovery-id')
     parser.add_argument('--registry-recovery-policy', type=Path)
@@ -638,6 +639,19 @@ def main():
     parser.add_argument('--cancel-policy', type=Path)
     parser.add_argument('--cancel-policy-sha256')
     args = parser.parse_args()
+    if args.restore_executor_sha256 is not None and args.action.removeprefix('_') not in (
+        'environment-maintenance',
+        'check-restore-preflight',
+        'prepare-restore-data',
+        'check-restore-readiness',
+        'prepare-restore-generation',
+        'describe-restore-deployment',
+        'prepare-release-deployment',
+        'select-release-deployment',
+    ):
+        parser.error(
+            'A separate fixed executor is accepted only for development structure restoration'
+        )
     prepare = args.action == 'prepare'
     registry_dispatch = args.action in ('pause-registry-dispatch', 'observe-registry-dispatch')
     host_recovery_control = args.action in (
@@ -1111,7 +1125,16 @@ def main():
             entry['verify_program'](args.project) == args.program_sha256,
             'PROGRAM_SNAPSHOT_MISMATCH',
         )
-        sys.path.append(str(args.project))
+        executor = args.project
+        if args.restore_executor_sha256 is not None:
+            launcher = Path(__file__)
+            executor = launcher.parents[2]
+            entry['demand'](
+                launcher == executor / 'tools/linux_runtime/manage_registry.py'
+                and entry['verify_program'](executor) == args.restore_executor_sha256,
+                'RESTORE_EXECUTOR_SNAPSHOT_MISMATCH',
+            )
+        sys.path.append(str(executor))
         if prepare:
             entry['verify_runtime'](args.root, args.sha256)
             from backend.app.management.registry_installation import (

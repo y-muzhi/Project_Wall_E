@@ -1,13 +1,13 @@
 """Restore the verified SQLite component to a new data generation, offline."""
 
-from contextlib import closing, ExitStack
-from dataclasses import replace
-from datetime import datetime, timezone
 import os
-from pathlib import Path
 import sqlite3
 import stat
 import time
+from contextlib import ExitStack, closing
+from dataclasses import replace
+from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 from backend.app.shared.time import utc_milliseconds
@@ -29,7 +29,14 @@ from .environment_backup_assets import (
     restore_count_audit,
     verify_count_audit,
 )
-from .environment_binding import EnvironmentBinding, verify_binding
+from .environment_binding import (
+    EnvironmentBinding,
+    document_ai_source_facts,
+    extend_document_ai_copy,
+    verify_binding,
+    verify_document_ai_copy,
+    verify_snapshot_binding,
+)
 from .environment_command import admission_inputs
 from .environment_control import check_maintenance_reference, read_control, stopped_for_policy
 from .environment_files import (
@@ -42,12 +49,14 @@ from .environment_files import (
     identity,
     no_acl,
     persisted_write,
+    protected_directory,
     read_entry,
     read_protected,
     require,
 )
 from .environment_installation import identity_record, sha_value, uuid_value
 from .schema_inspection import verify_integrity, verify_schema
+from .schema_v22_release import DocumentAiSchemaRelease, load_release
 
 POLICY = 'database-restore.v1.json'
 TARGET = 'restore-target.v1.json'
@@ -55,6 +64,8 @@ RECEIPT = 'database-restore-receipt.v1.json'
 INVALID = 'DATABASE_RESTORE_INTENT_MISMATCH'
 UNVERIFIED = 'DATABASE_RESTORE_UNVERIFIED'
 STALE = 'DATABASE_RESTORE_SOURCE_CHANGED'
+DOCUMENT_AI = 'document_ai_schema'
+DOCUMENT_AI_RESTORED = 'DOCUMENT_AI_DATABASE_AND_COUNT_AUDIT_RESTORE_VERIFIED'
 
 
 def load_restore(path, expected):
@@ -78,6 +89,7 @@ def load_restore(path, expected):
             'target_identity',
             'target_data_generation',
             *assets,
+            *((DOCUMENT_AI,) if DOCUMENT_AI in value else ()),
             *(('maintenance',) if 'maintenance' in value else ()),
         ),
         INVALID,
@@ -102,6 +114,17 @@ def load_restore(path, expected):
     )
     if 'maintenance' in plan:
         check_maintenance_reference(plan['maintenance'], INVALID)
+    if DOCUMENT_AI in plan:
+        evidence = exact(
+            plan[DOCUMENT_AI],
+            ('directory', 'manifest_sha256', 'contract_sha256', 'program', 'program_sha256'),
+            INVALID,
+        )
+        require(version == 2 and plan.get('maintenance') is not None, INVALID)
+        for name in ('directory', 'program'):
+            absolute(evidence[name], INVALID)
+        for name in ('manifest_sha256', 'contract_sha256', 'program_sha256'):
+            require(sha_value(evidence[name]), INVALID)
     absolute(plan['target_directory'], INVALID)
     identity_record(plan['target_identity'], INVALID)
     capture = exact(plan['capture_policy'], ('path', 'sha256'), INVALID)
@@ -289,7 +312,86 @@ def prepare_target(source, target, release, old, new, baseline, limit):
         db.execute('COMMIT')
 
 
-def restoration_status(version):
+def require_document_ai_extension(installation, source, target, code):
+    require(
+        installation.description['purpose'] == 'DEVELOPMENT'
+        and not isinstance(source, DocumentAiSchemaRelease)
+        and isinstance(target, DocumentAiSchemaRelease)
+        and target.core_contract_sha256 == source.schema_contract_sha256
+        and target.core_fresh_checksum == source.fresh_checksum
+        and target.schema_contract_sha256 != source.schema_contract_sha256,
+        code,
+    )
+
+
+def document_ai_release(plan, installation, source, active, entry):
+    evidence = plan.get(DOCUMENT_AI)
+    if evidence is None:
+        return None
+    program = Path(evidence['program'])
+    directory = Path(evidence['directory'])
+    require(entry['verify_program'](program) == evidence['program_sha256'], INVALID)
+    with protected_directory(directory):
+        target = load_release(
+            directory,
+            evidence['manifest_sha256'],
+            active.runtime_manifest_sha256,
+            source_root=program,
+        )
+    require_document_ai_extension(installation, source, target, INVALID)
+    require(target.schema_contract_sha256 == evidence['contract_sha256'], INVALID)
+    return target
+
+
+def archived_document_ai_source(source, release, binding):
+    with closing(sqlite3.connect(source.as_uri() + '?mode=ro&immutable=1', uri=True)) as database:
+        database.execute('BEGIN')
+        verify_snapshot_binding(database, release, binding)
+        verify_integrity(database)
+        return document_ai_source_facts(database)
+
+
+def prepare_document_ai_target(
+    source, target, current, release, old, new, baseline, maximum, operation
+):
+    with closing(
+        sqlite3.connect(target.as_uri() + '?mode=rw', uri=True, isolation_level=None)
+    ) as db:
+        db.execute('PRAGMA foreign_keys=ON')
+        db.execute('PRAGMA synchronous=FULL')
+        if db.execute('SELECT 1 FROM sqlite_schema LIMIT 1').fetchone() is None:
+            require(db.execute('PRAGMA user_version').fetchone() == (0,), UNVERIFIED)
+            copy_to_target(source, db, maximum)
+        require(db.execute('PRAGMA journal_mode=WAL').fetchone() == ('wal',), UNVERIFIED)
+        db.execute('BEGIN IMMEDIATE')
+        owner = db.execute('SELECT data_generation FROM environment_binding').fetchone()
+        require(owner in ((old.data_generation,), (new.data_generation,)), UNVERIFIED)
+        if owner[0] == old.data_generation:
+            verify_binding(db, current, old)
+            require(document_ai_source_facts(db) == baseline, UNVERIFIED)
+            extend_document_ai_copy(
+                db,
+                current,
+                release,
+                old,
+                new,
+                operation,
+                utc_milliseconds(datetime.now(timezone.utc)),
+            )
+        verify_document_ai_copy(db, release, new, operation, *baseline)
+        db.commit()
+
+
+def reopen_document_ai_target(target, release, binding, operation, source):
+    with closing(sqlite3.connect(target.as_uri() + '?mode=ro&immutable=1', uri=True)) as database:
+        database.execute('BEGIN')
+        verify_document_ai_copy(database, release, binding, operation, *source)
+        return archived_facts(database, release, binding)
+
+
+def restoration_status(version, *, document_ai=False):
+    if document_ai:
+        return DOCUMENT_AI_RESTORED
     return (
         'DATABASE_AND_COUNT_AUDIT_RESTORE_VERIFIED' if version == 2 else 'DATABASE_RESTORE_VERIFIED'
     )
@@ -317,7 +419,7 @@ def completed(fd, installation, common, plan, capture):
     )
     require(
         all(result[key] == value for key, value in common.items())
-        and result['status'] == restoration_status(version)
+        and result['status'] == restoration_status(version, document_ai=DOCUMENT_AI in common)
         and result['outbound_hold_required'] is True
         and sha_value(result['content_sha256']),
         UNVERIFIED,
@@ -346,18 +448,37 @@ def completed(fd, installation, common, plan, capture):
     return result
 
 
-def convert(installation, release, plan, capture, source, destination, fd, common):
+def convert(
+    installation, release, plan, capture, source, destination, fd, common, *, ai_release=None
+):
     marker = target_marker(fd, installation, common, create=True)
     props = safe_target_file(fd, installation, marker['database_identity'])
     source_file = source / SNAPSHOT
     target_file = destination / SNAPSHOT
     old = EnvironmentBinding(installation.environment_id, plan['source_data_generation'])
     new = EnvironmentBinding(installation.environment_id, plan['target_data_generation'])
-    baseline = reopen_archive(source_file, release, old)
+    baseline = (
+        reopen_archive(source_file, release, old)
+        if ai_release is None
+        else archived_document_ai_source(source_file, release, old)
+    )
     maximum = capture['max_database_bytes']
     if stat.S_IMODE(props.st_mode) == 0o600:
         verify_target_sidecars(fd, installation)
-        prepare_target(source_file, target_file, release, old, new, baseline, maximum)
+        if ai_release is None:
+            prepare_target(source_file, target_file, release, old, new, baseline, maximum)
+        else:
+            prepare_document_ai_target(
+                source_file,
+                target_file,
+                release,
+                ai_release,
+                old,
+                new,
+                baseline,
+                maximum,
+                plan['operation_id'],
+            )
     safe_target_file(fd, installation, marker['database_identity'])
     if common['format_version'] == 2 and stat.S_IMODE(props.st_mode) == 0o400:
         members = set(os.listdir(fd))
@@ -366,7 +487,13 @@ def convert(installation, release, plan, capture, source, destination, fd, commo
         )
     else:
         assert_contents(fd, {SNAPSHOT, TARGET})
-    require(reopen_archive(target_file, release, new) == baseline, UNVERIFIED)
+    if ai_release is None:
+        require(reopen_archive(target_file, release, new) == baseline, UNVERIFIED)
+        target_facts = baseline
+    else:
+        target_facts = reopen_document_ai_target(
+            target_file, ai_release, new, plan['operation_id'], baseline
+        )
     artifact = snapshot_artifact(
         fd,
         maximum,
@@ -375,7 +502,7 @@ def convert(installation, release, plan, capture, source, destination, fd, commo
         expected_identity=marker['database_identity'],
         seal=stat.S_IMODE(props.st_mode) == 0o600,
     )
-    return baseline, artifact
+    return target_facts, artifact
 
 
 def planned_restore(plan, capture, restore_sha):
@@ -406,6 +533,8 @@ def planned_restore(plan, capture, restore_sha):
     }
     if plan['format_version'] == 2:
         common['expected_asset_index_sha256'] = plan['expected_asset_index_sha256']
+    if DOCUMENT_AI in plan:
+        common[DOCUMENT_AI] = plan[DOCUMENT_AI]
     return target, common
 
 
@@ -433,6 +562,7 @@ def restore_database(native, active, args, entry):
         ),
         INVALID,
     )
+    ai_release = document_ai_release(plan, installation, release, active, entry)
     target, common = planned_restore(plan, capture, args.restore_sha256)
     with_assets = plan['format_version'] == 2
     with recovery_directory(target, installation) as (destination, fd):
@@ -469,7 +599,15 @@ def restore_database(native, active, args, entry):
                         UNVERIFIED,
                     )
                 facts, artifact = convert(
-                    installation, release, plan, capture, source, destination, fd, common
+                    installation,
+                    release,
+                    plan,
+                    capture,
+                    source,
+                    destination,
+                    fd,
+                    common,
+                    ai_release=ai_release,
                 )
                 asset_index = None
                 if with_assets:
@@ -483,7 +621,9 @@ def restore_database(native, active, args, entry):
                 )
                 result = {
                     **common,
-                    'status': restoration_status(plan['format_version']),
+                    'status': restoration_status(
+                        plan['format_version'], document_ai=ai_release is not None
+                    ),
                     'restored_at': utc_milliseconds(datetime.now(timezone.utc)),
                     'initialized_at': facts[0],
                     'content_sha256': facts[1].sha256,

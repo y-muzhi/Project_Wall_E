@@ -3,11 +3,13 @@
 import json
 
 from backend.app.infrastructure.batch_repository import has_independent_review
+from backend.app.infrastructure.idempotency import generation_namespace
 from backend.app.infrastructure.revision_repository import RevisionRepository
 from backend.app.shared.command_execution import Rejected
 from backend.app.shared.validation import object_fields, raw_text, strict_integer
 
 GROUP_DECISION = 'APP-BATCH-CMD-C05'
+GENERATION_TARGET = generation_namespace('????????-????-4???-[89ab]???-????????????')
 
 
 def validate_groups(value, count):
@@ -74,18 +76,31 @@ def review_groups(parent, suggestions):
 
 
 def decision_version(connection, batch_id):
+    # A retained batch keeps its review version when its receipts move to a new generation.
     group_target = f'Batch:{batch_id}'
     return (
         1
         + connection.execute(
             """SELECT count(*) FROM idempotency_records i
            WHERE i.status='SUCCEEDED' AND (
-               (i.capability_id IN ('APP-BATCH-CMD-C04', ?) AND i.target_identity=?)
-               OR (i.capability_id='APP-BATCH-CMD-C01' AND i.target_identity IN (
-                   SELECT 'Suggestion:' || id FROM suggestions WHERE batch_id=?
+               (i.capability_id IN ('APP-BATCH-CMD-C04', ?) AND (
+                   i.target_identity=? OR i.target_identity GLOB ? || ?
+               ))
+               OR (i.capability_id='APP-BATCH-CMD-C01' AND EXISTS (
+                   SELECT 1 FROM suggestions WHERE batch_id=? AND (
+                       i.target_identity='Suggestion:' || id
+                       OR i.target_identity GLOB ? || 'Suggestion:' || id
+                   )
                ))
            )""",
-            (GROUP_DECISION, group_target, batch_id),
+            (
+                GROUP_DECISION,
+                group_target,
+                GENERATION_TARGET,
+                group_target,
+                batch_id,
+                GENERATION_TARGET,
+            ),
         ).fetchone()[0]
     )
 

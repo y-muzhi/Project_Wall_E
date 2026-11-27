@@ -9,19 +9,23 @@ from .environment_backup import SNAPSHOT
 from .environment_backup_package import VERIFY_POLICY, read_evidence, read_manifest
 from .environment_backup_rehearsal import (
     POLICY as DATA_POLICY,
+)
+from .environment_backup_rehearsal import (
     anchored_path,
     data_rehearsal,
+    pinned_schema,
     principal_for_process,
+    recovery_contract,
     rehearsal_directories,
     rehearsal_inputs,
-    recovery_contract,
+    reopen_rehearsal,
 )
 from .environment_binding import EnvironmentBinding
 from .environment_control import read_control
 from .environment_files import absolute, canonical, decode, digest, require
 from .environment_recovery_installation import checked_ref
 from .environment_release_preflight import read_reference
-from .environment_restore import RECEIPT, completed, reopen_archive, restoration_status
+from .environment_restore import DOCUMENT_AI, RECEIPT, completed, reopen_archive, restoration_status
 from .environment_restore_preflight import RestorePreflight, locked_restore_preflight
 from .environment_result_archive import read_sealed
 
@@ -50,6 +54,14 @@ def target_inputs(args, verified):
         and backup['backup_manifest_sha256'] == receipt['selected_backup_manifest_sha256'],
         INVALID,
     )
+    if verified.document_ai_schema is not None:
+        expected = verified.plan['data_target']
+        require(
+            target == Path(expected['path'])
+            and plan['target_identity'] == expected['identity']
+            and schema == verified.source.installation.schema,
+            INVALID,
+        )
     preservation = read_reference(verified.plan['preserved']['verification'], name=VERIFY_POLICY)
     preserved_root = absolute(preservation['package_directory'], INVALID)
     boundaries = (verified.source.installation.environment_root, preserved_root)
@@ -72,6 +84,17 @@ class RestoreTarget:
     schema: Path
     policy_sha256: str
     principal: SimpleNamespace
+    active: object
+
+    def conversion(self):
+        if self.verified.document_ai_schema is None:
+            return None
+        return SimpleNamespace(
+            release=self.verified.schema,
+            document_ai_schema=self.verified.document_ai_schema,
+            maximum_bytes=self.verified.plan['data_target']['max_database_bytes'],
+            source_program=self.verified.source.installation.project,
+        )
 
 
 @contextmanager
@@ -91,6 +114,7 @@ def locked_restore_target(native, active, args, entry):
                 schema,
                 data_args.anchor_sha256,
                 principal,
+                active,
             )
 
 
@@ -107,7 +131,12 @@ def target_receipt(directory, principal, verified, record):
         and record['operation_id'] == proof['operation_id']
         and record['backup_manifest_sha256'] == proof['selected_backup_manifest_sha256']
         and record['initialized_at'] == initialized
-        and record['content_sha256'] == logical.sha256 == proof['selected_logical_content_sha256']
+        and record['content_sha256'] == logical.sha256
+        and (
+            (record.get(DOCUMENT_AI) == verified.document_ai_schema)
+            if verified.document_ai_schema is not None
+            else logical.sha256 == proof['selected_logical_content_sha256']
+        )
         and record['outbound_hold_required'] is True,
         UNVERIFIED,
     )
@@ -154,9 +183,16 @@ def restore_data_result(target, receipt):
         'target_database_sha256': record['database_artifact']['sha256'],
         'target_asset_index_sha256': record['restored_asset_index']['sha256'],
         'target_restored_at': record['restored_at'],
-        'selected_logical_content_sha256': record['content_sha256'],
+        'selected_logical_content_sha256': proof['selected_logical_content_sha256'],
         'outbound_hold_required': True,
     }
+    if verified.document_ai_schema is not None:
+        result.update(
+            {
+                DOCUMENT_AI: verified.document_ai_schema,
+                'target_logical_content_sha256': record['content_sha256'],
+            }
+        )
     return {**result, 'restore_target_data_sha256': digest(canonical(result))}
 
 
@@ -184,6 +220,7 @@ def prepare_restore_data(native, active, args, entry):
             active,
             target.policy_sha256,
             receipt_admission=receipt_admission,
+            conversion=target.conversion(),
         )
         require(
             prepared['original_result_index_sha256']
@@ -191,7 +228,9 @@ def prepare_restore_data(native, active, args, entry):
             UNVERIFIED,
         )
         record = {
-            key: value if key != 'status' else restoration_status(2)
+            key: value
+            if key != 'status'
+            else restoration_status(2, document_ai=target.verified.document_ai_schema is not None)
             for key, value in prepared.items()
             if key not in ('verification_status', 'original_result_index_sha256')
         }
@@ -206,8 +245,27 @@ def inspect_prepared_data(target):
         expected_manifest=target.backup['backup_manifest_sha256'],
     )
     evidence = read_evidence(target.selected_fd, target.principal, manifest)
-    planned, captured, common = recovery_contract(target.plan, target.backup, manifest, evidence)
+    conversion = target.conversion()
+    planned, captured, common = recovery_contract(
+        target.plan, target.backup, manifest, evidence, conversion=conversion
+    )
     common['rehearsal_policy_sha256'] = target.policy_sha256
     record = completed(target.target_fd, target.principal, common, planned, captured)
     require(record is not None, UNVERIFIED)
+    if conversion is not None:
+        original = pinned_schema(
+            target.active, target.schema, manifest, source_root=conversion.source_program
+        )
+        initialized, retained = reopen_rehearsal(
+            anchored_path(target.selected_fd),
+            anchored_path(target.target_fd),
+            original,
+            common,
+            target.verified.receipt['selected_logical_content_sha256'],
+            conversion=conversion,
+        )
+        require(
+            (initialized, retained.sha256) == (record['initialized_at'], record['content_sha256']),
+            UNVERIFIED,
+        )
     return restore_data_result(target, record)

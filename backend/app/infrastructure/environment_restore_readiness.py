@@ -49,7 +49,9 @@ def verify_prepared_readiness(args, active, verified, actual, plan, read):
         'program_snapshot_sha256': actual['target_program_snapshot_sha256'],
         'frontend_index_sha256': actual['target_frontend_index_sha256'],
         'database_sha256': actual['target_database_sha256'],
-        'logical_content_sha256': actual['selected_logical_content_sha256'],
+        'logical_content_sha256': actual.get(
+            'target_logical_content_sha256', actual['selected_logical_content_sha256']
+        ),
         'runtime_manifest_sha256': active.runtime_manifest_sha256,
     }
     require(

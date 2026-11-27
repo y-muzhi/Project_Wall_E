@@ -1,12 +1,12 @@
 """Place a verified recovered database and audit assets in a distinct stable data root."""
 
-from contextlib import ExitStack, contextmanager
-from hashlib import sha256
 import fcntl
 import os
 import stat
-from tempfile import TemporaryDirectory
+from contextlib import ExitStack, contextmanager
+from hashlib import sha256
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from .count_audit_paths import COUNT_AUDIT_ENTRY
 from .environment_backup import SNAPSHOT, snapshot_artifact
@@ -38,11 +38,12 @@ from .environment_files import (
 )
 from .environment_installation import (
     ANCHOR_NAME,
-    GENERATIONS,
     GENERATION_RECEIPT,
+    GENERATIONS,
     WORKSPACE_PURPOSES,
     identity_record,
     load_installation,
+    read_document_ai_policy,
     sha_value,
     uuid_value,
     validate_target_file,
@@ -54,23 +55,27 @@ from .environment_recovery_restore import (
     prepared_restore_reference,
     restore_proof_reference,
 )
-from .environment_restore import RECEIPT as ARCHIVE_RECEIPT, TARGET as ARCHIVE_TARGET
+from .environment_restore import DOCUMENT_AI
+from .environment_restore import RECEIPT as ARCHIVE_RECEIPT
+from .environment_restore import TARGET as ARCHIVE_TARGET
 from .environment_result_archive import read_sealed
 from .schema_v22_publish import publish_directory
 
 POLICY = 'restore-generation-policy.v1.json'
+DOCUMENT_AI_POLICY = 'document-ai-generation-policy.v1.json'
 RECEIPT = GENERATION_RECEIPT
 INVALID = 'RESTORE_GENERATION_INTENT_MISMATCH'
 UNVERIFIED = 'RESTORE_GENERATION_UNVERIFIED'
 
 
 def generation_plan(args):
-    plan = read_policy(
-        args.anchor,
-        args.anchor_sha256,
-        POLICY,
-        ('source_installation', 'prepared_data', 'readiness', 'prepared_root'),
-    )
+    filename = args.anchor.name
+    enable_document_ai = filename == DOCUMENT_AI_POLICY
+    require(filename in (POLICY, DOCUMENT_AI_POLICY), INVALID)
+    fields = ('source_installation', 'prepared_data', 'readiness', 'prepared_root')
+    if enable_document_ai:
+        fields += ('document_ai_policy',)
+    plan = read_policy(args.anchor, args.anchor_sha256, filename, fields)
     anchor, pin = checked_ref(plan['source_installation'], ANCHOR_NAME)
     source = load_installation(anchor, pin, args.sha256, args.project)
     prepared = prepared_restore_reference(plan['prepared_data'], code=INVALID)
@@ -111,7 +116,27 @@ def generation_plan(args):
         and not target.is_relative_to(source.environment_root),
         INVALID,
     )
-    return source, prepared, ready, target
+    executor = getattr(args, 'restore_executor_sha256', None)
+    require(
+        executor is None
+        or (DOCUMENT_AI in prepared and executor == prepared['target_program_snapshot_sha256']),
+        INVALID,
+    )
+    model_pin = None
+    if enable_document_ai:
+        require(source.description['purpose'] == 'DEVELOPMENT' and DOCUMENT_AI in prepared, INVALID)
+        model = exact(plan['document_ai_policy'], ('path', 'sha256'), INVALID)
+        model_path = absolute(model['path'], INVALID)
+        model_pin = model['sha256']
+        read_document_ai_policy(
+            model_path,
+            model_pin,
+            environment=prepared['environment_id'],
+            generation=prepared['target_data_generation'],
+            deployment=prepared['target_deployment_id'],
+            configuration=prepared['target_configuration_sha256'],
+        )
+    return source, prepared, ready, target, model_pin
 
 
 def sealed_audit(archive, source, receipt):
@@ -310,7 +335,7 @@ def populate_generation(staging, source, archive, archive_receipt, audit):
 
 def prepare_restore_generation(args, entry, hosts):
     require(os.geteuid() == 0, INVALID)
-    source, prepared, ready, origin = generation_plan(args)
+    source, prepared, ready, origin, model_pin = generation_plan(args)
     with ExitStack() as resources:
         lock = lock_frozen_source(resources, args, entry, hosts, source, prepared, code=UNVERIFIED)
         archive = resources.enter_context(
@@ -365,6 +390,16 @@ def prepare_restore_generation(args, entry, hosts):
             'data_root': str(final / 'data'),
             'outbound_hold_required': True,
         }
+
+        if DOCUMENT_AI in restored:
+            common.update(
+                document_ai_schema_contract_sha256=restored[DOCUMENT_AI]['contract_sha256'],
+                source_logical_content_sha256=prepared['selected_logical_content_sha256'],
+                target_logical_content_sha256=prepared['target_logical_content_sha256'],
+            )
+
+        if model_pin is not None:
+            common['document_ai_policy_sha256'] = model_pin
 
         def confirm():
             lock.assert_owned()

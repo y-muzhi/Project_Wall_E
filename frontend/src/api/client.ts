@@ -659,10 +659,14 @@ export class ApiClient {
   ): Promise<ApiSuccess<T, P>> {
     this.assertConnection(mutation);
     const connection = this.environmentConnection;
-    if (connection?.getSnapshot().environment.recovery !== undefined) {
+    const currentEnvironment = connection?.getSnapshot().environment;
+    if (currentEnvironment?.recovery !== undefined) {
       if (!allowsRecoveryRequest(method, target))
         throw new ApiNotSent(RECOVERY_READ_ONLY, 'RECOVERY_READ_ONLY');
-    } else if (connection && !allowsOrdinaryRequest(method, target)) {
+    } else if (
+      currentEnvironment &&
+      !allowsOrdinaryRequest(method, target, currentEnvironment.documentAiReady)
+    ) {
       throw new ApiNotSent(ORDINARY_OPERATION_UNAVAILABLE, 'ENVIRONMENT_CAPABILITY_DISABLED');
     }
     const revision = connection?.requestRevision ?? 0;

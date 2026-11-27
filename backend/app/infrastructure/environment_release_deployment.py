@@ -53,12 +53,14 @@ from .environment_release_preflight import (
     reconfiguration_program,
     rollback_subject,
 )
+from .environment_restore import require_document_ai_extension
 from .schema_v22_publish import publish_directory
 
 POLICY = 'release-deployment-policy.v1.json'
 ROLLBACK_POLICY = 'rollback-deployment-policy.v1.json'
 RECONFIGURE_POLICY = 'reconfigure-deployment-policy.v1.json'
 RESTORE_POLICY = 'restore-deployment-policy.v1.json'
+DOCUMENT_AI_POLICY = 'document-ai-deployment-policy.v1.json'
 INVALID = 'RELEASE_DEPLOYMENT_INTENT_MISMATCH'
 UNVERIFIED = 'RELEASE_DEPLOYMENT_UNVERIFIED'
 CONFLICT = 'RELEASE_DEPLOYMENT_CONFLICT'
@@ -75,6 +77,7 @@ class DeploymentTarget:
     access: bytes
     generation_receipt: dict | None = None
     generation_sha256: str | None = None
+    document_ai_schema_contract_sha256: str | None = None
 
 
 def reconfigured_access(plan, source):
@@ -100,8 +103,12 @@ def reconfigured_access(plan, source):
 
 def prepare_target(args, entry, *, describe=False):
     policy = args.release_deployment_policy.name
-    require(policy in (POLICY, ROLLBACK_POLICY, RECONFIGURE_POLICY, RESTORE_POLICY), INVALID)
-    restore = policy == RESTORE_POLICY
+    document_ai = policy == DOCUMENT_AI_POLICY
+    require(
+        policy in (POLICY, ROLLBACK_POLICY, RECONFIGURE_POLICY, RESTORE_POLICY, DOCUMENT_AI_POLICY),
+        INVALID,
+    )
+    restore = policy in (RESTORE_POLICY, DOCUMENT_AI_POLICY)
     rollback = policy == ROLLBACK_POLICY
     reconfigure = policy == RECONFIGURE_POLICY
     require(not describe or restore, INVALID)
@@ -136,6 +143,8 @@ def prepare_target(args, entry, *, describe=False):
     source.check_hold()
     runtime = SimpleNamespace(runtime_manifest_sha256=args.sha256)
     _, manifest, schema, program_sha = candidate_target(plan, runtime)
+    executor = getattr(args, 'restore_executor_sha256', None)
+    require(executor is None or (document_ai and executor == program_sha), INVALID)
     program = Path(plan['target_manifest']['path']).parent / 'application'
     schema_path = Path(plan['target_schema_directory'])
     require(
@@ -151,7 +160,11 @@ def prepare_target(args, entry, *, describe=False):
     original = checked_schema(
         source.schema, source.description['schema_manifest_sha256'], args.sha256, source.project
     )
-    if restore:
+    document_ai_contract = None
+    if document_ai:
+        require_document_ai_extension(source, original, schema, INVALID)
+        document_ai_contract = schema.schema_contract_sha256
+    elif restore:
         require(schema.schema_contract_sha256 == original.schema_contract_sha256, INVALID)
     else:
         if rollback:
@@ -226,18 +239,31 @@ def prepare_target(args, entry, *, describe=False):
                 receipt['operation_id'] == plan['operation_id']
                 and receipt['target_deployment_id'] == key
                 and receipt['target_configuration_sha256'] == digest(canonical(description))
-                and receipt['data_identity'] != source.roots['data'],
+                and receipt['data_identity'] != source.roots['data']
+                and (
+                    not document_ai
+                    or receipt.get('document_ai_schema_contract_sha256') == document_ai_contract
+                ),
                 UNVERIFIED,
             )
     return DeploymentTarget(
-        source, program, schema_path, key, binding, description, access, receipt, pin
+        source,
+        program,
+        schema_path,
+        key,
+        binding,
+        description,
+        access,
+        receipt,
+        pin,
+        document_ai_contract,
     )
 
 
 def describe_restore_deployment(args, entry):
     require(os.geteuid() == 0, UNVERIFIED)
     target = prepare_target(args, entry, describe=True)
-    return {
+    described = {
         'status': 'RESTORE_DEPLOYMENT_DESCRIBED',
         'environment_id': target.source.environment_id,
         'target_data_generation': target.description['data_generation'],
@@ -245,6 +271,13 @@ def describe_restore_deployment(args, entry):
         'target_configuration_sha256': digest(canonical(target.description)),
         'data_root': target.description['data_root'],
     }
+    if target.document_ai_schema_contract_sha256 is not None:
+        described.update(
+            status='DOCUMENT_AI_DEPLOYMENT_DESCRIBED',
+            document_ai_schema_contract_sha256=target.document_ai_schema_contract_sha256,
+            outbound_hold_required=True,
+        )
+    return described
 
 
 def expected_anchor(target, frontend_identity):

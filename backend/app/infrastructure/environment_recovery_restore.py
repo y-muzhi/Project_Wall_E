@@ -6,8 +6,10 @@ from .environment_control import read_control
 from .environment_files import absolute, canonical, digest, exact, require
 from .environment_installation import database_identity, identity_record, sha_value, uuid_value
 from .environment_lock import LIBRARY_REF, NativeEnvironmentFiles
-from .environment_release_preflight import candidate_target, read_reference
 from .environment_recovery_installation import INVALID, UNVERIFIED
+from .environment_release_preflight import candidate_target, read_reference
+from .environment_restore import DOCUMENT_AI
+from .schema_v22_release import DocumentAiSchemaRelease
 
 
 def restore_proof_reference(reference, name, status, hash_field, *, code=INVALID):
@@ -68,6 +70,21 @@ def approve_fixed_restore(args, plan, source, frontend, index, index_sha):
         and index == release_root / manifest['frontend_index_ref']['path'],
         INVALID,
     )
+    if isinstance(schema, DocumentAiSchemaRelease) and DOCUMENT_AI in prepared:
+        require(
+            source.description['purpose'] == 'DEVELOPMENT'
+            and prepared[DOCUMENT_AI]
+            == {
+                'directory': fixed['target_schema_directory'],
+                'contract_sha256': schema.schema_contract_sha256,
+                'manifest_sha256': schema.manifest_sha256,
+                'program': str(args.project),
+                'program_sha256': program,
+            },
+            INVALID,
+        )
+    else:
+        require(DOCUMENT_AI not in prepared, INVALID)
     identity_record(prepared['source_database_identity'], INVALID)
     return prepared, absolute(fixed['target_schema_directory'], INVALID)
 
@@ -100,6 +117,10 @@ def match_prepared_archive(prepared, receipt, *, code=UNVERIFIED):
         and receipt['database_artifact']['sha256'] == prepared['target_database_sha256']
         and receipt['restored_asset_index']['sha256'] == prepared['target_asset_index_sha256']
         and receipt['restored_at'] == prepared['target_restored_at']
-        and receipt['content_sha256'] == prepared['selected_logical_content_sha256'],
+        and receipt.get(DOCUMENT_AI) == prepared.get(DOCUMENT_AI)
+        and receipt['content_sha256']
+        == prepared.get(
+            'target_logical_content_sha256', prepared['selected_logical_content_sha256']
+        ),
         code,
     )

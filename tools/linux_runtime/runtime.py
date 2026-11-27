@@ -785,7 +785,12 @@ def run_target(args, environment):
         sys.path.append(str(project))
         from backend.app.infrastructure.schema_v22_publish import build_and_publish
 
-        release = build_and_publish(args.output, args.release_id, active.runtime_manifest_sha256)
+        release = build_and_publish(
+            args.output,
+            args.release_id,
+            active.runtime_manifest_sha256,
+            document_ai=args.document_ai_schema,
+        )
         validate_mappings(args.root, paths, hosts)
         print(
             f'SCHEMA_CANDIDATE {release.release_id} {release.manifest_sha256} '
@@ -810,6 +815,7 @@ def main():
     parser.add_argument('--project', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--release-id')
+    parser.add_argument('--document-ai-schema', action='store_true')
     parser.add_argument('--anchor', type=Path)
     parser.add_argument('--anchor-sha256')
     parser.add_argument('--action', choices=('prepare', 'continue', 'check', 'diagnose', 'observe'))
@@ -828,6 +834,7 @@ def main():
         demand(
             bool(args.project) == (schema_request or environment_request)
             and (all(schema_values) if schema_request else not any(schema_values))
+            and (schema_request or not args.document_ai_schema)
             and (
                 all(control_values)
                 if environment_request

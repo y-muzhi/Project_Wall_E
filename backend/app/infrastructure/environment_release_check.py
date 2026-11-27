@@ -5,10 +5,14 @@ import os
 from backend.app.management.attachment_observation import now
 
 from .environment_backup_package import read_policy
-from .environment_control import read_control, read_release_transition
+from .environment_control import (
+    read_control,
+    read_release_transition,
+    require_release_not_reverting,
+)
 from .environment_files import canonical, digest, require
 from .environment_installation import sha_value, uuid_value, validate_target_file
-from .environment_recovery_read import ClosedReadScope, SCOPES
+from .environment_recovery_read import SCOPES, ClosedReadScope
 from .environment_restore import reopen_archive
 
 POLICY = 'release-check-policy.v1.json'
@@ -57,6 +61,7 @@ class ReleaseCheckScope(ClosedReadScope):
         transition = read_release_transition(
             self.control_fd, self.installation, self.plan['operation_id']
         )
+        require_release_not_reverting(self.control_fd, transition, UNVERIFIED)
         require(
             record == transition['after']
             and digest(canonical(transition)) == self.plan['transition_sha256']

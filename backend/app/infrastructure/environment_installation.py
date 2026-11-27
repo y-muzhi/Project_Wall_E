@@ -115,6 +115,7 @@ class Installation:
     schema: Path
     ingress_group: int | None = None
     restore_generation_sha256: str | None = None
+    document_ai_policy_sha256: str | None = None
 
     @property
     def environment_root(self):
@@ -454,9 +455,12 @@ def load_installation(anchor, expected, runtime_sha256, project, *, allow_slot=T
     require(digest(config_raw) == record['configuration_sha256'], code)
     config = decode(config_raw, 'INVALID_ENVIRONMENT_CONFIG')
     environment_root = anchor.parent
+    document_ai_policy_sha256 = None
     if 'deployment_slot' in config:
         require(allow_slot, code)
-        environment_root = validate_deployment_slot(anchor, config, record, runtime_sha256)
+        environment_root, document_ai_policy_sha256 = validate_deployment_slot(
+            anchor, config, record, runtime_sha256
+        )
     else:
         require('restore_generation_sha256' not in record, code)
     _validate_description(anchor, environment_root, config, record, runtime_sha256)
@@ -480,7 +484,44 @@ def load_installation(anchor, expected, runtime_sha256, project, *, allow_slot=T
         schema,
         ingress,
         record.get('restore_generation_sha256'),
+        document_ai_policy_sha256,
     )
+
+
+def read_document_ai_policy(path, expected, *, environment, generation, deployment, configuration):
+    code = 'DOCUMENT_AI_POLICY_MISMATCH'
+    require(path.is_absolute() and sha_value(expected), code)
+    raw = read_protected(path)
+    require(digest(raw) == expected, code)
+    policy = decode(raw, code)
+    version_record(
+        policy,
+        (
+            'environment_id',
+            'data_generation',
+            'deployment_id',
+            'configuration_sha256',
+            'credential',
+            'local_http_proxy',
+            'discussion_release_sha256',
+            'document_release_sha256',
+        ),
+        code,
+    )
+    require(
+        (
+            policy['environment_id'],
+            policy['data_generation'],
+            policy['deployment_id'],
+            policy['configuration_sha256'],
+        )
+        == (environment, generation, deployment, configuration)
+        and sha_value(policy['discussion_release_sha256'])
+        and sha_value(policy['document_release_sha256'])
+        and type(policy['credential']) is str,
+        code,
+    )
+    return policy
 
 
 def restored_data_root(environment_root, generation):
@@ -502,6 +543,15 @@ def read_restore_generation(environment_root, environment_id, generation, *, exp
         'restore_readiness_sha256',
         'generation_policy_sha256',
     )
+    if 'document_ai_schema_contract_sha256' in receipt:
+        hashes += (
+            'document_ai_schema_contract_sha256',
+            'source_logical_content_sha256',
+            'target_logical_content_sha256',
+        )
+    if 'document_ai_policy_sha256' in receipt:
+        require('document_ai_schema_contract_sha256' in receipt, code)
+        hashes += ('document_ai_policy_sha256',)
     version_record(
         receipt,
         (
@@ -529,7 +579,11 @@ def read_restore_generation(environment_root, environment_id, generation, *, exp
         and receipt['data_root'] == str(data_root)
         and receipt['outbound_hold_required'] is True
         and all(uuid_value(receipt[field]) for field in ('operation_id', 'target_deployment_id'))
-        and all(sha_value(receipt[field]) for field in hashes),
+        and all(sha_value(receipt[field]) for field in hashes)
+        and (
+            'document_ai_schema_contract_sha256' not in receipt
+            or receipt['source_logical_content_sha256'] != receipt['target_logical_content_sha256']
+        ),
         code,
     )
     for field in ('source_database_identity', 'data_identity', 'database_identity'):
@@ -573,6 +627,7 @@ def validate_deployment_slot(anchor, config, record, runtime_sha256):
         allow_slot=False,
     )
     restored = record['data_generation'] != base.data_generation
+    document_ai_policy = None
     if restored:
         expected = record.get('restore_generation_sha256')
         require(sha_value(expected), code)
@@ -590,6 +645,8 @@ def validate_deployment_slot(anchor, config, record, runtime_sha256):
                 == (record['deployment_id'], record['configuration_sha256']),
                 code,
             )
+            document_ai_policy = receipt.get('document_ai_policy_sha256')
+            require(document_ai_policy is None or config['purpose'] == 'DEVELOPMENT', code)
     else:
         require(
             'restore_generation_sha256' not in record
@@ -623,7 +680,7 @@ def validate_deployment_slot(anchor, config, record, runtime_sha256):
     if config['access_policy_ref'] != base.description['access_policy_ref']:
         access = _access_policy(anchor, environment_root, config, base.environment_id)
         require(access_scope(access) == access_scope(read_access_policy(base)), code)
-    return environment_root
+    return environment_root, document_ai_policy
 
 
 def validate_target_file(installation, metadata):

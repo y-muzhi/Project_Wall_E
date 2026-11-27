@@ -168,6 +168,7 @@ function LoadedDetail({
     blocked = !supported || departure.phase !== 'IDLE',
     writeBlocked = blocked || writeReason !== null,
     ordinary = api.environmentScope !== undefined,
+    documentAiUnavailable = ordinary && !api.documentAiAvailable,
     propertyReason = ordinary ? '此环境尚未开放修改需求名称。' : writeReason,
     lifecycleReason = ordinary ? '此环境尚未开放修改需求状态。' : null,
     metadataReason = ordinary ? '此环境尚未开放修改文档属性或确认版本。' : writeReason,
@@ -477,7 +478,7 @@ function LoadedDetail({
             )
           }
           suggestions={
-            ordinary ? (
+            documentAiUnavailable ? (
               <p className="field-help">此环境暂未开放 AI 修改建议。</p>
             ) : (
               <ConversationSuggestions
@@ -490,7 +491,7 @@ function LoadedDetail({
             )
           }
           progress={
-            ordinary ? (
+            documentAiUnavailable ? (
               <p className="field-help">此环境暂未开放 AI 讨论进展。</p>
             ) : actual.current ? (
               <FormationProgress
@@ -531,7 +532,7 @@ function LoadedDetail({
               blocked={blocked || document.busy}
               revisions={owner.documents.revisions}
               history={regions.conversation.read.history}
-              versionsOnly={ordinary}
+              versionsOnly={documentAiUnavailable}
               readRun={owner.readRunRecord}
               versions={
                 <>

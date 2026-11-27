@@ -43,17 +43,19 @@ class GuideWorker:
         clock=lambda: datetime.now(timezone.utc),
         orchestrator_options=None,
         ordinary=None,
+        ordinary_document_ai=False,
     ):
         self.database = database
         self.catalog = ResourceCatalog() if catalog is None else catalog
         self.clock = clock
         if ordinary is not None and (
-            ordinary.database is not database or orchestrator_options is not None
+            ordinary.database is not database
+            or orchestrator_options is not None
+            and not ordinary_document_ai
         ):
-            raise ValueError(
-                'The ordinary scope must own this database and cannot enable model options'
-            )
+            raise ValueError('Invalid database or model options for the ordinary scope')
         self.ordinary = ordinary
+        self.model_enabled = ordinary is None or ordinary_document_ai
         self.process_lock = (
             ProcessLock.for_database(database.path) if ordinary is None else ordinary.lock
         )
@@ -139,10 +141,17 @@ class GuideWorker:
             self.executor = None
             raise
 
+    def open_bound_admission(self):
+        if not self.started or self.ordinary is None or self.accepting:
+            raise RuntimeError('Bound worker cannot open admission')
+        self.accepting = True
+        if self.model_enabled:
+            self._monitor = asyncio.create_task(self._monitor_loop(), name='walle-no-progress')
+
     def dispatch(self, identity):
         strict_integer(identity, 'guide_run_id')
         if (
-            self.ordinary is not None
+            not self.model_enabled
             or not self.accepting
             or asyncio.get_running_loop() is not self._loop
         ):
@@ -171,6 +180,7 @@ class GuideWorker:
                 process_lock=self.process_lock,
                 catalog=self.catalog,
                 clock=self.clock,
+                bound_document_ai=self.ordinary is not None and self.model_enabled,
                 **self._options,
             )
             self.events.append(
@@ -290,7 +300,7 @@ class GuideWorker:
 
     async def after_commit(self, result):
         """Use actual application success before HTTP projection may fail."""
-        if self.ordinary is not None:
+        if not self.model_enabled:
             return
         try:
             code, data = result['code'], result['data']
@@ -320,7 +330,7 @@ class GuideWorker:
             return None
         self.accepting = False
         self._resubmit.clear()
-        if self.ordinary is not None:
+        if self.ordinary is not None and not self.model_enabled:
             try:
                 await _native(self.ordinary.close)
             finally:
@@ -365,7 +375,11 @@ class GuideWorker:
             )
             self.events.append({'event': 'CLOSED_RECOVERY', 'code': recovery['code']})
         finally:
-            self.process_lock.release()
-            self.executor = None
-            self.started = False
+            try:
+                if self.ordinary is not None:
+                    await _native(self.ordinary.close)
+            finally:
+                self.process_lock.release()
+                self.executor = None
+                self.started = False
         return recovery

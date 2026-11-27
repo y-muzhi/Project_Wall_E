@@ -3,13 +3,14 @@
 import argparse
 import json
 import os
+import re
 import runpy
 import signal
 import socket
 import stat
 import subprocess
 import sys
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 
 
@@ -65,6 +66,80 @@ def serve_application(app, listener):
         )
     )
     return run_owned_server(server, listener)
+
+
+def document_ai_profile(args, installation, release):
+    from backend.app.infrastructure.environment_files import protected_directory, require
+    from backend.app.infrastructure.environment_installation import read_document_ai_policy
+    from backend.app.infrastructure.model_profile import OPENAI_PROFILE, ModelProfile
+    from backend.app.infrastructure.openai_transport import PROXY_ENV, validate_proxy
+    from backend.app.infrastructure.schema_v22_release import DocumentAiSchemaRelease
+
+    code = 'DOCUMENT_AI_POLICY_MISMATCH'
+    if installation.restore_generation_sha256 is not None:
+        require(args.document_ai_policy_sha256 == installation.document_ai_policy_sha256, code)
+    if args.document_ai_policy is None:
+        return None
+    require(
+        installation.description['purpose'] == 'DEVELOPMENT'
+        and isinstance(release, DocumentAiSchemaRelease),
+        code,
+    )
+    policy = read_document_ai_policy(
+        args.document_ai_policy,
+        args.document_ai_policy_sha256,
+        environment=installation.environment_id,
+        generation=installation.data_generation,
+        deployment=installation.deployment_id,
+        configuration=installation.configuration_sha256,
+    )
+    proxy = policy['local_http_proxy']
+    if proxy is not None:
+        proxy = validate_proxy(proxy)
+    credential = Path(policy['credential'])
+    root = Path('/run/credentials')
+    require(
+        credential.name == 'openai'
+        and credential.parent.parent == root
+        and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.@-]*\.service', credential.parent.name),
+        code,
+    )
+    with protected_directory(root) as parent:
+        directory = os.open(
+            credential.parent.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
+        )
+        try:
+            folder = os.fstat(directory)
+            require(folder.st_uid in (0, os.geteuid()) and not folder.st_mode & 0o022, code)
+            fd = os.open('openai', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+            with closing(os.fdopen(fd, 'rb')) as stream:
+                item = os.fstat(stream.fileno())
+                mode = stat.S_IMODE(item.st_mode)
+                private = mode == 0o400 or (
+                    mode == 0o440
+                    and item.st_gid in (0, os.getegid())
+                    and os.fstatvfs(stream.fileno()).f_flag & os.ST_RDONLY
+                )
+                require(
+                    stat.S_ISREG(item.st_mode)
+                    and item.st_uid in (0, os.geteuid())
+                    and item.st_nlink == 1
+                    and private
+                    and 1 <= item.st_size <= 8193,
+                    code,
+                )
+                try:
+                    key = stream.read(8194).decode('ascii').removesuffix('\n')
+                except UnicodeError:
+                    raise ValueError('Invalid OpenAI systemd credential') from None
+        finally:
+            os.close(directory)
+    profile = ModelProfile(key, OPENAI_PROFILE)
+    if proxy is not None:
+        os.environ[PROXY_ENV] = proxy
+    os.environ['WALLE_ACTIVATED_OPENAI_RELEASE_SHA256'] = policy['discussion_release_sha256']
+    os.environ['WALLE_ACTIVATED_OPENAI_DOCUMENT_RELEASE_SHA256'] = policy['document_release_sha256']
+    return profile
 
 
 def target(args, entry, environment):
@@ -139,7 +214,12 @@ def target(args, entry, environment):
                 args.release_open_policy,
                 args.release_open_policy_sha256,
             )
-            app = create_app(ordinary=scope, frontend_directory=installation.path('frontend'))
+            profile = document_ai_profile(args, installation, release)
+            app = create_app(
+                ordinary=scope,
+                frontend_directory=installation.path('frontend'),
+                document_ai_profile=profile,
+            )
             listener = prebind(scope, resources)
         elif args.action == '_serve-release-check':
             from backend.app.infrastructure.environment_release_check import (
@@ -176,7 +256,12 @@ def target(args, entry, environment):
             scope = OrdinaryScope(
                 installation, native, release, resources, args.operation_id, args.start_sha256
             )
-            app = create_app(ordinary=scope, frontend_directory=installation.path('frontend'))
+            profile = document_ai_profile(args, installation, release)
+            app = create_app(
+                ordinary=scope,
+                frontend_directory=installation.path('frontend'),
+                document_ai_profile=profile,
+            )
             listener = prebind(scope, resources)
         return serve_application(app, listener)
 
@@ -214,6 +299,8 @@ def main():
     parser.add_argument('--release-check-policy-sha256')
     parser.add_argument('--release-open-policy', type=Path)
     parser.add_argument('--release-open-policy-sha256')
+    parser.add_argument('--document-ai-policy', type=Path)
+    parser.add_argument('--document-ai-policy-sha256')
     args = parser.parse_args()
     if args.action.endswith('retire-start'):
         if None in (args.before_control_sha256, args.before_operation_id, args.before_revision):
@@ -236,6 +323,14 @@ def main():
     release_open = args.action.endswith('serve-release-open')
     if not (all(open_policy) if release_open else not any(open_policy)):
         parser.error('Only serve-release-open accepts and requires a pinned release open policy')
+    ai_policy = (args.document_ai_policy, args.document_ai_policy_sha256)
+    if any(ai_policy) and (
+        not all(ai_policy)
+        or args.action not in ('serve', '_serve', 'serve-release-open', '_serve-release-open')
+    ):
+        parser.error(
+            'A pinned document AI policy is accepted only for ordinary serving or release opening'
+        )
     try:
         if os.geteuid() == 0 or not (
             sys.flags.isolated and sys.flags.no_site and sys.dont_write_bytecode

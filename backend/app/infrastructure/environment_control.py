@@ -47,7 +47,10 @@ def initial_control(installation, operation_id):
         'drain_manifest_sha256': None,
         'last_opened_deployment_id': None,
         'open_receipt_ref': None,
-        'outbound_hold': getattr(installation, 'restore_generation_sha256', None) is not None,
+        'outbound_hold': (
+            getattr(installation, 'restore_generation_sha256', None) is not None
+            and getattr(installation, 'document_ai_policy_sha256', None) is None
+        ),
         'cause_operation_id': None,
         'model_access': {
             'revision': 0,
@@ -191,6 +194,20 @@ def release_transition_name(operation):
     return f'release-transition-{operation}.v1.json'
 
 
+def document_ai_revert_name(operation):
+    return f'document-ai-revert-{operation}.v1.json'
+
+
+def require_release_not_reverting(fd, transition, code):
+    if 'source_logical_content_sha256' in transition:
+        name = document_ai_revert_name(transition['operation_id'])
+        try:
+            os.stat(name, dir_fd=fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        require(False, code)
+
+
 def selected_release_control(before, installation):
     return {
         **before,
@@ -230,6 +247,11 @@ def read_release_transition(fd, installation, operation):
             'backup_manifest_sha256',
             'logical_content_sha256',
             'database_identity',
+            *(
+                ('source_logical_content_sha256',)
+                if 'source_logical_content_sha256' in transition
+                else ()
+            ),
             *(
                 (
                     'restore_generation_sha256',
@@ -313,7 +335,13 @@ def validate_restore_transition(installation, transition):
         and receipt['operation_id'] == transition['operation_id']
         and receipt['source_control_sha256'] == transition['before_sha256']
         and receipt['source_database_identity'] == transition['source_database_identity']
-        and receipt['database_identity'] == transition['database_identity'],
+        and receipt['database_identity'] == transition['database_identity']
+        and receipt.get('source_logical_content_sha256')
+        == transition.get('source_logical_content_sha256')
+        and (
+            'document_ai_schema_contract_sha256' not in receipt
+            or receipt['target_logical_content_sha256'] == transition['logical_content_sha256']
+        ),
         CONTROL_ERROR,
     )
 

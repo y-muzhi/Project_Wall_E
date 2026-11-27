@@ -14,7 +14,11 @@ from backend.app.documents.api import doc_router
 from backend.app.guide.orchestrator import _native
 from backend.app.infrastructure.execution_lease import ExecutionLease, LeasedDatabase
 from backend.app.infrastructure.formation_database import FormationDatabase
-from backend.app.infrastructure.model_profile import ModelProfile
+from backend.app.infrastructure.model_profile import (
+    OPENAI_DOCUMENT_PROFILE,
+    OPENAI_PROFILE,
+    ModelProfile,
+)
 from backend.app.infrastructure.production_ai import production_options
 from backend.app.infrastructure.resources import ConfigInvalid, DocumentResources, ResourceCatalog
 from backend.app.messages.api import message_router
@@ -85,6 +89,7 @@ def create_app(
     schema_version=200,
     ordinary=None,
     recovery=None,
+    document_ai_profile=None,
 ):
     """Private process startup dependencies. Installation input is never HTTP data."""
     if ordinary is not None and recovery is not None:
@@ -97,6 +102,21 @@ def create_app(
             for input_value in (database, worker_factory, registration_installation)
         ):
             raise TypeError('Installed execution must use its own admitted database and worker')
+    document_ai = document_ai_profile is not None
+    if document_ai:
+        from backend.app.infrastructure.schema_v22_release import DocumentAiSchemaRelease
+
+        if (
+            ordinary is None
+            or recovery is not None
+            or type(document_ai_profile) is not ModelProfile
+            or document_ai_profile.profile_id != OPENAI_PROFILE
+            or ordinary.installation.description['purpose'] != 'DEVELOPMENT'
+            or not ordinary.recover_on_start
+            or not isinstance(ordinary.database.schema_release, DocumentAiSchemaRelease)
+            or catalog is not None
+        ):
+            raise ConfigInvalid('Document AI requires the admitted development layout and profile')
     if recovery is not None:
         return _recovery_app(recovery, catalog, frontend_directory)
 
@@ -168,6 +188,20 @@ def create_app(
     if database is not None and isinstance(database, FormationDatabase) != (schema_version == 210):
         raise ValueError('Injected database and explicit schema version differ')
 
+    def check_document_ai_resources(actual_database, worker, resources):
+        from backend.app.infrastructure.collaboration_provider import admission_for
+
+        document_resources = resources.for_document_operation('GENERATE')
+        document_profile = ModelProfile(document_ai_profile.api_key, OPENAI_DOCUMENT_PROFILE)
+        for profile, catalog_for_profile in (
+            (document_ai_profile, resources),
+            (document_profile, document_resources),
+        ):
+            proof = admission_for(
+                actual_database, worker.process_lock, catalog_for_profile
+            ).current(profile.snapshot)
+            catalog_for_profile.collaboration.require_live(profile.snapshot, admission=proof)
+
     @asynccontextmanager
     async def lifespan(app):
         def startup_dependencies():
@@ -184,7 +218,16 @@ def create_app(
                 else:
                     actual_database = Database(configured_path(), schema_release=load_release())
             resources = ResourceCatalog() if catalog is None else catalog
-            if schema_version == 210:
+            if document_ai:
+                resources = resources.for_formation_profile(document_ai_profile.profile_id)
+                if (
+                    resources.collaboration.reference('collaboration.release')['version']
+                    != 'openai-v6'
+                ):
+                    raise ConfigInvalid(
+                        'Development document AI requires the selected OpenAI release'
+                    )
+            elif schema_version == 210:
                 if catalog is None:
                     resources = resources.for_formation_profile(ModelProfile.selected_profile())
                 elif not resources.collaboration.formation_driven:
@@ -197,7 +240,13 @@ def create_app(
 
         actual_database, resources = await _native(startup_dependencies)
         if ordinary is not None:
-            worker = GuideWorker(actual_database, catalog=resources, ordinary=ordinary)
+            worker = GuideWorker(
+                actual_database,
+                catalog=resources,
+                ordinary=ordinary,
+                ordinary_document_ai=document_ai,
+                orchestrator_options={'profile': document_ai_profile} if document_ai else None,
+            )
         elif worker_factory is not None:
             worker = worker_factory(actual_database, resources)
         else:
@@ -218,6 +267,8 @@ def create_app(
         stop_closing = asyncio.Event()
         try:
             await worker.start()
+            if document_ai:
+                await _native(check_document_ai_resources, actual_database, worker, resources)
             internal_runtime = HttpRuntime(actual_database, resources, worker.executor, worker)
             recover = ordinary is None or getattr(ordinary, 'recover_on_start', True)
             if actual_database.schema_release is not None and recover:
@@ -257,7 +308,7 @@ def create_app(
                 )
             if ordinary is not None:
                 await _native(ordinary.start)
-                worker.accepting = True
+                worker.open_bound_admission()
             yield
         finally:
             worker.accepting = False
@@ -302,7 +353,7 @@ def create_app(
                 app.state.walle_runtime = None
 
     formation_routes = ()
-    if schema_version == 210:
+    if schema_version == 210 or document_ai:
         from backend.app.formation.api import formation_router
 
         formation_routes = (formation_router,)
@@ -349,7 +400,7 @@ def create_app(
     @app.middleware('http')
     async def admission(request, call_next):
         if ordinary is not None:
-            return await api_admission(request, call_next, ordinary)
+            return await api_admission(request, call_next, ordinary, document_ai=document_ai)
         runtime = getattr(request.app.state, 'walle_runtime', None)
         if not isinstance(runtime, HttpRuntime) or not runtime.worker.accepting:
             request_id = new_request_id()

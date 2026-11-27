@@ -116,13 +116,20 @@ async def execute_guide_run(
     counting_counter=None,
     clock=None,
     observation=None,
+    bound_document_ai=False,
 ):
     """One accepted V1.5 run, bounded counts and at most one actual Chat.
 
     Explicit private offline dependencies cannot bypass the release gate.
     Continuation/retry commands create a new run; no loop resumes old input.
     """
-    if getattr(database, 'environment_lock', None) is not None:
+    scoped_lock = getattr(database, 'environment_lock', None)
+    if scoped_lock is not None and (
+        not bound_document_ai
+        or scoped_lock is not process_lock
+        or type(profile) is not ModelProfile
+        or profile.provider != 'openai'
+    ):
         return {'code': 'ENVIRONMENT_CAPABILITY_DISABLED', 'data': None, 'details': None}
     try:
         identity = execute_guide_run_input(payload)

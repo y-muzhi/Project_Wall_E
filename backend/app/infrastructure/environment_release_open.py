@@ -14,6 +14,7 @@ from .environment_control import (
     initial_control,
     read_control,
     read_release_transition,
+    require_release_not_reverting,
 )
 from .environment_files import (
     EnvironmentFailure,
@@ -77,6 +78,7 @@ def open_inputs(installation, operation, path, expected):
 
 def observed_transition(fd, installation, plan):
     transition = read_release_transition(fd, installation, plan['operation_id'])
+    require_release_not_reverting(fd, transition, UNVERIFIED)
     require(
         digest(canonical(transition)) == plan['transition_sha256']
         and transition['after_sha256'] == plan['control_sha256'],
