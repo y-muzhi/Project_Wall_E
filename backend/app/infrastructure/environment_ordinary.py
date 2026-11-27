@@ -1,6 +1,6 @@
 """Ordinary Linux database ownership and fail-closed recovery preconditions."""
 
-from contextlib import closing
+from contextlib import closing, contextmanager
 
 from .database import Database, StorageUnavailable
 from .environment_binding import EnvironmentBinding, verify_binding
@@ -90,6 +90,15 @@ class OrdinaryDatabase(Database):
         with read_locked_database(self.path) as connection:
             verify_locked_binding(connection, self.path, self.schema_release, self.binding)
             check_external_effects(connection)
+        self._check_file()
+
+    @contextmanager
+    def frozen_admission_transaction(self):
+        self._check_file()
+        require(not database_has_sidecars(self.path), 'ENVIRONMENT_BINDING_MISMATCH')
+        with read_locked_database(self.path) as connection:
+            verify_locked_binding(connection, self.path, self.schema_release, self.binding)
+            yield connection
         self._check_file()
 
     def checkpoint_for_stop(self):

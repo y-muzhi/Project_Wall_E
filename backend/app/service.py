@@ -6,6 +6,7 @@ is the separate native database CLI. This factory never creates or repairs a DB.
 
 import asyncio
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 
@@ -103,6 +104,9 @@ def create_app(
         ):
             raise TypeError('Installed execution must use its own admitted database and worker')
     document_ai = document_ai_profile is not None
+    document_ai_release_opening = document_ai and getattr(
+        ordinary, 'document_ai_release_opening', False
+    )
     if document_ai:
         from backend.app.infrastructure.schema_v22_release import DocumentAiSchemaRelease
 
@@ -112,7 +116,7 @@ def create_app(
             or type(document_ai_profile) is not ModelProfile
             or document_ai_profile.profile_id != OPENAI_PROFILE
             or ordinary.installation.description['purpose'] != 'DEVELOPMENT'
-            or not ordinary.recover_on_start
+            or not (ordinary.recover_on_start or document_ai_release_opening)
             or not isinstance(ordinary.database.schema_release, DocumentAiSchemaRelease)
             or catalog is not None
         ):
@@ -191,6 +195,12 @@ def create_app(
     def check_document_ai_resources(actual_database, worker, resources):
         from backend.app.infrastructure.collaboration_provider import admission_for
 
+        if document_ai_release_opening:
+            # Validate the pinned profiles while preserving the frozen database.
+            actual_database = SimpleNamespace(
+                path=actual_database.path,
+                transaction=actual_database.frozen_admission_transaction,
+            )
         document_resources = resources.for_document_operation('GENERATE')
         document_profile = ModelProfile(document_ai_profile.api_key, OPENAI_DOCUMENT_PROFILE)
         for profile, catalog_for_profile in (

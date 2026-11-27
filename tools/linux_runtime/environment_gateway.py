@@ -243,7 +243,10 @@ def main():
     parser.add_argument('--release-stage-policy', type=Path)
     parser.add_argument('--release-stage-policy-sha256')
     parser.add_argument('--runtime-root', type=Path)
+    parser.add_argument('--companion-runtime-root', type=Path)
+    parser.add_argument('--companion-runtime-sha256')
     args = parser.parse_args()
+    companion_values = (args.companion_runtime_root, args.companion_runtime_sha256)
     stage_values = (args.release_stage_policy, args.release_stage_policy_sha256, args.runtime_root)
     release_stage = bool(args.release_stage_policy)
     if not (
@@ -252,6 +255,8 @@ def main():
         else not any(stage_values) and args.site
     ):
         parser.error('Use --site or the complete fixed release staging policy')
+    if any(companion_values) and not (release_stage and all(companion_values)):
+        parser.error('A separate companion runtime requires a root and digest for release staging')
 
     try:
         path = args.runtime_entry

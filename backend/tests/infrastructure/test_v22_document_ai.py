@@ -4,7 +4,7 @@ import asyncio
 import json
 import sqlite3
 import sys
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 from time import monotonic
 from types import SimpleNamespace
@@ -42,6 +42,13 @@ class BoundTestDatabase(Database):
         verify_binding(connection, self.schema_release, self.binding)
         return 2
 
+    @contextmanager
+    def frozen_admission_transaction(self):
+        self.frozen_reads += 1
+        with closing(sqlite3.connect(self.path.as_uri() + '?mode=ro&immutable=1', uri=True)) as view:
+            view.execute('PRAGMA query_only=ON')
+            yield view
+
 
 class BoundTestScope:
     recover_on_start = True
@@ -70,6 +77,7 @@ class BoundTestScope:
         self.lock.assert_owned()
 
     def start(self):
+        self.control['outbound_hold'] = False
         self.active = True
 
     def drain(self):
@@ -79,7 +87,10 @@ class BoundTestScope:
         self.lock.assert_owned()
 
 
-def test_development_http_dispatches_openai_and_persists_a_document(tmp_path, monkeypatch):
+@pytest.mark.parametrize('release_opening', [False, True])
+def test_development_http_dispatches_openai_and_persists_a_document(
+    tmp_path, monkeypatch, release_opening
+):
     directory = (tmp_path / 'ai-release').resolve()
     directory.mkdir()
     runtime = '1' * 64
@@ -97,6 +108,11 @@ def test_development_http_dispatches_openai_and_persists_a_document(tmp_path, mo
         connection.commit()
     database = BoundTestDatabase(path, release, binding)
     scope = BoundTestScope(database)
+    database.frozen_reads = 0
+    scope.document_ai_release_opening = release_opening
+    scope.recover_on_start = not release_opening
+    scope.recover_local_commands = not release_opening
+    scope.control['outbound_hold'] = release_opening
     catalog = ResourceCatalog().for_formation_profile(OPENAI_PROFILE)
     monkeypatch.setenv(
         'WALLE_ACTIVATED_OPENAI_RELEASE_SHA256', catalog.collaboration.release_sha256
@@ -173,6 +189,7 @@ def test_development_http_dispatches_openai_and_persists_a_document(tmp_path, mo
             app.router.lifespan_context(app),
             AsyncClient(transport=ASGITransport(app=app), base_url=origin) as client,
         ):
+            assert database.frozen_reads == (2 if release_opening else 0)
             await round_trip(client)
         async with (
             app.router.lifespan_context(app),
@@ -183,6 +200,7 @@ def test_development_http_dispatches_openai_and_persists_a_document(tmp_path, mo
             )
             assert history.status_code == 200, history.text
             assert len(seen) == 8
+            assert database.frozen_reads == (4 if release_opening else 0)
 
     async def round_trip(client):
         nonlocal operation, suggestion

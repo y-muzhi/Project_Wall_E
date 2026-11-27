@@ -71,7 +71,14 @@ def gateway_release(args, entry):
     active = SimpleNamespace(runtime_manifest_sha256=args.runtime_sha256)
     previous = load_site(plan['previous_installation'], active, entry)
     target = load_site(plan['target_installation'], active, entry)
-    companion = load_site(plan['companion_installation'], active, entry)
+    companion_runtime = active
+    companion_root = getattr(args, 'companion_runtime_root', None)
+    if companion_root is not None:
+        companion_sha = args.companion_runtime_sha256
+        require(sha_value(companion_sha), INVALID)
+        entry['verify_runtime'](companion_root, companion_sha)
+        companion_runtime = SimpleNamespace(runtime_manifest_sha256=companion_sha)
+    companion = load_site(plan['companion_installation'], companion_runtime, entry)
     binding = target.description.get('deployment_slot')
     require(
         binding is not None

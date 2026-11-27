@@ -192,6 +192,13 @@ class ReleaseOpenScope(OrdinaryScope):
     def recover_on_start(self):
         return self.installation.restore_generation_sha256 is None
 
+    @property
+    def document_ai_release_opening(self):
+        return (
+            self.installation.restore_generation_sha256 is not None
+            and self.installation.document_ai_policy_sha256 is not None
+        )
+
     def __init__(self, installation, native, release, resources, operation, path, expected):
         self.open_path = path
         self.open_sha = expected
