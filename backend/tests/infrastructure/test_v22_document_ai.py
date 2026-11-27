@@ -47,6 +47,7 @@ class BoundTestDatabase(Database):
         self.frozen_reads += 1
         with closing(sqlite3.connect(self.path.as_uri() + '?mode=ro&immutable=1', uri=True)) as view:
             view.execute('PRAGMA query_only=ON')
+            view.row_factory = sqlite3.Row
             yield view
 
 
