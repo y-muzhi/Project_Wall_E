@@ -16,7 +16,6 @@ from backend.app.infrastructure.program_package import ProgramPackageLease
 from backend.app.infrastructure.runtime_launch_journal import _bytes
 from backend.tests.code_tasks.test_local_deployment import image_bytes
 from backend.tests.requirements.test_v15_foundation import tmp_path
-from tools.windows_guard_package import input_files
 from tools.windows_program_package import package_manifest, validate_program_destination
 
 
@@ -179,23 +178,6 @@ def test_unknown_close_retains_original_owner_and_is_never_retried(prepared, mon
     with pytest.raises(ProgramManifestError, match='CLOSE_PREVIOUSLY_UNVERIFIED') as second:
         held.close()
     assert second.value.retained_owner is held and calls == ['close']
-
-
-def test_guard_build_inventory_contains_only_actual_git_and_policy_resources():
-    root = Path(__file__).resolve().parents[3]
-    names = set(input_files(root))
-    assert 'backend/runtime_guard/__main__.py' in names
-    assert 'backend/frozen_guard_entry.py' in names
-    assert 'tools/windows_program_package.py' in names
-    assert 'backend/runtime/git/2.56.0.windows.4/win-x64/cmd/git.exe' in names
-    assert 'backend/resources/code/secret-policies/content20-secrets-1.json' in names
-    assert not any(
-        name.startswith(('frontend/', 'backend/runtime/sqlite/')) or name.endswith(('.db', '.sql'))
-        for name in names
-    )
-    assert {name for name in names if name.startswith('backend/resources/')} == {
-        'backend/resources/code/secret-policies/content20-secrets-1.json'
-    }
 
 
 def test_final_destination_limits_are_checked_before_any_publish(prepared, tmp_path):

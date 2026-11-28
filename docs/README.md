@@ -1,18 +1,18 @@
 # 项目文档导航
 
-按“类型／版本”组织。V1.0资料用于历史追溯；V1.5现行状态统一见[需求实现映射](traceability/v1.5/需求实现映射_V_1.5.md)，下一步与现场见[实现进度](project/v1.5/实现进度_V_1.5.md)。
+日常访问见 [V2.2 运行说明](operations/v2.2/运行说明_V_2.2.md)。V2.2 的实施接续和需求状态见 [实现进度](project/v2.2/实现进度_V_2.2.md)及 [需求实现映射](traceability/v2.2/需求实现映射_V_2.2.md)。V1.0 与 V1.5 的资料按类型保留在下表。
 
 | 类型 | V1.0 | V1.5 |
 | --- | --- | --- |
 | 正式设计入口 | [设计](design/v1.0/README.md) | [前后端两份正式设计](design/v1.5/README.md) |
 | 项目管理 | [实施及收口](project/v1.0/README.md) | [计划、断点与综合审查](project/v1.5/README.md) |
-| 需求追踪 | [映射与台账](traceability/v1.0/README.md) | [唯一现行能力／验收表](traceability/v1.5/需求实现映射_V_1.5.md) |
+| 需求追踪 | [映射与台账](traceability/v1.0/README.md) | [能力与验收表](traceability/v1.5/需求实现映射_V_1.5.md) |
 | 决策 | [决策](decisions/v1.0/README.md) | [决定与替代关系](decisions/v1.5/README.md) |
 | 提案 | [冻结方案](proposals/v1.0/README.md) | [上游方案](proposals/v1.5/README.md) |
 | 迭代 | [归档](archive/iterations/v1.0/README.md) | [待合并](iterations/pending/v1.5/README.md)、[已合入](archive/iterations/v1.5/README.md) |
 | 验证 | [历史证据](verification/v1.0/README.md) | [按日期保留的实际证据](verification/v1.5/README.md) |
 | 来源 | [原始来源](sources/v1.0/README.md) | [设计来源](sources/v1.5/设计来源索引_V_1.5.md) |
-| 运行 | [历史说明](operations/v1.0/运行说明.md) | [当前操作步骤](operations/v1.5/运行说明_V_1.5.md) |
+| 运行 | [历史说明](operations/v1.0/运行说明.md) | [历史运行步骤](operations/v1.5/运行说明_V_1.5.md) |
 
 公共规则：[文档管理](project/文档管理规则.md)、[共享模板](templates/README.md)、[验证记录规则](verification/README.md)。
 
@@ -20,8 +20,8 @@
 
 本页仅导航，不复制各轮测试数、资源准入状态、PID或执行申请。
 
-## V2.1设计与实施入口
+## V2.0 至 V2.11 的设计与实施记录
 
-[统一大纲设计基线](iterations/pending/v2.1/WALL-E.大纲设计基线_V_2.1.md)汇总V2.1文档形成主线与阶段性写入的当前需求／流程；已启动独立工作区实施，当前处于实施及验收阶段。接续见[项目管理](project/v2.1/README.md)，状态见[需求映射](traceability/v2.1/需求实现映射_V_2.1.md)，各类实际检查及其范围见[验证记录](verification/v2.1/README.md)。V1.5设计保留为现有实现基线，尚无V2.1正式规格。
-
-V2.1详细初稿（2026-11-14）：[后端](iterations/pending/v2.1/WALL-E.后端设计文档_V_2.1.md)、[前端](iterations/pending/v2.1/WALL-E.前端设计文档_V_2.1.md)，按共享模板完整八章输出，0.1-draft-4／DRAFT，尚未正式审定／合并；现已按用户授权实施，实际状态以进度和映射为准，尚未整版验收。
+- V2.0 记录代码开发、独立测试和数据库维护的设计与实施。见 [设计入口](design/v2.0/README.md)和[实施记录](project/v2.0/README.md)。
+- V2.1 记录文档形成主线与阶段性写入。详细设计为 0.1-draft-4／DRAFT，实施和验收证据按该版本保存。见 [大纲基线](iterations/pending/v2.1/WALL-E.大纲设计基线_V_2.1.md)、[后端草案](iterations/pending/v2.1/WALL-E.后端设计文档_V_2.1.md)、[前端草案](iterations/pending/v2.1/WALL-E.前端设计文档_V_2.1.md)、[实施记录](project/v2.1/README.md)、[需求映射](traceability/v2.1/需求实现映射_V_2.1.md)和[验证记录](verification/v2.1/README.md)。
+- V2.11 记录工作台交互、文档审阅和 Windows 单入口发布等批次。见 [实施记录](project/v2.11/实现进度_V_2.11.md)和[需求映射](traceability/v2.11/需求实现映射_V_2.11.md)。

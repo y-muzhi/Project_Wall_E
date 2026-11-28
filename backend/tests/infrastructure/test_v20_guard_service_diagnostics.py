@@ -1,8 +1,5 @@
-"""Finite SCM failures and a strictly read-only native status port."""
+"""Finite SCM failures and the Guard runtime journal probe."""
 
-import ctypes
-import importlib.util
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -14,7 +11,6 @@ from backend.app.infrastructure.guard_service_diagnostics import (
     decode_service_diagnostic,
     diagnostic_for_failure,
 )
-from tools import windows_guard_install_service as services
 
 
 @pytest.mark.parametrize('stage', list(GuardFailureStage))
@@ -70,75 +66,6 @@ def test_original_failure_diagnostic_survives_outer_boundary():
         GuardServiceDiagnostic(11, 5)
     with pytest.raises(ValueError):
         GuardServiceDiagnostic(GuardFailureStage.PRIVATE_JOURNAL, True)
-
-
-def status_cli():
-    path = Path(__file__).resolve().parents[3] / 'tools/inspect-windows-guard-service.py'
-    spec = importlib.util.spec_from_file_location('guard_read_only_status_cli', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.mark.parametrize('failure', [None, 'manager', 'service', 'query', 'kind', 'close'])
-def test_status_cli_requests_only_connect_and_query_and_closes_original_handles(
-    monkeypatch, capsys, failure
-):
-    calls = []
-
-    class QueryPort:
-        def OpenSCManagerW(self, machine, database, rights):
-            assert machine is database is None and rights == 1
-            calls.append(('manager', rights))
-            return 0 if failure == 'manager' else 101
-
-        def OpenServiceW(self, manager, name, rights):
-            assert manager == 101 and rights == 4
-            assert name == 'WALLE.RuntimeGuard.' + 'a' * 64
-            calls.append(('service', rights))
-            return 0 if failure == 'service' else 102
-
-        def QueryServiceStatusEx(self, handle, level, pointer, size, needed):
-            assert handle == 102 and level == 0
-            assert size == ctypes.sizeof(services._ServiceStatusProcess)
-            status = ctypes.cast(pointer, ctypes.POINTER(services._ServiceStatusProcess)).contents
-            status.service_type = 99 if failure == 'kind' else 16
-            status.state, status.pid, status.flags = 1, 0, 0
-            status.win32_exit_code = 1066
-            status.service_exit_code = GuardServiceDiagnostic(
-                GuardFailureStage.PRIVATE_JOURNAL, 5
-            ).service_exit_code
-            calls.append(('query', handle))
-            return failure != 'query'
-
-        def CloseServiceHandle(self, handle):
-            calls.append(('close', handle))
-            return failure != 'close' or handle != 102
-
-    monkeypatch.setattr(services, 'service_api', QueryPort)
-    cli = status_cli()
-    if failure:
-        with pytest.raises(RuntimeError, match='GUARD_STATUS_'):
-            cli.main(['--installation-ref', 'a' * 64])
-    else:
-        assert cli.main(['--installation-ref', 'a' * 64]) == 0
-        output = capsys.readouterr().out
-        assert (
-            'stage=PRIVATE_JOURNAL reason=UNSPECIFIED native=5' in output
-            and 'state=1 pid=0' in output
-        )
-    closed = [value for kind, value in calls if kind == 'close']
-    assert closed == ([] if failure == 'manager' else [101] if failure == 'service' else [102, 101])
-
-
-def test_invalid_status_reference_never_opens_scm(monkeypatch):
-    def forbidden():
-        raise AssertionError('Invalid reference must not touch SCM')
-
-    monkeypatch.setattr(services, 'service_api', forbidden)
-    with pytest.raises(SystemExit) as failure:
-        status_cli().main(['--installation-ref', 'untrusted'])
-    assert failure.value.code == 2
 
 
 @pytest.mark.parametrize('reason', list(GuardFailureReason))

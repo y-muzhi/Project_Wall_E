@@ -1,7 +1,7 @@
-"""OpenAI-only readiness, isolated one-shot observation, or native service startup.
+"""OpenAI readiness and isolated one-shot observation.
 
-No default credential read, provider I/O, database initialization, or service
-switch. Existing DeepSeek service/data/configuration are never stopped here.
+The default readiness check performs no credential read, provider I/O, or
+database initialization.
 """
 
 import argparse
@@ -236,114 +236,16 @@ def observe(args, *, count_limit=3):
         )
 
 
-def start(args):
-    runtime()
-    from backend.app.infrastructure.collaboration_provider import admission_for
-    from backend.app.infrastructure.formation_database import FormationDatabase
-    from backend.app.infrastructure.review_schema import load_configured_release
-    from backend.app.infrastructure.local_credentials import read_local_credential
-    from backend.app.infrastructure.model_profile import (
-        OPENAI_DOCUMENT_PROFILE,
-        OPENAI_PROFILE,
-        ModelProfile,
-    )
-    from backend.app.infrastructure.openai_protocol import BASE_URL
-    from backend.app.infrastructure.process_lock import ProcessLock
-
-    profile, catalog = profile_and_catalog()
-    database = FormationDatabase(
-        args.database.resolve(), formation_release=load_configured_release(), read_only=True
-    )
-    with database.transaction():
-        pass
-    proof = admission_for(database, ProcessLock.for_database(database.path), catalog).current(
-        profile.snapshot
-    )
-    activated = args.activate_release
-    os.environ.pop('WALLE_ACTIVATED_OPENAI_RELEASE_SHA256', None)
-    if activated is not None:
-        if activated != catalog.collaboration.release_sha256:
-            raise ValueError('Activation digest differs from selected OpenAI release')
-        os.environ['WALLE_ACTIVATED_OPENAI_RELEASE_SHA256'] = activated
-    catalog.collaboration.require_live(profile.snapshot, admission=proof)
-    os.environ.pop('WALLE_ACTIVATED_OPENAI_DOCUMENT_RELEASE_SHA256', None)
-    document_catalog = catalog.for_document_operation('GENERATE')
-    document_activation = args.activate_document_release
-    if document_catalog is not catalog:
-        document_profile = ModelProfile(profile.api_key, OPENAI_DOCUMENT_PROFILE)
-        document_release = document_catalog.collaboration
-        if document_activation is not None:
-            if document_activation != document_release.release_sha256:
-                raise ValueError('Activation digest differs from the document release')
-            os.environ['WALLE_ACTIVATED_OPENAI_DOCUMENT_RELEASE_SHA256'] = document_activation
-        document_proof = admission_for(
-            database, ProcessLock.for_database(database.path), document_catalog
-        ).current(document_profile.snapshot)
-        document_release.require_live(document_profile.snapshot, admission=document_proof)
-    elif document_activation is not None:
-        raise ValueError('Selected OpenAI service has no separate document release')
-    print(
-        'OPENAI_START release='
-        + catalog.collaboration.release_sha256
-        + ' admission='
-        + proof.value['state']
-        + ' activation='
-        + ('explicit' if activated else 'verified'),
-        flush=True,
-    )
-    key = read_local_credential(args.credential_file, name='OPENAI_API_KEY')
-    ModelProfile(key, OPENAI_PROFILE)
-    os.environ.update(
-        OPENAI_API_KEY=key,
-        WALLE_MODEL_PROFILE=OPENAI_PROFILE,
-        WALLE_MODEL_ID=profile.model_name,
-        WALLE_MODEL_VERSION=profile.model_version,
-        WALLE_MODEL_BASE_URL=BASE_URL,
-        WALLE_DATABASE_PATH=str(args.database.resolve()),
-    )
-    os.environ.pop('WALLE_MODEL_API_KEY', None)
-    from backend.app.__main__ import main as native
-    from backend.app.infrastructure.review_schema import LAYOUT_NAME
-
-    if database.formation_release.release_id != LAYOUT_NAME:
-        native(port=args.port, schema_version=210)
-        return 0
-
-    from backend.app.review_service import serve_review
-
-    serve_review(port=args.port)
-    return 0
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    action = parser.add_mutually_exclusive_group()
-    action.add_argument('--observe', action='store_true')
-    action.add_argument('--start', action='store_true')
-    parser.add_argument(
-        '--activate-release',
-        metavar='SHA256',
-        help='Start the selected offline-ready OpenAI release by its exact digest',
-    )
-    parser.add_argument(
-        '--activate-document-release',
-        metavar='SHA256',
-        help='Explicitly activate the offline-ready OpenAI document release',
-    )
+    parser.add_argument('--observe', action='store_true')
     parser.add_argument('--database', type=Path)
     parser.add_argument('--credential-file', type=Path, default=ROOT / '.env.openai.local')
     parser.add_argument('--slot', type=Path)
     parser.add_argument('--report', type=Path)
-    parser.add_argument('--port', type=int, default=8001)
     parser.add_argument('--count-limit', type=int, choices=(1, 2, 3), default=3)
     parser.add_argument('--proxy', help='Explicit credential-free local HTTP proxy for OpenAI only')
     args = parser.parse_args(argv)
-    if (
-        args.activate_release is not None or args.activate_document_release is not None
-    ) and not args.start:
-        parser.error('Release activation only applies to service startup')
-    if not 1024 <= args.port <= 65535:
-        parser.error('A valid local HTTP port is required')
     from backend.app.infrastructure.openai_transport import configured_proxy, validate_proxy
 
     if args.proxy is not None:
@@ -355,10 +257,6 @@ def main(argv=None):
                 'Observation requires a fresh --slot and --report, never a user --database'
             )
         return observe(args, count_limit=args.count_limit)
-    if args.start:
-        if args.database is None or args.slot is not None or args.report is not None:
-            parser.error('Startup requires an existing --database')
-        return start(args)
     if args.slot is not None or args.report is not None:
         parser.error('Output slots require explicit --observe')
     return check(args)

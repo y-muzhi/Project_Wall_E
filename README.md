@@ -1,15 +1,19 @@
-# WALL-E V2.0（实施中）
+# WALL-E
 
-本机单用户需求工作台：围绕同一需求讨论、生成和维护多份文档；V2.0继续构建Coding与独立Testing能力，由程序保护目标、版本、授权、费用和真实保存结果。
+WALL-E 是单用户需求工作台。用户可以围绕同一需求开展 AI 辅助讨论，生成、修订和审阅多份文档，并保留版本历史。
+
+## 运行与架构
+
+日常使用 V2.2。开发和集成环境都运行在 Mac 上的 Linux 虚拟机内，由 systemd 管理。Caddy 按 HTTPS 站点把请求转发到对应的后端。每套环境独立保存 SQLite 数据，并从同一个站点提供已构建的前端和 `/api/v1`。
+
+前端使用 React、TypeScript 和 Milkdown，由 Vite 构建。后端使用 Python、FastAPI 和 Uvicorn。
+
+在已配置的 Windows 工作站，双击项目目录下的 `output/v22-mac-access/打开 Mac WALL-E.cmd`，并在访问期间保持启动器运行。启动器通过 Mac 的 SSH 跳板连接 Linux 网关并打开两套环境。
 
 ## 从这里开始
 
-- [当前实施断点](docs/project/v2.0/实现进度_V_2.0.md)：接续位置、授权范围和实际检查。
-- [需求实现映射](docs/traceability/v2.0/需求实现映射_V_2.0.md)：各项能力、实现位置、证据和剩余事项。
-- [V2.0设计及独立迭代](docs/design/v2.0/README.md)：当前前后端设计仍为DRAFT，按用户授权实施。
-- [数据库维护使用说明](docs/project/v2.0/数据库维护使用说明_V_2.0.md)：固定SQLite、显式计划／备份／演练／升级／恢复入口。
-- [项目文档导航](docs/README.md)：版本、设计、决策、检查及历史档案。
+- [V2.2 运行说明](docs/operations/v2.2/运行说明_V_2.2.md)提供两套环境的 HTTPS 入口、部署状态和服务核对步骤。
+- [V2.2 实施进度](docs/project/v2.2/实现进度_V_2.2.md)记录接续位置和授权范围。[V2.2 需求实现映射](docs/traceability/v2.2/需求实现映射_V_2.2.md)记录能力、证据和剩余事项。
+- [项目文档导航](docs/README.md)汇总各版本设计、决策、验证及历史档案。
 
-当前源码按V2.0分批实施。正常后端启动要求已存在且通过精确校验的Schema200；151使用显式离线维护，缺失库使用独立初始化，启动应用不自动改结构。正常数据操作、真实模型／计数、用户服务启停和提交／推送按当前具体授权执行。
-
-V1.5基线：[实现进度](docs/project/v1.5/实现进度_V_1.5.md)、[需求映射](docs/traceability/v1.5/需求实现映射_V_1.5.md)、[历史运行说明](docs/operations/v1.5/运行说明_V_1.5.md)。V1.0历史：[收口资料](docs/project/v1.0/README.md)。入口只维护导航，各能力完成与未覆盖范围以V2映射为准。
+历史资料见 [V2.0 设计](docs/design/v2.0/README.md)、[V2.0 数据库维护说明](docs/project/v2.0/数据库维护使用说明_V_2.0.md)、[V1.5 项目资料](docs/project/v1.5/README.md)和 [V1.0 收口资料](docs/project/v1.0/README.md)。
