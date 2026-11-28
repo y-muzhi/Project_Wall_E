@@ -1,3 +1,7 @@
+:root:has(.application-main[data-page='CODE_SETTINGS']) {
+  scrollbar-gutter: stable;
+}
+
 .code-settings {
   max-width: 1100px;
   margin: 0 auto;

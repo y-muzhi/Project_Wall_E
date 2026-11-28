@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Request
 
+from backend.app.documents.drawing import is_drawing
 from backend.app.shared.http_boundary import handle_http, request_query
 from backend.app.shared.http_projection import exact, page
 from backend.app.shared.pagination import MAX_PAGE, PAGE_SIZE, page_metadata, page_offset
@@ -32,7 +33,7 @@ FIELDS = (
 # version in both the audit columns and the originally recorded event payload.
 _CHOICES = """
 SELECT r.id AS revision_id,r.requirement_id,r.document_id,r.version_no,
-       r.markdown_snapshot,d.content_version AS current_version,
+       r.markdown_snapshot,d.content_version AS current_version,d.document_kind,d.template_ref,
        a.id AS confirmation_event_id,a.created_at AS confirmed_at
 FROM revisions r
 JOIN requirement_documents d ON d.id=r.document_id AND d.requirement_id=r.requirement_id
@@ -63,6 +64,8 @@ def _choice(row, usage):
     reason = None
     if row['confirmation_event_id'] is None:
         reason = 'UNCONFIRMED'
+    elif is_drawing(row):
+        reason = 'UNAVAILABLE'
     elif usage == 'MAIN' and not row['markdown_snapshot'].strip():
         reason = 'EMPTY_MAIN'
     return {
@@ -80,7 +83,7 @@ def design_revision_choice(connection, document_id, revision_id, *, usage, inclu
         return None
     result = _choice(row, usage)
     if include_markdown:
-        result['markdown_snapshot'] = row['markdown_snapshot']
+        result['markdown_snapshot'] = '' if is_drawing(row) else row['markdown_snapshot']
     return result
 
 

@@ -1,21 +1,20 @@
 """Verify and launch the fixed Linux runtime before importing WALL-E."""
 
 import argparse
-from dataclasses import dataclass
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
 import re
 import stat
 import subprocess
 import sys
 import sysconfig
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
+from urllib.parse import urlsplit
 
-PLATFORM = dict(
-    os='linux', architecture='aarch64', distribution_id='ubuntu', distribution_version='24.04'
-)
+BUILD_ARCHITECTURES = ('aarch64', 'x86_64')
 SOURCE_ID = '2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76'
 PYTHON_VERSION = '3.13.18'
 SQLITE_VERSION = '3.54.1'
@@ -23,6 +22,7 @@ FLAGS = ['-I', '-B', '-S']
 FEATURES = ['FOREIGN_KEYS', 'STRICT', 'JSON', 'WAL', 'FULL_SYNCHRONOUS']
 LIMITS = {'trigger_depth': 100}
 FILE_MODES = {0o400, 0o440, 0o444, 0o500, 0o550, 0o555}
+FILE_MODE_NAMES = {f'{mode:04o}': mode for mode in FILE_MODES}
 RUNTIME_MANIFEST = 'runtime-manifest.v1.json'
 INDEX = 'runtime-files.v1.json'
 DEPENDENCIES = 'metadata/python-wheels.v1.json'
@@ -93,13 +93,17 @@ def validate_hash(value):
     demand(type(value) is str and re.fullmatch('[a-f0-9]{64}', value), 'Invalid SHA-256')
 
 
-def manifest_path(value):
+def manifest_relative_name(value):
     demand(type(value) is str and '\\' not in value and '\0' not in value, 'Invalid manifest path')
     demand(
         all(part not in ('', '.', '..') for part in value.split('/')),
         'Invalid relative manifest path',
     )
-    return PurePosixPath(value)
+    return value
+
+
+def manifest_path(value):
+    return PurePosixPath(manifest_relative_name(value))
 
 
 def file_entry(root, relative):
@@ -136,10 +140,9 @@ def protected_directory(path):
 
 
 def protected_file(path, info):
-    demand(
-        info.st_uid == 0 and stat.S_IMODE(info.st_mode) in FILE_MODES,
-        f'Unsealed runtime file: {path.name}',
-    )
+    if info.st_uid != 0 or stat.S_IMODE(info.st_mode) not in FILE_MODES:
+        name = path.name if isinstance(path, Path) else path
+        raise AdmissionError(f'Unsealed runtime file: {name}')
 
 
 def inventory(root):
@@ -165,6 +168,97 @@ def os_release():
     )
 
 
+def native_platform():
+    measured = os_release()
+    demand(
+        measured['os'] == 'linux'
+        and measured['distribution_id'] == 'ubuntu'
+        and measured['distribution_version'] == '24.04'
+        and measured['architecture'] in BUILD_ARCHITECTURES,
+        'Unsupported runtime platform',
+    )
+    return measured
+
+
+def target_soabi(platform):
+    return f'cpython-313-{platform["architecture"]}-linux-gnu'
+
+
+def wheel_lock_name(platform):
+    return f'requirements-linux-{platform["architecture"]}-cp313.lock'
+
+
+def require_build_target(architecture):
+    platform = native_platform()
+    demand(platform['architecture'] == architecture, 'Build architecture differs from the host')
+    demand(
+        sys.implementation.name == 'cpython'
+        and '.'.join(map(str, sys.version_info[:3])) == PYTHON_VERSION
+        and sys.implementation.cache_tag == 'cpython-313'
+        and sysconfig.get_config_var('SOABI') == target_soabi(platform),
+        'Build interpreter ABI differs',
+    )
+    return platform
+
+
+def verify_indexed_tree(root, rows, directories):
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    seen = set()
+
+    def walk(directory, prefix):
+        info = os.fstat(directory)
+        demand(
+            info.st_uid == 0 and info.st_mode & 0o022 == 0,
+            f'Unprotected runtime directory: {prefix or root}',
+        )
+
+        def open_file(name, flags):
+            return os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                leaf = entry.name
+                name = prefix + leaf
+                if name in directories:
+                    child = os.open(leaf, directory_flags, dir_fd=directory)
+                    try:
+                        walk(child, name + '/')
+                    finally:
+                        os.close(child)
+                    continue
+
+                row = rows.get(name)
+                demand(
+                    row is not None or name in (INDEX, RUNTIME_MANIFEST),
+                    f'Unregistered runtime entry: {name}',
+                )
+                demand(entry.is_file(follow_symlinks=False), f'Unsafe runtime file: {name}')
+                with open(leaf, 'rb', opener=open_file) as stream:
+                    info = os.fstat(stream.fileno())
+                    demand(
+                        stat.S_ISREG(info.st_mode) and info.st_nlink == 1,
+                        f'Unsafe runtime file: {name}',
+                    )
+                    protected_file(leaf, info)
+                    if row is None:
+                        continue
+                    mode = stat.S_IMODE(info.st_mode)
+                    demand(mode == FILE_MODE_NAMES[row['mode']], f'Incorrect file mode: {name}')
+                    demand(
+                        info.st_size == row['bytes']
+                        and hashlib.file_digest(stream, 'sha256').hexdigest() == row['sha256'],
+                        f'Artifact mismatch: {name}',
+                    )
+                seen.add(name)
+
+    descriptor = os.open(root, directory_flags)
+    try:
+        walk(descriptor, '')
+    finally:
+        os.close(descriptor)
+    demand(seen == rows.keys(), 'Missing runtime file')
+
+
 def verify_files(root, manifest):
     ref = manifest['files_ref']
     path = artifact(root, ref)
@@ -180,37 +274,20 @@ def verify_files(root, manifest):
     demand(type(index['files']) is list, 'Invalid runtime index')
     for row in index['files']:
         object_fields(row, 'path', 'sha256', 'bytes', 'mode')
-        name = str(manifest_path(row['path']))
+        name = manifest_relative_name(row['path'])
         demand(name not in rows and name not in (INDEX, RUNTIME_MANIFEST), 'Duplicate file')
-        demand(
-            type(row['mode']) is str and row['mode'] in {f'{m:04o}' for m in FILE_MODES},
-            'Invalid file mode',
-        )
+        demand(type(row['mode']) is str and row['mode'] in FILE_MODE_NAMES, 'Invalid file mode')
+        validate_hash(row['sha256'])
+        demand(type(row['bytes']) is int and row['bytes'] >= 0, 'Invalid artifact size')
         rows[name] = row
-        directories.update(
-            str(parent) for parent in PurePosixPath(name).parents if str(parent) != '.'
-        )
+        parent = name.rpartition('/')[0]
+        while parent and parent not in directories:
+            directories.add(parent)
+            parent = parent.rpartition('/')[0]
+
     demand(list(rows) == sorted(rows), 'Unsorted runtime index')
-    seen = set()
-    for candidate, info in inventory(root):
-        name = candidate.relative_to(root).as_posix()
-        if stat.S_ISDIR(info.st_mode):
-            demand(
-                info.st_uid == 0 and info.st_mode & 0o022 == 0 and name in directories,
-                f'Unexpected runtime directory: {name}',
-            )
-            continue
-        protected_file(candidate, info)
-        if name in (INDEX, RUNTIME_MANIFEST):
-            continue
-        demand(name in rows, f'Unregistered runtime file: {name}')
-        row = rows[name]
-        demand(stat.S_IMODE(info.st_mode) == int(row['mode'], 8), f'Incorrect file mode: {name}')
-        artifact(
-            root, {field: row[field] for field in ('path', 'sha256', 'bytes')}, allow_empty=True
-        )
-        seen.add(name)
-    demand(seen == rows.keys(), 'Missing runtime file')
+    demand(not directories.intersection(rows), 'Runtime path names both a file and directory')
+    verify_indexed_tree(root, rows, directories)
     return rows, directories
 
 
@@ -285,7 +362,8 @@ def verify_runtime(root, digest):
         and manifest['installation_prefix'] == str(root),
         'Unexpected runtime installation',
     )
-    demand(manifest['platform'] == PLATFORM == os_release(), 'Runtime platform differs')
+    platform = native_platform()
+    demand(manifest['platform'] == platform, 'Runtime platform differs')
     demand(manifest['launch_flags'] == FLAGS, 'Unexpected interpreter options')
     files, directories = verify_files(root, manifest)
     py = manifest['python']
@@ -303,7 +381,7 @@ def verify_runtime(root, digest):
         py['implementation'] == 'cpython'
         and py['version'] == PYTHON_VERSION
         and py['cache_tag'] == 'cpython-313'
-        and py['soabi'] == 'cpython-313-aarch64-linux-gnu',
+        and py['soabi'] == target_soabi(platform),
         'Unsupported CPython ABI',
     )
     sql = manifest['sqlite']
@@ -349,6 +427,7 @@ def verify_runtime(root, digest):
             artifact(root, ref) == root / expected and expected in files,
             'Unexpected runtime metadata artifact',
         )
+    read_wheel_manifest(root, manifest['dependencies_ref']['sha256'], platform)
     return manifest, verify_host_libraries(manifest['host_libraries'])
 
 
@@ -537,6 +616,72 @@ def minimum_environment(home, temporary):
     }
 
 
+def read_wheel_manifest(root, pin, platform):
+    path, _ = file_entry(root, manifest_path(DEPENDENCIES))
+    record = load_json(path, pin)
+    object_fields(
+        record,
+        'format_version',
+        'platform',
+        'python_version',
+        'input_lock',
+        'install_lock',
+        'installer',
+        'wheels',
+    )
+    demand(
+        type(record['format_version']) is int
+        and record['format_version'] == 1
+        and record['platform'] == platform == native_platform()
+        and record['python_version'] == PYTHON_VERSION,
+        'Dependency manifest platform differs',
+    )
+    source_lock = artifact(root, record['input_lock'])
+    install_lock = artifact(root, record['install_lock'])
+    demand(
+        source_lock == root / 'metadata' / 'requirements.input.lock'
+        and install_lock == root / 'metadata' / wheel_lock_name(record['platform']),
+        'Dependency lock does not belong to this target',
+    )
+    return record, source_lock, install_lock
+
+
+def validate_wheel_url(url, filename):
+    demand(type(url) is str, 'Invalid wheel source')
+    parsed = urlsplit(url)
+    demand(
+        parsed.scheme == 'https'
+        and parsed.netloc == 'files.pythonhosted.org'
+        and parsed.path.rsplit('/', 1)[-1] == filename
+        and not parsed.query
+        and not parsed.fragment
+        and manifest_path(filename).name == filename,
+        'Unexpected wheel source',
+    )
+
+
+def wheel_identity(row, parse_filename, tags):
+    object_fields(row, 'name', 'version', 'filename', 'sha256', 'bytes', 'tags', 'source_url')
+    name, version, _, wheel_tags = parse_filename(row['filename'])
+    demand(
+        name == row['name']
+        and str(version) == row['version']
+        and wheel_tags & tags
+        and sorted(map(str, wheel_tags)) == row['tags'],
+        'Incorrect target wheel identity',
+    )
+    demand(type(row['bytes']) is int and row['bytes'] > 0, 'Invalid wheel size')
+    validate_hash(row['sha256'])
+    validate_wheel_url(row['source_url'], row['filename'])
+    return name, str(version)
+
+
+def wheel_lock_content(rows):
+    return ''.join(
+        f'{row["name"]}=={row["version"]} --hash=sha256:{row["sha256"]}\n' for row in rows
+    ).encode('utf-8')
+
+
 def verify_target_imports(root, manifest):
     import importlib.metadata
 
@@ -553,27 +698,9 @@ def verify_target_imports(root, manifest):
     site = root / manifest['python']['site_packages_ref']
     for module in (fastapi, httpx, jsonschema, markdown_it, pydantic_core, rpds, uvicorn):
         demand(Path(module.__file__).is_relative_to(site), 'Dependency loaded outside its pin')
-    ref = manifest['dependencies_ref']
-    wheel_manifest = load_json(root / DEPENDENCIES, ref['sha256'])
-    object_fields(
-        wheel_manifest,
-        'format_version',
-        'platform',
-        'python_version',
-        'input_lock',
-        'install_lock',
-        'installer',
-        'wheels',
+    wheel_manifest, source_lock, install_lock = read_wheel_manifest(
+        root, manifest['dependencies_ref']['sha256'], manifest['platform']
     )
-    demand(
-        type(wheel_manifest['format_version']) is int
-        and wheel_manifest['format_version'] == 1
-        and wheel_manifest['platform'] == PLATFORM
-        and wheel_manifest['python_version'] == PYTHON_VERSION,
-        'Dependency manifest platform differs',
-    )
-    source_lock = artifact(root, wheel_manifest['input_lock'])
-    install_lock = artifact(root, wheel_manifest['install_lock'])
     installer = wheel_manifest['installer']
     object_fields(installer, 'name', 'version', 'bootstrap_wheel')
     demand(installer['name'] == 'pip' and installer['version'] == '26.2.2', 'Unexpected installer')
@@ -581,23 +708,12 @@ def verify_target_imports(root, manifest):
     demand(bootstrap.name == 'pip-26.2.2-py3-none-any.whl', 'Unexpected installer artifact')
     tags = set(sys_tags())
     records = {}
-    install_rows = []
-    demand(type(wheel_manifest['wheels']) is list, 'Invalid wheel manifest list')
-    for row in wheel_manifest['wheels']:
-        object_fields(row, 'name', 'version', 'filename', 'sha256', 'bytes', 'tags', 'source_url')
-        name, version, _, wheel_tags = parse_wheel_filename(row['filename'])
-        demand(
-            name == row['name']
-            and str(version) == row['version']
-            and name not in records
-            and wheel_tags & tags
-            and sorted(map(str, wheel_tags)) == row['tags'],
-            'Incorrect target wheel identity',
-        )
-        demand(type(row['bytes']) is int and row['bytes'] > 0, 'Invalid wheel size')
-        validate_hash(row['sha256'])
-        records[name] = str(version)
-        install_rows.append(f'{name}=={version} --hash=sha256:{row["sha256"]}\n')
+    rows = wheel_manifest['wheels']
+    demand(type(rows) is list, 'Invalid wheel manifest list')
+    for row in rows:
+        name, version = wheel_identity(row, parse_wheel_filename, tags)
+        demand(name not in records, 'Duplicate target wheel')
+        records[name] = version
     expected = []
     for line in source_lock.read_text(encoding='utf-8').splitlines():
         if line and not line.startswith('#'):
@@ -611,7 +727,7 @@ def verify_target_imports(root, manifest):
         len(records) == 31
         and list(records) == sorted(records)
         and sorted(records.items()) == sorted(expected) == sorted(installed)
-        and install_lock.read_bytes() == ''.join(install_rows).encode('utf-8'),
+        and install_lock.read_bytes() == wheel_lock_content(rows),
         'Installed dependencies differ from the locked wheel set',
     )
 
@@ -669,7 +785,12 @@ def run_target(args, environment):
         sys.path.append(str(project))
         from backend.app.infrastructure.schema_v22_publish import build_and_publish
 
-        release = build_and_publish(args.output, args.release_id, active.runtime_manifest_sha256)
+        release = build_and_publish(
+            args.output,
+            args.release_id,
+            active.runtime_manifest_sha256,
+            document_ai=args.document_ai_schema,
+        )
         validate_mappings(args.root, paths, hosts)
         print(
             f'SCHEMA_CANDIDATE {release.release_id} {release.manifest_sha256} '
@@ -694,6 +815,7 @@ def main():
     parser.add_argument('--project', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--release-id')
+    parser.add_argument('--document-ai-schema', action='store_true')
     parser.add_argument('--anchor', type=Path)
     parser.add_argument('--anchor-sha256')
     parser.add_argument('--action', choices=('prepare', 'continue', 'check', 'diagnose', 'observe'))
@@ -712,6 +834,7 @@ def main():
         demand(
             bool(args.project) == (schema_request or environment_request)
             and (all(schema_values) if schema_request else not any(schema_values))
+            and (schema_request or not args.document_ai_schema)
             and (
                 all(control_values)
                 if environment_request

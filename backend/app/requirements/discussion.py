@@ -104,6 +104,7 @@ def validate_discussion(value, resources=None):
 def apply_user_command(connection, root, command, catalog):
     """Build a complete new value before writing any message or index."""
     from copy import deepcopy
+    from backend.app.documents.drawing import is_drawing
     from backend.app.documents.scopes import resolve_scope, ScopeInvalid
     from backend.app.documents.snapshot import validate_snapshot
     from backend.app.documents.sources import DocumentSources
@@ -116,7 +117,9 @@ def apply_user_command(connection, root, command, catalog):
     state = deepcopy(root['discussion_state_json'])
     kind = command['type']
     if kind == 'SET_BINDING':
-        verify_source_refs(connection, root['id'], command['source_refs'], resources=resources)
+        verify_source_refs(
+            connection, root['id'], command['source_refs'], resources=resources, text_only=True
+        )
         target = command['target_document_id']
         document_kind = None
         if target is None:
@@ -136,6 +139,8 @@ def apply_user_command(connection, root, command, catalog):
                 'SPECIFICATION': 'specification',
             }[current['document_kind']]
             if command['scope'] is not None:
+                if is_drawing(current):
+                    raise Rejected('SCOPE_INVALID')
                 scope = command['scope']
                 ref = scope['scope_ref']
                 # Stored SECTION uses heading_block_id; the reused resolver's

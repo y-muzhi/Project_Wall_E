@@ -22,7 +22,7 @@ from backend.app.shared.validation import MAX_SAFE_INTEGER, reject
 
 from .database import CommitOutcomeUnknown, Database
 from .identifiers import require_write_transaction
-from .process_lock import ProcessLock
+from .process_lock import ProcessLock, matches_database
 
 
 def request_key(value: object, field: str = 'Idempotency-Key') -> str:
@@ -34,6 +34,15 @@ def request_key(value: object, field: str = 'Idempotency-Key') -> str:
     if parsed.version != 4:
         reject(field, 'INVALID_FORMAT', '必须为UUID v4')
     return str(parsed)
+
+
+def generation_namespace(generation: str | None) -> str:
+    return '' if generation is None else f'@generation:{generation}:'
+
+
+def storage_identity(database, scope) -> tuple[str, str, str]:
+    prefix = generation_namespace(getattr(database, 'idempotency_generation', None))
+    return scope.capability_id, prefix + scope.target_identity, scope.key
 
 
 class IdempotencyConflict(RuntimeError):
@@ -134,7 +143,7 @@ class Idempotency:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
         process_lock.assert_owned()
-        if process_lock.path != ProcessLock.for_database(database.path).path:
+        if not matches_database(process_lock, database):
             raise ValueError('Execution lock must be bound to this exact database')
         self.database = database
         self.process_lock = process_lock
@@ -157,7 +166,7 @@ class Idempotency:
         with self.database.transaction(write=True) as connection:
             row = connection.execute(
                 'SELECT * FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=?',
-                scope.identity,
+                storage_identity(self.database, scope),
             ).fetchone()
             if row is not None:
                 if row['business_input_json'] != input_json:
@@ -173,7 +182,7 @@ class Idempotency:
             connection.execute(
                 'INSERT INTO idempotency_records(capability_id,target_identity,idempotency_key,business_input_json,status,owner_epoch,created_at,updated_at,success_result_json,http_status) VALUES (?,?,?,?,?,?,?,?,?,?)',
                 (
-                    *scope.identity,
+                    *storage_identity(self.database, scope),
                     input_json,
                     'PROCESSING',
                     self.owner_epoch,
@@ -190,7 +199,7 @@ class Idempotency:
         require_write_transaction(connection)
         row = connection.execute(
             'SELECT business_input_json,status,owner_epoch FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=?',
-            claim.scope.identity,
+            storage_identity(self.database, claim.scope),
         ).fetchone()
         if (
             claim.owner_epoch != self.owner_epoch
@@ -204,7 +213,12 @@ class Idempotency:
         encoded = success.encoded()
         connection.execute(
             "UPDATE idempotency_records SET status='SUCCEEDED',success_result_json=?,http_status=?,updated_at=? WHERE capability_id=? AND target_identity=? AND idempotency_key=?",
-            (encoded, success.http_status, self._time(), *claim.scope.identity),
+            (
+                encoded,
+                success.http_status,
+                self._time(),
+                *storage_identity(self.database, claim.scope),
+            ),
         )
 
     def abandon(self, claim: Claim) -> None:
@@ -217,18 +231,27 @@ class Idempotency:
         with self.database.transaction(write=True) as connection:
             connection.execute(
                 "DELETE FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=? AND business_input_json=? AND status='PROCESSING' AND owner_epoch=?",
-                (*claim.scope.identity, claim.input_json, claim.owner_epoch),
+                (
+                    *storage_identity(self.database, claim.scope),
+                    claim.input_json,
+                    claim.owner_epoch,
+                ),
             )
 
     def recover_previous_process(self) -> int:
         """Startup only, holding OS lock. Success facts are never pruned/replayed."""
         self._owned()
+        query = (
+            "DELETE FROM idempotency_records WHERE status='PROCESSING' AND owner_epoch<>? "
+            "AND capability_id NOT LIKE 'APP-CODE-CMD-%' AND capability_id NOT LIKE 'APP-TEST-CMD-%'"
+        )
+        parameters = (self.owner_epoch,)
+        prefix = generation_namespace(getattr(self.database, 'idempotency_generation', None))
+        if prefix:
+            query += ' AND substr(target_identity,1,?)=?'
+            parameters += (len(prefix), prefix)
         with self.database.transaction(write=True) as connection:
-            cursor = connection.execute(
-                "DELETE FROM idempotency_records WHERE status='PROCESSING' AND owner_epoch<>? AND capability_id NOT LIKE 'APP-CODE-CMD-%' AND capability_id NOT LIKE 'APP-TEST-CMD-%'",
-                (self.owner_epoch,),
-            )
-            return cursor.rowcount
+            return connection.execute(query, parameters).rowcount
 
     def close_command(self, scope: Scope) -> dict:
         from .command_receipts import close_command
@@ -278,7 +301,11 @@ class Idempotency:
                     self.assert_claim(connection, claimed)
                     removed = connection.execute(
                         "DELETE FROM idempotency_records WHERE capability_id=? AND target_identity=? AND idempotency_key=? AND business_input_json=? AND status='PROCESSING' AND owner_epoch=?",
-                        (*scope.identity, claimed.input_json, claimed.owner_epoch),
+                        (
+                            *storage_identity(self.database, scope),
+                            claimed.input_json,
+                            claimed.owner_epoch,
+                        ),
                     )
                     if removed.rowcount != 1:
                         raise ClaimLost(

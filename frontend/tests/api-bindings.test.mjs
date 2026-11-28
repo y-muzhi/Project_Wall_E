@@ -42,6 +42,7 @@ const cases = [
   ['I17', 'prepareCancelGuide', [2], 'POST', '/guide-runs/2/cancel', null, true],
   ['I18', 'prepareRetryGuide', [2], 'POST', '/guide-runs/2/retry', null, true],
   ['I19', 'listGuideRuns', [1, {}], 'GET', '/requirements/1/guide-runs', null, false],
+  ['Pending document suggestion', 'getPendingDocumentBatch', [1,2], 'GET', '/requirements/1/documents/2/pending-suggestion', null, false],
   ['I20', 'getBatch', [8], 'GET', '/suggestion-batches/8', null, false],
   ['I21', 'prepareDecideSuggestion', [9, { decision: 'ACCEPTED' }], 'PUT', '/suggestions/9/decision', { decision: 'ACCEPTED' }, true],
   ['I20 group decide', 'prepareDecideGroup', [8, 2, 'ACCEPTED', 3], 'PUT', '/suggestion-batches/8/groups/2/decision', {decision:'ACCEPTED',expected_decision_version:3}, true],
@@ -85,7 +86,7 @@ test('all active client bindings reach exact public method/path/body/key policy;
   }
   const serverOnly=['POST /requirements/:id/complete-initialization','POST /requirements/:id/complete','POST /requirements/:id/reactivate'];
   const bindings = cases.map(([, , , method, path]) => method + ' ' + path.replace(/\/[0-9]+(?=\/|$)/g, '/:id'));
-  assert.equal(registered.length,44);assert.equal(cases.length,41);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
+  assert.equal(registered.length,45);assert.equal(cases.length,42);assert.deepEqual([...bindings,...serverOnly].sort(),registered.sort());
 });
 test('the extended batch review stays on the same read path with an explicit query', async () => {
   let sent;

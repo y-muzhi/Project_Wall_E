@@ -23,7 +23,9 @@ export function DocumentAssociations({
     (item) => item.kind === 'REVISION' && item.document_id !== documentId,
   );
   const selected = draft ?? saved.map((item) => Number(item.document_id));
-  const documents = state.detail.documents.filter((item) => item.id !== documentId);
+  const documents = state.detail.documents.filter(
+    (item) => item.id !== documentId && item.document_kind !== 'DRAWING',
+  );
   const changed =
     latest ||
     JSON.stringify([...selected].sort()) !==

@@ -14,6 +14,37 @@ from backend.app.shared.http_projection import document
 
 
 @dataclass(frozen=True)
+class GetPendingDocumentBatchRequest:
+    requirement_id: int
+    document_id: int
+
+    @classmethod
+    def parse(cls, request):
+        request_query(request)
+        return cls(
+            decimal_integer(request.path_params['requirement_id'], 'requirement_id'),
+            decimal_integer(request.path_params['document_id'], 'document_id'),
+        )
+
+
+class GetPendingDocumentBatchResponse:
+    errors = frozenset({'INVALID_INPUT', 'NOT_FOUND', 'STORAGE_UNAVAILABLE', 'INTERNAL_ERROR'})
+
+    @staticmethod
+    def project(data, request):
+        fields = ('requirement_id', 'document_id', 'batch_id')
+        value = object_fields(data, 'data', fields, fields)
+        if (
+            strict_integer(value['requirement_id'], 'requirement_id') != request.requirement_id
+            or strict_integer(value['document_id'], 'document_id') != request.document_id
+        ):
+            raise ValueError('Pending suggestion belongs to another document')
+        if value['batch_id'] is not None:
+            strict_integer(value['batch_id'], 'batch_id')
+        return value, None
+
+
+@dataclass(frozen=True)
 class GetBatchRequest:
     batch_id: int
     include_review: bool

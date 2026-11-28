@@ -1,27 +1,20 @@
 """Admitted Linux maintenance and read-only diagnostics."""
 
-from contextlib import ExitStack
 import json
 import os
+from contextlib import ExitStack
 
 from .database import SchemaMismatch
 from .environment_binding import EnvironmentBinding
-from .environment_control import CONTROL_NAME, confirm_initial_control
-from .environment_files import (
-    EnvironmentFailure,
-    decode,
-    digest,
-    read_entry,
-    read_protected,
-    require,
-)
+from .environment_control import read_control
+from .environment_files import EnvironmentFailure, digest, read_protected, require
 from .environment_initialize import inspect_database, perform_initialization
-from .environment_installation import database_identity, load_installation, uuid_value
+from .environment_installation import CANDIDATE_PURPOSE, database_identity, load_installation
 from .environment_lock import NativeEnvironmentFiles
 from .schema_v22_release import load_release
 
 
-def admission_inputs(args, active, program_sha):
+def admission_inputs(args, active, program_sha, *, offline=False):
     installation = load_installation(
         args.anchor, args.anchor_sha256, active.runtime_manifest_sha256, args.project
     )
@@ -31,41 +24,40 @@ def admission_inputs(args, active, program_sha):
         == installation.description['program_source']['sha256'],
         'PROGRAM_SNAPSHOT_MISMATCH',
     )
-    installation.check_hold()
+    installation.check_hold(offline=offline)
+    binding = installation.description.get('deployment_slot')
+    if installation.description['purpose'] == CANDIDATE_PURPOSE:
+        binding = installation.description['release_validation']
+    if binding is not None:
+        from backend.app.management.release_validation import verify_validation_frontend
+
+        verify_validation_frontend(
+            installation.path('frontend'),
+            installation.project,
+            binding,
+        )
     try:
         release = load_release(
             installation.schema,
             installation.description['schema_manifest_sha256'],
             active.runtime_manifest_sha256,
+            source_root=installation.project,
         )
     except (OSError, SchemaMismatch, ValueError) as error:
         raise EnvironmentFailure('SCHEMA_RELEASE_MISMATCH') from error
     return installation, release
 
 
-def read_initial_operation(control_fd, installation):
-    raw = read_entry(
-        control_fd, CONTROL_NAME, owner=installation.maintenance_uid, group=installation.group
-    )
-    control = decode(raw, 'ENVIRONMENT_CONTROL_MISMATCH')
-    operation = control.get('operation_id')
-    require(
-        uuid_value(operation)
-        and confirm_initial_control(control_fd, installation, operation, create=False),
-        'ENVIRONMENT_CONTROL_MISMATCH',
-    )
-    return operation
-
-
 def diagnose(native, installation, release):
     installation.check_identity(maintenance=False)
     with ExitStack() as resources:
         resources.enter_context(installation.lock(native))
-        installation.check_hold()
+        installation.check_hold(offline=True)
         for kind in ('runtime', 'log', 'temporary', 'frontend'):
             resources.enter_context(installation.directory(native, kind))
         control_fd = resources.enter_context(installation.directory(native, 'control'))
-        read_initial_operation(control_fd, installation)
+        control = read_control(control_fd, installation)
+        require(control['admission'] == 'CLOSED', 'ENVIRONMENT_CONTROL_MISMATCH')
         data_fd = resources.enter_context(installation.directory(native, 'data'))
         file_identity = database_identity(installation, data_fd)
         require(file_identity is not None, 'ENVIRONMENT_BINDING_MISMATCH')
@@ -84,7 +76,9 @@ def diagnose(native, installation, release):
 def run_command(args, active, program_sha):
     os.umask(0o007)
     try:
-        installation, release = admission_inputs(args, active, program_sha)
+        installation, release = admission_inputs(
+            args, active, program_sha, offline=args.action in ('diagnose', 'observe')
+        )
         native = NativeEnvironmentFiles(args.root)
         if args.action in ('diagnose', 'observe'):
             require(
@@ -98,6 +92,13 @@ def run_command(args, active, program_sha):
                 pid = installation.lock(native).observer_pid()
                 result = {'status': 'LOCK_OBSERVED', 'pid': pid}
         else:
+            require(
+                'recovery_replica' not in installation.description, 'RECOVERY_REPLICA_READ_ONLY'
+            )
+            require(
+                'deployment_slot' not in installation.description,
+                'INITIALIZATION_INTENT_MISMATCH',
+            )
             result = perform_initialization(
                 native, installation, release, args.action, args.operation_id, args.intent_sha256
             )

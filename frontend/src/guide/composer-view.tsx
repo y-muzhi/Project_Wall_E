@@ -238,6 +238,12 @@ export function GuideComposer({
                 className="ui-button"
                 type="button"
                 aria-pressed={mode === 'REVISE' ? writing : !writing}
+                disabled={mode === 'REVISE' && state.detail.current?.document_kind === 'DRAWING'}
+                title={
+                  mode === 'REVISE' && state.detail.current?.document_kind === 'DRAWING'
+                    ? '画板仅支持人工编辑'
+                    : undefined
+                }
                 onClick={() => owner.choose(mode)}
               >
                 {names[mode]}

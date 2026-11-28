@@ -2,6 +2,7 @@ import { useCallback, useState, useSyncExternalStore } from 'react';
 import { linkHandoffPath } from '../api/code-task-handoff.ts';
 import type { HandoffView } from '../api/code-task-handoff.ts';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import type { DocumentHandoffLink } from '../application/router.ts';
 import { evidenceLabel } from '../code-tasks/evidence-picker.tsx';
 import { useCodeTaskCommand } from '../code-tasks/handoff-command.ts';
@@ -44,9 +45,11 @@ function draftMarker(link: DocumentHandoffLink, requirement: number) {
   ].join(':');
 }
 
-function wasInserted(marker: string) {
+function wasInserted(api: WalleApi, marker: string) {
   try {
-    return sessionStorage.getItem(marker) === '1';
+    return (
+      environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(marker) === '1'
+    );
   } catch {
     return false;
   }
@@ -79,7 +82,7 @@ export function DocumentHandoff({ api, owner, link, active, blocked }: Props) {
   const requirement = state.detail.requirement.id;
   const document = state.detail.selected_document_id;
   const marker = draftMarker(link, requirement);
-  const [inserted, setInserted] = useState(() => wasInserted(marker));
+  const [inserted, setInserted] = useState(() => wasInserted(api, marker));
   const [insertError, setInsertError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [retry, setRetry] = useState(0);
@@ -162,7 +165,7 @@ export function DocumentHandoff({ api, owner, link, active, blocked }: Props) {
     setInserted(true);
     if (!draft.draft_warning) {
       try {
-        sessionStorage.setItem(marker, '1');
+        environmentBrowserStorage('sessionStorage', api.environmentScope).setItem(marker, '1');
       } catch {
         // The same plain-text marker still prevents a duplicate in this draft.
       }

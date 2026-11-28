@@ -9,6 +9,20 @@ function browser(path='/requirements'){
  return {history,entries,values,pathname:()=>entries[index].path,scroll:()=>scroll,scrollTop:()=>{scroll=0;},setScroll:value=>{scroll=value;},listen:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},storage:{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)},identify:()=>`00000000-0000-4000-8000-${String(++serial).padStart(12,'0')}`,idle:()=>new Promise(resolve=>setImmediate(resolve))};
 }
 const api={listRequirements:async filters=>({data:{items:[]},meta:{pagination:{page:filters.page,page_size:20,total:0,total_pages:0}}})};
+test('code settings tabs and history keep the current window scroll', async () => {
+ const port=browser('/settings/code'),router=new ApplicationRouter(api,port,port.storage,port.identify);
+ port.setScroll(42);
+ router.selectCodeSettingsSection('execution');
+ assert.equal(port.pathname(),'/settings/code?section=execution');
+ assert.equal(port.scroll(),42);
+ port.history.go(-1);
+ await port.idle();
+ assert.equal(port.pathname(),'/settings/code');
+ assert.equal(port.scroll(),42);
+ router.mainNavigation();
+ assert.equal(port.scroll(),0);
+ router.dispose();
+});
 test('workbench button directly opens the default list; main navigation creates fresh defaults',async()=>{
  const port=browser(),router=new ApplicationRouter(api,port,port.storage,port.identify),first=router.getSnapshot();
  const query={...defaultWorkbenchQuery,keyword:'原提交',status:['PLANNING'],page:3};await first.workbench.query(query);port.setScroll(320);router.saveEntry(query,320);router.openRequirement(17);
@@ -346,4 +360,44 @@ test('Coding pins a path-only route to its original verified owner without addin
  assert.equal(router.getSnapshot().taskWorkspace, pinned);
  assert.equal(new URLSearchParams(port.search()).get('plan_id'), '41');
  router.dispose();
+});
+
+test('a bound router restores its own history, and another data generation reads only the current URL', async () => {
+ const origin = 'https://dev.walle.test:9443';
+ const environment_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const data_generation = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const scope = {binding_protocol: 1, origin, environment_id, data_generation};
+ const current = {...api, environmentScope: scope};
+ const port = browser();
+ const original = new ApplicationRouter(current, port, port.storage, port.identify);
+ const query = {...defaultWorkbenchQuery, keyword: '旧代次查询'};
+ await original.getSnapshot().workbench.query(query);
+ original.saveEntry(query, 144);
+ const old = port.history.state;
+ assert.equal(old.scope_version, 1);
+ assert.equal(old.environment_id, environment_id);
+ assert.equal(old.data_generation, data_generation);
+ assert.deepEqual(old.value.query, query);
+ assert.equal(port.history.scrollRestoration, 'manual');
+ const firstKeys = [...port.values.keys()];
+ assert.ok(firstKeys.length > 0);
+ assert.ok(firstKeys.every((key) => key.startsWith('walle:v2.01:' + environment_id + ':' + data_generation + ':')));
+ original.dispose();
+
+ const same = new ApplicationRouter(current, port, port.storage, port.identify);
+ assert.deepEqual(same.getSnapshot().entry.query, query);
+ assert.equal(same.getSnapshot().restoreScroll, 144);
+ same.dispose();
+
+ const nextGeneration = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ const next = new ApplicationRouter(
+  {...api, environmentScope: {...scope, data_generation: nextGeneration}},
+  port, port.storage, port.identify,
+ );
+ assert.equal(port.pathname(), '/requirements');
+ assert.deepEqual(next.getSnapshot().entry.query, defaultWorkbenchQuery);
+ assert.equal(next.getSnapshot().restoreScroll, 0);
+ assert.equal(port.history.state.data_generation, nextGeneration);
+ for (const key of firstKeys) assert.ok(port.values.has(key));
+ next.dispose();
 });

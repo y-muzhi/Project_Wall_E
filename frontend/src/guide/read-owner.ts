@@ -1,5 +1,7 @@
 import { positiveInteger, snapshotObject } from '../api/client.ts';
-import type { GuideRun, GuideSummary } from '../api/models.ts';
+import type { GuideOperationReceipt, GuideRun, GuideSummary } from '../api/models.ts';
+import { readOperationDetail } from './saved-operation.ts';
+import type { OperationDetailKind } from './saved-operation.ts';
 import type { WalleApi } from '../api/walle.ts';
 import type { DetailSnapshot } from '../requirements/detail-read.ts';
 import { RequirementMessages } from '../messages/read.ts';
@@ -7,7 +9,15 @@ import { RequirementRunHistory } from './history.ts';
 import { GuideRunPolling } from './polling.ts';
 import type { PollClock } from './polling.ts';
 type RunIdentity = Readonly<{ id: number; requirement_id: number }>;
-type Api = Pick<WalleApi, 'getGuideRun' | 'listGuideRuns' | 'listMessages'> &
+type Api = Pick<
+  WalleApi,
+  | 'getGuideRun'
+  | 'listGuideRuns'
+  | 'listMessages'
+  | 'getRevision'
+  | 'listRevisions'
+  | 'revisionBlocks'
+> &
   Partial<Pick<WalleApi, 'detailReadEpoch' | 'waitForDetailWrites'>>;
 export type AiReadState = Readonly<{
   detail: DetailSnapshot;
@@ -46,6 +56,7 @@ export class RequirementAiRead {
   private readonly adoptActual: (actual: DetailSnapshot) => Promise<void>;
   private readonly openPanel: () => void | Promise<void>;
   private readonly timing: PollClock | undefined;
+  private readonly allowRunReads: boolean;
   private value: AiReadState;
   private readonly listeners = new Set<() => void>();
   private poll: GuideRunPolling | undefined;
@@ -65,6 +76,7 @@ export class RequirementAiRead {
     adoptActual: (actual: DetailSnapshot) => Promise<void>,
     openPanel: () => void | Promise<void>,
     timing?: PollClock,
+    allowRunReads = true,
   ) {
     positiveInteger(detail.requirement.id);
     if (
@@ -78,6 +90,7 @@ export class RequirementAiRead {
     this.adoptActual = adoptActual;
     this.openPanel = openPanel;
     this.timing = timing;
+    this.allowRunReads = allowRunReads;
     this.messages = new RequirementMessages(detail.requirement.id, api);
     this.history = new RequirementRunHistory(detail.requirement.id, api);
     this.value = Object.freeze({
@@ -160,7 +173,7 @@ export class RequirementAiRead {
     actual?: GuideRun,
   ): void {
     this.owned(run);
-    if (this.closed) return;
+    if (this.closed || !this.allowRunReads) return;
     if (this.value.selected === run.id && this.poll) {
       this.publish({ selection: kind });
       return;
@@ -224,6 +237,9 @@ export class RequirementAiRead {
     if (this.closed || !this.value.visible) return;
     this.select(summary, 'HISTORY');
   }
+  readOperation(receipt: GuideOperationReceipt, kind: OperationDetailKind, signal: AbortSignal) {
+    return readOperationDetail(this.api, this.value.detail.requirement.id, receipt, kind, signal);
+  }
   readRun(): void {
     if (!this.closed && this.value.visible) this.poll?.refresh();
   }
@@ -267,6 +283,10 @@ export class RequirementAiRead {
           if (!alive()) throw Error('AI view is hidden or retired');
           const epoch = this.api.detailReadEpoch ?? 0;
           try {
+            if (!this.allowRunReads) {
+              if (!(await this.messages.refresh())) throw Error('已保存消息暂时无法读取');
+              continue;
+            }
             const actual = await this.readActual();
             if (!alive()) throw Error('AI read was hidden');
             if (actual.requirement.id !== this.value.detail.requirement.id)

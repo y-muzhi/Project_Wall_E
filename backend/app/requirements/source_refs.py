@@ -58,7 +58,9 @@ def saved_run_material(connection, requirement_id, source, resources):
     raise Rejected('SOURCE_INVALID')
 
 
-def verify_source_refs(connection, requirement_id, refs, *, resources=None):
+def verify_source_refs(connection, requirement_id, refs, *, resources=None, text_only=False):
+    from backend.app.documents.drawing import is_drawing
+
     resources = resources or discussion_resources()
     seen = set()
     for source in refs:
@@ -97,10 +99,12 @@ def verify_source_refs(connection, requirement_id, refs, *, resources=None):
                     raise Rejected('SOURCE_INVALID')
         elif kind == 'REVISION':
             row = connection.execute(
-                "SELECT r.block_state_snapshot_json FROM revisions r JOIN requirement_documents d ON d.id=r.document_id WHERE r.id=? AND r.document_id=? AND r.requirement_id=? AND d.document_type='CURRENT'",
+                "SELECT r.block_state_snapshot_json,d.document_kind,d.template_ref FROM revisions r JOIN requirement_documents d ON d.id=r.document_id WHERE r.id=? AND r.document_id=? AND r.requirement_id=? AND d.document_type='CURRENT'",
                 (source['revision_id'], source['document_id'], requirement_id),
             ).fetchone()
             if row is None:
+                raise Rejected('SOURCE_INVALID')
+            if text_only and is_drawing(row):
                 raise Rejected('SOURCE_INVALID')
             ids = source['block_ids']
             if ids is not None and (

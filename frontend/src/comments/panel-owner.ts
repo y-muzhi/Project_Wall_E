@@ -59,6 +59,7 @@ export class RequirementCommentPanel {
   private readonly adoptActual: (actual: DetailSnapshot) => Promise<void>;
   private readonly acceptedGuide: (run: GuideRun) => Promise<void>;
   private readonly notifyConfirmed: ConfirmedNotice | undefined;
+  private readonly environmentWriteReason: string | null;
   private value: CommentPanelState;
   private readonly listeners = new Set<() => void>();
   private readonly owners = new Map<number, OwnedSlot>();
@@ -76,6 +77,7 @@ export class RequirementCommentPanel {
     adoptActual: (actual: DetailSnapshot) => Promise<void>,
     acceptedGuide: (run: GuideRun) => Promise<void>,
     notifyConfirmed?: ConfirmedNotice,
+    environmentWriteReason: string | null = null,
   ) {
     if (
       detail.current !== null &&
@@ -89,6 +91,7 @@ export class RequirementCommentPanel {
     this.adoptActual = adoptActual;
     this.acceptedGuide = acceptedGuide;
     this.notifyConfirmed = notifyConfirmed;
+    this.environmentWriteReason = environmentWriteReason;
     this.value = Object.freeze({
       detail: capture(detail),
       view: detail.activity.kind === 'MANUAL' ? 'MANUAL' : 'CURRENT',
@@ -117,6 +120,7 @@ export class RequirementCommentPanel {
   get writeReady(): boolean {
     return (
       !this.blocked &&
+      !this.environmentWriteReason &&
       !this.value.refreshing &&
       !this.value.needs_refresh &&
       this.value.view === 'CURRENT' &&
@@ -129,6 +133,7 @@ export class RequirementCommentPanel {
     if (current === null) return '请先选择文档。';
     if (this.closed || this.value.suspended) return '评论操作已暂停，请恢复后再操作。';
     if (this.value.view === 'HISTORY') return '历史版本仅供查看，无法修改评论。';
+    if (this.environmentWriteReason) return this.environmentWriteReason;
     if (current.archived_at) return '文档已归档，评论暂不可修改。';
     if (
       this.value.view === 'MANUAL' ||

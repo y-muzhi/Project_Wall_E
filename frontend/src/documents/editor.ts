@@ -17,6 +17,8 @@ import { TemplateHeadingLock, templateLockMessage } from './template-lock.ts';
 import type { DocumentStructureBinding } from './template-lock.ts';
 import { installFormatToolbar } from './format-toolbar.ts';
 import { chineseStrongDecorations } from './chinese-strong-display.ts';
+import { loadDrawingCanvas } from './drawing-assets.ts';
+import type { DrawingCanvas } from './drawing-canvas.tsx';
 
 export type EditorEvents = Readonly<{
   change?: (snapshot: EditedSnapshot) => void;
@@ -44,6 +46,7 @@ export class RequirementEditor {
   >();
   private formatToolbar: ReturnType<typeof installFormatToolbar> | null = null;
   private readonlyMode: boolean;
+  private drawing: DrawingCanvas | null = null;
   private closed = false;
   private composing = false;
   private invalid = false;
@@ -55,6 +58,7 @@ export class RequirementEditor {
     readonly: boolean,
     events: EditorEvents,
     templateLock: TemplateHeadingLock | null,
+    drawing: boolean,
   ) {
     this.crepe = crepe;
     this.root = root;
@@ -113,7 +117,7 @@ export class RequirementEditor {
     };
     root.ownerDocument.addEventListener('focusout', focusout);
     this.removeListeners.push(() => root.ownerDocument.removeEventListener('focusout', focusout));
-    if (this.session)
+    if (this.session && !drawing)
       this.formatToolbar = installFormatToolbar(root, this, (message) =>
         this.notify(() => this.events.error?.(message)),
       );
@@ -124,12 +128,19 @@ export class RequirementEditor {
     readonly = true,
     events: EditorEvents = {},
     structure: DocumentStructureBinding | null = null,
+    drawing = false,
   ): Promise<RequirementEditor> {
     input = editorReadModel(snapshotObject(input) as unknown as DocumentReadModel);
     if (!readonly && input.document_type !== 'MANUAL_DRAFT')
       throw new TypeError('Only actual manual draft may be edited');
+    const editorRoot = drawing ? root.ownerDocument.createElement('div') : root;
+    if (drawing) {
+      editorRoot.hidden = true;
+      editorRoot.inert = true;
+      root.append(editorRoot);
+    }
     const crepe = new Crepe({
-      root,
+      root: editorRoot,
       defaultValue: input.markdown_content,
       features: {
         [Crepe.Feature.CodeMirror]: false,
@@ -146,6 +157,7 @@ export class RequirementEditor {
         [Crepe.Feature.AI]: false,
       },
     });
+    let editor: RequirementEditor | undefined;
     try {
       await installSourceNodes(crepe);
       installIdentityAttributes(crepe);
@@ -169,9 +181,21 @@ export class RequirementEditor {
         structure === null
           ? null
           : crepe.editor.action((ctx) => new TemplateHeadingLock(ctx, structure));
-      return new RequirementEditor(crepe, root, document, readonly, events, lock);
+      const owned = new RequirementEditor(crepe, root, document, readonly, events, lock, drawing);
+      editor = owned;
+      if (drawing) {
+        const { mountDrawingCanvas } = await loadDrawingCanvas();
+        owned.drawing = mountDrawingCanvas(root, document.markdown_content, {
+          change: (scene) => owned.changeDrawing(scene),
+          validity: () => owned.notifyValidity(),
+          error: (message) => owned.notify(() => events.error?.(message)),
+        });
+        owned.drawing.setReadonly(readonly);
+      }
+      return owned;
     } catch (error) {
-      await crepe.destroy();
+      if (editor) await editor.destroy();
+      else await crepe.destroy();
       root.replaceChildren();
       throw error;
     }
@@ -183,8 +207,11 @@ export class RequirementEditor {
   get loadedDocument(): DocumentReadModel {
     return this.document;
   }
+  get isDrawing(): boolean {
+    return this.drawing !== null;
+  }
   get valid(): boolean {
-    return !this.closed && !this.invalid && !this.composing;
+    return !this.closed && !this.invalid && !this.composing && (this.drawing?.valid ?? true);
   }
   get readonly(): boolean {
     return this.readonlyMode;
@@ -205,6 +232,7 @@ export class RequirementEditor {
     if (!readonly && !this.session) throw new TypeError('Current document is read only');
     this.readonlyMode = readonly;
     this.crepe.setReadonly(readonly);
+    this.drawing?.setReadonly(readonly);
     this.formatToolbar?.update();
   }
   private notify(operation: () => void): void {
@@ -219,7 +247,7 @@ export class RequirementEditor {
     this.notify(() => this.events.validity?.(this.valid));
   }
   private select(ctx: Ctx): void {
-    if (this.closed) return;
+    if (this.closed || this.drawing) return;
     let selection: SelectionEvent | null = null;
     try {
       selection = selectionFromEditorState(ctx.get(editorViewCtx).state, {
@@ -311,12 +339,32 @@ export class RequirementEditor {
       this.notifyValidity();
     }
   }
+  private changeDrawing(scene: string): void {
+    if (this.closed || this.readonlyMode || !this.session) return;
+    this.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const block = view.state.doc.firstChild;
+      if (view.state.doc.childCount !== 1 || block?.type.name !== 'code_block')
+        throw Error('画板草稿结构无效');
+      if (block.textContent !== scene)
+        view.dispatch(
+          view.state.tr.insertText(scene, 1, block.nodeSize - 1).setMeta('addToHistory', false),
+        );
+      if (this.invalid) throw Error('画板草稿暂时无法保存');
+    });
+  }
   /** Parent checks this before completing; partial composition/invalid local
    * input cannot be mistaken for the older snapshot already saved on server.
    */
+  readVisibleDraft(): string {
+    if (this.closed || !this.session) throw Error('Manual editor is unavailable');
+    return this.action((ctx) => ctx.get(editorViewCtx).dom.innerText);
+  }
+
   flushLocal(): boolean {
     if (this.closed || this.composing) return false;
     if (!this.session) return true;
+    if (this.drawing && !this.drawing.flush()) return false;
     return this.action((ctx) => this.capture(ctx, ctx.get(editorViewCtx).state));
   }
   /** Parent owns explicit cache choice and fresh occupancy/version checks.
@@ -333,6 +381,7 @@ export class RequirementEditor {
       const pair = this.session!.accept(prepared, view.state);
       this.accepted = view.state;
       this.invalid = false;
+      this.drawing?.replace(pair.markdown_content);
       this.editingTime = Math.max(
         this.editingTime,
         Date.parse(local.updated_at),
@@ -360,6 +409,7 @@ export class RequirementEditor {
     this.transactionGuards.clear();
     for (const remove of this.removeListeners) remove();
     this.formatToolbar?.destroy();
+    this.drawing?.destroy();
     this.session?.dispose();
     await this.crepe.destroy();
     this.root.replaceChildren();

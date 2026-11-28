@@ -57,7 +57,8 @@ export function PlanDraftEditor({
   dirty,
 }: Props) {
   const versionId = version?.id ?? null;
-  const [local, setLocal] = useState(() => loadDraft(planId, version));
+  const scope = api.environmentScope;
+  const [local, setLocal] = useState(() => loadDraft(planId, version, scope));
   const current = useRef(local);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,7 +100,7 @@ export function PlanDraftEditor({
   function install(value: LocalDraft, persistent = true) {
     current.current = value;
     setLocal(value);
-    setWarning(!saveLocal(planId, versionId, persistent ? value : null));
+    setWarning(!saveLocal(planId, versionId, persistent ? value : null, scope));
   }
 
   function reset(value: TestPlanVersion | null) {
@@ -129,11 +130,11 @@ export function PlanDraftEditor({
     };
     current.current = next;
     setLocal(next);
-    setWarning(!saveLocal(planId, versionId, null));
+    setWarning(!saveLocal(planId, versionId, null, scope));
     setError(null);
     if (versionId === null) setOpen(false);
     latest.current.saved(stored);
-  }, [recovered, planId, versionId]);
+  }, [recovered, planId, versionId, scope]);
 
   function change(draft: Draft) {
     const previous = current.current;

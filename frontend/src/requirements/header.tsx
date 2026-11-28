@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { RequirementHeaderCommands } from './header-commands.ts';
 import type { LifecycleOutcome } from './lifecycle.ts';
@@ -15,10 +16,13 @@ export function RequirementHeader(
   props: Readonly<{
     tools?: ReactNode;
     documentActions?: ReactNode;
+    manualActionHost?: HTMLElement | null;
     toolHint?: string | undefined;
     commands: RequirementHeaderCommands;
     ready: boolean;
     blocked: boolean;
+    writeReason?: string | null;
+    lifecycleReason?: string | null;
     history: boolean;
     refresh(): Promise<DetailSnapshot>;
     refreshRevisions(): Promise<void>;
@@ -89,8 +93,19 @@ export function RequirementHeader(
     await refresh();
     closeTools();
   };
+  const manualControl = manual && (!props.history || manual.getSnapshot().phase !== 'READY') && (
+    <ManualStartControl
+      key={'manual-' + state.manual_generation}
+      flow={manual}
+      disabled={external || props.commands.blockedFor('MANUAL')}
+      writeReady={ready}
+      writeReason={props.writeReason ?? null}
+      started={manualEditingStarted}
+    />
+  );
   return (
     <section className="requirement-header" aria-label="需求属性和操作">
+      {props.manualActionHost && createPortal(manualControl, props.manualActionHost)}
       <div className="requirement-operations">
         {props.documentActions}
         <div
@@ -132,20 +147,17 @@ export function RequirementHeader(
                   key={'lifecycle-' + state.lifecycle_generation}
                   caption="修改需求状态"
                   flow={life}
-                  blocked={props.blocked || props.commands.blockedFor('LIFECYCLE')}
+                  blocked={
+                    props.blocked ||
+                    !!props.lifecycleReason ||
+                    props.commands.blockedFor('LIFECYCLE')
+                  }
+                  reason={props.lifecycleReason ?? null}
                   writeReady={ready}
                   changed={requirementStatusChanged}
                 />
               )}
-              {manual && (!props.history || manual.getSnapshot().phase !== 'READY') && (
-                <ManualStartControl
-                  key={'manual-' + state.manual_generation}
-                  flow={manual}
-                  disabled={external || props.commands.blockedFor('MANUAL')}
-                  writeReady={ready}
-                  started={manualEditingStarted}
-                />
-              )}
+              {!props.manualActionHost && manualControl}
             </div>
             {props.tools && (
               <div

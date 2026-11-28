@@ -168,6 +168,9 @@ export class ManualDraftStart {
       return false;
     }
   }
+  get awaitingOriginalResult(): boolean {
+    return ['SUBMITTING', 'CHECKING', 'UNKNOWN'].includes(this.value.phase);
+  }
   retryUnknown(): Promise<boolean> {
     if (this.disposed || !this.action) return Promise.resolve(false);
     if (this.pending) return this.pending;

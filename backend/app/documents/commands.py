@@ -19,7 +19,8 @@ from .contracts import (
     cancel_manual_draft_input,
     cancel_manual_draft_result,
 )
-from .design_profiles import DESIGN_PROFILES, design_framework_markdown
+from .design_profiles import DESIGN_PROFILES, DRAWING_KIND, design_framework_markdown
+from .drawing import empty_drawing
 from .guards import active_manual_draft, assert_document_idle, current_at_version
 from .sources import DocumentSources, close_edit_session, register_edit_session
 
@@ -353,7 +354,9 @@ def create_document(executor, payload, *, catalog=None, clock=None):
         if request.document_kind in DESIGN_PROFILES:
             profile = DESIGN_PROFILES[request.document_kind]
             stored_kind = profile['stored_kind']
-            if request.initial_content == 'FRAMEWORK':
+            if request.document_kind == DRAWING_KIND:
+                markdown = empty_drawing()
+            elif request.initial_content == 'FRAMEWORK':
                 markdown = design_framework_markdown(reference)
         elif reference is not None:
             kind = {

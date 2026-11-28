@@ -56,8 +56,13 @@ def _review_evidence(path):
 class OpenAIAdmission(CollaborationAdmission):
     """Native evidence interpretation and the pinned review layout on readback."""
 
+    def _evidence_database(self, path):
+        if Path(path).resolve() == Path(self.database.path).resolve():
+            return self.database
+        return _review_evidence(path)
+
     def _saved(self, path, identity):
-        review = _review_evidence(path)
+        review = self._evidence_database(path)
         if review is None:
             return super()._saved(path, identity)
         with review.transaction() as connection:
@@ -112,7 +117,7 @@ class OpenAIAdmission(CollaborationAdmission):
 
     def _suspended(self, path, profile_snapshot):
         reference = self.resources.reference('collaboration.release')
-        source = _review_evidence(path) or evidence_database(path)
+        source = self._evidence_database(path) or evidence_database(path)
         with source.transaction() as connection:
             rows = connection.execute(
                 """SELECT input_tokens,output_tokens,

@@ -139,6 +139,11 @@ export const requirement = checked(
 export type Requirement = Model<typeof requirement>;
 export type RequirementSummary = Model<typeof requirementSummary>;
 export const nullableId = nullable(id);
+export const pendingDocumentBatch = shape({
+  requirement_id: id,
+  document_id: id,
+  batch_id: nullableId,
+});
 
 export const collaborationValue =
   (name: string) =>
@@ -319,6 +324,7 @@ export const creatableDocumentKinds = [
   'REQUIREMENT_BRIEF',
   'FRONTEND_DESIGN',
   'BACKEND_DESIGN',
+  'DRAWING',
 ] as const;
 export const documentKinds = [...creatableDocumentKinds, 'DESIGN', 'SPECIFICATION'] as const;
 export const documentSummaryFields = {

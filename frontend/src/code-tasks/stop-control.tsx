@@ -33,7 +33,7 @@ export function TaskStopControl({ api, task, visible, ready, changed }: Props) {
   const recovery = useMemo(
     () =>
       api.configurationRecovery(
-        new CommandRecoveryStore(),
+        new CommandRecoveryStore({ scope: api.environmentScope }),
         async (original, association, signal) => {
           if (
             original.decoder_kind !== 'APP-CODE-CMD-C37' ||

@@ -18,7 +18,7 @@ export function useCodeTaskCommand(
   const recovery = useMemo(
     () =>
       api.configurationRecovery(
-        new CommandRecoveryStore(),
+        new CommandRecoveryStore({ scope: api.environmentScope }),
         readOperation ??
           (async () => {
             throw Error('A synchronous Coding command has no active receipt operation');

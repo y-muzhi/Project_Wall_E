@@ -71,6 +71,18 @@ export class RequirementHeaderCommands {
       }
     }
   }
+  get pendingScopeOperations(): number {
+    const titlePhase = this.title.getSnapshot().phase;
+    const lifecyclePhase = this.value.lifecycle?.getSnapshot().phase;
+    return (
+      Number(['SUBMITTING', 'READING', 'UNKNOWN'].includes(titlePhase)) +
+      Number(
+        lifecyclePhase !== undefined &&
+          ['SUBMITTING', 'READING', 'UNKNOWN'].includes(lifecyclePhase),
+      ) +
+      Number(this.value.manual?.awaitingOriginalResult === true)
+    );
+  }
   blockedFor(owner: HeaderOwner): boolean {
     const ownPhase =
       owner === 'TITLE'
@@ -136,8 +148,7 @@ export class RequirementHeaderCommands {
         this.lifecycleSignature = nextSignature;
         this.lifecycleRelease = lifecycle?.subscribe(() => this.notify());
       }
-      const protectedStart =
-        manual && ['SUBMITTING', 'CHECKING', 'UNKNOWN'].includes(manual.getSnapshot().phase);
+      const protectedStart = manual?.awaitingOriginalResult;
       if (
         !protectedStart &&
         (!manual ||

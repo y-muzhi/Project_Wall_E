@@ -1,14 +1,14 @@
-"""Generate and sync an ARM64 runtime index in a new build-owned prefix."""
+"""Generate and sync a native Linux runtime index in a new build-owned prefix."""
 
 import argparse
 import os
-from pathlib import Path
 import re
 import runpy
 import stat
 import subprocess
 import sys
 import sysconfig
+from pathlib import Path
 
 here = Path(__file__).resolve().parent
 runtime = runpy.run_path(str(here / 'runtime.py'))
@@ -96,6 +96,7 @@ def sync_directory(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('runtime_id')
+    parser.add_argument('--architecture', choices=runtime['BUILD_ARCHITECTURES'], default='aarch64')
     args = parser.parse_args()
     root = Path(sys.base_prefix)
     if (
@@ -103,15 +104,17 @@ def main():
         or os.geteuid() == 0
         or root.stat().st_uid != os.geteuid()
         or root.stat().st_mode & 0o077
-        or runtime['os_release']() != runtime['PLATFORM']
         or Path(sys.executable) != root / 'bin/python3.13'
         or not re.fullmatch('[a-z0-9][a-z0-9-]{0,95}', args.runtime_id)
     ):
         raise ValueError('Expected the unprivileged builder, a private prefix and -I -B -S')
+    platform = runtime['require_build_target'](args.architecture)
 
     for name in ('build-inputs.v1.json', 'python-wheels.v1.json'):
         if not (root / 'metadata' / name).is_file():
             raise ValueError(f'Missing build input: {name}')
+    dependency_reference = artifact(root, root / runtime['DEPENDENCIES'])
+    runtime['read_wheel_manifest'](root, dependency_reference['sha256'], platform)
     for name in (runtime['INDEX'], runtime['RUNTIME_MANIFEST']):
         if (root / name).exists():
             raise ValueError('Runtime release already exists')
@@ -186,7 +189,7 @@ def main():
     manifest = {
         'format_version': 1,
         'runtime_id': args.runtime_id,
-        'platform': runtime['PLATFORM'],
+        'platform': platform,
         'installation_prefix': str(root),
         'python': {
             'implementation': sys.implementation.name,
@@ -206,7 +209,7 @@ def main():
             'required_limits': runtime['LIMITS'],
         },
         'files_ref': artifact(root, index_file),
-        'dependencies_ref': artifact(root, root / runtime['DEPENDENCIES']),
+        'dependencies_ref': dependency_reference,
         'host_libraries': libraries,
         'build_ref': artifact(root, root / runtime['BUILD_INPUTS']),
         'launch_flags': runtime['FLAGS'],

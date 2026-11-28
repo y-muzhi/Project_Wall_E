@@ -38,6 +38,8 @@ const shapes = {
     </>
   ),
   close: <path d="m4 4 8 8M12 4l-8 8" />,
+  maximize: <path d="M6 2H2v4m8-4h4v4M2 10v4h4m8-4v4h-4" />,
+  minimize: <path d="M2 6h4V2m8 4h-4V2m-8 8h4v4m8-4h-4v4" />,
   plus: <path d="M8 3v10M3 8h10" />,
   edit: (
     <>

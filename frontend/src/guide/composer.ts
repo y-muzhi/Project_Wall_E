@@ -68,7 +68,12 @@ const capture = <T>(value: T): T => snapshotObject(value) as unknown as T;
 
 function discussionTarget(detail: DetailSnapshot): GuideTarget | null {
   const current = detail.current;
-  if (current === null || current.id !== (detail.selected_document_id ?? current.id)) return null;
+  if (
+    current === null ||
+    current.document_kind === 'DRAWING' ||
+    current.id !== (detail.selected_document_id ?? current.id)
+  )
+    return null;
   return {
     document_id: current.id,
     content_version: current.content_version,
@@ -177,6 +182,7 @@ export class RequirementGuideComposer {
       }
   }
   attachFormation(owner: FormationWorkspace): void {
+    if (this.value.detail.current?.document_kind === 'DRAWING') return;
     this.formationRelease?.();
     this.formation = owner;
     const update = () =>
@@ -217,7 +223,11 @@ export class RequirementGuideComposer {
       !state.available ||
       state.needs_refresh ||
       state.refreshing ||
-      (action === 'DISCUSS' && parent === null && state.formation_blocked !== null) ||
+      (state.detail.current.document_kind === 'DRAWING' && action !== 'DISCUSS') ||
+      (action === 'DISCUSS' &&
+        parent === null &&
+        state.detail.current.document_kind !== 'DRAWING' &&
+        state.formation_blocked !== null) ||
       state.detail.requirement.document_work_state !== 'IDLE'
     )
       return false;
@@ -278,6 +288,7 @@ export class RequirementGuideComposer {
   }
   choose(action: 'DISCUSS' | 'REVISE'): void {
     if (this.closed || (action === 'DISCUSS') === (this.value.action === 'DISCUSS')) return;
+    if (action === 'REVISE' && this.value.detail.current?.document_kind === 'DRAWING') return;
     this.publish({
       action,
       target: action === 'DISCUSS' ? discussionTarget(this.value.detail) : null,
@@ -288,7 +299,12 @@ export class RequirementGuideComposer {
   }
 
   chooseReviewOnly(reviewOnly: boolean): void {
-    if (!this.editable || this.value.action === 'DISCUSS') return;
+    if (
+      !this.editable ||
+      this.value.action === 'DISCUSS' ||
+      this.value.detail.current?.document_kind === 'DRAWING'
+    )
+      return;
     this.publish({ action: reviewOnly ? 'PROPOSE_CHANGES' : 'REVISE' });
   }
 
@@ -551,7 +567,9 @@ export class RequirementGuideComposer {
             acknowledge_source_changes: false,
           };
           const selected =
-            action === 'DISCUSS' && this.formation !== null
+            action === 'DISCUSS' &&
+            this.formation !== null &&
+            state.detail.current?.document_kind !== 'DRAWING'
               ? await this.formation.captureTarget()
               : null;
           if (selected !== null && this.formation !== null) {

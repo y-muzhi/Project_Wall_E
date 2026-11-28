@@ -42,11 +42,23 @@ class GuideWorker:
         catalog=None,
         clock=lambda: datetime.now(timezone.utc),
         orchestrator_options=None,
+        ordinary=None,
+        ordinary_document_ai=False,
     ):
         self.database = database
         self.catalog = ResourceCatalog() if catalog is None else catalog
         self.clock = clock
-        self.process_lock = ProcessLock.for_database(database.path)
+        if ordinary is not None and (
+            ordinary.database is not database
+            or orchestrator_options is not None
+            and not ordinary_document_ai
+        ):
+            raise ValueError('Invalid database or model options for the ordinary scope')
+        self.ordinary = ordinary
+        self.model_enabled = ordinary is None or ordinary_document_ai
+        self.process_lock = (
+            ProcessLock.for_database(database.path) if ordinary is None else ordinary.lock
+        )
         self.executor = None
         self._options = {} if orchestrator_options is None else dict(orchestrator_options)
         if set(self._options) - {'profile', 'gateway', 'counting_counter'}:
@@ -69,37 +81,59 @@ class GuideWorker:
         if self.started:
             raise RuntimeError('Worker already started')
 
-        # Verify existing schema before acquiring the exclusive process owner;
-        # startup never initializes, drops or migrates an application database.
+        recover = self.ordinary is None or getattr(self.ordinary, 'recover_on_start', True)
+        recover_local = self.ordinary is not None and getattr(
+            self.ordinary, 'recover_local_commands', False
+        )
+
+        # Legacy storage keeps its existing startup check. Ordinary environments
+        # can inspect their database only after acquiring the stable owner.
         def verify():
-            with self.database.transaction():
-                pass
+            if self.ordinary is None:
+                with self.database.transaction():
+                    pass
             self.catalog.collaboration  # Validate V1.5 fixed resources; no Chat admission or credentials.
 
         await _native(verify)
         try:
             await _native(self.process_lock.acquire)
+            if self.ordinary is not None:
+                if recover or recover_local:
+                    await _native(self.ordinary.preflight)
+                await _native(self.ordinary.before_recovery)
             self.executor = Idempotency(self.database, self.process_lock, clock=self.clock)
-            cleared = await _native(self.executor.recover_previous_process)
-            recovery = await _native(
-                recover_runs,
-                self.database,
-                {
-                    'recovery_reason': 'STARTUP',
-                    'live_run_ids': set(),
-                    'operation_time': operation_time(self.clock),
-                },
-                process_lock=self.process_lock,
-                catalog=self.catalog,
+            cleared = (
+                await _native(self.executor.recover_previous_process)
+                if recover or recover_local
+                else 0
             )
-            if recovery['code'] not in ('RECOVERED', 'RECOVERY_NO_CHANGE'):
-                raise WorkerStartupFailed(recovery['code'])
+            if recover:
+                recovery = await _native(
+                    recover_runs,
+                    self.database,
+                    {
+                        'recovery_reason': 'STARTUP',
+                        'live_run_ids': set(),
+                        'operation_time': operation_time(self.clock),
+                    },
+                    process_lock=self.process_lock,
+                    catalog=self.catalog,
+                )
+                if recovery['code'] not in ('RECOVERED', 'RECOVERY_NO_CHANGE'):
+                    raise WorkerStartupFailed(recovery['code'])
+                self.events.append(
+                    {'event': 'STARTED', 'cleared_claims': cleared, 'recovery': recovery}
+                )
+            else:
+                recovery = {'code': 'RECOVERY_DEFERRED'}
+                self.events.append(
+                    {'event': 'STARTED', 'cleared_claims': cleared, 'recovery': recovery}
+                )
             self._loop = asyncio.get_running_loop()
-            self.started = self.accepting = True
-            self.events.append(
-                {'event': 'STARTED', 'cleared_claims': cleared, 'recovery': recovery}
-            )
-            self._monitor = asyncio.create_task(self._monitor_loop(), name='walle-no-progress')
+            self.started = True
+            self.accepting = self.ordinary is None
+            if self.ordinary is None:
+                self._monitor = asyncio.create_task(self._monitor_loop(), name='walle-no-progress')
             return recovery
         except BaseException:
             if self.process_lock.owner_epoch is not None:
@@ -107,9 +141,20 @@ class GuideWorker:
             self.executor = None
             raise
 
+    def open_bound_admission(self):
+        if not self.started or self.ordinary is None or self.accepting:
+            raise RuntimeError('Bound worker cannot open admission')
+        self.accepting = True
+        if self.model_enabled:
+            self._monitor = asyncio.create_task(self._monitor_loop(), name='walle-no-progress')
+
     def dispatch(self, identity):
         strict_integer(identity, 'guide_run_id')
-        if not self.accepting or asyncio.get_running_loop() is not self._loop:
+        if (
+            not self.model_enabled
+            or not self.accepting
+            or asyncio.get_running_loop() is not self._loop
+        ):
             self.events.append({'event': 'DISPATCH_REJECTED', 'guide_run_id': identity})
             return False
         previous = self._tasks.get(identity)
@@ -135,6 +180,7 @@ class GuideWorker:
                 process_lock=self.process_lock,
                 catalog=self.catalog,
                 clock=self.clock,
+                bound_document_ai=self.ordinary is not None and self.model_enabled,
                 **self._options,
             )
             self.events.append(
@@ -254,6 +300,8 @@ class GuideWorker:
 
     async def after_commit(self, result):
         """Use actual application success before HTTP projection may fail."""
+        if not self.model_enabled:
+            return
         try:
             code, data = result['code'], result['data']
             if data.get('processing') == 'MODEL':
@@ -282,6 +330,14 @@ class GuideWorker:
             return None
         self.accepting = False
         self._resubmit.clear()
+        if self.ordinary is not None and not self.model_enabled:
+            try:
+                await _native(self.ordinary.close)
+            finally:
+                self.process_lock.release()
+                self.executor = None
+                self.started = False
+            return None
         if self._monitor is not None:
             self._monitor.cancel()
             try:
@@ -319,7 +375,11 @@ class GuideWorker:
             )
             self.events.append({'event': 'CLOSED_RECOVERY', 'code': recovery['code']})
         finally:
-            self.process_lock.release()
-            self.executor = None
-            self.started = False
+            try:
+                if self.ordinary is not None:
+                    await _native(self.ordinary.close)
+            finally:
+                self.process_lock.release()
+                self.executor = None
+                self.started = False
         return recovery

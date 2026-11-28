@@ -1,16 +1,16 @@
 """Initialize or reconcile one original fresh Linux database operation."""
 
-from contextlib import ExitStack, closing, contextmanager
-from datetime import datetime, timezone
 import os
 import sqlite3
 import stat
+from contextlib import ExitStack, closing, contextmanager
+from datetime import datetime, timezone
 
 from backend.app.shared.time import utc_milliseconds
 
 from .database import SchemaMismatch
-from .environment_binding import EnvironmentBinding, verify_binding, write_initial_schema
-from .environment_control import confirm_initial_control
+from .environment_binding import EnvironmentBinding, verify_snapshot_binding, write_initial_schema
+from .environment_control import confirm_initial_control, read_control
 from .environment_files import (
     MAX_REVISION,
     EnvironmentFailure,
@@ -167,6 +167,27 @@ def store_progress(
     return record
 
 
+def confirm_initialized(native, installation, maintenance_fd, operation, target, timestamp):
+    """Confirm the locally recorded original initialization before its first START."""
+    try:
+        with operation_directory(
+            native, maintenance_fd, operation, create=False, installation=installation
+        ) as fd:
+            original = digest(record_from(fd, INTENT, installation))
+            intent_digest(fd, installation, operation, 'check', original)
+            record = read_progress(fd, installation, operation, original)
+            require(
+                record is not None
+                and record['phase'] == 'COMPLETE'
+                and record['data_root_identity'] == installation.roots['data']
+                and record['database_identity'] == target
+                and record['initialized_at'] == timestamp,
+                'INITIALIZATION_NOT_CONFIRMED',
+            )
+    except (OSError, EnvironmentFailure) as error:
+        raise EnvironmentFailure('INITIALIZATION_NOT_CONFIRMED') from error
+
+
 def create_target(native, installation, data_fd):
     name = str(installation.database_relative)
     for suffix in ('-journal', '-wal', '-shm'):
@@ -198,11 +219,40 @@ def assert_database(installation, data_fd, expected):
         validate_target_file(installation, metadata)
 
 
+def database_has_sidecars(path):
+    return any(
+        os.path.lexists(path.with_name(path.name + suffix))
+        for suffix in ('-wal', '-shm', '-journal')
+    )
+
+
+@contextmanager
+def read_locked_database(path):
+    """Read a database while its stable environment lock is held."""
+    sidecars = database_has_sidecars(path)
+    uri = path.as_uri() + ('?mode=ro' if sidecars else '?mode=ro&immutable=1')
+    with closing(sqlite3.connect(uri, uri=True, isolation_level=None)) as source:
+        source.execute('PRAGMA query_only=ON')
+        source.execute('BEGIN')
+        yield source
+    require(sidecars or not database_has_sidecars(path), 'TARGET_OWNERSHIP_UNVERIFIED')
+
+
+def verify_locked_binding(database, path, release, binding):
+    # SQLite reports DELETE on an immutable connection even for a WAL database.
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    with os.fdopen(fd, 'rb') as stream:
+        header = stream.read(20)
+    require(
+        header[:16] == b'SQLite format 3\x00' and header[18:20] == b'\x02\x02',
+        'ENVIRONMENT_BINDING_MISMATCH',
+    )
+    return verify_snapshot_binding(database, release, binding)
+
+
 def inspect_database(installation, data_fd, file_identity, release, binding):
     assert_database(installation, data_fd, file_identity)
-    uri = installation.database.as_uri() + '?mode=ro'
-    with closing(sqlite3.connect(uri, uri=True, isolation_level=None)) as database:
-        database.execute('BEGIN')
+    with read_locked_database(installation.database) as database:
         objects = database.execute(
             "SELECT 1 FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*'"
         ).fetchone()
@@ -220,7 +270,7 @@ def inspect_database(installation, data_fd, file_identity, release, binding):
             )
             timestamp = None
         else:
-            timestamp = verify_binding(database, release, binding)
+            timestamp = verify_locked_binding(database, installation.database, release, binding)
             verify_integrity(database)
         assert_database(installation, data_fd, file_identity)
         return timestamp
@@ -275,8 +325,8 @@ def _initialize_under_lock(
     control_fd = stack.enter_context(installation.directory(native, 'control'))
     data_fd = stack.enter_context(installation.directory(native, 'data'))
     maintenance_fd = stack.enter_context(installation.directory(native, 'maintenance'))
-    confirm_initial_control(control_fd, installation, operation_id, create=False)
     if mode == 'prepare':
+        confirm_initial_control(control_fd, installation, operation_id, create=False)
         require(database_identity(installation, data_fd) is None, 'TARGET_OWNERSHIP_UNVERIFIED')
     fd = stack.enter_context(
         operation_directory(
@@ -326,6 +376,8 @@ def _initialize_under_lock(
             lock.assert_owned()
             target = create_target(native, installation, data_fd)
             advance('TARGET_BOUND')
+        elif progress['phase'] == 'COMPLETE':
+            read_control(control_fd, installation)
         else:
             require(
                 confirm_initial_control(control_fd, installation, operation_id, create=False),

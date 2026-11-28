@@ -37,6 +37,33 @@ test('actual activity batch is loaded once without fake empty, retained decision
 test('actual history selection remains separate from ordinary current scope and does not manufacture a pending batch',async()=>{
  const {owner,f}=fixture();await ready(owner);owner.composer.change('未发送');owner.read.open({...f.runs[0],status:'COMPLETED'});await owner.read.refresh();assert.equal(owner.read.getSnapshot().selection,'HISTORY');assert.equal(owner.composer.getSnapshot().instruction,'未发送');assert.equal(owner.composer.getSnapshot().target.document_id,2);assert.equal(owner.getSnapshot().batch,null);assert.equal(f.batchQueries,0);owner.dispose();
 });
+test('direct review discovers the document batch independently of chat and ignores a cancelled lookup', async () => {
+ const {f,owner,api}=fixture();
+ const first=Promise.withResolvers(), reads=[];
+ f.batch=pendingBatch();
+ api.getPendingDocumentBatch=async (requirement,document,signal)=>{
+  reads.push({requirement,document,signal});
+  return reads.length===1 ? first.promise : {data:{requirement_id:1,document_id:2,batch_id:null}};
+ };
+ owner.setView(false,true,true);
+ assert.equal(owner.getSnapshot().pendingBatchRead,'LOADING');
+ assert.equal(owner.getSnapshot().batch,null);
+ assert.equal(reads[0].requirement,1);
+ assert.equal(reads[0].document,2);
+ owner.openBatch(8);
+ assert(reads[0].signal.aborted);
+ first.resolve({data:{requirement_id:1,document_id:2,batch_id:999}});
+ await owner.getSnapshot().batch.refresh();
+ assert.equal(owner.getSnapshot().batch.batchId,8);
+ assert.equal(owner.batch(999),null);
+ owner.setView(true);
+ owner.setView(false,true,true);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(reads.length,2);
+ assert.equal(owner.getSnapshot().pendingBatchRead,'READY');
+ assert.equal(owner.getSnapshot().batch,null);
+ owner.dispose();
+});
 test('retirement closes all owners, observers and pending unstarted operations without mutations',async()=>{
  const {f,owner}=fixture();await ready(owner);const card=owner.cards.get(8).owner;owner.composer.change('末尾输入');owner.dispose();assert.equal(owner.getSnapshot().active,false);assert.equal(card.getSnapshot().active,false);assert(!await owner.composer.submit());assert(!await card.submit());assert.equal(f.prepares,0);assert.equal(f.sends,0);assert.equal(owner.read.getSnapshot().visible,false);
 });

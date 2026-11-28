@@ -197,6 +197,7 @@ import {
 import type { CheckSetContent } from './code-check-sets.ts';
 import type { ConfigurationOptionKind } from './code-configuration-options.ts';
 import * as models from './models.ts';
+import { validateBlockState } from '../documents/contracts.ts';
 import { modelCalls, modelCallDetail } from './model-calls.ts';
 import { suggestionMarkdown } from '../suggestions/preview.ts';
 import { DetailReadScope } from './detail-read-scope.ts';
@@ -339,6 +340,20 @@ export class WalleApi {
     this.ctx = ctx;
     this.readScope = readScope;
   }
+  get environmentScope() {
+    return this.client.environmentScope;
+  }
+
+  get environmentConnection() {
+    return this.client.environmentConnection;
+  }
+
+  get documentAiAvailable(): boolean {
+    if (!this.environmentScope) return true;
+    const current = this.environmentConnection?.getSnapshot();
+    return current?.phase === 'READY' && current.environment.documentAiReady;
+  }
+
   commandReceipt<T>(
     original: CommandIdentity,
     policy: OriginalResultPolicy<T>,
@@ -779,6 +794,18 @@ export class WalleApi {
           ),
         )
       : load(signal);
+  }
+  revisionBlocks(revision: { markdown_content: string; block_state_json: unknown }) {
+    const { source, state } = validateBlockState(
+      this.ctx,
+      revision.markdown_content,
+      revision.block_state_json,
+    );
+    return source.blocks.map((block, index) => ({
+      id: state.blocks[index]!.block_id,
+      markdown: block.markdown,
+      section: block.section_path,
+    }));
   }
   previewMarkdown(markdown: string, columns?: number): DocumentFragment {
     return suggestionMarkdown(this.ctx, markdown, columns);
@@ -1294,6 +1321,15 @@ export class WalleApi {
       ),
       [...query(filters), ['document_id', String(this.assistantOwner())]],
       filters.page ?? 1,
+      signal,
+    );
+  }
+  getPendingDocumentBatch(requirementId: number, documentId: number, signal?: AbortSignal) {
+    return this.single(
+      target('requirements', requirementId, '/documents/' + id(documentId) + '/pending-suggestion'),
+      checked(owned(models.pendingDocumentBatch, requirementId), (value) =>
+        require(value.document_id === documentId),
+      ),
       signal,
     );
   }

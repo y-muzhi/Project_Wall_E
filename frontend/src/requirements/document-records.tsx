@@ -119,6 +119,7 @@ export function DocumentRecords({
   history,
   readRun,
   versions,
+  versionsOnly = false,
   modelCallApi,
   requirementId,
   cache,
@@ -129,6 +130,7 @@ export function DocumentRecords({
   history: RequirementRunHistory;
   readRun: RunReader;
   versions: ReactNode;
+  versionsOnly?: boolean;
   modelCallApi: ModelCallApi;
   requirementId: number;
   cache?: ModelCallCache | undefined;
@@ -139,22 +141,23 @@ export function DocumentRecords({
     id = useId();
   const version = useSyncExternalStore(revisions.subscribe, revisions.getSnapshot);
   const available = active && !blocked,
-    runActive = available && tab === 'RUNS';
+    records = versionsOnly ? tabs.slice(0, 1) : tabs,
+    runActive = available && !versionsOnly && tab === 'RUNS';
   useEffect(() => {
     if (version.history.phase !== 'CLOSED') setTab('VERSIONS');
   }, [version.history.requested?.id]);
   useEffect(() => {
     if (!available) return;
-    if (tab === 'RUNS') void history.refresh();
+    if (runActive) void history.refresh();
     else void revisions.refresh();
     return () => {
-      if (tab === 'RUNS') history.pause();
+      if (runActive) history.pause();
     };
-  }, [available, tab, history, revisions]);
+  }, [available, runActive, history, revisions]);
   return (
     <section className="document-records" aria-label="文档记录">
       <div className="document-record-tabs" role="tablist" aria-label="文档记录类型">
-        {tabs.map((item, index) => (
+        {records.map((item, index) => (
           <button
             key={item.value}
             type="button"
@@ -166,6 +169,7 @@ export function DocumentRecords({
             disabled={!active}
             onClick={() => setTab(item.value)}
             onKeyDown={(event) => {
+              if (records.length < 2) return;
               const next =
                 event.key === 'ArrowRight' || event.key === 'ArrowLeft'
                   ? 1 - index

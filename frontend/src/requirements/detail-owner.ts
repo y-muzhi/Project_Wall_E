@@ -1,5 +1,6 @@
 import { FormationWorkspace } from '../formation/workspace.ts';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import type { RevisionSummary, VersionMarker } from '../api/models.ts';
 import { RequirementDetailRead } from './detail-read.ts';
 import type { DetailSnapshot } from './detail-read.ts';
@@ -100,6 +101,7 @@ export class RequirementDetailOwner {
       adopt,
       conversation.receive,
       this.notifyConfirmed,
+      api.environmentScope ? '此环境尚未开放新增或修改评论。' : null,
     );
     const refreshDiscussion = async () => {
       const next = await read();
@@ -152,7 +154,12 @@ export class RequirementDetailOwner {
     api = this.api;
     this.width = width;
     this.storage = storage;
-    this.read = new RequirementDetailRead(identity, api, undefined, documentId);
+    this.read = new RequirementDetailRead(
+      identity,
+      api,
+      () => environmentBrowserStorage('sessionStorage', api.environmentScope),
+      documentId,
+    );
     this.documents = new RequirementDocumentOwner(host, identity, api, this.readActual, scrollport);
     this.departure = new DetailDeparture(this.documents);
     this.releases.push(
@@ -298,6 +305,7 @@ export class RequirementDetailOwner {
           !historical && actual?.current !== null,
           this.supported && geometry.right_open && geometry.right_tab === 'SUGGESTIONS',
           historical && actual?.current !== null,
+          geometry.right_tab === 'SUGGESTIONS',
         );
         regions.comments.setView(
           historical ? 'HISTORY' : document.mode === 'MANUAL' ? 'MANUAL' : 'CURRENT',

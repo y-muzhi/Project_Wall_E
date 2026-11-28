@@ -6,8 +6,19 @@ import type { CommandIdentity } from './code-command-registry.ts';
 import { codeErrorPolicy } from './code-errors.ts';
 import type { CodeErrorCode } from './code-errors.ts';
 import type { OriginalResultPolicy } from './code-command-receipts.ts';
+import { decodeEnvironmentScope, type EnvironmentScope } from './environment-binding.ts';
 
 export const COMMAND_BODY_BYTES = 8 * 1024 * 1024;
+export const COMMAND_SCOPE_FIELDS = ['scope_version', 'environment_id', 'data_generation'] as const;
+export const FROZEN_IDENTITY_FIELDS = [
+  'origin',
+  'owner_module',
+  'method',
+  'path',
+  'key',
+  'decoder_kind',
+  'identity_sha256',
+] as const;
 export type RecoveryMode = 'QUERY_ONLY' | 'REPLAY_SAME_KEY';
 export type FrozenIdentity = Readonly<{
   origin: string;
@@ -17,6 +28,9 @@ export type FrozenIdentity = Readonly<{
   key: string;
   decoder_kind: string;
   identity_sha256: string;
+  scope_version?: 1;
+  environment_id?: string;
+  data_generation?: string;
 }>;
 export type FrozenCodeCommand = FrozenIdentity &
   Readonly<{
@@ -50,26 +64,60 @@ export async function commandSha256(value: string): Promise<string> {
   const hash = await globalThis.crypto.subtle.digest('SHA-256', encoder.encode(value));
   return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
-export function identityText(origin: string, original: CommandIdentity): string {
+export function identityText(
+  origin: string,
+  original: CommandIdentity,
+  scope?: EnvironmentScope,
+): string {
+  const currentOrigin = commandOrigin(origin);
+  const command = [original.owner_module, original.method, original.path, original.key];
+  if (!scope) return JSON.stringify([currentOrigin, ...command]);
+  const validScope = decodeEnvironmentScope(scope);
+  if (currentOrigin !== validScope.origin)
+    throw new TypeError('Original origin differs from the bound environment');
   return JSON.stringify([
-    commandOrigin(origin),
-    original.owner_module,
-    original.method,
-    original.path,
-    original.key,
+    1,
+    currentOrigin,
+    validScope.environment_id,
+    validScope.data_generation,
+    ...command,
   ]);
 }
+
+function scopeFields(scope: EnvironmentScope | undefined) {
+  if (!scope) return {};
+  return {
+    scope_version: 1 as const,
+    environment_id: scope.environment_id,
+    data_generation: scope.data_generation,
+  };
+}
+export function matchesCommandScope(
+  row: Record<string, unknown>,
+  scope: EnvironmentScope | undefined,
+): boolean {
+  return scope
+    ? row.scope_version === 1 &&
+        row.origin === scope.origin &&
+        row.environment_id === scope.environment_id &&
+        row.data_generation === scope.data_generation
+    : COMMAND_SCOPE_FIELDS.every((field) => !Object.hasOwn(row, field));
+}
+
 export async function verifiedCommandIdentity(
   value: unknown,
   currentOrigin: string,
+  scope?: EnvironmentScope,
 ): Promise<CommandIdentity> {
   const row = object(value);
   const original = registeredCommand(row.method, row.path, row.key);
+
   if (
+    !matchesCommandScope(row, scope) ||
     row.origin !== commandOrigin(currentOrigin) ||
     row.owner_module !== original.owner_module ||
     row.decoder_kind !== original.decoder_kind ||
-    row.identity_sha256 !== (await commandSha256(identityText(currentOrigin, original)))
+    row.identity_sha256 !== (await commandSha256(identityText(currentOrigin, original, scope)))
   )
     throw new TypeError('Frozen command identity differs from this origin or route');
   return original;
@@ -173,6 +221,9 @@ export async function prepareCodeCommand<T>(
   currentOrigin: string,
 ): Promise<FrozenCodeAction<T>> {
   const origin = commandOrigin(currentOrigin);
+  const environmentScope = client.environmentScope;
+  if (environmentScope && environmentScope.origin !== origin)
+    throw new TypeError('Original origin differs from the bound environment');
   const scope = registeredCommand('POST', path, PROBE_KEY);
   const native = binding(nativeBinding, scope);
   const input = snapshotObject(body);
@@ -189,6 +240,7 @@ export async function prepareCodeCommand<T>(
   const original = registeredCommand(exported.method, exported.path, exported.key);
   if (exported.body !== text) throw new TypeError('Command byte snapshot differs');
   const frozen = Object.freeze({
+    ...scopeFields(environmentScope),
     origin,
     owner_module: original.owner_module,
     method: original.method,
@@ -196,7 +248,7 @@ export async function prepareCodeCommand<T>(
     key: original.key,
     decoder_kind: original.decoder_kind,
     body_json: text,
-    identity_sha256: await commandSha256(identityText(origin, original)),
+    identity_sha256: await commandSha256(identityText(origin, original, environmentScope)),
     body_sha256: await commandSha256(text),
   });
   return action(client, handle, frozen, input, original, native);
@@ -208,27 +260,19 @@ export async function restoreCodeCommand<T>(
   currentOrigin: string,
 ): Promise<FrozenCodeAction<T>> {
   // Snapshot before hashing/await; storage/caller mutations cannot change bytes.
-  const row = snapshotObject(
-    exact(value, [
-      'origin',
-      'owner_module',
-      'method',
-      'path',
-      'key',
-      'decoder_kind',
-      'identity_sha256',
-      'body_json',
-      'body_sha256',
-    ]),
-  );
+  const scope = client.environmentScope;
+  const fields: string[] = [...FROZEN_IDENTITY_FIELDS, 'body_json', 'body_sha256'];
+  if (scope) fields.push(...COMMAND_SCOPE_FIELDS);
+  const row = snapshotObject(exact(value, fields));
   const candidate = registeredCommand(row.method, row.path, row.key);
   const native = binding(nativeBinding, candidate);
-  const original = await verifiedCommandIdentity(row, currentOrigin);
+  const original = await verifiedCommandIdentity(row, currentOrigin, scope);
   const input = boundedBody(row.body_json);
   if (row.body_sha256 !== (await commandSha256(row.body_json as string)))
     throw new TypeError('Frozen command body digest differs');
   native.validate_input(input, original);
   const frozen: FrozenCodeCommand = Object.freeze({
+    ...scopeFields(scope),
     origin: currentOrigin,
     owner_module: original.owner_module,
     method: original.method,
@@ -240,7 +284,13 @@ export async function restoreCodeCommand<T>(
     body_sha256: row.body_sha256 as string,
   });
   const handle = client.restorePrepared(
-    { method: original.method, path: original.path, key: original.key, body: frozen.body_json },
+    {
+      method: original.method,
+      path: original.path,
+      key: original.key,
+      body: frozen.body_json,
+      ...(scope ? { binding_scope: scope } : {}),
+    },
     {
       idempotent: true,
       success_status: native.success_status,

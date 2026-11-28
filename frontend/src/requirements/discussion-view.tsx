@@ -227,7 +227,7 @@ export function DiscussionProgress({
     }
   };
   const view =
-    discussion && currentDocument
+    discussion && currentDocument && currentDocument.document_kind !== 'DRAWING'
       ? progressPresentation(discussion, guides[currentDocument.document_kind].mainlines)
       : null;
   const stale = discussion !== null && state.version !== actual.requirement.discussion_version;

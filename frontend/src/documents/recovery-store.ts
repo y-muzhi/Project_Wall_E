@@ -3,6 +3,7 @@ import { validateBlockState } from './contracts.ts';
 import type { BlockState, DocumentReadModel } from './contracts.ts';
 import { exact, positiveInteger, snapshotObject } from '../api/client.ts';
 import { time } from '../api/decoding.ts';
+import { decodeEnvironmentScope, type EnvironmentScope } from '../api/environment-binding.ts';
 
 export type LocalDraftSnapshot = Readonly<{
   schema_version: 1;
@@ -38,38 +39,104 @@ export type RecoveryBinding = Readonly<{
 }>;
 export function recoveryStorageKey(
   binding: RecoveryBinding,
-): readonly [number, number, number, number] {
-  return Object.freeze([
+): readonly [number, number, number, number];
+export function recoveryStorageKey(
+  binding: RecoveryBinding,
+  scope: EnvironmentScope,
+): readonly [string, string, string, number, number, number, number];
+export function recoveryStorageKey(binding: RecoveryBinding, scope?: EnvironmentScope) {
+  const identity = [
     positiveInteger(binding.requirement_id),
     positiveInteger(binding.target_document_id),
     positiveInteger(binding.manual_draft_id),
     positiveInteger(binding.base_content_version),
-  ]);
+  ] as const;
+  if (!scope) return Object.freeze(identity);
+  const valid = decodeEnvironmentScope(scope);
+  return Object.freeze([
+    valid.origin,
+    valid.environment_id,
+    valid.data_generation,
+    ...identity,
+  ] as const);
 }
 
-/** Local intentions, not a server DocumentReadModel or saved receipt. */
-export function validateLocalDraftSnapshot(ctx: Ctx, value: unknown): LocalDraftSnapshot {
+export function scopedDraftPayload(value: unknown, key: IDBValidKey, origin: string): unknown {
   try {
+    if (!Array.isArray(key) || key.length !== 7 || key[0] !== origin)
+      throw new TypeError('Invalid scoped draft key');
+    for (const part of key.slice(3)) positiveInteger(part);
+    const scopeFromKey = decodeEnvironmentScope({
+      binding_protocol: 1,
+      origin: key[0],
+      environment_id: key[1],
+      data_generation: key[2],
+    });
     const row = exact(value, [
       'schema_version',
+      'scope_version',
+      'origin',
+      'environment_id',
+      'data_generation',
       'base_confirmed_version',
       'markdown_content',
       'block_state_json',
       'local_revision',
       'updated_at',
     ]);
-    if (row.schema_version !== 1) throw new TypeError('Invalid local schema');
-    positiveInteger(row.base_confirmed_version);
-    positiveInteger(row.local_revision);
-    time(row.updated_at);
+    if (
+      row.schema_version !== 2 ||
+      row.scope_version !== 1 ||
+      row.origin !== scopeFromKey.origin ||
+      row.environment_id !== scopeFromKey.environment_id ||
+      row.data_generation !== scopeFromKey.data_generation
+    )
+      throw new TypeError('Stored draft scope differs from its key');
+    return {
+      schema_version: 1,
+      base_confirmed_version: row.base_confirmed_version,
+      markdown_content: row.markdown_content,
+      block_state_json: row.block_state_json,
+      local_revision: row.local_revision,
+      updated_at: row.updated_at,
+    };
+  } catch {
+    throw new DraftStorageError('CORRUPT');
+  }
+}
+
+export function localDraftEnvelope(value: unknown) {
+  const row = exact(value, [
+    'schema_version',
+    'base_confirmed_version',
+    'markdown_content',
+    'block_state_json',
+    'local_revision',
+    'updated_at',
+  ]);
+  if (row.schema_version !== 1 || typeof row.markdown_content !== 'string')
+    throw new TypeError('Invalid local schema');
+  return {
+    base_confirmed_version: positiveInteger(row.base_confirmed_version),
+    local_revision: positiveInteger(row.local_revision),
+    updated_at: time(row.updated_at),
+    markdown_content: row.markdown_content,
+    block_state_json: row.block_state_json,
+  };
+}
+
+/** Local intentions, not a server DocumentReadModel or saved receipt. */
+export function validateLocalDraftSnapshot(ctx: Ctx, value: unknown): LocalDraftSnapshot {
+  try {
+    const row = localDraftEnvelope(value);
     const pair = validateBlockState(ctx, row.markdown_content, row.block_state_json);
     return Object.freeze({
       schema_version: 1,
-      base_confirmed_version: row.base_confirmed_version as number,
+      base_confirmed_version: row.base_confirmed_version,
       markdown_content: pair.source.markdown,
       block_state_json: pair.state,
-      local_revision: row.local_revision as number,
-      updated_at: row.updated_at as string,
+      local_revision: row.local_revision,
+      updated_at: row.updated_at,
     });
   } catch {
     throw new DraftStorageError('CORRUPT');
@@ -103,10 +170,11 @@ export class DraftRecoveryStore {
   private closed = false;
   private readonly pending = new Set<Promise<unknown>>();
   private readonly binding: RecoveryBinding;
+  private readonly scope: EnvironmentScope | undefined;
   constructor(
     ctx: Ctx,
     binding: RecoveryBinding,
-    diagnostic: { name?: string; factory?: () => IDBFactory } = {},
+    diagnostic: { name?: string; factory?: () => IDBFactory; scope?: EnvironmentScope } = {},
   ) {
     const fields = [
       'requirement_id',
@@ -120,20 +188,41 @@ export class DraftRecoveryStore {
       throw TypeError('The draft is distinct from its target');
     this.binding = Object.freeze({ ...binding });
     this.ctx = ctx;
-    this.name = diagnostic.name ?? 'walle-v1.5-document-assistant';
+    this.scope = diagnostic.scope ? decodeEnvironmentScope(diagnostic.scope) : undefined;
+    this.name =
+      diagnostic.name ??
+      (this.scope ? 'walle-v2.01-document-assistant' : 'walle-v1.5-document-assistant');
     this.factory = diagnostic.factory ?? (() => globalThis.indexedDB);
   }
-  private key(requirement: number, draft: number): [number, number, number, number] {
+  private key(requirement: number, draft: number): IDBValidKey[] {
     if (
       positiveInteger(requirement) !== this.binding.requirement_id ||
       positiveInteger(draft) !== this.binding.manual_draft_id
     )
       throw TypeError('Local recovery belongs to another actual edit session');
-    return [...recoveryStorageKey(this.binding)];
+    return this.scope
+      ? [...recoveryStorageKey(this.binding, this.scope)]
+      : [...recoveryStorageKey(this.binding)];
   }
   private validate(value: unknown): LocalDraftSnapshot {
     return validateLocalDraftSnapshot(this.ctx, value);
   }
+  private persistedValue(value: LocalDraftSnapshot) {
+    return this.scope
+      ? {
+          ...value,
+          schema_version: 2,
+          scope_version: 1,
+          origin: this.scope.origin,
+          environment_id: this.scope.environment_id,
+          data_generation: this.scope.data_generation,
+        }
+      : value;
+  }
+  private validateStored(value: unknown, key: IDBValidKey): LocalDraftSnapshot {
+    return this.validate(this.scope ? scopedDraftPayload(value, key, this.scope.origin) : value);
+  }
+
   private open(): Promise<IDBDatabase> {
     if (this.closed) return Promise.reject(new DraftStorageError('UNAVAILABLE'));
     if (this.opening) return this.opening;
@@ -250,7 +339,7 @@ export class DraftRecoveryStore {
     } catch {
       throw new DraftStorageError('CORRUPT');
     }
-    return this.validate(value);
+    return this.validateStored(value, identity);
   }
   async put(requirement: number, draft: number, value: unknown): Promise<boolean> {
     const identity = this.key(requirement, draft);
@@ -262,6 +351,9 @@ export class DraftRecoveryStore {
     }
     if (encoded > DRAFT_BYTES) throw new DraftStorageError('CAPACITY');
     const record = this.validate(value);
+    const persisted = this.persistedValue(record);
+    if (this.scope) encoded = bytes(persisted);
+    if (encoded > DRAFT_BYTES) throw new DraftStorageError('CAPACITY');
     return this.transaction<boolean>('readwrite', (store, complete, fail) => {
       let total = 0,
         entries = 0,
@@ -275,6 +367,10 @@ export class DraftRecoveryStore {
           let size: number;
           try {
             size = bytes(entry.value);
+            if (this.scope) {
+              if (size > DRAFT_BYTES) throw new DraftStorageError('CORRUPT');
+              scopedDraftPayload(entry.value, entry.key, this.scope.origin);
+            }
           } catch {
             fail(new DraftStorageError('CORRUPT'));
             return;
@@ -291,7 +387,7 @@ export class DraftRecoveryStore {
             previous = size;
             let saved: LocalDraftSnapshot;
             try {
-              saved = this.validate(entry.value);
+              saved = this.validateStored(entry.value, storedKey);
             } catch {
               fail(new DraftStorageError('CORRUPT'));
               return;
@@ -317,7 +413,7 @@ export class DraftRecoveryStore {
           fail(new DraftStorageError('CAPACITY'));
           return;
         }
-        const saved = store.put(record, identity);
+        const saved = store.put(persisted, identity);
         saved.onsuccess = () => complete(true);
       };
     });
@@ -335,7 +431,7 @@ export class DraftRecoveryStore {
         }
         let row: LocalDraftSnapshot;
         try {
-          row = this.validate(request.result);
+          row = this.validateStored(request.result, identity);
         } catch {
           fail(new DraftStorageError('CORRUPT'));
           return;
@@ -352,9 +448,29 @@ export class DraftRecoveryStore {
   /** Only called after a parent confirms actual complete/cancel success. */
   async clearClosedDraft(requirement: number, draft: number): Promise<void> {
     const identity = this.key(requirement, draft);
-    return this.transaction<void>('readwrite', (store, complete) => {
-      const removed = store.delete(identity);
-      removed.onsuccess = () => complete(undefined);
+    return this.transaction<void>('readwrite', (store, complete, fail) => {
+      const remove = () => {
+        const removed = store.delete(identity);
+        removed.onsuccess = () => complete(undefined);
+      };
+      if (!this.scope) {
+        remove();
+        return;
+      }
+      const existing = store.get(identity);
+      existing.onsuccess = () => {
+        if (existing.result === undefined) {
+          complete(undefined);
+          return;
+        }
+        try {
+          this.validateStored(existing.result, identity);
+        } catch {
+          fail(new DraftStorageError('CORRUPT'));
+          return;
+        }
+        remove();
+      };
     });
   }
   close(): void {

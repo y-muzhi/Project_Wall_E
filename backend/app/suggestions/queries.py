@@ -2,10 +2,36 @@
 
 from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.batch_repository import BatchRepository
+from backend.app.infrastructure.document_repository import DocumentRepository
 from backend.app.infrastructure.resources import ResourceCatalog
 from backend.app.shared.validation import MISSING, InvalidInput
 from .contracts import get_batch_input, get_batch_result
 from .review import review_projection
+
+
+def get_pending_document_batch(database: Database, requirement_id: int, document_id: int) -> dict:
+    try:
+        with database.transaction() as connection:
+            document = DocumentRepository(connection).get_current(requirement_id, document_id)
+            if document is None:
+                return {'code': 'NOT_FOUND', 'data': None, 'details': None}
+            batch_id = BatchRepository(connection).pending_for_document(
+                requirement_id, document_id, document['content_version']
+            )
+        return {
+            'code': 'READ_OK',
+            'data': {
+                'requirement_id': requirement_id,
+                'document_id': document_id,
+                'batch_id': batch_id,
+            },
+            'details': None,
+        }
+    except StorageUnavailable:
+        code = 'STORAGE_UNAVAILABLE'
+    except Exception:
+        code = 'INTERNAL_ERROR'
+    return {'code': code, 'data': None, 'details': None}
 
 
 def get_batch(

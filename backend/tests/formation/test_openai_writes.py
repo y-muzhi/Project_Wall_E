@@ -273,7 +273,7 @@ def verify_review_after_first_write(workspace, document_resources):
     from backend.app.documents.markdown import parse_markdown
     from backend.app.infrastructure.requirement_repository import RequirementRepository
     from backend.app.suggestions.commands import decide_group, decide_suggestion, complete_batch
-    from backend.app.suggestions.queries import get_batch
+    from backend.app.suggestions.queries import get_batch, get_pending_document_batch
 
     db, commands, catalog = workspace
     with db.transaction() as connection:
@@ -420,6 +420,13 @@ def verify_review_after_first_write(workspace, document_resources):
     run = get_guide_run(db, run_id)['data']
     batch_id = run['suggestion_batch_id']
     assert batch_id is not None, run
+    assert get_pending_document_batch(db, 1, 1)['data'] == {
+        'requirement_id': 1,
+        'document_id': 1,
+        'batch_id': batch_id,
+    }
+    assert get_pending_document_batch(db, 1, 2)['data']['batch_id'] is None
+    assert get_pending_document_batch(db, 2, 1)['code'] == 'NOT_FOUND'
     with db.transaction() as connection:
         root = RequirementRepository(connection).get(1)
         assert root['document_work_state'] == 'MANUAL_EDITING'
@@ -546,6 +553,7 @@ def verify_review_after_first_write(workspace, document_resources):
         catalog=catalog,
     )
     assert application['code'] == 'BATCH_APPLIED', application
+    assert get_pending_document_batch(db, 1, 1)['data']['batch_id'] is None
     from backend.app.documents.queries import get_manual_draft
 
     submitted = {
@@ -624,7 +632,7 @@ def test_restored_framework_remains_reviewable_when_model_finishes_after_manual_
     def current():
         return get_current_document(db, 1, document_id, catalog=catalog)['data']
 
-    def request(document):
+    def request(document, heading_id=None):
         with db.transaction() as connection:
             version = connection.execute(
                 'SELECT discussion_version FROM requirement_documents WHERE id=?', (document_id,)
@@ -638,7 +646,11 @@ def test_restored_framework_remains_reviewable_when_model_finishes_after_manual_
                 'document_id': document_id,
                 'expected_content_version': document['content_version'],
             },
-            scope={'scope_type': 'DOCUMENT', 'scope_ref': None},
+            scope=(
+                {'scope_type': 'DOCUMENT', 'scope_ref': None}
+                if heading_id is None
+                else {'scope_type': 'SECTION', 'scope_ref': {'heading_block_id': heading_id}}
+            ),
         )
         assert result['code'] == 'GUIDE_ACCEPTED', result
         return result['data']
@@ -660,23 +672,68 @@ def test_restored_framework_remains_reviewable_when_model_finishes_after_manual_
         assert [kind for kind, _ in seen] == ['count', 'model']
         return get_guide_run(db, result['guide_run_id'])['data']
 
+    template_blocks = parse_markdown(template['markdown_content']).blocks
+    chapters = (
+        (index, block) for index, block in enumerate(template_blocks) if block.heading_level == 1
+    )
+    chapter_index, chapter_block = next(chapters)
+    _, next_chapter = next(chapters)
+    chapter_id = template['block_state_json']['blocks'][chapter_index]['block_id']
     first = run(
-        request(template),
+        request(template, chapter_id),
         lambda context: output(
             context,
-            response_type='DOCUMENT_RESULT',
-            document_result={
-                'name': '前端设计',
-                'document_kind': 'design',
-                'markdown_content': '# 咖啡助手前端\n\n这是业务设计首稿。\n',
-                'change_summary': '完成首稿',
-            },
+            response_type='CHANGE_PROPOSALS',
+            suggestions=[
+                {
+                    'title': '完善第一章',
+                    'explanation': '首稿仍须审阅',
+                    'impact': None,
+                    'patch_operation': 'REPLACE_BLOCK',
+                    'target_ref': {'block_id': chapter_id},
+                    'selector_json': None,
+                    'original_content': chapter_block.markdown,
+                    'proposed_markdown': '# 业务设计首稿\n',
+                    'proposed_data_json': None,
+                }
+            ],
+            suggestion_groups=[
+                {'title': '完善第一章', 'reason': '首稿审阅', 'suggestion_orders': [1]}
+            ],
         ),
     )
-    assert first['operation'] == 'REVISE' and first['suggestion_batch_id'] is None
-    assert first['application_result'] == 'APPLIED', first
-    assert first['document_effect']['after_content_version'] == 2
-    assert '业务设计首稿' in current()['markdown_content']
+    assert first['operation'] == 'PROPOSE_CHANGES' and first['document_effect'] is None
+    first_batch_id = first['suggestion_batch_id']
+    assert first_batch_id is not None, first
+    assert current()['current_revision_id'] == template['current_revision_id']
+    decision = decide_group(
+        commands,
+        {
+            'batch_id': first_batch_id,
+            'group_id': 1,
+            'expected_decision_version': 1,
+            'decision': 'ACCEPTED',
+            'idempotency_key': str(uuid4()),
+        },
+        catalog=catalog,
+    )
+    assert decision['code'] == 'GROUP_DECIDED', decision
+    assert current()['content_version'] == 1
+    applied = complete_batch(
+        commands,
+        {
+            'batch_id': first_batch_id,
+            'expected_content_version': 1,
+            'expected_decision_version': decision['data']['decision_version'],
+            'idempotency_key': str(uuid4()),
+        },
+        catalog=catalog,
+    )
+    assert applied['code'] == 'BATCH_APPLIED', applied
+    saved_first = current()
+    assert saved_first['content_version'] == 2
+    assert '业务设计首稿' in saved_first['markdown_content']
+    assert next_chapter.markdown in saved_first['markdown_content']
 
     restoring = start(
         active, identity=document_id, version=2, restore=template['current_revision_id']

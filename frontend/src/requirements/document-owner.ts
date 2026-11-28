@@ -157,7 +157,8 @@ export class RequirementDocumentOwner {
   get currentBinding(): CurrentDocumentBinding | null {
     return this.writeReady &&
       this.value.mode === 'CURRENT' &&
-      this.live?.document.document_type === 'CURRENT'
+      this.live?.document.document_type === 'CURRENT' &&
+      !this.live.editor.isDrawing
       ? this.live.binding
       : null;
   }
@@ -241,12 +242,19 @@ export class RequirementDocumentOwner {
         session = await ManualDraftSession.create(host, actual, this.api);
         editor = session.editor;
       } else
-        editor = await RequirementEditor.create(host, document, true, {
-          selection: (selected) => {
-            if (!this.closed && this.live?.host === host && this.value.mode === 'CURRENT')
-              this.publish({ selection: selected });
+        editor = await RequirementEditor.create(
+          host,
+          document,
+          true,
+          {
+            selection: (selected) => {
+              if (!this.closed && this.live?.host === host && this.value.mode === 'CURRENT')
+                this.publish({ selection: selected });
+            },
           },
-        });
+          null,
+          actual.current.document_kind === 'DRAWING',
+        );
       navigation = DocumentNavigation.forEditor(host, editor, this.scrollport);
       const result: LiveDocument = {
         host,
@@ -393,7 +401,7 @@ export class RequirementDocumentOwner {
         version: detail.current.content_version,
       });
     let selection: SelectionEvent | null = null;
-    if (!this.live.session)
+    if (!this.live.session && !this.live.editor.isDrawing)
       try {
         const input = this.live.document;
         selection = this.live.editor.action((ctx) =>
@@ -405,7 +413,7 @@ export class RequirementDocumentOwner {
       } catch {}
     this.publish({
       mode: this.live.session ? 'MANUAL' : 'CURRENT',
-      navigation: this.live.navigation,
+      navigation: this.live.editor.isDrawing ? null : this.live.navigation,
       revision: null,
       save_warning: false,
       restoration_conflict: null,
@@ -450,7 +458,8 @@ export class RequirementDocumentOwner {
     return this.enqueue(async () => {
       if (summary.requirement_id !== this.identity) throw TypeError('Owned revision required');
       const live = this.live;
-      if (!live) throw Error('Actual document must be loaded first');
+      if (!live || summary.document_id !== this.value.detail?.current?.id)
+        throw Error('Actual document must own this revision');
       this.positions?.capture();
       let saved = true;
       if (live.session) saved = await live.session.blockAndSave('HISTORY');
@@ -471,13 +480,16 @@ export class RequirementDocumentOwner {
       }
       const snapshot = this.revisions.getSnapshot().history.snapshot!;
       if (this.history?.viewer.snapshot.id === snapshot.id) {
-        this.publish({ revision: snapshot, navigation: this.history.navigation });
+        this.publish({
+          revision: snapshot,
+          navigation: live.editor.isDrawing ? null : this.history.navigation,
+        });
         return true;
       }
       const host = this.container();
       let viewer: RevisionViewer | undefined, navigation: DocumentNavigation | undefined;
       try {
-        viewer = await RevisionViewer.create(host, snapshot);
+        viewer = await RevisionViewer.create(host, snapshot, live.editor.isDrawing);
         navigation = DocumentNavigation.forRevision(host, viewer, this.scrollport);
         if (this.closed) throw Error('Retired history');
         const previous = this.history;
@@ -492,7 +504,11 @@ export class RequirementDocumentOwner {
           version: snapshot.id,
         });
         if (previous) await this.retireHistory(previous);
-        this.publish({ revision: snapshot, navigation, error: null });
+        this.publish({
+          revision: snapshot,
+          navigation: live.editor.isDrawing ? null : navigation,
+          error: null,
+        });
         return true;
       } catch {
         navigation?.dispose();

@@ -6,75 +6,78 @@ is the separate native database CLI. This factory never creates or repairs a DB.
 
 import asyncio
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 
 from fastapi import FastAPI
-from starlette.responses import JSONResponse
 
-from backend.app.code_tasks.authorization_api import authorization_router
-from backend.app.code_tasks.check_set_api import check_set_router
-from backend.app.code_tasks.command_api import COMMAND_CONTROL_PATHS, command_router
-from backend.app.code_tasks.configuration_api import (
-    configuration_router,
-    is_configuration_path,
-)
-from backend.app.code_tasks.design_revisions import design_revision_router, is_design_revision_path
-from backend.app.code_tasks.execution_profile_api import execution_profile_router
-from backend.app.code_tasks.repository_observations import (
-    is_repository_observation_path,
-    repository_observation_router,
-)
-from backend.app.code_tasks.repository_operations import (
-    is_repository_operation_path,
-    repository_operation_router,
-)
-from backend.app.code_tasks.repository_reads import is_repository_read_path, repository_read_router
-from backend.app.code_tasks.repository_registration_api import (
-    is_repository_write_path,
-    repository_registration_router,
-)
-from backend.app.code_tasks.repository_registration_worker import (
-    RegistrationInstallation,
-    RepositoryRegistrationWorker,
-)
-from backend.app.code_tasks.repository_snapshot_reads import (
-    is_repository_snapshot_path,
-    repository_snapshot_router,
-)
-from backend.app.code_tasks.task_creation_api import (
-    is_document_code_tasks_path,
-    task_creation_router,
-)
-from backend.app.code_tasks.task_defects import defect_router
-from backend.app.code_tasks.task_delivery_api import delivery_command_router
-from backend.app.code_tasks.task_delivery_reads import delivery_reads_router
-from backend.app.code_tasks.task_read_api import is_code_task_detail_path, task_read_router
-from backend.app.code_tasks.task_repairs import repair_router
-from backend.app.code_tasks.task_start_api import is_task_start_path, task_start_router
-from backend.app.code_tasks.task_start_workspace import recover_workspace_starts
-from backend.app.code_tasks.task_stop import serve_task_stops
-from backend.app.code_tasks.task_stop_api import is_task_stop_path, task_stop_router
 from backend.app.comments.api import comment_router
 from backend.app.documents.api import doc_router
-from backend.app.guide.api import guide_router
 from backend.app.guide.orchestrator import _native
-from backend.app.guide.worker import GuideWorker
-from backend.app.infrastructure.database import Database, configured_path
 from backend.app.infrastructure.execution_lease import ExecutionLease, LeasedDatabase
 from backend.app.infrastructure.formation_database import FormationDatabase
-from backend.app.infrastructure.idempotency import Idempotency
-from backend.app.infrastructure.model_profile import ModelProfile
+from backend.app.infrastructure.model_profile import (
+    OPENAI_DOCUMENT_PROFILE,
+    OPENAI_PROFILE,
+    ModelProfile,
+)
 from backend.app.infrastructure.production_ai import production_options
-from backend.app.infrastructure.resources import ConfigInvalid, ResourceCatalog
-from backend.app.infrastructure.schema_v20_release import load_release
+from backend.app.infrastructure.resources import ConfigInvalid, DocumentResources, ResourceCatalog
 from backend.app.messages.api import message_router
 from backend.app.requirements.api import req_router
 from backend.app.revisions.api import rev_router
 from backend.app.shared.http_boundary import HttpRuntime
-from backend.app.shared.http_errors import error_response, new_request_id
-from backend.app.suggestions.api import batch_router
-from backend.app.testing.plan_api import TEST_PLAN_ROUTER, is_testing_plan_path
-from backend.app.testing.planning_worker import recover_drafts, serve_testing_plans
-from backend.app.testing.policy_api import is_testing_policy_path, testing_policy_router
+
+
+def _build_app(lifespan, routers, frontend_directory):
+    app = FastAPI(
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        redirect_slashes=False,
+    )
+    for router in routers:
+        app.include_router(router)
+    if frontend_directory is not None:
+        from .frontend import install_frontend
+
+        install_frontend(app, frontend_directory)
+    return app
+
+
+def _recovery_app(recovery, catalog, frontend_directory):
+    from backend.app.infrastructure.environment_http import api_admission
+    from backend.app.requirements.discussion import discussion_resources
+
+    def load_document_resources():
+        return DocumentResources(default_collaboration=discussion_resources())
+
+    @asynccontextmanager
+    async def lifespan(app):
+        resources = await _native(load_document_resources) if catalog is None else catalog
+        lease = ExecutionLease()
+        await _native(recovery.start)
+        app.state.walle_runtime = HttpRuntime(LeasedDatabase(recovery.database, lease), resources)
+        try:
+            yield
+        finally:
+            recovery.drain()
+            try:
+                await _native(lease.retire_and_wait)
+            finally:
+                app.state.walle_runtime = None
+
+    app = _build_app(
+        lifespan,
+        (req_router, doc_router, rev_router, comment_router, message_router),
+        frontend_directory,
+    )
+
+    @app.middleware('http')
+    async def admission(request, call_next):
+        return await api_admission(request, call_next, recovery, recovery=True)
+
+    return app
 
 
 def create_app(
@@ -85,23 +88,134 @@ def create_app(
     frontend_directory=None,
     registration_installation=None,
     schema_version=200,
+    ordinary=None,
+    recovery=None,
+    document_ai_profile=None,
 ):
     """Private process startup dependencies. Installation input is never HTTP data."""
-    if (
-        registration_installation is not None
-        and type(registration_installation) is not RegistrationInstallation
-    ):
-        raise TypeError('Trusted registration installation inputs required')
+    if ordinary is not None and recovery is not None:
+        raise TypeError('Only one installed scope may be bound to the application')
+    if ordinary is not None or recovery is not None:
+        if schema_version != 200:
+            raise ValueError('Installed environments require the fixed Schema200-derived layout')
+        if any(
+            input_value is not None
+            for input_value in (database, worker_factory, registration_installation)
+        ):
+            raise TypeError('Installed execution must use its own admitted database and worker')
+    document_ai = document_ai_profile is not None
+    document_ai_release_opening = document_ai and getattr(
+        ordinary, 'document_ai_release_opening', False
+    )
+    if document_ai:
+        from backend.app.infrastructure.schema_v22_release import DocumentAiSchemaRelease
+
+        if (
+            ordinary is None
+            or recovery is not None
+            or type(document_ai_profile) is not ModelProfile
+            or document_ai_profile.profile_id != OPENAI_PROFILE
+            or ordinary.installation.description['purpose'] != 'DEVELOPMENT'
+            or not (ordinary.recover_on_start or document_ai_release_opening)
+            or not isinstance(ordinary.database.schema_release, DocumentAiSchemaRelease)
+            or catalog is not None
+        ):
+            raise ConfigInvalid('Document AI requires the admitted development layout and profile')
+    if recovery is not None:
+        return _recovery_app(recovery, catalog, frontend_directory)
+
+    from backend.app.code_tasks.authorization_api import authorization_router
+    from backend.app.code_tasks.check_set_api import check_set_router
+    from backend.app.code_tasks.command_api import COMMAND_CONTROL_PATHS, command_router
+    from backend.app.code_tasks.configuration_api import (
+        configuration_router,
+        is_configuration_path,
+    )
+    from backend.app.code_tasks.design_revisions import (
+        design_revision_router,
+        is_design_revision_path,
+    )
+    from backend.app.code_tasks.execution_profile_api import execution_profile_router
+    from backend.app.code_tasks.repository_observations import (
+        is_repository_observation_path,
+        repository_observation_router,
+    )
+    from backend.app.code_tasks.repository_operations import (
+        is_repository_operation_path,
+        repository_operation_router,
+    )
+    from backend.app.code_tasks.repository_reads import (
+        is_repository_read_path,
+        repository_read_router,
+    )
+    from backend.app.code_tasks.repository_registration_api import (
+        is_repository_write_path,
+        repository_registration_router,
+    )
+    from backend.app.code_tasks.repository_snapshot_reads import (
+        is_repository_snapshot_path,
+        repository_snapshot_router,
+    )
+    from backend.app.code_tasks.task_creation_api import (
+        is_document_code_tasks_path,
+        task_creation_router,
+    )
+    from backend.app.code_tasks.task_defects import defect_router
+    from backend.app.code_tasks.task_delivery_api import delivery_command_router
+    from backend.app.code_tasks.task_delivery_reads import delivery_reads_router
+    from backend.app.code_tasks.task_read_api import is_code_task_detail_path, task_read_router
+    from backend.app.code_tasks.task_repairs import repair_router
+    from backend.app.code_tasks.task_start_api import is_task_start_path, task_start_router
+    from backend.app.code_tasks.task_start_workspace import recover_workspace_starts
+    from backend.app.code_tasks.task_stop import serve_task_stops
+    from backend.app.code_tasks.task_stop_api import is_task_stop_path, task_stop_router
+    from starlette.responses import JSONResponse
+    from backend.app.guide.api import guide_router
+    from backend.app.guide.worker import GuideWorker
+    from backend.app.infrastructure.database import Database, configured_path
+    from backend.app.infrastructure.idempotency import Idempotency
+    from backend.app.infrastructure.schema_v20_release import load_release
+    from backend.app.shared.http_errors import error_response, new_request_id
+    from backend.app.suggestions.api import batch_router
+    from backend.app.testing.plan_api import TEST_PLAN_ROUTER, is_testing_plan_path
+    from backend.app.testing.planning_worker import recover_drafts, serve_testing_plans
+    from backend.app.testing.policy_api import is_testing_policy_path, testing_policy_router
+
+    if registration_installation is not None:
+        from backend.app.code_tasks.repository_registration_worker import RegistrationInstallation
+
+        if type(registration_installation) is not RegistrationInstallation:
+            raise TypeError('Trusted registration installation inputs required')
 
     if type(schema_version) is not int or schema_version not in (200, 210):
         raise ValueError('An explicit supported database schema version is required')
     if database is not None and isinstance(database, FormationDatabase) != (schema_version == 210):
         raise ValueError('Injected database and explicit schema version differ')
 
+    def check_document_ai_resources(actual_database, worker, resources):
+        from backend.app.infrastructure.collaboration_provider import admission_for
+
+        if document_ai_release_opening:
+            # Validate the pinned profiles while preserving the frozen database.
+            actual_database = SimpleNamespace(
+                path=actual_database.path,
+                transaction=actual_database.frozen_admission_transaction,
+            )
+        document_resources = resources.for_document_operation('GENERATE')
+        document_profile = ModelProfile(document_ai_profile.api_key, OPENAI_DOCUMENT_PROFILE)
+        for profile, catalog_for_profile in (
+            (document_ai_profile, resources),
+            (document_profile, document_resources),
+        ):
+            proof = admission_for(
+                actual_database, worker.process_lock, catalog_for_profile
+            ).current(profile.snapshot)
+            catalog_for_profile.collaboration.require_live(profile.snapshot, admission=proof)
+
     @asynccontextmanager
     async def lifespan(app):
         def startup_dependencies():
-            actual_database = database
+            actual_database = ordinary.database if ordinary is not None else database
             if actual_database is None:
                 if schema_version == 210:
                     from backend.app.infrastructure.formation_schema_release import (
@@ -114,7 +228,16 @@ def create_app(
                 else:
                     actual_database = Database(configured_path(), schema_release=load_release())
             resources = ResourceCatalog() if catalog is None else catalog
-            if schema_version == 210:
+            if document_ai:
+                resources = resources.for_formation_profile(document_ai_profile.profile_id)
+                if (
+                    resources.collaboration.reference('collaboration.release')['version']
+                    != 'openai-v6'
+                ):
+                    raise ConfigInvalid(
+                        'Development document AI requires the selected OpenAI release'
+                    )
+            elif schema_version == 210:
                 if catalog is None:
                     resources = resources.for_formation_profile(ModelProfile.selected_profile())
                 elif not resources.collaboration.formation_driven:
@@ -126,20 +249,26 @@ def create_app(
             return actual_database, resources
 
         actual_database, resources = await _native(startup_dependencies)
-        worker = (
-            GuideWorker(
+        if ordinary is not None:
+            worker = GuideWorker(
+                actual_database,
+                catalog=resources,
+                ordinary=ordinary,
+                ordinary_document_ai=document_ai,
+                orchestrator_options={'profile': document_ai_profile} if document_ai else None,
+            )
+        elif worker_factory is not None:
+            worker = worker_factory(actual_database, resources)
+        else:
+            worker = GuideWorker(
                 actual_database, catalog=resources, orchestrator_options=production_options()
             )
-            if worker_factory is None
-            else worker_factory(actual_database, resources)
-        )
         if (
             not isinstance(worker, GuideWorker)
             or worker.database is not actual_database
             or worker.catalog is not resources
         ):
             raise ValueError('The startup owner must bind this actual database and catalog')
-        await worker.start()
         http_lease = ExecutionLease()
         registration = None
         stop_service = planning_service = None
@@ -147,11 +276,19 @@ def create_app(
         stop_wake = asyncio.Event()
         stop_closing = asyncio.Event()
         try:
+            await worker.start()
+            if document_ai:
+                await _native(check_document_ai_resources, actual_database, worker, resources)
             internal_runtime = HttpRuntime(actual_database, resources, worker.executor, worker)
-            if actual_database.schema_release is not None:
+            recover = ordinary is None or getattr(ordinary, 'recover_on_start', True)
+            if actual_database.schema_release is not None and recover:
                 await _native(recover_workspace_starts, internal_runtime)
                 await _native(recover_drafts, internal_runtime)
             if registration_installation is not None:
+                from backend.app.code_tasks.repository_registration_worker import (
+                    RepositoryRegistrationWorker,
+                )
+
                 registration = RepositoryRegistrationWorker(
                     internal_runtime, registration_installation
                 )
@@ -162,7 +299,7 @@ def create_app(
             app.state.walle_runtime = HttpRuntime(http_database, resources, executor, worker)
             app.state.walle_worker = worker
             app.state.walle_http_lease = http_lease
-            if actual_database.schema_release is not None:
+            if ordinary is None and actual_database.schema_release is not None:
                 app.state.walle_stop_wake = stop_wake
                 app.state.walle_planning_wake = planning_wake
                 planning_service = asyncio.create_task(
@@ -179,6 +316,9 @@ def create_app(
                         ),
                     )
                 )
+            if ordinary is not None:
+                await _native(ordinary.start)
+                worker.open_bound_admission()
             yield
         finally:
             worker.accepting = False
@@ -188,7 +328,13 @@ def create_app(
             # Worker and recovery use the underlying actual DB independently.
             async def close():
                 try:
-                    await asyncio.to_thread(http_lease.retire)
+                    if ordinary is None:
+                        await asyncio.to_thread(http_lease.retire)
+                    else:
+                        try:
+                            await _native(ordinary.drain)
+                        finally:
+                            await asyncio.to_thread(http_lease.retire_and_wait)
                 finally:
                     try:
                         try:
@@ -216,51 +362,55 @@ def create_app(
             finally:
                 app.state.walle_runtime = None
 
-    app = FastAPI(
-        lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None, redirect_slashes=False
-    )
-    for router in (
-        req_router,
-        doc_router,
-        rev_router,
-        comment_router,
-        batch_router,
-        guide_router,
-        message_router,
-        command_router,
-        configuration_router,
-        check_set_router,
-        execution_profile_router,
-        authorization_router,
-        repository_observation_router,
-        repository_operation_router,
-        repository_read_router,
-        repository_registration_router,
-        repository_snapshot_router,
-        design_revision_router,
-        task_creation_router,
-        task_read_router,
-        defect_router,
-        delivery_command_router,
-        delivery_reads_router,
-        repair_router,
-        task_start_router,
-        task_stop_router,
-        testing_policy_router,
-        TEST_PLAN_ROUTER,
-    ):
-        app.include_router(router)
-    if schema_version == 210:
+    formation_routes = ()
+    if schema_version == 210 or document_ai:
         from backend.app.formation.api import formation_router
 
-        app.include_router(formation_router)
-    if frontend_directory is not None:
-        from .frontend import install_frontend
+        formation_routes = (formation_router,)
 
-        install_frontend(app, frontend_directory)
+    app = _build_app(
+        lifespan,
+        (
+            req_router,
+            doc_router,
+            rev_router,
+            comment_router,
+            batch_router,
+            guide_router,
+            message_router,
+            command_router,
+            configuration_router,
+            check_set_router,
+            execution_profile_router,
+            authorization_router,
+            repository_observation_router,
+            repository_operation_router,
+            repository_read_router,
+            repository_registration_router,
+            repository_snapshot_router,
+            design_revision_router,
+            task_creation_router,
+            task_read_router,
+            defect_router,
+            delivery_command_router,
+            delivery_reads_router,
+            repair_router,
+            task_start_router,
+            task_stop_router,
+            testing_policy_router,
+            TEST_PLAN_ROUTER,
+            *formation_routes,
+        ),
+        frontend_directory,
+    )
+
+    if ordinary is not None:
+        from backend.app.infrastructure.environment_http import api_admission
 
     @app.middleware('http')
     async def admission(request, call_next):
+        if ordinary is not None:
+            return await api_admission(request, call_next, ordinary, document_ai=document_ai)
         runtime = getattr(request.app.state, 'walle_runtime', None)
         if not isinstance(runtime, HttpRuntime) or not runtime.worker.accepting:
             request_id = new_request_id()

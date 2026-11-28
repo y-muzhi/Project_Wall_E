@@ -1,10 +1,11 @@
 import { Icon, BusyIndicator } from '../shared/icon.tsx';
-import { useId, useLayoutEffect, useRef } from 'react';
+import { useContext, useId, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { registerModal, trapModalTab } from '../shared/modal.ts';
 import { requirementCatalog } from './catalog.ts';
 import type { CreateDraft, CreateState } from './create.ts';
 import { SingleSelect } from '../shared/single-select.tsx';
+import { ApplicationConnectionNotice } from '../application/connection-notice.ts';
 import { useMotionPresence } from '../shared/motion-react.ts';
 
 export function CreateRequirementDrawer({
@@ -13,9 +14,11 @@ export function CreateRequirementDrawer({
   edit,
   create,
   cancel,
+  writeReason = null,
 }: Readonly<{
   open: boolean;
   state: CreateState;
+  writeReason?: string | null;
   edit(draft: CreateDraft): void;
   create(): void;
   cancel(): void;
@@ -24,6 +27,7 @@ export function CreateRequirementDrawer({
     composing = useRef(false),
     id = useId();
   const present = useMotionPresence(open);
+  const connectionNotice = useContext(ApplicationConnectionNotice);
   const locked = !open || state.busy || state.unknown;
   useLayoutEffect(() => {
     if (!open) return;
@@ -73,6 +77,7 @@ export function CreateRequirementDrawer({
     <dialog
       ref={dialog}
       className="create-drawer"
+      data-environment-connection-owner=""
       tabIndex={-1}
       inert={!open}
       aria-hidden={!open}
@@ -93,7 +98,7 @@ export function CreateRequirementDrawer({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (!state.busy && !composing.current) create();
+          if (!state.busy && !composing.current && writeReason === null) create();
         }}
       >
         <header>
@@ -108,6 +113,7 @@ export function CreateRequirementDrawer({
             <Icon name="close" />
           </button>
         </header>
+        {open && connectionNotice}
         {state.error && (
           <p role="alert" className="inline-error create-feedback">
             ! {state.error}
@@ -154,7 +160,8 @@ export function CreateRequirementDrawer({
           <button
             type="submit"
             className="ui-button primary"
-            disabled={state.busy}
+            disabled={state.busy || writeReason !== null}
+            title={writeReason ?? undefined}
             aria-busy={state.busy}
           >
             <BusyIndicator busy={state.busy} />

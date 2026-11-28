@@ -59,6 +59,7 @@ export const documentKindLabels = Object.freeze({
   REQUIREMENT_BRIEF: '设计大纲',
   FRONTEND_DESIGN: '前端设计文档',
   BACKEND_DESIGN: '后端设计文档',
+  DRAWING: '画板',
   DESIGN: '设计文档（旧）',
   SPECIFICATION: '规格说明（旧）',
 } as const);

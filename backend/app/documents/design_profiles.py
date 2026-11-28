@@ -6,7 +6,15 @@ from functools import cache
 from pathlib import Path
 
 
+DRAWING_KIND = 'DRAWING'
+
 DESIGN_PROFILES = {
+    DRAWING_KIND: {
+        'key': 'structure.excalidraw',
+        'stored_kind': 'DESIGN',
+        'headings': (),
+        'rule': '独立画板使用 Excalidraw 场景，只允许人工编辑。',
+    },
     'FRONTEND_DESIGN': {
         'key': 'structure.frontend-design',
         'stored_kind': 'DESIGN',

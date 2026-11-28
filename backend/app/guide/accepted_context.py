@@ -82,6 +82,8 @@ def check_proposal(connection, root, request, resources):
 
 def capture_source(connection, root_id, source, resources):
     """Capture only the addressed record/material, never another run's authority."""
+    from backend.app.documents.drawing import is_drawing
+
     kind = source['kind']
     if kind in ('MESSAGE', 'CARD_ANSWER'):
         row = dict(
@@ -111,6 +113,8 @@ def capture_source(connection, root_id, source, resources):
             'SELECT name,document_kind,template_ref FROM requirement_documents WHERE id=?',
             (row['document_id'],),
         ).fetchone()
+        if is_drawing(document):
+            raise Rejected('SOURCE_INVALID')
         return {'source_ref': source, 'value': {**row, **dict(document)}}
     run = connection.execute(
         'SELECT * FROM guide_runs WHERE id=? AND requirement_id=?',
@@ -183,6 +187,8 @@ def capture_source(connection, root_id, source, resources):
 
 
 def capture_inputs(connection, root, request, catalog):
+    from backend.app.documents.drawing import is_drawing
+
     resources = catalog.collaboration
     if request.document_id != root['assistant_document_id']:
         raise Rejected('SOURCE_INVALID')
@@ -204,6 +210,8 @@ def capture_inputs(connection, root, request, catalog):
         current = DocumentRepository(connection).get_current(root['id'], target['document_id'])
         if current is None:
             raise Rejected('SOURCE_INVALID')
+        if is_drawing(current):
+            raise Rejected('SCOPE_INVALID')
         if current['content_version'] != target['expected_content_version']:
             raise Rejected('CONTENT_VERSION_CONFLICT')
         if (
@@ -283,7 +291,7 @@ def capture_inputs(connection, root, request, catalog):
     for ref in refs:
         unique.setdefault(canonical_input(ref), ref)
     refs = list(unique.values())
-    verify_source_refs(connection, root['id'], refs, resources=resources)
+    verify_source_refs(connection, root['id'], refs, resources=resources, text_only=True)
     history = [
         dict(row)
         for row in connection.execute(

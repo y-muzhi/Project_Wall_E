@@ -4,6 +4,7 @@ import type { CodeTaskView } from '../api/code-task-creation.ts';
 import { configurationPath, fixedContentChanged } from '../api/code-task-configuration.ts';
 import { exact, positiveInteger } from '../api/client.ts';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage } from '../api/environment-storage.ts';
 import type { OperationReader } from './command-recovery.ts';
 import { optionPage, PagedTaskSelect } from './create-selection.tsx';
 import { useCodeTaskCommand } from './handoff-command.ts';
@@ -20,9 +21,11 @@ type Draft = Readonly<{
 const emptyDraft: Draft = { profile: null, version: null, grant: null, reason: '' };
 const draftId = (value: unknown) => (value === null ? null : positiveInteger(value));
 
-function savedDraft(storageKey: string): Draft {
+function savedDraft(api: WalleApi, storageKey: string): Draft {
   try {
-    const raw = sessionStorage.getItem(storageKey);
+    const raw = environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(
+      storageKey,
+    );
     if (raw === null) return emptyDraft;
     const row = exact(JSON.parse(raw), ['profile', 'version', 'grant', 'reason']);
     if (typeof row.reason !== 'string') return emptyDraft;
@@ -53,19 +56,20 @@ export function TaskConfigurationControl({
   changed(): void;
 }>) {
   const key = 'walle:v2:coding-configuration:' + task.id;
-  const [draft, setDraft] = useState(() => savedDraft(key));
+  const [draft, setDraft] = useState(() => savedDraft(api, key));
   const [open, setOpen] = useState(false);
   const [attempt, retry] = useState(0);
   const [storageIssue, setStorageIssue] = useState(false);
   useEffect(() => {
     try {
-      if (draft.profile === null && !draft.reason) sessionStorage.removeItem(key);
-      else sessionStorage.setItem(key, JSON.stringify(draft));
+      const storage = environmentBrowserStorage('sessionStorage', api.environmentScope);
+      if (draft.profile === null && !draft.reason) storage.removeItem(key);
+      else storage.setItem(key, JSON.stringify(draft));
       setStorageIssue(false);
     } catch {
       setStorageIssue(true);
     }
-  }, [draft, key]);
+  }, [api, draft, key]);
 
   const readOperation = useCallback<OperationReader>(
     async (original, association, signal) => {

@@ -20,6 +20,7 @@ import { Icon } from '../shared/icon.tsx';
 import { NameEditor } from '../shared/name-editor.tsx';
 import { ordinaryInput } from '../shared/text.ts';
 import { useMotionPresence } from '../shared/motion-react.ts';
+import { ApplicationConnectionNotice } from '../application/connection-notice.ts';
 import { EmptyState } from '../shared/empty-state.tsx';
 
 type CreationDefaults = Readonly<{
@@ -33,9 +34,11 @@ export function useDocumentCreation() {
 }
 export function DocumentCreationProvider({
   owner,
+  writeReason,
   children,
 }: {
   owner: RequirementDetailOwner;
+  writeReason: string | null;
   children: import('react').ReactNode;
 }) {
   const [state, setState] = useState({
@@ -58,6 +61,7 @@ export function DocumentCreationProvider({
           key={state.identity}
           owner={owner}
           open={state.open}
+          writeReason={writeReason}
           defaults={state.defaults}
           close={() => setState((previous) => ({ ...previous, open: false }))}
         />
@@ -68,11 +72,13 @@ export function DocumentCreationProvider({
 function CreateDocumentDialog({
   owner,
   open,
+  writeReason,
   close,
   defaults,
 }: {
   owner: RequirementDetailOwner;
   open: boolean;
+  writeReason: string | null;
   close(): void;
   defaults: CreationDefaults;
 }) {
@@ -91,6 +97,9 @@ function CreateDocumentDialog({
     pending = useRef(false);
   const id = useId();
   const locked = !open || ['SUBMITTING', 'UNKNOWN', 'CONFIRMED'].includes(state.phase);
+  const drawing = kind === 'DRAWING';
+  const connectionNotice = useContext(ApplicationConnectionNotice);
+  const blockedReason = state.phase === 'CONFIRMED' ? null : writeReason;
   const requestClose = () => {
     if (locked) return;
     if (name.length > 0 || kind !== 'REQUIREMENT_BRIEF' || framework) setDiscard(true);
@@ -134,7 +143,8 @@ function CreateDocumentDialog({
     };
   }, [open]);
   const submit = async () => {
-    if (pending.current || composing.current) return;
+    if (pending.current || composing.current || connectionNotice !== null || blockedReason !== null)
+      return;
     if (!locked) {
       try {
         ordinaryInput(name, '文档名称', 1, 80, false);
@@ -161,7 +171,7 @@ function CreateDocumentDialog({
                   framework && kind === 'REQUIREMENT_BRIEF' ? documentStructureRefs[kind]! : null,
                 ...(kind === 'REQUIREMENT_BRIEF'
                   ? {}
-                  : { initial_content: framework ? 'FRAMEWORK' : 'EMPTY' }),
+                  : { initial_content: framework && !drawing ? 'FRAMEWORK' : 'EMPTY' }),
               });
       if (done) {
         owner.toasts.push('success', '文档已创建');
@@ -179,6 +189,7 @@ function CreateDocumentDialog({
         <dialog
           ref={dialog}
           className="create-drawer"
+          data-environment-connection-owner=""
           tabIndex={-1}
           inert={!open}
           aria-hidden={!open}
@@ -214,6 +225,12 @@ function CreateDocumentDialog({
                 <Icon name="close" />
               </button>
             </header>
+            {connectionNotice}
+            {connectionNotice === null && blockedReason !== null && (
+              <p role="status" className="inline-error">
+                {blockedReason}
+              </p>
+            )}
             <div className="create-fields">
               <div>
                 <label htmlFor={id + '-name'}>文档名称</label>
@@ -248,24 +265,28 @@ function CreateDocumentDialog({
                   change={(value) => setKind(value as typeof kind)}
                 />
               </div>
-              <div>
-                <label htmlFor={id + '-content'}>初始内容</label>
-                <SingleSelect
-                  id={id + '-content'}
-                  label="初始内容"
-                  value={framework ? 'FRAMEWORK' : 'EMPTY'}
-                  disabled={locked}
-                  options={[
-                    { value: 'EMPTY', label: '空白文档' },
-                    { value: 'FRAMEWORK', label: '固定框架' },
-                  ]}
-                  change={(value) => setFramework(value === 'FRAMEWORK')}
-                />
-              </div>
+              {!drawing && (
+                <div>
+                  <label htmlFor={id + '-content'}>初始内容</label>
+                  <SingleSelect
+                    id={id + '-content'}
+                    label="初始内容"
+                    value={framework ? 'FRAMEWORK' : 'EMPTY'}
+                    disabled={locked}
+                    options={[
+                      { value: 'EMPTY', label: '空白文档' },
+                      { value: 'FRAMEWORK', label: '固定框架' },
+                    ]}
+                    change={(value) => setFramework(value === 'FRAMEWORK')}
+                  />
+                </div>
+              )}
               <p className="field-help">
-                {framework
-                  ? '预置所选类型的章节，创建后可继续填写正文。'
-                  : '从空白正文开始，创建后可直接编辑。'}
+                {drawing
+                  ? '创建空白画板。'
+                  : framework
+                    ? '预置所选类型的章节，创建后可继续填写正文。'
+                    : '从空白正文开始，创建后可直接编辑。'}
                 此操作不调用 AI。
               </p>
               {(error || state.error) && (
@@ -281,7 +302,12 @@ function CreateDocumentDialog({
               <button
                 className="ui-button primary"
                 type="submit"
-                disabled={state.phase === 'SUBMITTING'}
+                disabled={
+                  connectionNotice !== null ||
+                  blockedReason !== null ||
+                  state.phase === 'SUBMITTING'
+                }
+                title={blockedReason ?? undefined}
               >
                 {state.phase === 'UNKNOWN'
                   ? '核实创建结果'
@@ -362,7 +388,8 @@ export function DocumentDirectory({
             className="ui-button document-directory-code-action"
             type="button"
             aria-label={document.name + '的代码任务'}
-            disabled={codeTasksBlocked}
+            disabled={codeTasksBlocked || document.document_kind === 'DRAWING'}
+            title={document.document_kind === 'DRAWING' ? '画板不能作为文字设计依据' : undefined}
             onClick={() => codeTasks(document.id)}
           >
             代码任务
@@ -428,10 +455,12 @@ export function NewDocumentButton({
   owner,
   label = '新建文档',
   iconOnly = false,
+  writeReason = null,
 }: {
   owner: RequirementDetailOwner;
   label?: string;
   iconOnly?: boolean;
+  writeReason?: string | null;
 }) {
   const flow = owner.regions!.directory;
   useSyncExternalStore(flow.subscribe, flow.getSnapshot);
@@ -444,8 +473,8 @@ export function NewDocumentButton({
       className={'ui-button' + (iconOnly ? ' icon-button document-create-trigger' : '')}
       type="button"
       aria-label={label}
-      title={iconOnly ? label : undefined}
-      disabled={!flow.allowed || create === null}
+      title={writeReason ?? (iconOnly ? label : undefined)}
+      disabled={writeReason !== null || !flow.allowed || create === null}
       onClick={() => create?.()}
     >
       {iconOnly ? <Icon name="plus" /> : label}
@@ -456,9 +485,13 @@ export function NewDocumentButton({
 export function DocumentMetadataBar({
   owner,
   navigation,
+  viewActions,
+  writeReason = null,
 }: {
   owner: RequirementDetailOwner;
+  writeReason?: string | null;
   navigation?: import('react').ReactNode;
+  viewActions?: import('react').ReactNode;
 }) {
   const detail = useSyncExternalStore(owner.subscribe, owner.getSnapshot).detail,
     flow = owner.regions!.directory,
@@ -473,7 +506,7 @@ export function DocumentMetadataBar({
     pending = useRef(false);
   const current = detail?.current;
   const execute = async (work: () => Promise<boolean>, message?: string) => {
-    if (pending.current) return;
+    if (pending.current || writeReason) return;
     pending.current = true;
     setBusy(true);
     setError(null);
@@ -536,7 +569,8 @@ export function DocumentMetadataBar({
           draft={name}
           editing={renamingCurrent}
           canRename={!editing && current.archived_at === null}
-          disabled={!flow.allowed || busy}
+          disabled={!flow.allowed || busy || !!writeReason}
+          disabledReason={writeReason}
           readOnly={unresolved}
           cancelDisabled={busy || unresolved}
           begin={beginRename}
@@ -567,49 +601,55 @@ export function DocumentMetadataBar({
               正在进行人工编辑
             </p>
           )}
-          {current && !editing && (
-            <span className="document-metadata-actions">
-              {current.archived_at === null ? (
-                <>
+          {((current && !editing) || viewActions) && (
+            <div className="document-metadata-actions">
+              {current &&
+                !editing &&
+                (current.archived_at === null ? (
+                  <>
+                    <button
+                      className="ui-button"
+                      disabled={
+                        !flow.allowed ||
+                        current.confirmed_revision_id === current.current_revision_id
+                      }
+                      onClick={() =>
+                        void execute(
+                          () =>
+                            flow.metadata(current, {
+                              type: 'CONFIRM',
+                              expected_content_version: current.content_version,
+                              revision_id: current.current_revision_id,
+                            }),
+                          '当前版本已确认',
+                        )
+                      }
+                    >
+                      确认当前版本
+                    </button>
+                    <button
+                      className="ui-button"
+                      disabled={!flow.allowed || !!writeReason}
+                      title={writeReason ?? undefined}
+                      onClick={() => setArchive(current)}
+                    >
+                      归档
+                    </button>
+                  </>
+                ) : (
                   <button
                     className="ui-button"
-                    disabled={
-                      !flow.allowed || current.confirmed_revision_id === current.current_revision_id
-                    }
+                    disabled={!flow.allowed || !!writeReason}
+                    title={writeReason ?? undefined}
                     onClick={() =>
-                      void execute(
-                        () =>
-                          flow.metadata(current, {
-                            type: 'CONFIRM',
-                            expected_content_version: current.content_version,
-                            revision_id: current.current_revision_id,
-                          }),
-                        '当前版本已确认',
-                      )
+                      void execute(() => flow.metadata(current, { type: 'RESTORE' }), '文档已恢复')
                     }
                   >
-                    确认当前版本
+                    恢复文档
                   </button>
-                  <button
-                    className="ui-button"
-                    disabled={!flow.allowed}
-                    onClick={() => setArchive(current)}
-                  >
-                    归档
-                  </button>
-                </>
-              ) : (
-                <button
-                  className="ui-button"
-                  disabled={!flow.allowed}
-                  onClick={() =>
-                    void execute(() => flow.metadata(current, { type: 'RESTORE' }), '文档已恢复')
-                  }
-                >
-                  恢复文档
-                </button>
-              )}
-            </span>
+                ))}
+              {viewActions}
+            </div>
           )}
         </div>
       )}

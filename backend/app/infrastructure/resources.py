@@ -267,12 +267,22 @@ def _inspect_schema(node, root):
             _inspect_schema(child, root)
 
 
-class ResourceCatalog:
-    def code_configuration_options(self, kind):
-        """Read the pinned nonsecret catalogue; never probe or grant execution."""
-        from .code_configuration_catalog import load_code_catalogue
+class DocumentResources:
+    """Pinned template and collaboration resources shared by document readers."""
 
-        return load_code_catalogue().items(kind)
+    def __init__(self, *, default_collaboration=None):
+        self._default_collaboration = default_collaboration
+        self.root = DEFAULT_ROOT.resolve()
+        self._catalog_sha256 = MANIFEST_SHA256
+        try:
+            self._load_base_templates(self._read_base_templates_release())
+            self._load_full_template(*self._read_full_template_release(V3_ROOT.resolve()))
+            self._load_v6(V6_ROOT.resolve())
+            self._load_v7(V7_ROOT.resolve())
+        except ConfigInvalid:
+            raise
+        except Exception as error:
+            raise ConfigInvalid('Frozen resource catalog cannot be loaded') from error
 
     @property
     def collaboration(self):
@@ -291,15 +301,19 @@ class ResourceCatalog:
             selected = (
                 getattr(self, '_collaboration_profile', None) or ModelProfile.selected_profile()
             )
-            self._collaboration_resources = CollaborationResources.load(
-                ROOT.parent / 'openai-v2'
-                if selected == OPENAI_PROFILE
-                else ROOT.parent / 'openai-v8'
-                if selected == OPENAI_DOCUMENT_PROFILE
-                else ROOT.parent / 'v18'
-                if selected == LONG_OUTPUT_PROFILE
-                else ROOT
-            )
+            profile_roots = {
+                OPENAI_PROFILE: ROOT.parent / 'openai-v2',
+                OPENAI_DOCUMENT_PROFILE: ROOT.parent / 'openai-v8',
+                LONG_OUTPUT_PROFILE: ROOT.parent / 'v18',
+            }
+            profile_root = profile_roots.get(selected)
+            default = getattr(self, '_default_collaboration', None)
+            if profile_root is not None:
+                self._collaboration_resources = CollaborationResources.load(profile_root)
+            elif default is not None:
+                self._collaboration_resources = default
+            else:
+                self._collaboration_resources = CollaborationResources.load(ROOT)
         return self._collaboration_resources
 
     def for_collaboration_release(self, reference):
@@ -401,6 +415,250 @@ class ResourceCatalog:
         selected.__dict__.pop('_collaboration_resources', None)
         return selected
 
+    def template(self, requirement_type: str, key: str, version: str) -> FixedTemplate:
+        template = self._templates.get((key, version))
+        if template is None or requirement_type not in template.requirement_types:
+            raise TemplateInvalid('模板不存在或不适用于需求类型')
+        return template
+
+    def _read_base_templates_release(self):
+        raw_manifest = (self.root / 'manifest.json').read_bytes()
+        if hashlib.sha256(raw_manifest).hexdigest() != MANIFEST_SHA256:
+            raise ConfigInvalid('Frozen resource manifest differs from the approved release')
+        manifest = strict_json_object(raw_manifest)
+        if manifest['schema_version'] != 1 or manifest['status'] != 'APPROVED':
+            raise ConfigInvalid('Resources have not been approved')
+        texts = {}
+        for entry in manifest['files']:
+            relative = Path(entry['path'])
+            path = (self.root / relative).resolve()
+            if relative.is_absolute() or not path.is_relative_to(self.root):
+                raise ConfigInvalid('Resource path must stay within the frozen catalog')
+            content = path.read_bytes()
+            if (
+                len(content) != entry['bytes']
+                or hashlib.sha256(content).hexdigest() != entry['sha256']
+            ):
+                raise ConfigInvalid('Frozen resource content has changed')
+            texts[entry['path']] = content.decode('utf-8', errors='strict')
+        return texts
+
+    def _load_base_templates(self, texts):
+        self._templates = {}
+        self._catalog_json = texts['templates/catalog.v1.json']
+        for template in strict_json_object(self._catalog_json)['templates']:
+            key, version = template['template_key'], template['template_version']
+            metadata = strict_json_object(texts[f'templates/{key}.{version}.json'])
+            if metadata != template:
+                raise ConfigInvalid('Template catalog and metadata do not agree')
+            self._templates[(key, version)] = FixedTemplate(
+                key,
+                version,
+                template['label'],
+                tuple(template['requirement_types']),
+                texts[template['markdown_path']],
+                tuple(LockedHeading(**heading) for heading in template['locked_headings']),
+                MANIFEST_SHA256,
+            )
+
+    @staticmethod
+    def _read_full_template_release(root):
+        raw = (root / 'manifest.json').read_bytes()
+        if hashlib.sha256(raw).hexdigest() != V3_MANIFEST_SHA256:
+            raise ConfigInvalid('Full-template manifest differs from the approved release')
+        manifest = strict_json_object(raw)
+        if (
+            manifest['status'],
+            manifest['decision'],
+            manifest['version'],
+            manifest['base_manifest_sha256'],
+        ) != ('APPROVED', 'TPL-001', 'v3', V2_MANIFEST_SHA256):
+            raise ConfigInvalid('Full-template release lacks its approved base identity')
+        texts = {}
+        for entry in manifest['files']:
+            relative = Path(entry['path'])
+            path = (root / relative).resolve()
+            if relative.is_absolute() or not path.is_relative_to(root) or entry['path'] in texts:
+                raise ConfigInvalid('Unsafe or duplicate full-template resource path')
+            content = path.read_bytes()
+            if (
+                len(content) != entry['bytes']
+                or hashlib.sha256(content).hexdigest() != entry['sha256']
+            ):
+                raise ConfigInvalid('Frozen full-template resource content has changed')
+            texts[entry['path']] = content.decode('utf-8', errors='strict')
+        if len(texts) != 16:
+            raise ConfigInvalid('Complete full-template release required')
+        return manifest, texts
+
+    def _load_full_template(self, manifest, texts):
+        catalog_json = texts['templates/catalog.v2.json']
+        catalog = strict_json_object(catalog_json)
+        template = strict_json_object(texts['templates/new-requirement.v2.json'])
+        previous = json.loads(self._catalog_json)
+        expected_catalog = {
+            **previous,
+            'templates': [
+                template,
+                *[
+                    item
+                    for item in previous['templates']
+                    if item['template_key'] != FULL_TEMPLATE[0]
+                ],
+            ],
+        }
+        if (
+            catalog != expected_catalog
+            or (template['template_key'], template['template_version']) != FULL_TEMPLATE
+            or template['requirement_types'] != ['NEW']
+        ):
+            raise ConfigInvalid('Full template must replace only the NEW creation choice')
+        markdown = texts[template['markdown_path']]
+        source = manifest['template_source']
+        if (
+            len(markdown.encode('utf-8')) != source['bytes']
+            or hashlib.sha256(markdown.encode('utf-8')).hexdigest() != source['sha256']
+        ):
+            raise ConfigInvalid('Full template differs from its approved source snapshot')
+        from backend.app.documents.markdown import parse_markdown
+
+        headings = tuple(
+            LockedHeading(block.heading_level, block.plain_text)
+            for block in parse_markdown(markdown).blocks
+            if block.block_type == 'heading'
+        )
+        if headings != tuple(LockedHeading(**heading) for heading in template['locked_headings']):
+            raise ConfigInvalid('Full-template locked headings differ from the actual Markdown')
+        self._templates[FULL_TEMPLATE] = FixedTemplate(
+            *FULL_TEMPLATE, template['label'], ('NEW',), markdown, headings, V3_MANIFEST_SHA256
+        )
+        self._catalog_json, self._catalog_sha256 = catalog_json, V3_MANIFEST_SHA256
+
+    def _load_v6(self, root: Path) -> None:
+        self._load_heading_release(
+            root, 'v6', V6_MANIFEST_SHA256, HEADING_TEMPLATE, remove_title=False
+        )
+
+    def _load_v7(self, root: Path) -> None:
+        self._load_heading_release(
+            root, 'v7', V7_MANIFEST_SHA256, PROMOTED_TEMPLATE, remove_title=True
+        )
+
+    def _load_heading_release(
+        self,
+        root: Path,
+        release: str,
+        manifest_sha: str,
+        identity: tuple[str, str],
+        *,
+        remove_title: bool,
+    ) -> None:
+        """TPL-003 heading revisions derive from v2; historical releases stay frozen."""
+        raw = (root / 'manifest.json').read_bytes()
+        if hashlib.sha256(raw).hexdigest() != manifest_sha:
+            raise ConfigInvalid('Heading-template manifest differs from its fixed release')
+        manifest = strict_json_object(raw)
+        if (
+            manifest['schema_version'],
+            manifest['status'],
+            manifest['decision'],
+            manifest['version'],
+            manifest['base_manifest_sha256'],
+        ) != (1, 'APPROVED', 'TPL-003', release, V3_MANIFEST_SHA256):
+            raise ConfigInvalid('Heading-template release has an invalid base identity')
+        texts = {}
+        for entry in manifest['files']:
+            relative = Path(entry['path'])
+            path = (root / relative).resolve()
+            if relative.is_absolute() or not path.is_relative_to(root) or entry['path'] in texts:
+                raise ConfigInvalid('Unsafe or duplicate heading-template resource path')
+            content = path.read_bytes()
+            if (
+                len(content) != entry['bytes']
+                or hashlib.sha256(content).hexdigest() != entry['sha256']
+            ):
+                raise ConfigInvalid('Frozen heading-template resource content has changed')
+            texts[entry['path']] = content.decode('utf-8', errors='strict')
+        catalog_path = f'templates/catalog.{identity[1]}.json'
+        metadata_path = f'templates/{identity[0]}.{identity[1]}.json'
+        markdown_path = f'templates/{identity[0]}.{identity[1]}.md'
+        if set(texts) != {catalog_path, metadata_path, markdown_path}:
+            raise ConfigInvalid('Complete heading-template release required')
+        template = strict_json_object(texts[metadata_path])
+        previous = strict_json_object(self._catalog_json)
+        catalog_json = texts[catalog_path]
+        expected = {
+            **previous,
+            'templates': [
+                template,
+                *[item for item in previous['templates'] if item['template_key'] != identity[0]],
+            ],
+        }
+        if (
+            strict_json_object(catalog_json) != expected
+            or (template['template_key'], template['template_version']) != identity
+            or template['requirement_types'] != ['NEW']
+            or template['markdown_path'] != markdown_path
+        ):
+            raise ConfigInvalid('Heading release must replace only the NEW creation choice')
+        old = self._templates[FULL_TEMPLATE]
+        markdown = texts[template['markdown_path']]
+        expected_lines = []
+        fence = None
+        lines = old.markdown.splitlines(keepends=True)
+        for line in lines[1:] if remove_title else lines:
+            marker = re.match(r'(`{3,}|~{3,})', line.lstrip(' '))
+            if marker:
+                kind = marker.group(1)[0]
+                if fence is None:
+                    fence = kind
+                elif kind == fence:
+                    fence = None
+            if fence is None and re.match(r'^#{2,6}[ \t]', line):
+                line = line[1:] if remove_title else '#' + line
+            expected_lines.append(line)
+        if markdown != ''.join(expected_lines):
+            raise ConfigInvalid('Heading release must preserve all non-heading source content')
+        from backend.app.documents.markdown import parse_markdown
+
+        headings = tuple(
+            LockedHeading(block.heading_level, block.plain_text)
+            for block in parse_markdown(markdown).blocks
+            if block.block_type == 'heading'
+        )
+        expected_headings = (
+            tuple(
+                LockedHeading(heading.level - 1, heading.text)
+                for heading in old.locked_headings[1:]
+            )
+            if remove_title
+            else tuple(
+                LockedHeading(heading.level if index == 0 else heading.level + 1, heading.text)
+                for index, heading in enumerate(old.locked_headings)
+            )
+        )
+        source = manifest['template_source']
+        if (
+            headings != expected_headings
+            or headings
+            != tuple(LockedHeading(**heading) for heading in template['locked_headings'])
+            or len(markdown.encode('utf-8')) != source['bytes']
+            or hashlib.sha256(markdown.encode('utf-8')).hexdigest() != source['sha256']
+        ):
+            raise ConfigInvalid('Heading-template source or locked headings differ')
+        self._templates[identity] = FixedTemplate(
+            *identity, template['label'], ('NEW',), markdown, headings, manifest_sha
+        )
+        self._catalog_json, self._catalog_sha256 = catalog_json, manifest_sha
+
+
+class ResourceCatalog(DocumentResources):
+    def code_configuration_options(self, kind):
+        """Read the pinned nonsecret catalogue; never probe or grant execution."""
+        from .code_configuration_catalog import load_code_catalogue
+
+        return load_code_catalogue().items(kind)
+
     def __init__(
         self,
         root: Path | str | None = None,
@@ -437,25 +695,7 @@ class ResourceCatalog:
         self._initialization_versions = None
         self._catalog_sha256 = MANIFEST_SHA256
         try:
-            raw_manifest = (self.root / 'manifest.json').read_bytes()
-            if hashlib.sha256(raw_manifest).hexdigest() != MANIFEST_SHA256:
-                raise ConfigInvalid('Frozen resource manifest differs from the approved release')
-            manifest = strict_json_object(raw_manifest)
-            if manifest['schema_version'] != 1 or manifest['status'] != 'APPROVED':
-                raise ConfigInvalid('Resources have not been approved')
-            texts = {}
-            for entry in manifest['files']:
-                relative = Path(entry['path'])
-                path = (self.root / relative).resolve()
-                if relative.is_absolute() or not path.is_relative_to(self.root):
-                    raise ConfigInvalid('Resource path must stay within the frozen catalog')
-                content = path.read_bytes()
-                if (
-                    len(content) != entry['bytes']
-                    or hashlib.sha256(content).hexdigest() != entry['sha256']
-                ):
-                    raise ConfigInvalid('Frozen resource content has changed')
-                texts[entry['path']] = content.decode('utf-8', errors='strict')
+            texts = self._read_base_templates_release()
             schemas = {}
             for name, text in texts.items():
                 if name.startswith('schemas/'):
@@ -507,22 +747,7 @@ class ResourceCatalog:
                     schemas[entry['output_schema']],
                     MANIFEST_SHA256,
                 )
-            self._templates = {}
-            self._catalog_json = texts['templates/catalog.v1.json']
-            for template in strict_json_object(self._catalog_json)['templates']:
-                key, version = template['template_key'], template['template_version']
-                metadata = strict_json_object(texts[f'templates/{key}.{version}.json'])
-                if metadata != template:
-                    raise ConfigInvalid('Template catalog and metadata do not agree')
-                self._templates[(key, version)] = FixedTemplate(
-                    key,
-                    version,
-                    template['label'],
-                    tuple(template['requirement_types']),
-                    texts[template['markdown_path']],
-                    tuple(LockedHeading(**heading) for heading in template['locked_headings']),
-                    MANIFEST_SHA256,
-                )
+            self._load_base_templates(texts)
             if installed or versioned_root is not None:
                 self._load_v2(
                     Path(V2_ROOT if versioned_root is None else versioned_root).resolve(), texts
@@ -633,32 +858,7 @@ class ResourceCatalog:
 
     def _load_v3(self, root: Path) -> None:
         """TPL-001 adds the full template and budgets; old bytes stay frozen."""
-        raw = (root / 'manifest.json').read_bytes()
-        if hashlib.sha256(raw).hexdigest() != V3_MANIFEST_SHA256:
-            raise ConfigInvalid('Full-template manifest differs from the approved release')
-        manifest = strict_json_object(raw)
-        if (
-            manifest['status'],
-            manifest['decision'],
-            manifest['version'],
-            manifest['base_manifest_sha256'],
-        ) != ('APPROVED', 'TPL-001', 'v3', V2_MANIFEST_SHA256):
-            raise ConfigInvalid('Full-template release lacks its approved base identity')
-        texts = {}
-        for entry in manifest['files']:
-            relative = Path(entry['path'])
-            path = (root / relative).resolve()
-            if relative.is_absolute() or not path.is_relative_to(root) or entry['path'] in texts:
-                raise ConfigInvalid('Unsafe or duplicate full-template resource path')
-            content = path.read_bytes()
-            if (
-                len(content) != entry['bytes']
-                or hashlib.sha256(content).hexdigest() != entry['sha256']
-            ):
-                raise ConfigInvalid('Frozen full-template resource content has changed')
-            texts[entry['path']] = content.decode('utf-8', errors='strict')
-        if len(texts) != 16:
-            raise ConfigInvalid('Complete full-template release required')
+        manifest, texts = self._read_full_template_release(root)
         resource = strict_json_object(texts['functions.v3.json'])
         if resource['proposal'] is not False or len(resource['functions']) != 6:
             raise ConfigInvalid('All six full-template Functions required')
@@ -706,47 +906,7 @@ class ResourceCatalog:
                 old.output_schema_json,
                 V3_MANIFEST_SHA256,
             )
-        catalog_json = texts['templates/catalog.v2.json']
-        catalog = strict_json_object(catalog_json)
-        template = strict_json_object(texts['templates/new-requirement.v2.json'])
-        previous = json.loads(self._catalog_json)
-        expected_catalog = {
-            **previous,
-            'templates': [
-                template,
-                *[
-                    item
-                    for item in previous['templates']
-                    if item['template_key'] != FULL_TEMPLATE[0]
-                ],
-            ],
-        }
-        if (
-            catalog != expected_catalog
-            or (template['template_key'], template['template_version']) != FULL_TEMPLATE
-            or template['requirement_types'] != ['NEW']
-        ):
-            raise ConfigInvalid('Full template must replace only the NEW creation choice')
-        markdown = texts[template['markdown_path']]
-        source = manifest['template_source']
-        if (
-            len(markdown.encode('utf-8')) != source['bytes']
-            or hashlib.sha256(markdown.encode('utf-8')).hexdigest() != source['sha256']
-        ):
-            raise ConfigInvalid('Full template differs from its approved source snapshot')
-        from backend.app.documents.markdown import parse_markdown
-
-        headings = tuple(
-            LockedHeading(block.heading_level, block.plain_text)
-            for block in parse_markdown(markdown).blocks
-            if block.block_type == 'heading'
-        )
-        if headings != tuple(LockedHeading(**heading) for heading in template['locked_headings']):
-            raise ConfigInvalid('Full-template locked headings differ from the actual Markdown')
-        self._templates[FULL_TEMPLATE] = FixedTemplate(
-            *FULL_TEMPLATE, template['label'], ('NEW',), markdown, headings, V3_MANIFEST_SHA256
-        )
-        self._catalog_json, self._catalog_sha256 = catalog_json, V3_MANIFEST_SHA256
+        self._load_full_template(manifest, texts)
 
     def _load_v4(self, root: Path) -> None:
         """CTX-001 changes only transport layout; both prior budgets survive."""
@@ -957,6 +1117,18 @@ class ResourceCatalog:
         entries = strict_json_object(texts['functions.v8.json'])
         if len(texts) != 37 or entries['proposal'] is not False or len(entries['functions']) != 12:
             raise ConfigInvalid('Both six-Function projection budget sets are required')
+        # Both budget variants use the same pinned schema files.
+        checked_schemas = {}
+
+        def checked_schema(reference):
+            if reference not in checked_schemas:
+                text = texts['schemas/' + reference.replace('@', '.') + '.json']
+                value = strict_json_object(text)
+                Draft202012Validator.check_schema(value)
+                _inspect_schema(value, value)
+                checked_schemas[reference] = (text, value)
+            return checked_schemas[reference]
+
         seen = set()
         for entry in entries['functions']:
             action_source = entry['action_type'], entry['source_type']
@@ -1000,16 +1172,10 @@ class ResourceCatalog:
             prompt = texts['prompts/' + entry['prompt'].replace('@', '.') + '.md']
             if prompt != projection_prompt(old.prompt, expected, key, version, wire_ref):
                 raise ConfigInvalid('Projection guidance differs from the frozen phase A rules')
-            wire_schema = texts['schemas/' + wire_ref.replace('@', '.') + '.json']
-            schema = strict_json_object(wire_schema)
-            Draft202012Validator.check_schema(schema)
-            _inspect_schema(schema, schema)
+            wire_schema, schema = checked_schema(wire_ref)
             if schema['title'] != wire_ref or tuple(schema['properties']) != FIELD_ORDER:
                 raise ConfigInvalid('Projection transport schema differs')
-            canonical_schema = texts['schemas/' + canonical_ref.replace('@', '.') + '.json']
-            canonical_value = strict_json_object(canonical_schema)
-            Draft202012Validator.check_schema(canonical_value)
-            _inspect_schema(canonical_value, canonical_value)
+            canonical_schema, canonical_value = checked_schema(canonical_ref)
             original = strict_json_object(old.input_schema_json)
             restored = {
                 **canonical_value,
@@ -1041,129 +1207,6 @@ class ResourceCatalog:
                 V8_MANIFEST_SHA256,
                 wire_schema,
             )
-
-    def template(self, requirement_type: str, key: str, version: str) -> FixedTemplate:
-        template = self._templates.get((key, version))
-        if template is None or requirement_type not in template.requirement_types:
-            raise TemplateInvalid('模板不存在或不适用于需求类型')
-        return template
-
-    def _load_v6(self, root: Path) -> None:
-        self._load_heading_release(
-            root, 'v6', V6_MANIFEST_SHA256, HEADING_TEMPLATE, remove_title=False
-        )
-
-    def _load_v7(self, root: Path) -> None:
-        self._load_heading_release(
-            root, 'v7', V7_MANIFEST_SHA256, PROMOTED_TEMPLATE, remove_title=True
-        )
-
-    def _load_heading_release(
-        self,
-        root: Path,
-        release: str,
-        manifest_sha: str,
-        identity: tuple[str, str],
-        *,
-        remove_title: bool,
-    ) -> None:
-        """TPL-003 heading revisions derive from v2; historical releases stay frozen."""
-        raw = (root / 'manifest.json').read_bytes()
-        if hashlib.sha256(raw).hexdigest() != manifest_sha:
-            raise ConfigInvalid('Heading-template manifest differs from its fixed release')
-        manifest = strict_json_object(raw)
-        if (
-            manifest['schema_version'],
-            manifest['status'],
-            manifest['decision'],
-            manifest['version'],
-            manifest['base_manifest_sha256'],
-        ) != (1, 'APPROVED', 'TPL-003', release, V3_MANIFEST_SHA256):
-            raise ConfigInvalid('Heading-template release has an invalid base identity')
-        texts = {}
-        for entry in manifest['files']:
-            relative = Path(entry['path'])
-            path = (root / relative).resolve()
-            if relative.is_absolute() or not path.is_relative_to(root) or entry['path'] in texts:
-                raise ConfigInvalid('Unsafe or duplicate heading-template resource path')
-            content = path.read_bytes()
-            if (
-                len(content) != entry['bytes']
-                or hashlib.sha256(content).hexdigest() != entry['sha256']
-            ):
-                raise ConfigInvalid('Frozen heading-template resource content has changed')
-            texts[entry['path']] = content.decode('utf-8', errors='strict')
-        catalog_path = f'templates/catalog.{identity[1]}.json'
-        metadata_path = f'templates/{identity[0]}.{identity[1]}.json'
-        markdown_path = f'templates/{identity[0]}.{identity[1]}.md'
-        if set(texts) != {catalog_path, metadata_path, markdown_path}:
-            raise ConfigInvalid('Complete heading-template release required')
-        template = strict_json_object(texts[metadata_path])
-        previous = strict_json_object(self._catalog_json)
-        catalog_json = texts[catalog_path]
-        expected = {
-            **previous,
-            'templates': [
-                template,
-                *[item for item in previous['templates'] if item['template_key'] != identity[0]],
-            ],
-        }
-        if (
-            strict_json_object(catalog_json) != expected
-            or (template['template_key'], template['template_version']) != identity
-            or template['requirement_types'] != ['NEW']
-            or template['markdown_path'] != markdown_path
-        ):
-            raise ConfigInvalid('Heading release must replace only the NEW creation choice')
-        old = self._templates[FULL_TEMPLATE]
-        markdown = texts[template['markdown_path']]
-        expected_lines = []
-        fence = None
-        lines = old.markdown.splitlines(keepends=True)
-        for line in lines[1:] if remove_title else lines:
-            marker = re.match(r'(`{3,}|~{3,})', line.lstrip(' '))
-            if marker:
-                kind = marker.group(1)[0]
-                if fence is None:
-                    fence = kind
-                elif kind == fence:
-                    fence = None
-            if fence is None and re.match(r'^#{2,6}[ \t]', line):
-                line = line[1:] if remove_title else '#' + line
-            expected_lines.append(line)
-        if markdown != ''.join(expected_lines):
-            raise ConfigInvalid('Heading release must preserve all non-heading source content')
-        from backend.app.documents.markdown import parse_markdown
-
-        headings = tuple(
-            LockedHeading(block.heading_level, block.plain_text)
-            for block in parse_markdown(markdown).blocks
-            if block.block_type == 'heading'
-        )
-        expected_headings = (
-            tuple(
-                LockedHeading(heading.level - 1, heading.text)
-                for heading in old.locked_headings[1:]
-            )
-            if remove_title
-            else tuple(
-                LockedHeading(heading.level if index == 0 else heading.level + 1, heading.text)
-                for index, heading in enumerate(old.locked_headings)
-            )
-        )
-        source = manifest['template_source']
-        if (
-            headings != expected_headings
-            or headings
-            != tuple(LockedHeading(**heading) for heading in template['locked_headings'])
-            or len(markdown.encode('utf-8')) != source['bytes']
-            or hashlib.sha256(markdown.encode('utf-8')).hexdigest() != source['sha256']
-        ):
-            raise ConfigInvalid('Heading-template source or locked headings differ')
-        self._templates[identity] = FixedTemplate(
-            *identity, template['label'], ('NEW',), markdown, headings, manifest_sha
-        )
-        self._catalog_json, self._catalog_sha256 = catalog_json, manifest_sha
 
     def freeze(
         self,

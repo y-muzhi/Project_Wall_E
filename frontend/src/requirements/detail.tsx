@@ -1,6 +1,7 @@
 import { REQUIREMENT_STATUS_LABELS, saveStatusLabel } from '../shared/status-labels.ts';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { WalleApi } from '../api/walle.ts';
+import { environmentBrowserStorage, type StoragePort } from '../api/environment-storage.ts';
 import { DocumentHandoff } from './document-handoff.tsx';
 import type { DocumentHandoffEntry, DocumentReading } from '../application/router.ts';
 import { RequirementDetailOwner } from './detail-owner.ts';
@@ -8,6 +9,7 @@ import { DetailFrame } from './detail-frame.tsx';
 import { RequirementHeader } from './header.tsx';
 import { RequirementPropertyControl } from './property-control.tsx';
 import { OwnedDocumentControls } from './document-controls.tsx';
+import { DraftSavedTime } from '../documents/manual-controls.tsx';
 import {
   DocumentCreationProvider,
   DocumentDirectory,
@@ -24,6 +26,7 @@ import { DocumentRecords } from './document-records.tsx';
 import { FormationProgress } from '../formation/progress-view.tsx';
 import { DocumentAssociations } from './document-associations.tsx';
 import { activeModal } from '../shared/modal.ts';
+import { Icon } from '../shared/icon.tsx';
 import { EmptyState } from '../shared/empty-state.tsx';
 import type { EmptyStateContent } from '../shared/empty-state.tsx';
 
@@ -95,6 +98,14 @@ function ManualSaveStatus({
     manual = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const recovery = useSyncExternalStore(session.recovery.subscribe, session.recovery.getSnapshot),
     ending = useSyncExternalStore(session.ending.subscribe, session.ending.getSnapshot);
+  if (session.editor.isDrawing) {
+    return (
+      <span role="status">
+        {retained ? '保留草稿：' : ''}
+        <DraftSavedTime savedAt={state.saved_at} />
+      </span>
+    );
+  }
   return (
     <span role="status">
       {retained ? '保留草稿：' : ''}
@@ -119,6 +130,7 @@ function LoadedDetail({
   back,
   openCodeTasks,
   choosingCodeDocument,
+  writeReason,
   handoff,
 }: Readonly<{
   owner: RequirementDetailOwner;
@@ -128,8 +140,13 @@ function LoadedDetail({
   handoff: DocumentHandoffEntry;
   openCodeTasks?: OpenCodeTasks | undefined;
   choosingCodeDocument: boolean;
+  writeReason: string | null;
 }>) {
   const [documentActionHost, setDocumentActionHost] = useState<HTMLDivElement | null>(null);
+  const [fullscreenActionHost, setFullscreenActionHost] = useState<HTMLDivElement | null>(null);
+  const [fullscreenDrawing, setFullscreenDrawing] = useState<number | null>(null);
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
+  const previousFullscreen = useRef(false);
   const product = useRef<HTMLDivElement>(null);
   const composerFocus = useRef(false);
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot),
@@ -149,6 +166,13 @@ function LoadedDetail({
     historical = owner.documents.historical;
   const supported = geometry.mode !== 'BLOCKED' && viewport.phase === 'SUPPORTED',
     blocked = !supported || departure.phase !== 'IDLE',
+    writeBlocked = blocked || writeReason !== null,
+    ordinary = api.environmentScope !== undefined,
+    documentAiUnavailable = ordinary && !api.documentAiAvailable,
+    propertyReason = ordinary ? '此环境尚未开放修改需求名称。' : writeReason,
+    lifecycleReason = ordinary ? '此环境尚未开放修改需求状态。' : null,
+    metadataReason = ordinary ? '此环境尚未开放修改文档属性或确认版本。' : writeReason,
+    revisionReason = ordinary ? '此环境尚未开放添加版本说明。' : writeReason,
     actual = state.detail!,
     activity =
       actual.activity.kind === 'GUIDE'
@@ -172,6 +196,51 @@ function LoadedDetail({
     return () => window.removeEventListener('beforeunload', protect);
   }, [owner]);
   const selectedDocument = actual.selected_document_id;
+  const drawingId = actual.current?.document_kind === 'DRAWING' ? actual.current.id : null;
+  const fullscreen = supported && drawingId !== null && fullscreenDrawing === drawingId;
+
+  useLayoutEffect(() => {
+    if (previousFullscreen.current !== fullscreen) {
+      previousFullscreen.current = fullscreen;
+      fullscreenButton.current?.focus({ preventScroll: true });
+    }
+    if (!fullscreen && fullscreenDrawing !== null) setFullscreenDrawing(null);
+  }, [fullscreen, fullscreenDrawing]);
+  useEffect(() => {
+    if (!fullscreen) return;
+    function exitOnEscape(event: KeyboardEvent) {
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        activeModal() ||
+        (event.target instanceof Element && event.target.closest('[role="dialog"]'))
+      )
+        return;
+      event.preventDefault();
+      setFullscreenDrawing(null);
+    }
+    window.addEventListener('keydown', exitOnEscape);
+    return () => window.removeEventListener('keydown', exitOnEscape);
+  }, [fullscreen]);
+
+  const fullscreenLabel = fullscreen ? '退出全屏' : '全屏';
+  const fullscreenControls = drawingId !== null && (
+    <>
+      {fullscreen && <div className="drawing-fullscreen-actions" ref={setFullscreenActionHost} />}
+      <button
+        ref={fullscreenButton}
+        className="ui-button drawing-fullscreen-toggle"
+        type="button"
+        aria-pressed={fullscreen}
+        title={fullscreen ? '退出全屏（Esc）' : '全屏查看画板'}
+        onClick={() => setFullscreenDrawing(fullscreen ? null : drawingId)}
+      >
+        <Icon name={fullscreen ? 'minimize' : 'maximize'} />
+        {fullscreenLabel}
+      </button>
+    </>
+  );
   useEffect(() => {
     if (handoff && handoff !== 'INVALID' && supported) regions.layout.openTab('AI');
   }, [handoff, regions.layout, supported]);
@@ -187,7 +256,12 @@ function LoadedDetail({
     };
   }
   function visitDocumentCodeTasks(documentId: number) {
-    if (!openCodeTasks || codeTasksBlocked) return;
+    if (
+      !openCodeTasks ||
+      codeTasksBlocked ||
+      actual.documents.find((item) => item.id === documentId)?.document_kind === 'DRAWING'
+    )
+      return;
     openCodeTasks(
       actual.requirement.id,
       readCodeDocument(documentId),
@@ -223,17 +297,25 @@ function LoadedDetail({
     geometry.right_tab,
   ]);
   return (
-    <DocumentCreationProvider owner={owner}>
+    <DocumentCreationProvider owner={owner} writeReason={writeReason}>
       <div className="detail-product" ref={product} data-requirement-id={actual.requirement.id}>
         <DetailFrame
           layout={regions.layout}
           viewport={regions.viewport}
+          documentFullscreen={fullscreen}
           title={actual.requirement.title}
           titleEditor={
             <RequirementPropertyControl
               flow={regions.header.title}
-              blocked={blocked || document.busy || historical || regions.header.blockedFor('TITLE')}
+              blocked={
+                writeBlocked ||
+                propertyReason !== null ||
+                document.busy ||
+                historical ||
+                regions.header.blockedFor('TITLE')
+              }
               writeReady={state.ready}
+              writeReason={propertyReason}
               refresh={owner.refresh}
             />
           }
@@ -253,11 +335,14 @@ function LoadedDetail({
               documentActions={
                 <div className="requirement-document-actions" ref={setDocumentActionHost} />
               }
+              manualActionHost={fullscreen ? fullscreenActionHost : null}
               toolHint={openCodeTasks && selectedDocument === null ? '请先选择文档' : undefined}
               commands={regions.header}
               ready={state.ready}
-              blocked={blocked || document.busy}
+              blocked={writeBlocked || document.busy}
+              writeReason={writeReason}
               history={historical}
+              lifecycleReason={lifecycleReason}
               refresh={owner.refresh}
               refreshRevisions={async () => {
                 if (!(await owner.documents.revisions.refresh()))
@@ -270,7 +355,16 @@ function LoadedDetail({
                     <button
                       className="ui-button"
                       type="button"
-                      disabled={selectedDocument === null || codeTasksBlocked}
+                      disabled={
+                        selectedDocument === null ||
+                        codeTasksBlocked ||
+                        actual.current?.document_kind === 'DRAWING'
+                      }
+                      title={
+                        actual.current?.document_kind === 'DRAWING'
+                          ? '画板不能作为文字设计依据'
+                          : undefined
+                      }
                       onClick={visitSelectedCodeTasks}
                     >
                       代码任务
@@ -303,15 +397,21 @@ function LoadedDetail({
               codeTasksBlocked={codeTasksBlocked}
             />
           }
-          outlineActions={<NewDocumentButton owner={owner} iconOnly />}
+          outlineActions={<NewDocumentButton owner={owner} iconOnly writeReason={writeReason} />}
           document={(navigation) => (
             <>
-              <DocumentMetadataBar owner={owner} navigation={navigation} />
+              <DocumentMetadataBar
+                owner={owner}
+                navigation={navigation}
+                viewActions={fullscreenControls}
+                writeReason={metadataReason}
+              />
               <OwnedDocumentControls
-                actionHost={documentActionHost}
-                showSaveStatus={false}
+                actionHost={fullscreen ? fullscreenActionHost : documentActionHost}
+                showSaveStatus={fullscreen}
                 owner={owner.documents}
                 blocked={blocked}
+                writeReason={writeReason}
                 auxiliary={document.mode !== 'CURRENT' || !owner.documents.currentBinding}
                 notifyConfirmed={owner.notifyConfirmed}
               />
@@ -353,16 +453,6 @@ function LoadedDetail({
                 documents={owner.documents}
                 discussion={regions.discussion}
                 openSuggestions={() => regions.layout.openTab('SUGGESTIONS')}
-                openDocument={(id) =>
-                  void owner
-                    .selectDocument(id)
-                    .catch((error: unknown) =>
-                      owner.toasts.push(
-                        'error',
-                        error instanceof Error ? error.message : '文档暂时无法打开',
-                      ),
-                    )
-                }
                 handoff={
                   handoff &&
                   handoff !== 'INVALID' && (
@@ -388,16 +478,22 @@ function LoadedDetail({
             )
           }
           suggestions={
-            <ConversationSuggestions
-              key={actual.selected_document_id}
-              owner={regions.conversation}
-              documents={owner.documents}
-              layout={regions.layout}
-              toasts={owner.toasts}
-            />
+            documentAiUnavailable ? (
+              <p className="field-help">此环境暂未开放 AI 修改建议。</p>
+            ) : (
+              <ConversationSuggestions
+                key={actual.selected_document_id}
+                owner={regions.conversation}
+                documents={owner.documents}
+                layout={regions.layout}
+                toasts={owner.toasts}
+              />
+            )
           }
           progress={
-            actual.current ? (
+            documentAiUnavailable ? (
+              <p className="field-help">此环境暂未开放 AI 讨论进展。</p>
+            ) : actual.current ? (
               <FormationProgress
                 key={actual.selected_document_id}
                 owner={owner}
@@ -436,6 +532,7 @@ function LoadedDetail({
               blocked={blocked || document.busy}
               revisions={owner.documents.revisions}
               history={regions.conversation.read.history}
+              versionsOnly={documentAiUnavailable}
               readRun={owner.readRunRecord}
               versions={
                 <>
@@ -443,7 +540,8 @@ function LoadedDetail({
                     <RevisionSaveControl
                       flow={state.revisionSave}
                       ready={state.ready && state.revisionSave.allowed}
-                      blocked={blocked || historical}
+                      blocked={writeBlocked || historical || revisionReason !== null}
+                      writeReason={revisionReason}
                       refreshActual={owner.refresh}
                       saved={(receipt) => owner.savedRevision(receipt)}
                     />
@@ -503,6 +601,7 @@ export function RequirementDetail({
   reading,
   openCodeTasks,
   choosingCodeDocument = false,
+  writeReason = null,
   handoff = null,
 }: Readonly<{
   identity: number;
@@ -513,6 +612,7 @@ export function RequirementDetail({
   handoff?: DocumentHandoffEntry;
   openCodeTasks?: OpenCodeTasks | undefined;
   choosingCodeDocument?: boolean;
+  writeReason?: string | null;
 }>) {
   const host = useMemo(() => {
     const element = document.createElement('div');
@@ -524,9 +624,9 @@ export function RequirementDetail({
   callbacks.current = { back, ready };
   const [restoreError, setRestoreError] = useState(false);
   useEffect(() => {
-    let storage: Storage | null = null;
+    let storage: StoragePort | null = null;
     try {
-      storage = window.localStorage;
+      storage = environmentBrowserStorage('localStorage', api.environmentScope);
     } catch {}
     const owned = new RequirementDetailOwner(
       identity,
@@ -538,6 +638,14 @@ export function RequirementDetail({
       reading?.documentId,
     );
     const controller = new AbortController();
+    const connection = api.environmentConnection;
+    let lastPhase = connection?.getSnapshot().phase;
+    const release = connection?.subscribe(() => {
+      const current = connection.getSnapshot().phase;
+      const resumed = current === 'READY' && lastPhase !== 'READY';
+      lastPhase = current;
+      if (resumed) void owned.refresh().catch(() => undefined);
+    });
     setRestoreError(false);
     setOwner(owned);
     callbacks.current.ready?.(owned);
@@ -568,6 +676,7 @@ export function RequirementDetail({
     });
     return () => {
       controller.abort();
+      release?.();
       void owned.retire().catch((error) => console.error('WALL-E detail retirement failed', error));
       host.remove();
     };
@@ -587,6 +696,7 @@ export function RequirementDetail({
         back={() => callbacks.current.back()}
         openCodeTasks={openCodeTasks}
         choosingCodeDocument={choosingCodeDocument}
+        writeReason={writeReason}
       />
     </>
   ) : (
@@ -603,6 +713,7 @@ function DetailSurface({
   back,
   openCodeTasks,
   choosingCodeDocument,
+  writeReason,
   handoff,
 }: Readonly<{
   owner: RequirementDetailOwner;
@@ -612,6 +723,7 @@ function DetailSurface({
   handoff: DocumentHandoffEntry;
   openCodeTasks?: OpenCodeTasks | undefined;
   choosingCodeDocument: boolean;
+  writeReason: string | null;
 }>) {
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot);
   if (owner.regions)
@@ -624,6 +736,7 @@ function DetailSurface({
         back={back}
         openCodeTasks={openCodeTasks}
         choosingCodeDocument={choosingCodeDocument}
+        writeReason={writeReason}
       />
     );
   return (

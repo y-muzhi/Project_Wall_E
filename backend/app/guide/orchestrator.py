@@ -14,7 +14,7 @@ from backend.app.infrastructure.database import StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository
 from backend.app.infrastructure.model_profile import OPENAI_DOCUMENT_PROFILE, ModelProfile
 from backend.app.infrastructure.batch_repository import INDEPENDENT_REVIEW_RELEASES
-from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.process_lock import matches_database
 from backend.app.infrastructure.resources import ResourceCatalog, ConfigInvalid, ProtocolInvalid
 from backend.app.infrastructure.tokenization import ExactCountUnavailable
 from backend.app.shared.command_execution import Rejected, operation_time
@@ -116,12 +116,21 @@ async def execute_guide_run(
     counting_counter=None,
     clock=None,
     observation=None,
+    bound_document_ai=False,
 ):
     """One accepted V1.5 run, bounded counts and at most one actual Chat.
 
     Explicit private offline dependencies cannot bypass the release gate.
     Continuation/retry commands create a new run; no loop resumes old input.
     """
+    scoped_lock = getattr(database, 'environment_lock', None)
+    if scoped_lock is not None and (
+        not bound_document_ai
+        or scoped_lock is not process_lock
+        or type(profile) is not ModelProfile
+        or profile.provider != 'openai'
+    ):
+        return {'code': 'ENVIRONMENT_CAPABILITY_DISABLED', 'data': None, 'details': None}
     try:
         identity = execute_guide_run_input(payload)
     except InvalidInput as error:
@@ -174,7 +183,7 @@ async def execute_guide_run(
 
     try:
         process_lock.assert_owned()
-        if process_lock.path != ProcessLock.for_database(database.path).path:
+        if not matches_database(process_lock, database):
             raise RuntimeError('ORCH must own this database')
         row, last = await state()
         if row['status'] != 'RUNNING':

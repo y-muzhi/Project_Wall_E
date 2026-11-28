@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 from backend.app.shared.validation import MISSING, strict_enum, strict_integer, strict_json_object
 from backend.app.shared.validation import object_fields
-from .design_profiles import DESIGN_KINDS, design_resource
+from .design_profiles import DESIGN_KINDS, DRAWING_KIND, design_resource
+from .drawing import is_drawing, validate_drawing
 from .snapshot import SourceVerifier, _time, validate_snapshot
 
 DOCUMENT_FIELDS = (
@@ -40,6 +41,8 @@ def document_read_model(row: Mapping[str, Any], source_verifier: SourceVerifier)
     data['block_state_json'] = validate_snapshot(
         data['markdown_content'], state, source_verifier
     ).state
+    if is_drawing(row):
+        validate_drawing(data['markdown_content'])
     return data
 
 
@@ -333,8 +336,10 @@ def create_document_input(payload):
         initial_content = strict_enum(
             data.get('initial_content'), 'initial_content', ('EMPTY', 'FRAMEWORK')
         )
+        if kind == DRAWING_KIND and initial_content != 'EMPTY':
+            reject('initial_content', 'INVALID_ENUM', '画板以空白场景创建')
         if reference is not None:
-            reject('template_ref', 'INVALID_FORMAT', '设计文档的结构由初始内容确定')
+            reject('template_ref', 'INVALID_FORMAT', '文档的结构由初始内容确定')
     elif 'initial_content' in data:
         reject('initial_content', 'INVALID_FORMAT', '当前文档类型使用模板引用')
     if reference is not None:

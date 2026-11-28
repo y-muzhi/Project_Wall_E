@@ -1,4 +1,6 @@
 import { snapshotObject, stableJson } from '../../api/client.ts';
+import type { EnvironmentScope } from '../../api/environment-binding.ts';
+import { environmentBrowserStorage } from '../../api/environment-storage.ts';
 import { array, choices, count, id, nullable, shape, text } from '../../api/decoding.ts';
 import {
   planContentOf,
@@ -222,7 +224,11 @@ export function draftPath(planId: number, versionId: number | null) {
 function storageKey(planId: number, versionId: number | null) {
   return 'walle:v20:testing-plan-draft:' + planId + ':' + (versionId ?? 'new');
 }
-export function loadDraft(planId: number, version: TestPlanVersion | null): LocalDraft {
+export function loadDraft(
+  planId: number,
+  version: TestPlanVersion | null,
+  scope: EnvironmentScope | undefined,
+): LocalDraft {
   const initial = {
     draft: initialDraft(version),
     base: version?.state_version ?? null,
@@ -230,7 +236,9 @@ export function loadDraft(planId: number, version: TestPlanVersion | null): Loca
     sent: null,
   };
   try {
-    const saved = window.sessionStorage.getItem(storageKey(planId, version?.id ?? null));
+    const saved = environmentBrowserStorage('sessionStorage', scope).getItem(
+      storageKey(planId, version?.id ?? null),
+    );
     if (saved === null) return initial;
     const local = cached(JSON.parse(saved));
     if ((local.base === null) !== (version === null)) return initial;
@@ -243,11 +251,13 @@ export function saveLocal(
   planId: number,
   versionId: number | null,
   local: LocalDraft | null,
+  scope: EnvironmentScope | undefined,
 ): boolean {
   try {
     const key = storageKey(planId, versionId);
-    if (local === null) window.sessionStorage.removeItem(key);
-    else window.sessionStorage.setItem(key, JSON.stringify(local));
+    const storage = environmentBrowserStorage('sessionStorage', scope);
+    if (local === null) storage.removeItem(key);
+    else storage.setItem(key, JSON.stringify(local));
     return true;
   } catch {
     return false;

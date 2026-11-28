@@ -8,7 +8,7 @@ from backend.app.infrastructure.batch_repository import BatchRepository, INDEPEN
 from backend.app.documents.snapshot import _time
 from backend.app.infrastructure.database import Database, StorageUnavailable
 from backend.app.infrastructure.guide_repository import GuideRepository, is_document_scoped
-from backend.app.infrastructure.process_lock import ProcessLock
+from backend.app.infrastructure.process_lock import ProcessLock, matches_database
 from backend.app.infrastructure.requirement_repository import RequirementRepository
 from backend.app.shared.command_execution import Rejected, execute_idempotent, operation_time
 from backend.app.infrastructure.idempotency import Idempotency, Success
@@ -134,7 +134,7 @@ def _document_write_request(connection, request, catalog):
         target['expected_content_version'],
         document_id=target['document_id'],
     )
-    if current['content_version'] == 1:
+    if current['content_version'] == 1 and not current['markdown_content'].strip():
         creation = connection.execute(
             """SELECT 1 FROM document_change_audits a
                JOIN revisions r ON r.id=a.revision_id AND r.document_id=a.document_id
@@ -796,7 +796,7 @@ def recover_runs(
         return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
     try:
         process_lock.assert_owned()
-        if process_lock.path != ProcessLock.for_database(database.path).path:
+        if not matches_database(process_lock, database):
             raise RuntimeError('Recovery lock must own the same actual database')
         from .collaboration_recovery import complete_saved_returns
 
@@ -929,7 +929,7 @@ def fail_guide_run(
         return {'code': 'INVALID_INPUT', 'data': None, 'details': error.details}
     try:
         process_lock.assert_owned()
-        if process_lock.path != ProcessLock.for_database(database.path).path:
+        if not matches_database(process_lock, database):
             raise RuntimeError('Failure writer must own the same actual database')
         with database.transaction(write=True) as connection:
             guides, requirements = GuideRepository(connection), RequirementRepository(connection)

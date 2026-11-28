@@ -39,6 +39,17 @@ class BatchRepository:
             is not None
         )
 
+    def pending_for_document(
+        self, requirement_id: int, document_id: int, content_version: int
+    ) -> int | None:
+        row = self.connection.execute(
+            """SELECT id FROM suggestion_batches
+               WHERE requirement_id=? AND target_document_id=? AND status='PENDING'
+               ORDER BY (base_content_version=?) DESC, id DESC LIMIT 1""",
+            (requirement_id, document_id, content_version),
+        ).fetchone()
+        return None if row is None else int(row['id'])
+
     def get(self, identity: int) -> sqlite3.Row | None:
         return self.connection.execute(
             'SELECT * FROM suggestion_batches WHERE id=?', (identity,)

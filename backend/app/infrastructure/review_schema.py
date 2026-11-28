@@ -13,7 +13,7 @@ from .schema_v20_release import canonical_bytes, digest
 LAYOUT_NAME = 'db21-document-review-r1'
 REQUIREMENT_INDEX = 'manual_draft_requirement'
 SCHEMA_SHA256 = 'd20230c0121b933c7f9700f64ace233c7198e7e41fb16248743b433a0180c9c3'
-MANIFEST_SHA256 = 'bdaecb28147743b6575ffb0fe02d8eb66e37e85dedd54b3ecc2e0757d0c99cbf'
+MANIFEST_SHA256 = '3454d765dca7c83fb7fc991ecc072e538a41b65940dad5690a5e096b9ccc6fd1'
 LEGACY_DRAFT_LIMIT = (
     'CREATE UNIQUE INDEX manual_draft_requirement ON requirement_documents(requirement_id) '
     "WHERE document_type='MANUAL_DRAFT';"

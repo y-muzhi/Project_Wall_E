@@ -62,3 +62,56 @@ test('rejected and retired creation never reveals the assistant',async()=>{
  const failed=new DocumentDirectoryCommands(detail(),{prepareCreateDocument(){return {async submit(){throw Error('offline');}};}},async()=>detail(),async()=>{},()=>created++);
  assert.equal(await failed.create({name:'设计',document_kind:'DESIGN',template_ref:null}),false);assert.equal(created,0);failed.dispose();
 });
+
+test('draft recovery uses the environment and data generation on every storage lookup', async () => {
+ const binding = {requirement_id: 1, target_document_id: 2, manual_draft_id: 3, base_content_version: 7};
+ const scope = Object.freeze({
+  binding_protocol: 1,
+  origin: 'https://dev.walle.test:9443',
+  environment_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  data_generation: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+ });
+ const otherGeneration = {...scope, data_generation: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'};
+ const key = [scope.origin, scope.environment_id, scope.data_generation, 1, 2, 3, 7];
+ assert.deepEqual(recoveryStorageKey(binding, scope), key);
+ assert.notDeepEqual(recoveryStorageKey(binding, otherGeneration), key);
+ assert.throws(() => recoveryStorageKey(binding, {...scope, origin: 'http://dev.walle.test'}));
+
+ const opened = [], lookedUp = [];
+ const factory = () => ({
+  open(name, version) {
+   opened.push([name, version]);
+   const request = {result: {
+    objectStoreNames: {contains: name => name === 'draft_snapshots'},
+    transaction() {
+     const transaction = {objectStore: () => ({
+      get(identity) {
+       lookedUp.push(identity);
+       const lookup = {result: undefined};
+       queueMicrotask(() => {
+        lookup.onsuccess();
+        transaction.oncomplete();
+       });
+       return lookup;
+      },
+     })};
+     return transaction;
+    },
+    close() {},
+   }};
+   queueMicrotask(() => request.onsuccess());
+   return request;
+  },
+ });
+ const first = new DraftRecoveryStore(undefined, binding, {scope, factory});
+ const next = new DraftRecoveryStore(undefined, binding, {scope: otherGeneration, factory});
+ try {
+  assert.equal(await first.get(1, 3), null);
+  assert.equal(await next.get(1, 3), null);
+  assert.deepEqual(opened, Array(2).fill(['walle-v2.01-document-assistant', 1]));
+  assert.deepEqual(lookedUp, [key, recoveryStorageKey(binding, otherGeneration)]);
+ } finally {
+  first.close();
+  next.close();
+ }
+});

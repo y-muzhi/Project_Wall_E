@@ -5,6 +5,17 @@ import os
 from uuid import uuid4
 
 
+def matches_database(process_lock, database):
+    """An admitted environment uses its pinned lock. Legacy callers use the DB path."""
+    scoped = getattr(database, 'environment_lock', None)
+    if scoped is not None:
+        return scoped is process_lock
+    return (
+        isinstance(process_lock, ProcessLock)
+        and process_lock.path == ProcessLock.for_database(database.path).path
+    )
+
+
 class ProcessAlreadyRunning(RuntimeError):
     pass
 

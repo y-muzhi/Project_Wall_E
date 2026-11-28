@@ -45,7 +45,7 @@ def canonical(record):
     ).encode('utf-8')
 
 
-def decode(raw, code):
+def decode(raw, code, *, require_canonical=True):
     def pairs(items):
         result = dict(items)
         require(len(result) == len(items), code)
@@ -58,7 +58,7 @@ def decode(raw, code):
         record = json.loads(
             raw, object_pairs_hook=pairs, parse_constant=invalid_number, parse_float=invalid_number
         )
-        require(type(record) is dict and canonical(record) == raw, code)
+        require(type(record) is dict and (not require_canonical or canonical(record) == raw), code)
     except (ValueError, UnicodeError, RecursionError) as error:
         raise EnvironmentFailure(code) from error
     return record

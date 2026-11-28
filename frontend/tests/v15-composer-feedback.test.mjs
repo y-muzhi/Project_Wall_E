@@ -5,7 +5,7 @@ import {composerFeedback,composerProgress} from '../src/guide/composer-feedback.
 const state=(changes={})=>({action:'DISCUSS',phase:'READY',needs_refresh:false,detail:{requirement:{status:'CLOSED',document_work_state:'IDLE'}},target:null,source_refs:[],...changes});
 test('feedback distinguishes discussion from a revision whose result may require review',()=>{
  const input=state();assert.equal(composerFeedback(input,true,true).blocked,null);assert.match(composerFeedback(input,true,true).effect,/不修改文档/);
- assert.match(composerFeedback(state({action:'REVISE',target:{document_id:2}}),true,true).effect,/已保存或待审阅/);
+ assert.match(composerFeedback(state({action:'REVISE',target:{document_id:2}}),true,true).effect,/已有正文先生成待审阅建议。原始空白文档的首份正文可直接保存。/);
  assert.equal(input.detail.requirement.status,'CLOSED');
 });
 test('missing configuration has an actionable reason while a stale owner denial remains denied',()=>{

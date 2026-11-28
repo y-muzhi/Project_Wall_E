@@ -171,3 +171,57 @@ test('original mutation recognizes only its own COMMAND_CLOSED response',async()
   await assert.rejects(original.submit(),wrong?ApiUnknown:ApiRejected);
  }
 });
+
+test('bound Coding originals retain exact bytes and cannot be restored or closed in another data generation', async () => {
+ const origin = 'https://dev.walle.test:9443';
+ const environment_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const data_generation = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const runId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+ const bound = {
+  scope: {binding_protocol: 1, origin, environment_id, data_generation},
+  displayName: '开发环境', purpose: 'DEVELOPMENT', userPermission: 'DEVELOP',
+  configurationSha256: 'a'.repeat(64), runId,
+ };
+ const calls = [];
+ const sender = async (path, options) => {
+  calls.push({path, options});
+  const close = path === '/api/v1/command-intents/close';
+  const reply = close
+   ? response({close_status: 'CLOSED', original_receipt: closed()})
+   : response({task_id: 7, operation_id: 9}, 202);
+  reply.headers.set('X-WALL-E-Environment-ID', environment_id);
+  reply.headers.set('X-WALL-E-Data-Generation', data_generation);
+  reply.headers.set('X-WALL-E-Run-ID', runId);
+  return reply;
+ };
+ const initial = new ApiClient(sender, () => KEY, bound);
+ const cold = new ApiClient(sender, () => assert.fail('restoration must not mint a key'), bound);
+ const next = new ApiClient(() => assert.fail('another generation may not send'), undefined, {
+  ...bound, scope: {...bound.scope, data_generation: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'},
+ });
+ const action = await prepareCodeCommand(initial, PATH, {expected_state_version: 1}, binding, origin);
+ const { frozen } = action;
+ assert.equal(frozen.scope_version, 1);
+ assert.equal(frozen.identity_sha256, await commandSha256(JSON.stringify([
+  1, origin, environment_id, data_generation, 'CODING', 'POST', PATH, KEY,
+ ])));
+ assert.equal(frozen.body_sha256, await commandSha256(frozen.body_json));
+ const { frozen: old } = await prepared();
+ await assert.rejects(restoreCodeCommand(cold, old, binding, origin), TypeError);
+ await assert.rejects(restoreCodeCommand(next, frozen, binding, origin), TypeError);
+ await assert.rejects(restoreCodeCommand(cold, {...frozen, scope_version: 2}, binding, origin), TypeError);
+ await assert.rejects(prepareCloseOriginalCommand(next, frozen, origin, action.result_policy), TypeError);
+ assert.equal(calls.length, 0);
+
+ const restored = await restoreCodeCommand(cold, frozen, binding, origin);
+ assert.equal((await restored.submit()).data.operation_id, 9);
+ assert.equal(calls[0].options.body, frozen.body_json);
+ assert.equal(calls[0].options.headers['Idempotency-Key'], KEY);
+ assert.equal(calls[0].options.headers['X-WALL-E-Data-Generation'], data_generation);
+ const close = await prepareCloseOriginalCommand(
+  cold, {...frozen, body_json: null}, origin, action.result_policy,
+ );
+ assert.equal((await close.submit()).data.close_status, 'CLOSED');
+ assert.equal(calls[1].options.headers['Idempotency-Key'], KEY);
+ assert.deepEqual(JSON.parse(calls[1].options.body), {method: 'POST', path: PATH});
+});

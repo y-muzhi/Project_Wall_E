@@ -96,6 +96,10 @@ def create_comment(
         )
         if current['archived_at'] is not None:
             raise Rejected('STATE_CONFLICT')
+        from backend.app.documents.drawing import is_drawing
+
+        if is_drawing(current):
+            raise Rejected('ANCHOR_INVALID')
         sources = DocumentSources(
             connection,
             root['id'],

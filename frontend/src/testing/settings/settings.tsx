@@ -8,6 +8,7 @@ import type {
   TestingProfile,
 } from '../../api/testing-policy.ts';
 import type { WalleApi } from '../../api/walle.ts';
+import { environmentBrowserStorage } from '../../api/environment-storage.ts';
 import { TEST_PLAN_RECOVERY_KINDS } from '../../api/testing-plans.ts';
 import { SectionPageHeader } from '../../application/header.tsx';
 import {
@@ -33,18 +34,19 @@ type Approval = {
 };
 const selectedProfileKey = 'walle:v20:testing-settings:profile';
 const selectedAuthorizationKey = 'walle:v20:testing-settings:authorization';
-function savedIdentity(key: string): number | null {
+function savedIdentity(api: WalleApi, key: string): number | null {
   try {
-    const value = window.sessionStorage.getItem(key);
+    const value = environmentBrowserStorage('sessionStorage', api.environmentScope).getItem(key);
     return value !== null && /^[1-9][0-9]*$/.test(value) ? positiveInteger(Number(value)) : null;
   } catch {
     return null;
   }
 }
-function rememberIdentity(key: string, identity: number | null) {
+function rememberIdentity(api: WalleApi, key: string, identity: number | null) {
   try {
-    if (identity === null) window.sessionStorage.removeItem(key);
-    else window.sessionStorage.setItem(key, String(identity));
+    const storage = environmentBrowserStorage('sessionStorage', api.environmentScope);
+    if (identity === null) storage.removeItem(key);
+    else storage.setItem(key, String(identity));
   } catch {
     // Read-only access remains possible when session storage is unavailable.
   }
@@ -82,7 +84,7 @@ function ownerFor(
   api: WalleApi,
   observed: (record: PendingSummary, result: RecoveryLookup) => void,
 ) {
-  const store = new CommandRecoveryStore();
+  const store = new CommandRecoveryStore({ scope: api.environmentScope });
   const recovery = api.configurationRecovery(store, async () => {
     throw new TypeError('测试配置与授权无后台操作');
   });
@@ -114,7 +116,7 @@ export function TestingSettings({
   const [refresh, setRefresh] = useState(0);
   const [profiles, setProfiles] = useState<ProfilesPage | null>(null);
   const [profileId, setProfileId] = useState<number | null>(() =>
-    savedIdentity(selectedProfileKey),
+    savedIdentity(api, selectedProfileKey),
   );
   const [profile, setProfile] = useState<TestingProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,10 +125,10 @@ export function TestingSettings({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [scope, setScope] = useState<TestingAuthorizationScope>('TASK');
   const [authorizationId, setAuthorizationId] = useState<number | null>(() =>
-    savedIdentity(selectedAuthorizationKey),
+    savedIdentity(api, selectedAuthorizationKey),
   );
   const [authorizationText, setAuthorizationText] = useState(() => {
-    const identity = savedIdentity(selectedAuthorizationKey);
+    const identity = savedIdentity(api, selectedAuthorizationKey);
     return identity === null ? '' : String(identity);
   });
   const [authorization, setAuthorization] = useState<TestingAuthorization | null>(null);
@@ -202,7 +204,7 @@ export function TestingSettings({
   }, [api, page, name, refresh]);
 
   useEffect(() => {
-    rememberIdentity(selectedProfileKey, profileId);
+    rememberIdentity(api, selectedProfileKey, profileId);
     if (profileId === null) return;
     const request = new AbortController();
     setProfileLoading(true);
@@ -224,7 +226,7 @@ export function TestingSettings({
   }, [api, profileId, refresh]);
 
   useEffect(() => {
-    rememberIdentity(selectedAuthorizationKey, authorizationId);
+    rememberIdentity(api, selectedAuthorizationKey, authorizationId);
     if (authorizationId === null) return;
     const request = new AbortController();
     setAuthorizationLoading(true);

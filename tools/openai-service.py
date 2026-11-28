@@ -44,11 +44,11 @@ def check(args):
     if args.database is not None:
         from backend.app.infrastructure.collaboration_provider import admission_for
         from backend.app.infrastructure.formation_database import FormationDatabase
-        from backend.app.infrastructure.formation_schema_release import load_release
         from backend.app.infrastructure.process_lock import ProcessLock
+        from backend.app.infrastructure.review_schema import load_configured_release
 
         database = FormationDatabase(
-            args.database.resolve(), formation_release=load_release(), read_only=True
+            args.database.resolve(), formation_release=load_configured_release(), read_only=True
         )
         with database.transaction():
             pass

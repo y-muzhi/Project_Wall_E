@@ -3,7 +3,11 @@ import { ApiClient, exact, object, snapshotObject } from './client.ts';
 import type { ApiSuccess } from './client.ts';
 import { commandReceipt } from './code-command-receipts.ts';
 import type { CommandReceipt, OriginalResultPolicy } from './code-command-receipts.ts';
-import { verifiedCommandIdentity } from './code-command-snapshot.ts';
+import {
+  COMMAND_SCOPE_FIELDS,
+  FROZEN_IDENTITY_FIELDS,
+  verifiedCommandIdentity,
+} from './code-command-snapshot.ts';
 import { codeErrorPolicy } from './code-errors.ts';
 
 export type CommandCloseReceipt<T> = Readonly<{
@@ -20,19 +24,20 @@ export async function prepareCloseOriginalCommand<T>(
 > {
   // Body damage must not prevent closing a verifiable original identity.
   const source = object(frozenIdentity);
+  const scope = client.environmentScope;
+  const fields = [
+    ...FROZEN_IDENTITY_FIELDS,
+    ...COMMAND_SCOPE_FIELDS.filter((field) => Object.hasOwn(source, field)),
+  ];
   const identity = snapshotObject(
-    Object.fromEntries(
-      ['origin', 'owner_module', 'method', 'path', 'key', 'decoder_kind', 'identity_sha256'].map(
-        (field) => [field, source[field]],
-      ),
-    ),
+    Object.fromEntries(fields.map((field) => [field, source[field]])),
   );
   const policy = Object.freeze({
     ...nativePolicy,
     success_status: Object.freeze([...nativePolicy.success_status]),
     errors: Object.freeze([...nativePolicy.errors]),
   });
-  const original = await verifiedCommandIdentity(identity, currentOrigin);
+  const original = await verifiedCommandIdentity(identity, currentOrigin, scope);
   if (policy.decoder_kind !== original.decoder_kind || typeof policy.decode !== 'function')
     throw new TypeError('Original close decoder differs');
   const handle = client.restorePrepared(
@@ -41,6 +46,7 @@ export async function prepareCloseOriginalCommand<T>(
       path: '/api/v1/command-intents/close',
       key: original.key,
       body: JSON.stringify({ method: original.method, path: original.path }),
+      ...(scope ? { binding_scope: scope } : {}),
     },
     {
       idempotent: true,
